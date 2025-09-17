@@ -1,34 +1,26 @@
 import React, { useState, useEffect } from "react"
 import { useAuthStore } from "../store/auth-store"
 import { useConnectionStatus } from "../shared/hooks/useConnectionStatus"
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
+import { CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Button } from "../components/ui/button"
 import { Badge } from "../components/ui/badge"
 import { Switch } from "../components/ui/switch"
-import { dashboardService, DashboardData, DashboardMetrics, RecentActivity, SystemStatus, WeeklyStats } from "../services/dashboard-service"
+import { dashboardService, DashboardData, DashboardMetrics } from "../services/dashboard-service"
 import { 
   Users, 
   Shield, 
   Database, 
-  FileText, 
   BarChart3, 
   TrendingUp, 
   Activity,
-  Settings,
-  Search,
-  CheckCircle,
-  AlertTriangle,
   Clock,
   ArrowUpRight,
   ArrowDownRight,
-  Zap,
   Globe,
   Server,
   RefreshCw,
   AlertCircle,
-  UserPlus,
   Upload,
-  BarChart,
   HardDrive,
   Cpu,
   Layers,
@@ -46,7 +38,7 @@ interface MetricCard {
 
 const Dashboard: React.FC = () => {
   const { user } = useAuthStore()
-  const { status: connectionStatus } = useConnectionStatus()
+  useConnectionStatus()
   const [currentTime, setCurrentTime] = useState(new Date())
   const [isLoading, setIsLoading] = useState(true)
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
@@ -181,20 +173,6 @@ const Dashboard: React.FC = () => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
   }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'operational':
-      case 'connected':
-        return 'bg-success-500'
-      case 'warning':
-        return 'bg-warning-500'
-      case 'error':
-      case 'disconnected':
-        return 'bg-error-500'
-      default:
-        return 'bg-neutral-500'
-    }
-  }
 
   const getStatusText = (status: string) => {
     switch (status) {
@@ -224,7 +202,7 @@ const Dashboard: React.FC = () => {
       case 'disconnected':
         return 'error'
       default:
-        return 'neutral'
+        return 'outline'
     }
   }
 
@@ -404,7 +382,7 @@ const Dashboard: React.FC = () => {
                         </p>
                       </div>
                       <span className="text-xs text-neutral-500 dark:text-neutral-400 flex-shrink-0">
-                        {activity.timestamp}
+                        {activity.createdAt || new Date().toLocaleDateString()}
                       </span>
                     </div>
                   ))

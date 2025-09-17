@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { Eye, EyeOff, Lock, AlertCircle, CheckCircle, Shield } from 'lucide-react';
+import { Eye, EyeOff, AlertCircle, CheckCircle, Shield } from 'lucide-react';
 import { authService } from '../services/auth-service';
 import { useAuthStore } from '../store/auth-store';
 

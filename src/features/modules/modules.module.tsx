@@ -30,7 +30,6 @@ import {
   Plus, 
   Edit, 
   Trash2, 
-  Settings, 
   Search,
   ToggleLeft,
   ToggleRight,

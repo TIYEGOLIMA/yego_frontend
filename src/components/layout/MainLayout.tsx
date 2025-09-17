@@ -1,4 +1,3 @@
-import React from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/auth-store'
 import { Button } from '../ui/button'
@@ -32,7 +31,7 @@ export default function MainLayout() {
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2">
                 <User className="h-4 w-4 text-gray-500" />
-                <span className="text-sm text-gray-700">{user?.nombre}</span>
+                <span className="text-sm text-gray-700">{user?.username}</span>
               </div>
               <Button variant="outline" size="sm" onClick={handleLogout}>
                 <LogOut className="h-4 w-4 mr-2" />

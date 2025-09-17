@@ -38,7 +38,6 @@ import {
   Smartphone,
   Tablet,
   Calendar,
-  AlertCircle
 } from 'lucide-react';
 import { useAuth } from "@/shared/hooks/useAuth";
 import api from "@/services/api";

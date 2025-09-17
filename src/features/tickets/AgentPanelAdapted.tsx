@@ -5,7 +5,6 @@ import { useAuthStore } from '../../store/auth-store';
 const AgentPanelAdapted: React.FC = () => {
   const { user, logout } = useAuthStore();
   const [loading, setLoading] = useState(true);
-  const [tickets, setTickets] = useState([]);
 
   useEffect(() => {
     // Simular carga inicial

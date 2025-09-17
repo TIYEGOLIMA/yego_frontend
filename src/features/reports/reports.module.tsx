@@ -25,8 +25,6 @@ import {
   FileText, 
   Download,
   Calendar,
-  TrendingUp,
-  TrendingDown,
   RefreshCw,
   ChartPie,
   FileDown

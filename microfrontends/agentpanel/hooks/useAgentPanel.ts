@@ -3,7 +3,6 @@ import { ticketService } from '../services/ticketService'
 import { queueAgentService } from '../services/queueAgentService'
 import { validationService } from '../services/validationService'
 import { safeGetItem, safeSetItem } from '../utils/storage'
-import { AGENT_CONFIG } from '../config/agentConfig'
 import { Ticket } from '../types'
 import { normalizeDriverName } from '../utils/utf8Decoder'
 import { useSocket } from '../contexts/SocketContext'
@@ -487,7 +486,7 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       }
 
       const ticketsConNombres = await Promise.all(
-        todosLosTickets.map(async (ticket, index) => {
+        todosLosTickets.map(async (ticket) => {
           // Si ya tiene driverName, no hacer nada
           if (ticket.driverName) {
             if (!esConsultaAutomatica) {
