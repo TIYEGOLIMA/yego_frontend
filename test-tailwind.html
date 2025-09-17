@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tailwind v4 Test</title>
+  <link href="./dist/output.css" rel="stylesheet">
+</head>
+<body class="min-h-screen flex items-center justify-center bg-gray-100">
+  <div class="rounded-xl bg-white text-gray-900 shadow-2xl border-0 p-8 max-w-md w-full mx-auto flex flex-col items-center">
+    <div class="bg-blue-100 rounded-full p-3 shadow-md mb-2">
+      <img src="vite.svg" alt="Logo" class="h-10 w-10" />
+    </div>
+    <h3 class="text-3xl font-extrabold text-blue-700 text-center tracking-tight drop-shadow-sm mb-2">YEGO Integral</h3>
+    <p class="text-center text-gray-500 font-medium mb-6">Inicia sesión en tu cuenta empresarial</p>
+    <form class="w-full space-y-4">
+      <div>
+        <label class="block text-base font-semibold text-gray-700 mb-1">Usuario</label>
+        <input class="block w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-base text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition disabled:opacity-50 disabled:cursor-not-allowed" placeholder="Usuario" />
+      </div>
+      <div>
+        <label class="block text-base font-semibold text-gray-700 mb-1">Contraseña</label>
+        <input type="password" class="block w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-base text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition disabled:opacity-50 disabled:cursor-not-allowed" placeholder="Contraseña" />
+      </div>
+      <button type="submit" class="inline-flex items-center justify-center w-full rounded-xl bg-blue-600 px-4 py-3 text-base font-bold text-white shadow-lg transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed mt-2">
+        Iniciar sesión
+      </button>
+    </form>
+  </div>
+</body>
+</html> 

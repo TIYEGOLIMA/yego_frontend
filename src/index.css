@@ -1,0 +1,449 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Animaciones personalizadas */
+@keyframes slide-down {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-down {
+  animation: slide-down 0.3s ease-out;
+}
+
+/* Variables CSS para el sistema de diseño */
+:root {
+  --yego-primary: #EF0000;
+  --yego-primary-dark: #D40000;
+  --yego-primary-darker: #A50000;
+  
+  /* Espaciado consistente */
+  --spacing-xs: 0.25rem;
+  --spacing-sm: 0.5rem;
+  --spacing-md: 1rem;
+  --spacing-lg: 1.5rem;
+  --spacing-xl: 2rem;
+  --spacing-2xl: 3rem;
+  
+  /* Bordes redondeados */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  
+  /* Transiciones */
+  --transition-fast: 150ms ease-in-out;
+  --transition-normal: 250ms ease-in-out;
+  --transition-slow: 350ms ease-in-out;
+}
+
+/* Reset y configuración base */
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  line-height: 1.6;
+  color: theme('colors.neutral.900');
+  background-color: theme('colors.background.DEFAULT');
+  transition: background-color var(--transition-normal), color var(--transition-normal);
+}
+
+/* Modo oscuro */
+.dark body {
+  color: theme('colors.neutral.100');
+  background-color: theme('colors.background.dark');
+}
+
+/* Clases utilitarias del sistema de diseño */
+@layer components {
+  /* Contenedores */
+  .yego-container {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+  
+  .yego-container-narrow {
+    @apply max-w-4xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+  
+  /* Superficies y tarjetas */
+  .yego-surface {
+    @apply bg-surface dark:bg-surface-dark border border-border dark:border-border-dark rounded-xl;
+  }
+  
+  .yego-card {
+    @apply yego-surface p-6 shadow-md dark:shadow-dark-md transition-all duration-300;
+  }
+  
+  .yego-card-hover {
+    @apply yego-card hover:shadow-lg dark:hover:shadow-dark-lg hover:-translate-y-0.5;
+  }
+  
+  /* Botones del sistema */
+  .yego-btn-base {
+    @apply inline-flex items-center justify-center rounded-lg font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  .yego-btn-primary {
+    @apply yego-btn-base bg-primary-500 text-white hover:bg-primary-600 focus:ring-primary-500 shadow-sm hover:shadow-md;
+  }
+  
+  .yego-btn-secondary {
+    @apply yego-btn-base bg-neutral-100 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 hover:bg-neutral-200 dark:hover:bg-neutral-700 focus:ring-neutral-500 border border-border dark:border-border-dark;
+  }
+  
+  .yego-btn-ghost {
+    @apply yego-btn-base text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 focus:ring-neutral-500;
+  }
+  
+  .yego-btn-danger {
+    @apply yego-btn-base bg-error-500 text-white hover:bg-error-600 focus:ring-error-500 shadow-sm hover:shadow-md;
+  }
+  
+  /* Tamaños de botones */
+  .yego-btn-sm {
+    @apply px-3 py-1.5 text-sm;
+  }
+  
+  .yego-btn-md {
+    @apply px-4 py-2 text-sm;
+  }
+  
+  .yego-btn-lg {
+    @apply px-6 py-3 text-base;
+  }
+  
+  /* Inputs y formularios */
+  .yego-input {
+    @apply block w-full rounded-lg border border-border dark:border-border-dark bg-surface dark:bg-surface-dark px-3 py-2 text-neutral-900 dark:text-neutral-100 placeholder-neutral-500 dark:placeholder-neutral-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500 focus:ring-offset-0 transition-colors;
+  }
+  
+  .yego-label {
+    @apply block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1;
+  }
+  
+  /* Badges y estados */
+  .yego-badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+  
+  .yego-badge-primary {
+    @apply yego-badge bg-primary-100 text-primary-800 dark:bg-primary-900/30 dark:text-primary-300;
+  }
+  
+  .yego-badge-success {
+    @apply yego-badge bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300;
+  }
+  
+  .yego-badge-warning {
+    @apply yego-badge bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300;
+  }
+  
+  .yego-badge-error {
+    @apply yego-badge bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300;
+  }
+  
+  .yego-badge-neutral {
+    @apply yego-badge bg-neutral-100 text-neutral-800 dark:bg-neutral-800 dark:text-neutral-300;
+  }
+  
+  /* Tipografía */
+  .yego-heading-1 {
+    @apply text-3xl font-bold text-neutral-900 dark:text-neutral-100 tracking-tight;
+  }
+  
+  .yego-heading-2 {
+    @apply text-2xl font-semibold text-neutral-900 dark:text-neutral-100 tracking-tight;
+  }
+  
+  .yego-heading-3 {
+    @apply text-xl font-semibold text-neutral-900 dark:text-neutral-100;
+  }
+  
+  .yego-heading-4 {
+    @apply text-lg font-medium text-neutral-900 dark:text-neutral-100;
+  }
+  
+  .yego-body {
+    @apply text-base text-neutral-700 dark:text-neutral-300;
+  }
+  
+  .yego-body-sm {
+    @apply text-sm text-neutral-600 dark:text-neutral-400;
+  }
+  
+  .yego-caption {
+    @apply text-xs text-neutral-500 dark:text-neutral-500;
+  }
+  
+  /* Separadores */
+  .yego-divider {
+    @apply border-t border-border dark:border-border-dark;
+  }
+  
+  /* Estados de carga */
+  .yego-skeleton {
+    @apply animate-pulse bg-neutral-200 dark:bg-neutral-700 rounded;
+  }
+  
+  /* Overlays y modales */
+  .yego-overlay {
+    @apply fixed inset-0 bg-black/50 backdrop-blur-sm z-40;
+  }
+  
+  .yego-modal {
+    @apply fixed inset-0 z-50 flex items-center justify-center p-4;
+  }
+  
+  .yego-modal-content {
+    @apply yego-surface max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl dark:shadow-dark-2xl;
+  }
+  
+  /* Sidebar y navegación */
+  .yego-sidebar {
+    @apply fixed left-0 top-0 h-full bg-surface dark:bg-surface-dark border-r border-border dark:border-border-dark shadow-lg dark:shadow-dark-lg z-30;
+  }
+  
+  .yego-nav-item {
+    @apply flex items-center px-4 py-3 rounded-2xl h-14 text-base font-bold gap-4 transition-colors;
+  }
+  
+  .yego-nav-item-active {
+    @apply yego-nav-item bg-gradient-to-r from-primary-500 to-primary-400 text-white relative shadow-md;
+  }
+  
+  .yego-nav-item-active .yego-nav-indicator {
+    @apply absolute right-4 w-2 h-2 bg-primary-200 rounded-full block;
+  }
+  
+  .yego-nav-item-inactive {
+    @apply yego-nav-item text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800;
+  }
+  
+  /* Tablas */
+  .yego-table {
+    @apply w-full border-collapse;
+  }
+  
+  .yego-table-header {
+    @apply bg-neutral-50 dark:bg-neutral-900/50;
+  }
+  
+  .yego-table-cell {
+    @apply px-4 py-3 text-sm border-b border-border dark:border-border-dark;
+  }
+  
+  .yego-table-header-cell {
+    @apply yego-table-cell font-medium text-neutral-900 dark:text-neutral-100;
+  }
+  
+  .yego-table-body-cell {
+    @apply yego-table-cell text-neutral-700 dark:text-neutral-300;
+  }
+}
+
+/* Scrollbars personalizados */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: theme('colors.neutral.100');
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: theme('colors.neutral.800');
+}
+
+::-webkit-scrollbar-thumb {
+  background: theme('colors.neutral.400');
+  border-radius: 3px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: theme('colors.neutral.600');
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: theme('colors.neutral.500');
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: theme('colors.neutral.500');
+}
+
+/* Animaciones de entrada */
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.3s ease-out;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.2s ease-out;
+}
+
+/* Focus visible mejorado */
+.focus-visible:focus {
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Eliminar todos los outlines por defecto */
+*:focus {
+  outline: none !important;
+}
+
+/* Estilos específicos para elementos glassmorphism */
+.glassmorphism *:focus {
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Transiciones globales */
+* {
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* Efectos Glassmorphism adicionales */
+.glassmorphism {
+  @apply bg-white/10 dark:bg-neutral-900/20 backdrop-blur-md border border-white/20 dark:border-neutral-800/50;
+}
+
+.glassmorphism-strong {
+  @apply bg-white/20 dark:bg-neutral-900/30 backdrop-blur-xl border border-white/30 dark:border-neutral-800/60;
+}
+
+.glassmorphism-light {
+  @apply bg-white/5 dark:bg-neutral-900/10 backdrop-blur-sm border border-white/10 dark:border-neutral-800/30;
+}
+
+/* Efectos específicos para inputs glassmorphism */
+.input-glassmorphism {
+  @apply bg-white/10 dark:bg-neutral-900/20 backdrop-blur-md border border-white/20 dark:border-neutral-800/50 rounded-xl transition-all duration-300;
+  box-shadow: 0 2px 16px 0 rgba(0,0,0,0.08), 0 1.5px 6px 0 rgba(239,0,0,0.04);
+}
+
+.input-glassmorphism:focus-within {
+  @apply bg-white/15 dark:bg-neutral-900/25 border-white/30 dark:border-neutral-700/60;
+  box-shadow: 0 0 0 3px rgba(239,0,0,0.13), 0 6px 32px 0 rgba(0,0,0,0.16);
+}
+
+.dark .input-glassmorphism {
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.10), 0 2px 16px 0 rgba(255,255,255,0.08), 0 1.5px 6px 0 rgba(239,0,0,0.10);
+}
+
+.dark .input-glassmorphism:focus-within {
+  box-shadow: 0 0 0 3px rgba(255,255,255,0.18), 0 0 0 6px rgba(239,0,0,0.10), 0 8px 36px 0 rgba(255,255,255,0.18);
+}
+
+.input-glassmorphism:hover {
+  @apply bg-white/15 dark:bg-neutral-900/25 border-white/30 dark:border-neutral-700/60;
+}
+
+/* Eliminar outline por defecto y mejorar focus */
+input:focus {
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Estilos específicos para inputs dentro de glassmorphism */
+.input-glassmorphism input:focus {
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+.glassmorphism-glow {
+  @apply relative;
+}
+
+.glassmorphism-glow::before {
+  content: '';
+  @apply absolute inset-0 bg-gradient-to-br from-white/20 to-white/10 dark:from-neutral-900/20 dark:to-neutral-800/10 rounded-3xl blur-2xl -z-10;
+}
+
+/* Efectos de hover mejorados para glassmorphism */
+.glassmorphism-hover {
+  @apply transition-all duration-300 hover:scale-105 hover:bg-white/15 dark:hover:bg-neutral-900/25 hover:shadow-xl hover:shadow-primary-500/10;
+}
+
+/* Bordes con gradiente para glassmorphism */
+.glassmorphism-border {
+  @apply relative;
+}
+
+.glassmorphism-border::before {
+  content: '';
+  @apply absolute inset-0 bg-gradient-to-r from-primary-500/20 via-blue-500/20 to-indigo-500/20 rounded-3xl blur-sm -z-10;
+}
+
+/* Animaciones adicionales para elementos flotantes */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.animate-float-delayed {
+  animation: float 3s ease-in-out infinite;
+  animation-delay: 1.5s;
+}
+
+/* Efectos de partículas para el fondo */
+@keyframes sparkle {
+  0%, 100% { opacity: 0; transform: scale(0); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+.animate-sparkle {
+  animation: sparkle 2s ease-in-out infinite;
+}
+
+.animate-sparkle-delayed {
+  animation: sparkle 2s ease-in-out infinite;
+  animation-delay: 1s;
+}

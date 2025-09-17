@@ -1,0 +1,285 @@
+import api from './api'
+import { 
+  Ticket, 
+  CreateTicketData,
+} from '../types'
+
+export const ticketService = {
+  async createTicket(data: CreateTicketData): Promise<Ticket> {
+    try {
+      const response = await api.post('/tickets/create', data)
+      return response.data
+    } catch (error) {
+      console.error('❌ [ticketService] Error creando ticket:', error)
+      throw error
+    }
+  },
+
+  async createTicketPublic(data: CreateTicketData): Promise<Ticket> {
+    try {
+      console.log('🎫 [ticketService] Creando ticket público con datos:', data)
+      
+      const response = await api.post('/tickets/create', data)
+      console.log('✅ [ticketService] Ticket creado exitosamente:', response.data)
+      
+      return response.data
+    } catch (error: any) {
+      console.error('❌ [ticketService] Error creando ticket público:', error)
+      
+      // Log detallado del error
+      if (error?.response) {
+        console.error('📊 [ticketService] Detalles del error:', {
+          status: error.response.status,
+          statusText: error.response.statusText,
+          data: error.response.data,
+          headers: error.response.headers
+        })
+      }
+      
+      throw error
+    }
+  },
+
+  async getTickets(): Promise<Ticket[]> {
+    try {
+      const response = await api.get('/tickets/all')
+      return response.data
+    } catch (error: any) {
+      if (error?.response?.status === 429) {
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        const retryResponse = await api.get('/tickets/all')
+        return retryResponse.data
+      }
+      console.error('❌ [ticketService] Error obteniendo tickets:', error)
+      throw error
+    }
+  },
+
+  async getTicketsByStatus(status: string): Promise<Ticket[]> {
+    try {
+      const response = await api.get(`/tickets/status/${status}`)
+      return response.data
+    } catch (error) {
+      console.error('❌ [ticketService] Error obteniendo tickets por estado:', error)
+      throw error
+    }
+  },
+
+  async getTicketWaiting(): Promise<Ticket[]> {
+    try {
+      const response = await api.get('/tickets/waiting')
+      return response.data
+    } catch (error) {
+      console.error('❌ [ticketService] Error obteniendo tickets en espera:', error)
+      throw error
+    }
+  },
+
+  async getLastCalledTicket(): Promise<Ticket | null> {
+    try {
+      const response = await api.get('/tickets/last-called')
+      return response.data
+    } catch (error) {
+      console.error('❌ [ticketService] Error obteniendo último ticket llamado:', error)
+      throw error
+    }
+  },
+
+  async getCalledTickets(): Promise<Ticket[]> {
+    try {
+      const response = await api.get('/tickets/called')
+      return response.data
+    } catch (error) {
+      console.error('❌ [ticketService] Error obteniendo tickets llamados:', error)
+      throw error
+    }
+  },
+
+  async callTicket(ticketId: number, agentId: number, moduleId?: number): Promise<Ticket> {
+    try {
+      // 🎯 Construir URL con query parameters como espera el backend
+      let url = `/tickets/${ticketId}/call?agentId=${agentId}`
+      if (moduleId) {
+        url += `&moduleId=${moduleId}`
+      }
+      
+      console.log('🎯 [ticketService] Llamando ticket con URL:', url)
+      console.log('🔍 [ticketService] Parámetros:', { ticketId, agentId, moduleId })
+      console.log('🔍 [ticketService] URL completa:', url)
+      
+      // 🎯 Enviar PATCH sin body, solo con query parameters
+      const response = await api.patch(url)
+      console.log('✅ [ticketService] Respuesta del backend:', response.data)
+      console.log('🔍 [ticketService] Status de respuesta:', response.status)
+      console.log('🔍 [ticketService] Headers de respuesta:', response.headers)
+      
+      return response.data
+    } catch (error: any) {
+      console.error('❌ [ticketService] Error llamando ticket:', error)
+      console.error('🔍 [ticketService] Detalles del error:', {
+        message: error?.message,
+        status: error?.response?.status,
+        data: error?.response?.data,
+        url: error?.config?.url,
+        method: error?.config?.method
+      })
+      throw new Error(`Error llamando ticket: ${error?.response?.data?.message || error?.message}`)
+    }
+  },
+
+  async completeTicket(ticketId: number, agentId: number, notes?: string): Promise<Ticket> {
+    try {
+      const validAgentId = Number(agentId)
+      if (!validAgentId || validAgentId <= 0) {
+        throw new Error(`ID de agente inválido: ${agentId}`)
+      }
+      
+      const validNotes = notes && notes.trim() ? notes.trim() : null
+      
+      const requestData = {
+        agentId: validAgentId,
+        notes: validNotes
+      }
+      
+      const response = await api.patch(`/tickets/${ticketId}/complete`, requestData)
+      
+      return response.data
+    } catch (error: any) {
+      console.error('❌ [ticketService] Error completando ticket:', error)
+      throw new Error(`Error completando ticket: ${error?.response?.data?.message || error?.message}`)
+    }
+  },
+
+  async cancelTicket(ticketId: number, agentId: number): Promise<Ticket> {
+    try {
+      const response = await api.patch(`/tickets/${ticketId}/cancel?agentId=${agentId}`)
+      return response.data
+    } catch (error: any) {
+      console.error('❌ [ticketService] Error cancelando ticket:', error)
+      throw new Error(`Error cancelando ticket: ${error?.response?.data?.message || error?.message}`)
+    }
+  },
+
+  async startTicket(ticketId: number, agentId: number): Promise<Ticket> {
+    try {
+      const response = await api.patch(`/tickets/${ticketId}/start?agentId=${agentId}`)
+      return response.data
+    } catch (error: any) {
+      console.error('❌ [ticketService] Error iniciando ticket:', error)
+      throw new Error(`Error iniciando ticket: ${error?.response?.data?.message || error?.message}`)
+    }
+  },
+
+  async getStats(): Promise<{
+    enEspera: number
+    llamados: number
+    atendidos: number
+    completados: number
+  }> {
+    try {
+      const response = await api.get('/tickets/stats')
+      return response.data
+    } catch (error) {
+      console.error('❌ [ticketService] Error obteniendo estadísticas:', error)
+      throw error
+    }
+  },
+
+  async getTicketsByModule(moduleId: number): Promise<Ticket[]> {
+    try {
+      console.log('🎯 [ticketService] Obteniendo tickets del módulo:', moduleId)
+      const response = await api.get(`/tickets/modulo/${moduleId}/completos`)
+      
+      // 🎯 DEBUGGING: Ver qué estructura devuelve el endpoint
+      console.log('🔍 [ticketService] Tipo de response.data:', typeof response.data)
+      console.log('🔍 [ticketService] ¿Es array?', Array.isArray(response.data))
+      console.log('🔍 [ticketService] Estructura completa:', response.data)
+      
+      // 🎯 MANEJAR DIFERENTES ESTRUCTURAS DE RESPUESTA
+      let tickets: any[] = []
+      
+      if (Array.isArray(response.data)) {
+        // Si es un array directo
+        tickets = response.data
+      } else if (response.data && typeof response.data === 'object') {
+        // Si es un objeto con propiedades
+        if (response.data.tickets && Array.isArray(response.data.tickets)) {
+          tickets = response.data.tickets
+        } else if (response.data.data && Array.isArray(response.data.data)) {
+          tickets = response.data.data
+        } else if (response.data.content && Array.isArray(response.data.content)) {
+          tickets = response.data.content
+        } else {
+          // Si no hay estructura conocida, intentar convertir el objeto
+          console.log('⚠️ [ticketService] Estructura desconocida, intentando convertir...')
+          tickets = Object.values(response.data).filter(item => Array.isArray(item)).flat()
+        }
+      }
+      
+      console.log('✅ [ticketService] Tickets extraídos:', tickets.length)
+      console.log('✅ [ticketService] Primer ticket:', tickets[0])
+      
+      // 🎯 MAPEAR LOS TICKETS
+      return tickets.map(ticket => ({
+        ...ticket,
+        userId: ticket.agent_id || null,
+        optionId: undefined,
+        licenseNumber: ticket.phone,
+        user: undefined,
+        option: undefined
+      }))
+      
+    } catch (error: any) {
+      if (error?.response?.status === 429) {
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        const retryResponse = await api.get(`/tickets/modulo/${moduleId}/completos`)
+        
+        let tickets: any[] = []
+        if (Array.isArray(retryResponse.data)) {
+          tickets = retryResponse.data
+        } else if (retryResponse.data && typeof retryResponse.data === 'object') {
+          if (retryResponse.data.tickets && Array.isArray(retryResponse.data.tickets)) {
+            tickets = retryResponse.data.tickets
+          } else if (retryResponse.data.data && Array.isArray(retryResponse.data.data)) {
+            tickets = retryResponse.data.data
+          } else if (retryResponse.data.content && Array.isArray(retryResponse.data.content)) {
+            tickets = retryResponse.data.content
+          } else {
+            tickets = Object.values(retryResponse.data).filter(item => Array.isArray(item)).flat()
+          }
+        }
+        
+        return tickets.map(ticket => ({
+          ...ticket,
+          userId: ticket.agent_id || null,
+          optionId: undefined,
+          licenseNumber: ticket.phone,
+          user: undefined,
+          option: undefined
+        }))
+      }
+      console.error('❌ [ticketService] Error obteniendo tickets por módulo:', error)
+      throw error
+    }
+  },
+
+  async getWaitingTicketsByModule(moduleId: number): Promise<Ticket[]> {
+    try {
+      const response = await api.get(`/tickets/modulo/${moduleId}/waiting`)
+      return response.data
+    } catch (error) {
+      console.error('❌ [ticketService] Error obteniendo tickets en espera por módulo:', error)
+      throw error
+    }
+  },
+
+  async getModuleStats(moduleId: number): Promise<any> {
+    try {
+      const response = await api.get(`/tickets/modulo/${moduleId}/stats`)
+      return response.data
+    } catch (error) {
+      console.error('❌ [ticketService] Error obteniendo estadísticas del módulo:', error)
+      throw error
+    }
+  }
+}
