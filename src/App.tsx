@@ -59,7 +59,7 @@ function App() {
   // Suscribirse a eventos de autenticación
   useAuthEvents();
 
-  // ✅ SocketService (Socket.IO) para backend NestJS (puerto 3001)
+  // ✅ SocketService (Socket.IO) para backend NestJS (puerto 3000)
   // Este maneja eventos generales de la aplicación
   useEffect(() => {
     const socket = SocketService.getInstance();

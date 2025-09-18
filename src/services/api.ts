@@ -4,8 +4,10 @@
  */
 import axios from 'axios'
 
-// URL base de la API, con fallback a localhost en desarrollo (sistema principal NestJS)
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1'
+// URL base de la API usando variable de entorno
+const API_BASE_URL = import.meta.env.VITE_API_URL || (
+  import.meta.env.DEV ? 'http://localhost:3000/api' : '/api'
+)
 
 // Crear instancia de axios con configuración base
 export const api = axios.create({
