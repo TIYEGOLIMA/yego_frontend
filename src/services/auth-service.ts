@@ -137,33 +137,19 @@ export const authService = {
     try {
       const token = localStorage.getItem('token');
       
-      // 🎯 PASO 1: Notificar al backend para liberar el módulo ANTES de limpiar localStorage
       if (token) {
         try {
-          console.log('🔄 [authService] Notificando logout al backend para liberar módulo...');
-          // Notificar al backend de ticketera para liberar módulo
-          const backendUrl = import.meta.env.VITE_API_URL || 'http://10.10.12.117:3030/api'
-          const ticketeraResponse = await fetch(`${backendUrl}/auth/logout`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
-          });
-          
-          if (ticketeraResponse.ok) {
-            console.log('✅ [authService] Módulo liberado en ticketera');
-          } else {
-            console.warn('⚠️ [authService] Error liberando módulo en ticketera:', ticketeraResponse.status);
-          }
-          console.log('✅ [authService] Backend notificado - módulo liberado');
-        } catch (backendError) {
-          console.warn('⚠️ [authService] Error notificando logout al backend:', backendError);
+          console.log('🔄 [authService] Notificando logout al backend...');
+          // 🎯 UNA SOLA LLAMADA: Tu backend maneja todo internamente
+          await api.post('/auth/logout');
+          console.log('✅ [authService] Logout exitoso en backend');
+        } catch (error) {
+          console.warn('⚠️ [authService] No se pudo hacer logout en backend:', error);
           // Continuar con la limpieza local aunque falle el backend
         }
       }
       
-      // 🎯 PASO 2: Limpiar datos locales
+      // 🎯 Limpiar datos locales
       this.clearLocalStorage();
       
     } catch (error) {
