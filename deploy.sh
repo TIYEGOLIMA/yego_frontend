@@ -19,14 +19,23 @@ echo "🌐 Configurando para IP: $SERVER_IP"
 
 # Crear archivo .env.production
 cat > .env.production << EOF
-# Frontend principal (Socket.IO) - Backend NestJS
-VITE_API_URL=http://$SERVER_IP:3001/api/v1
-VITE_SOCKET_URL=http://$SERVER_IP:3001
-VITE_WS_URL=ws://$SERVER_IP:3001
+# Frontend principal (Backend NestJS)
+VITE_API_URL=http://$SERVER_IP/api
+
+# Backend del AgentPanel (Sistema de ticketera)
+VITE_AGENT_API_URL=http://$SERVER_IP:3030/api
+VITE_AGENT_SOCKET_URL=http://$SERVER_IP:3030
+
+# WebSockets
+VITE_SOCKET_URL=http://$SERVER_IP
+VITE_WS_URL=ws://$SERVER_IP
 
 # Aplicación  
 VITE_APP_NAME=Yego Integral
 VITE_APP_VERSION=2.0.0
+VITE_DEV_MODE=false
+VITE_ENABLE_LOGS=false
+VITE_ENABLE_DEBUG=false
 EOF
 
 echo "✅ Archivo .env.production creado"

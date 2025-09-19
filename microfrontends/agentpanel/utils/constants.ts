@@ -1,6 +1,6 @@
 // Configuración específica para AgentPanel (microfrontend)
-export const API_BASE_URL =  'http://5.161.86.63:3030/api'
-export const SOCKET_URL =  'http://5.161.86.63:3030'
+export const API_BASE_URL = import.meta.env.VITE_AGENT_API_URL || 'http://5.161.86.63:3030/api'
+export const SOCKET_URL = import.meta.env.VITE_AGENT_SOCKET_URL || 'http://5.161.86.63:3030'
 
 
 export const TICKET_STATUS = {
