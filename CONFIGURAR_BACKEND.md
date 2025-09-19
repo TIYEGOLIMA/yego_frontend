@@ -139,6 +139,6 @@ Agregar a los arrays de origins:
 | **Frontend (dev)** | `http://localhost:5174` | 5174 |
 | **Frontend (build)** | `http://localhost:3000` | 3000 |
 | **Backend NestJS** | `http://localhost:3001` | 3001 |
-| **Backend Spring Boot** | `http://10.10.12.117:3030` | 3030 |
+| **Backend Spring Boot** | `http://5.161.86.63:3030` | 3030 |
 
 ¡Una vez que hagas estos cambios, todo debería funcionar perfectamente! 🚀
