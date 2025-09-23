@@ -93,6 +93,13 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       return
     }
     
+    // 🎯 PREVENIR MÚLTIPLES INSTANCIAS: Si ya existe un cliente, desconectarlo primero
+    if (client) {
+      console.log('🔧 [SocketContext] Desconectando cliente existente antes de crear uno nuevo')
+      client.deactivate()
+      setClient(null)
+    }
+    
     try {
       console.log('🔌 [SocketContext] Iniciando conexión WebSocket a:', `${SOCKET_URL}/ws`)
       
