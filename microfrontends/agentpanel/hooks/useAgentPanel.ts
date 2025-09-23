@@ -66,7 +66,7 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
   
   
   // 🎯 WebSocket para AgentPanel
-  const { isConnected, subscribe } = useSocket()
+  const { client, isConnected, subscribe } = useSocket()
   
   // 🎯 SUSCRIPCIONES DE WEBSOCKET PARA ACTUALIZACIONES EN TIEMPO REAL
   useEffect(() => {
@@ -260,18 +260,18 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
     
     console.log('🔌 [AgentPanel] Suscripciones WebSocket configuradas:', subscriptions.length)
     
-         // Cleanup
-         return () => {
-           console.log('🧹 [AgentPanel] Limpiando suscripciones WebSocket')
-           subscriptions.forEach(sub => {
-             try {
-               sub.unsubscribe()
-             } catch (error) {
-               console.warn('⚠️ [AgentPanel] Error desuscribiendo:', error)
-             }
-           })
-         }
-       }, [isConnected, selectedModule])
+    // Cleanup
+    return () => {
+      console.log('🧹 [AgentPanel] Limpiando suscripciones WebSocket')
+      subscriptions.forEach(sub => {
+        try {
+          sub.unsubscribe()
+        } catch (error) {
+          console.warn('⚠️ [AgentPanel] Error desuscribiendo:', error)
+        }
+      })
+    }
+  }, [isConnected, selectedModule])
        
   
   // 🎯 ESTADO PARA TICKETS EN PROCESO (loading)

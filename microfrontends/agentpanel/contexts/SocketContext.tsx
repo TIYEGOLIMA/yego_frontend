@@ -101,14 +101,15 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     }
     
     try {
-      console.log('🔌 [SocketContext] Iniciando conexión WebSocket a:', `${SOCKET_URL}/ws`)
+      console.log('🔌 [SocketContext] Iniciando conexión SockJS/STOMP a:', 'https://api-tick.yego.pro/stomp-ws')
       
       // Obtener token de autenticación usando almacenamiento seguro
       const token = safeGetItem('token')
       console.log('🔑 [SocketContext] Token para WebSocket:', token ? `Presente (${token.substring(0, 20)}...)` : 'No encontrado')
 
+      const socket = new SockJS('https://api-tick.yego.pro/stomp-ws')  // ✅ Actualizado
       const stompClient = new Client({
-        webSocketFactory: () => new SockJS(`${SOCKET_URL}/ws`),
+        webSocketFactory: () => socket,
         connectHeaders: token ? {
           'Authorization': `Bearer ${token}`
         } : {},
@@ -117,21 +118,16 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
         heartbeatIncoming: WEBSOCKET_CONFIG.connection.heartbeatIncoming,
         heartbeatOutgoing: WEBSOCKET_CONFIG.connection.heartbeatOutgoing,
         connectionTimeout: WEBSOCKET_CONFIG.connection.connectionTimeout,
-        forceBinaryWSFrames: false, // Optimizar para texto
-        appendMissingNULLonIncoming: false, // Optimización de rendimiento
-        logRawCommunication: false, // Desactivar logs de comunicación
-        splitLargeFrames: false, // Optimización para frames pequeños
       })
 
       stompClient.onConnect = () => {
-        console.log('✅ [SocketContext] Conectado al servidor WebSocket')
+        console.log('✅ [SocketContext] Conectado al servidor SockJS/STOMP')
         setIsConnected(true)
-        setReconnectAttempts(0) // Resetear intentos de reconexión
+        setReconnectAttempts(0)
         
-        // Monitoreo de latencia simplificado usando timestamps
+        // Monitoreo de latencia simplificado
         const latencyInterval = setInterval(() => {
           if (stompClient.connected) {
-            // Simular latencia realista
             const estimatedLatency = Math.floor(
               Math.random() * 
               (WEBSOCKET_CONFIG.latency.maxSimulatedLatency - WEBSOCKET_CONFIG.latency.minLatency)
@@ -144,11 +140,8 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       }
 
       stompClient.onDisconnect = () => {
-        console.log('🔌 [SocketContext] Desconectado del servidor WebSocket')
+        console.log('🔌 [SocketContext] Desconectado del servidor SockJS/STOMP')
         setIsConnected(false)
-        
-        // 🚫 NO RECONECTAR AUTOMÁTICAMENTE - Solo una conexión por sesión
-        console.log('🚫 [SocketContext] WebSocket desconectado - NO se reconectará automáticamente')
       }
 
       stompClient.onStompError = (frame: any) => {
@@ -178,7 +171,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     }
     
     if (client) {
-      console.log('🔌 Desconectando WebSocket...')
+      console.log('🔌 Desconectando SockJS/STOMP...')
       client.deactivate()
       setClient(null)
       setIsConnected(false)
@@ -203,7 +196,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     }
     
     if (!client?.connected) {
-      console.log('❌ No hay conexión WebSocket activa para suscribirse a:', topic)
+      console.log('❌ No hay conexión STOMP activa para suscribirse a:', topic)
       return null
     }
 
@@ -212,7 +205,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       const subscription = client.subscribe(topic, (message: any) => {
         try {
           const parsedMessage = JSON.parse(message.body)
-          console.log('🎉 [WebSocket] ¡MENSAJE RECIBIDO!', {
+          console.log('🎉 [STOMP] ¡MENSAJE RECIBIDO!', {
             topic: topic,
             ticketNumber: parsedMessage.ticketNumber || 'N/A',
             status: parsedMessage.status || 'N/A',
