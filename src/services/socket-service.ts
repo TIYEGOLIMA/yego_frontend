@@ -58,10 +58,10 @@ class SocketService {
       
       console.log('🔑 [SocketService] Token encontrado, conectando...');
       
-      this.socket = io(SOCKET_URL, {
+      this.socket = io(`${SOCKET_URL}/socketio-ws`, {
         withCredentials: true,
         autoConnect: false, // No conectar automáticamente
-        transports: ['websocket', 'polling'],
+        transports: ['websocket'],
         reconnection: true,
         reconnectionAttempts: Infinity,
         reconnectionDelay: 1000, // Reducir delay de reconexión
