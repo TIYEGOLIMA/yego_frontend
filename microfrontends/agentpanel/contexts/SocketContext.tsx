@@ -107,7 +107,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       const token = safeGetItem('token')
       console.log('🔑 [SocketContext] Token para WebSocket:', token ? `Presente (${token.substring(0, 20)}...)` : 'No encontrado')
 
-      const socket = new SockJS('https://api-tick.yego.pro/stomp-ws')  // ✅ Actualizado
+      const socket = new SockJS('http://api-tick.yego.pro:3030/stomp-ws')  // ✅ HTTP para Java Backend
       const stompClient = new Client({
         webSocketFactory: () => socket,
         connectHeaders: token ? {
