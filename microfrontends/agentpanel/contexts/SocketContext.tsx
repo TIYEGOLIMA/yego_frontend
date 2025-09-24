@@ -82,11 +82,8 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     console.log('🔌 [SocketContext] AGENT_CONFIG.WEBSOCKET_ONLY_TVDISPLAY:', AGENT_CONFIG.WEBSOCKET_ONLY_TVDISPLAY)
     console.log('🔌 [SocketContext] isTVDisplay:', isTVDisplay)
     
-    if (!isTVDisplay) {
-      console.log('🚫 [SocketContext] WebSocket solo para TVDisplay/RatingTablet/AgentPanel - componente actual:', isTVDisplay ? 'TVDisplay/RatingTablet/AgentPanel' : 'Otro')
-      // 🚫 NO llamar a setIsConnected aquí - puede causar problemas durante el renderizado
-      return
-    }
+    // ✅ SIEMPRE CONECTAR: El SocketProvider solo se usa en AgentPanel
+    console.log('✅ [SocketContext] WebSocket habilitado para AgentPanel - conectando siempre')
     
     if (client?.connected) {
       console.log('🔌 [SocketContext] Cliente ya conectado, saltando conexión')
@@ -231,10 +228,8 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     console.log('🎯 [SocketContext] WEBSOCKET_ONLY_TVDISPLAY:', AGENT_CONFIG.WEBSOCKET_ONLY_TVDISPLAY)
     console.log('🎯 [SocketContext] isTVDisplay:', isTVDisplay)
     
-    if (!isTVDisplay) {
-      console.log('🚫 [SocketContext] WebSocket solo para TVDisplay/RatingTablet/AgentPanel - componente actual:', isTVDisplay ? 'TVDisplay/RatingTablet/AgentPanel' : 'Otro')
-      return
-    }
+    // ✅ SIEMPRE CONECTAR: El SocketProvider solo se usa en AgentPanel
+    console.log('✅ [SocketContext] Iniciando conexión automática para AgentPanel')
     
     console.log('🔌 [SocketContext] Iniciando conexión WebSocket...')
     // Solo conectar si WebSocket está habilitado y estamos en TVDisplay o RatingTablet
