@@ -68,16 +68,21 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
           }
         })
 
-        // 📡 Suscripción a lista de tickets
-        stompClient.subscribe("/topic/tickets", (message) => {
-          try {
-            const body = JSON.parse(message.body)
-            console.log("📋 Lista de tickets recibida:", body)
-            setTickets(body) // reemplazar lista completa
-          } catch (err) {
-            console.error("❌ Error parseando lista de tickets:", err)
-          }
-        })
+         // 📡 Suscripción a lista de tickets
+         stompClient.subscribe("/topic/tickets", (message) => {
+           try {
+             const body = JSON.parse(message.body)
+             console.log("📋 Lista de tickets recibida:", body)
+             console.log("🔍 Ticket moduleId:", body.moduleId, "agentId:", body.agentId, "status:", body.status)
+             setTickets((prev) => {
+               // Actualizar o agregar ticket
+               const updatedTickets = prev.filter(t => t.id !== body.id)
+               return [...updatedTickets, body]
+             })
+           } catch (err) {
+             console.error("❌ Error parseando lista de tickets:", err)
+           }
+         })
 
         // 🔎 Medición de latencia simulada
         const latencyInterval = setInterval(() => {

@@ -84,8 +84,8 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       console.log('📊 [WebSocket] Evento de tickets recibido:', message)
       
       setTickets(prevTickets => {
-        // Si es un nuevo ticket WAITING, agregarlo (visible para todos los módulos)
-        if (message.status === 'WAITING' && !prevTickets.some(t => t.id === message.id)) {
+        // Si es un nuevo ticket WAITING sin módulo (moduleId = null), agregarlo (visible para todos los módulos)
+        if (message.status === 'WAITING' && (message.moduleId === null || message.moduleId === undefined) && !prevTickets.some(t => t.id === message.id)) {
           console.log('🆕 [WebSocket] Agregando nuevo ticket WAITING:', message.ticketNumber)
           console.log('🆕 [WebSocket] Datos del nuevo ticket:', {
             ticketNumber: message.ticketNumber,
@@ -222,8 +222,9 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
         moduleId: message.moduleId
       })
       
-      // Los tickets nuevos pueden ser para cualquier módulo o sin módulo asignado
-      if (message.moduleId === selectedModule || message.status === 'WAITING') {
+      // Los tickets nuevos WAITING sin módulo están disponibles para todos
+      if ((message.status === 'WAITING' && (message.moduleId === null || message.moduleId === undefined)) || 
+          message.moduleId === selectedModule) {
         setTickets(prevTickets => {
           // Verificar si el ticket ya existe
           const exists = prevTickets.some(t => t.id === message.id)
@@ -403,17 +404,32 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       const todosLosTicketsBackend = await ticketService.getTickets()
       if (!esConsultaAutomatica) {
         console.log('🎯 [AgentPanel] Todos los tickets del backend:', todosLosTicketsBackend.length)
+        console.log('🔍 [AgentPanel] DETALLES de cada ticket:')
+        todosLosTicketsBackend.forEach((ticket, index) => {
+          console.log(`  ${index + 1}. ${ticket.ticketNumber}: status="${ticket.status}", moduleId=${ticket.moduleId}, agentId=${ticket.agentId}`)
+        })
+        console.log('🎯 [AgentPanel] Módulo seleccionado actual:', selectedModule)
       }
       
       // 🎯 FILTRAR TICKETS RELEVANTES PARA ESTE MÓDULO
       const ticketsRelevantes = todosLosTicketsBackend.filter(ticket => {
-        // Mostrar tickets WAITING (sin asignar) para todos los módulos
-        if (ticket.status === 'WAITING') {
+        // Mostrar tickets WAITING (sin módulo asignado - moduleId = null)
+        if (ticket.status === 'WAITING' && (ticket.moduleId === null || ticket.moduleId === undefined)) {
+          if (!esConsultaAutomatica) {
+            console.log(`✅ [AgentPanel] Ticket ${ticket.ticketNumber} incluido: WAITING sin módulo (disponible para todos)`)
+          }
           return true
         }
-        // Mostrar tickets asignados solo a este módulo
+        // Mostrar tickets asignados a este módulo específico
         if (ticket.moduleId === selectedModule && (ticket.status === 'CALLED' || ticket.status === 'IN_PROGRESS')) {
+          if (!esConsultaAutomatica) {
+            console.log(`✅ [AgentPanel] Ticket ${ticket.ticketNumber} incluido: ${ticket.status} del módulo ${selectedModule}`)
+          }
           return true
+        }
+        
+        if (!esConsultaAutomatica) {
+          console.log(`❌ [AgentPanel] Ticket ${ticket.ticketNumber} excluido: status="${ticket.status}", moduleId=${ticket.moduleId} (no es WAITING sin módulo ni del módulo ${selectedModule})`)
         }
         return false
       })
