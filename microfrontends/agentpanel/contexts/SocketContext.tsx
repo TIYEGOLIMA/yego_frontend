@@ -8,7 +8,6 @@ interface SocketContextType {
   client: Client | null
   isConnected: boolean
   latency: number
-  tickets: any[]
   connect: () => void
   disconnect: () => void
   reconnectWithAuth: () => void
@@ -21,9 +20,10 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   const [client, setClient] = useState<Client | null>(null)
   const [isConnected, setIsConnected] = useState(false)
   const [latency, setLatency] = useState(0)
-  const [tickets, setTickets] = useState<any[]>([])
 
   const connect = () => {
+    console.log('🚀 [SocketContext] INICIANDO PROCESO DE CONEXIÓN')
+    
     if (client?.connected) {
       console.log('🔌 [SocketContext] Cliente ya conectado, saltando conexión')
       return
@@ -39,7 +39,10 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       console.log('🔌 [SocketContext] Iniciando conexión SockJS/STOMP a:', 'https://api-tick.yego.pro/stomp-ws')
 
       const token = safeGetItem('token')
+      console.log('🔐 [SocketContext] Token JWT encontrado:', token ? 'SÍ (' + token.substring(0, 20) + '...)' : 'NO')
+      
       const socket = new SockJS('https://api-tick.yego.pro/stomp-ws')
+      console.log('🌐 [SocketContext] Socket SockJS creado')
 
       const stompClient = new Client({
         webSocketFactory: () => socket,
@@ -52,37 +55,13 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
         heartbeatOutgoing: 5000,
         connectionTimeout: 30000,
       })
+      
+      console.log('⚙️ [SocketContext] Cliente STOMP configurado con headers:', token ? 'Con Authorization' : 'Sin Authorization')
 
       stompClient.onConnect = () => {
         console.log('✅ [SocketContext] Conectado al servidor SockJS/STOMP')
+        console.log('🎯 [SocketContext] Ready para suscripciones dinámicas')
         setIsConnected(true)
-
-        // 📡 Suscripción a nuevos tickets
-        stompClient.subscribe("/topic/new-ticket", (message) => {
-          try {
-            const body = JSON.parse(message.body)
-            console.log("🎉 Nuevo ticket recibido:", body)
-            setTickets((prev) => [...prev, body])
-          } catch (err) {
-            console.error("❌ Error parseando ticket:", err)
-          }
-        })
-
-         // 📡 Suscripción a lista de tickets
-         stompClient.subscribe("/topic/tickets", (message) => {
-           try {
-             const body = JSON.parse(message.body)
-             console.log("📋 Lista de tickets recibida:", body)
-             console.log("🔍 Ticket moduleId:", body.moduleId, "agentId:", body.agentId, "status:", body.status)
-             setTickets((prev) => {
-               // Actualizar o agregar ticket
-               const updatedTickets = prev.filter(t => t.id !== body.id)
-               return [...updatedTickets, body]
-             })
-           } catch (err) {
-             console.error("❌ Error parseando lista de tickets:", err)
-           }
-         })
 
         // 🔎 Medición de latencia simulada
         const latencyInterval = setInterval(() => {
@@ -105,16 +84,21 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       stompClient.onStompError = (frame: any) => {
         console.error('❌ [SocketContext] Error STOMP:', frame.headers['message'])
         console.error('❌ [SocketContext] Error details:', frame.body)
+        console.error('❌ [SocketContext] Frame completo:', frame)
         setIsConnected(false)
       }
 
       stompClient.onWebSocketError = (error: any) => {
         console.error('❌ [SocketContext] Error WebSocket:', error)
+        console.error('❌ [SocketContext] Tipo de error:', typeof error)
+        console.error('❌ [SocketContext] Propiedades del error:', Object.keys(error))
         setIsConnected(false)
       }
 
+      console.log('🚀 [SocketContext] Activando cliente STOMP...')
       stompClient.activate()
       setClient(stompClient)
+      console.log('💾 [SocketContext] Cliente STOMP guardado en estado')
     } catch (error) {
       console.error('❌ [SocketContext] Error creando cliente WebSocket:', error)
       setIsConnected(false)
@@ -137,24 +121,33 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   }
 
   const subscribe = (topic: string, callback: (message: any) => void) => {
+    console.log('📡 [SocketContext] Intento de suscripción a:', topic)
+    console.log('🔗 [SocketContext] Cliente conectado?:', client?.connected)
+    console.log('🔗 [SocketContext] Cliente existe?:', !!client)
+    
     if (!client?.connected) {
-      console.log('❌ No hay conexión STOMP activa para suscribirse a:', topic)
+      console.log('❌ [SocketContext] No hay conexión STOMP activa para suscribirse a:', topic)
       return null
     }
 
     try {
-      console.log('📡 Suscribiéndose a tópico:', topic)
-      return client.subscribe(topic, (message: any) => {
+      console.log('✅ [SocketContext] Creando suscripción a tópico:', topic)
+      const subscription = client.subscribe(topic, (message: any) => {
+        console.log('📥 [SocketContext] Mensaje recibido en tópico', topic, ':', message.body)
         try {
           const parsedMessage = JSON.parse(message.body)
+          console.log('✅ [SocketContext] Mensaje parseado:', parsedMessage)
           callback(parsedMessage)
         } catch (error) {
-          console.error('❌ Error parseando mensaje del tópico:', topic, error)
+          console.error('❌ [SocketContext] Error parseando mensaje del tópico:', topic, error)
+          console.log('📝 [SocketContext] Enviando mensaje raw:', message.body)
           callback(message.body)
         }
       })
+      console.log('🎉 [SocketContext] Suscripción exitosa a:', topic)
+      return subscription
     } catch (error) {
-      console.error('❌ Error suscribiéndose al tópico:', topic, error)
+      console.error('❌ [SocketContext] Error suscribiéndose al tópico:', topic, error)
       return null
     }
   }
@@ -168,7 +161,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   return (
-    <SocketContext.Provider value={{ client, isConnected, latency, tickets, connect, disconnect, reconnectWithAuth, subscribe }}>
+    <SocketContext.Provider value={{ client, isConnected, latency, connect, disconnect, reconnectWithAuth, subscribe }}>
       {children}
     </SocketContext.Provider>
   )
