@@ -108,13 +108,20 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       const stompClient = new Client({
         webSocketFactory: () => socket,
         connectHeaders: token ? {
-          'Authorization': `Bearer ${token}`
-        } : {},
-        debug: () => {}, // Desactivar debug para mejor rendimiento
-        reconnectDelay: WEBSOCKET_CONFIG.connection.reconnectDelay,
-        heartbeatIncoming: WEBSOCKET_CONFIG.connection.heartbeatIncoming,
-        heartbeatOutgoing: WEBSOCKET_CONFIG.connection.heartbeatOutgoing,
-        connectionTimeout: WEBSOCKET_CONFIG.connection.connectionTimeout,
+          'Authorization': `Bearer ${token}`,
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Headers': 'Authorization'
+        } : {
+          'Access-Control-Allow-Origin': '*'
+        },
+        debug: (str) => console.log('🔧 [STOMP Debug]:', str), // Habilitar debug temporal
+        reconnectDelay: 5000, // 5 segundos más conservador
+        heartbeatIncoming: 0, // Desactivar heartbeat temporalmente
+        heartbeatOutgoing: 0, // Desactivar heartbeat temporalmente  
+        connectionTimeout: 30000, // Timeout más largo (30 segundos)
+        forceBinaryWSFrames: false,
+        splitLargeFrames: true, // Permitir frames grandes
+        appendMissingNULLonIncoming: true // Compatibilidad adicional
       })
 
       stompClient.onConnect = () => {
@@ -144,11 +151,21 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       stompClient.onStompError = (frame: any) => {
         console.error('❌ [SocketContext] Error STOMP:', frame.headers['message'])
         console.error('❌ [SocketContext] Error details:', frame.body)
+        console.error('❌ [SocketContext] Frame completo:', frame)
         setIsConnected(false)
       }
 
       stompClient.onWebSocketError = (error: any) => {
         console.error('❌ [SocketContext] Error WebSocket:', error)
+        console.error('❌ [SocketContext] Error type:', typeof error)
+        console.error('❌ [SocketContext] Error keys:', Object.keys(error))
+        setIsConnected(false)
+      }
+
+      stompClient.onWebSocketClose = (event: any) => {
+        console.warn('🔒 [SocketContext] WebSocket cerrado:', event)
+        console.warn('🔒 [SocketContext] Código:', event.code, 'Razón:', event.reason)
+        console.warn('🔒 [SocketContext] ¿Limpio?:', event.wasClean)
         setIsConnected(false)
       }
 
