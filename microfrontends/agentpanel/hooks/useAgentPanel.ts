@@ -70,12 +70,13 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
   
   // 🎯 SUSCRIPCIONES DE WEBSOCKET PARA ACTUALIZACIONES EN TIEMPO REAL
   useEffect(() => {
-    if (!isConnected || !selectedModule) {
-      console.log('🔌 [AgentPanel] WebSocket no conectado o sin módulo seleccionado')
+    if (!isConnected) {
+      console.log('🔌 [AgentPanel] WebSocket no conectado - esperando conexión...')
       return
     }
     
-    console.log('🔌 [AgentPanel] Configurando suscripciones WebSocket para actualizaciones de módulo:', selectedModule)
+    console.log('🔌 [AgentPanel] Configurando suscripciones WebSocket (módulo actual:', selectedModule, ')')
+    console.log('✅ [AgentPanel] WebSocket conectado - creando suscripciones para TODOS los tickets')
     
     const subscriptions: any[] = []
     
@@ -272,7 +273,7 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
         }
       })
     }
-  }, [isConnected, selectedModule])
+  }, [isConnected]) // ✅ Solo depende de la conexión, no del módulo seleccionado
        
   
   // 🎯 ESTADO PARA TICKETS EN PROCESO (loading)
