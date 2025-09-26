@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Eye, EyeOff, AlertCircle, CheckCircle, Shield } from 'lucide-react';
-import { authService } from '../services/auth-service';
+import { authService } from '../services';
 import { useAuthStore } from '../store/auth-store';
 
 interface ForcePasswordChangeDialogProps {

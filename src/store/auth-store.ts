@@ -4,7 +4,7 @@
  */
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { authService } from "../services/auth-service"
+import { authService } from "../services"
 
 export interface User {
   id: number;
@@ -12,9 +12,9 @@ export interface User {
   email: string;
   name: string;
   role: string;
-  moduleId?: number;
+  moduleId?: string | null;  // Backend devuelve string, no number
   active: boolean;
-  lastLogin?: Date;
+  lastLogin: string;         // Backend devuelve LocalDateTime como string ISO
 }
 
 export interface AuthState {
@@ -46,7 +46,7 @@ export const useAuthStore = create<AuthState>()(
           
           
           // Login normal con token
-          if (!response.access_token) {
+          if (!response.accessToken) {
             throw new Error('No se recibió token de acceso')
           }
           
@@ -58,11 +58,11 @@ export const useAuthStore = create<AuthState>()(
           
           set({ 
             user: response.user, 
-            token: response.access_token, 
+            token: response.accessToken, 
             loading: false,
             error: null
           })
-          localStorage.setItem("token", response.access_token)
+          localStorage.setItem("token", response.accessToken)
           localStorage.setItem("user", JSON.stringify(response.user))
           localStorage.removeItem("requiereCambioPassword")
           return response

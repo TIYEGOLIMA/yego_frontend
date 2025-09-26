@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Eye, EyeOff, Lock, AlertCircle, CheckCircle } from 'lucide-react';
-import { authService } from '../services/auth-service';
+import { authService } from '../services';
 
 interface ChangePasswordDialogProps {
   isOpen: boolean;

@@ -56,11 +56,11 @@ if [ $? -eq 0 ]; then
     echo ""
     echo "🎯 Próximos pasos:"
     echo "1. Instalar PM2: npm install -g pm2 serve"
-    echo "2. Ejecutar: pm2 start 'serve -s dist -l 3000' --name yego-frontend"
+    echo "2. Ejecutar: pm2 start 'serve -s dist -l 3030' --name yego-frontend"
     echo "3. Verificar: pm2 status"
     echo ""
     echo "🌐 Tu aplicación estará disponible en:"
-    echo "   http://$SERVER_IP:3000"
+    echo "   http://$SERVER_IP:3030"
     echo ""
 else
     echo "❌ Error en el build"

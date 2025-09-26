@@ -5,7 +5,7 @@
 import { io, Socket } from 'socket.io-client';
 
 // URL del servidor de WebSockets desde variables de entorno
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3000';
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3030';
 
 class SocketService {
   private static instance: SocketService;
@@ -130,6 +130,75 @@ class SocketService {
           this.listeners['permissions-updated'].forEach(fn => fn(...args));
         }
       });
+
+      // 🎯 EVENTOS ESPECÍFICOS PARA MICROFRONTENDS
+
+      // TicketPanel - Eventos de tickets
+      this.socket.on('ticket-created', (...args) => {
+        console.log('📡 [SocketService] Evento ticket-created:', args);
+        if (this.listeners['ticket-created']) {
+          this.listeners['ticket-created'].forEach(fn => fn(...args));
+        }
+      });
+
+      this.socket.on('ticket-updated', (...args) => {
+        console.log('📡 [SocketService] Evento ticket-updated:', args);
+        if (this.listeners['ticket-updated']) {
+          this.listeners['ticket-updated'].forEach(fn => fn(...args));
+        }
+      });
+
+      this.socket.on('ticket-called', (...args) => {
+        console.log('📡 [SocketService] Evento ticket-called:', args);
+        if (this.listeners['ticket-called']) {
+          this.listeners['ticket-called'].forEach(fn => fn(...args));
+        }
+      });
+
+      this.socket.on('ticket-completed', (...args) => {
+        console.log('📡 [SocketService] Evento ticket-completed:', args);
+        if (this.listeners['ticket-completed']) {
+          this.listeners['ticket-completed'].forEach(fn => fn(...args));
+        }
+      });
+
+      // AgentPanel - Eventos de cola y módulos
+      this.socket.on('queue-changed', (...args) => {
+        console.log('📡 [SocketService] Evento queue-changed:', args);
+        if (this.listeners['queue-changed']) {
+          this.listeners['queue-changed'].forEach(fn => fn(...args));
+        }
+      });
+
+      this.socket.on('module-assigned', (...args) => {
+        console.log('📡 [SocketService] Evento module-assigned:', args);
+        if (this.listeners['module-assigned']) {
+          this.listeners['module-assigned'].forEach(fn => fn(...args));
+        }
+      });
+
+      this.socket.on('module-released', (...args) => {
+        console.log('📡 [SocketService] Evento module-released:', args);
+        if (this.listeners['module-released']) {
+          this.listeners['module-released'].forEach(fn => fn(...args));
+        }
+      });
+
+      // RatingTablet - Eventos de calificaciones
+      this.socket.on('rating-submitted', (...args) => {
+        console.log('📡 [SocketService] Evento rating-submitted:', args);
+        if (this.listeners['rating-submitted']) {
+          this.listeners['rating-submitted'].forEach(fn => fn(...args));
+        }
+      });
+
+      // TVDisplay - Eventos para pantallas
+      this.socket.on('display-updated', (...args) => {
+        console.log('📡 [SocketService] Evento display-updated:', args);
+        if (this.listeners['display-updated']) {
+          this.listeners['display-updated'].forEach(fn => fn(...args));
+        }
+      });
       
       // Conectar manualmente con un pequeño delay
       this.updateStatus('connecting');
@@ -193,6 +262,119 @@ class SocketService {
       return true;
     }
     return false;
+  }
+
+  // 🎯 MÉTODOS DE CONVENIENCIA PARA MICROFRONTENDS
+
+  /**
+   * Suscripción a eventos de tickets para AgentPanel
+   * @param callback Función a ejecutar cuando se reciba el evento
+   * @returns Función para desuscribirse
+   */
+  public onTicketUpdated(callback: (ticket: any) => void): () => void {
+    this.on('ticket-updated', callback);
+    return () => this.off('ticket-updated', callback);
+  }
+
+  public onTicketCreated(callback: (ticket: any) => void): () => void {
+    this.on('ticket-created', callback);
+    return () => this.off('ticket-created', callback);
+  }
+
+  public onTicketCalled(callback: (ticket: any) => void): () => void {
+    this.on('ticket-called', callback);
+    return () => this.off('ticket-called', callback);
+  }
+
+  public onTicketCompleted(callback: (ticket: any) => void): () => void {
+    this.on('ticket-completed', callback);
+    return () => this.off('ticket-completed', callback);
+  }
+
+  /**
+   * Suscripción a eventos de cola y módulos para AgentPanel
+   * @param callback Función a ejecutar cuando se reciba el evento
+   * @returns Función para desuscribirse
+   */
+  public onQueueChanged(callback: (queueData: any) => void): () => void {
+    this.on('queue-changed', callback);
+    return () => this.off('queue-changed', callback);
+  }
+
+  public onModuleAssigned(callback: (moduleData: any) => void): () => void {
+    this.on('module-assigned', callback);
+    return () => this.off('module-assigned', callback);
+  }
+
+  public onModuleReleased(callback: (moduleData: any) => void): () => void {
+    this.on('module-released', callback);
+    return () => this.off('module-released', callback);
+  }
+
+  /**
+   * Suscripción a eventos para RatingTablet
+   * @param callback Función a ejecutar cuando se reciba el evento
+   * @returns Función para desuscribirse
+   */
+  public onRatingSubmitted(callback: (ratingData: any) => void): () => void {
+    this.on('rating-submitted', callback);
+    return () => this.off('rating-submitted', callback);
+  }
+
+  /**
+   * Suscripción a eventos para TVDisplay
+   * @param callback Función a ejecutar cuando se reciba el evento
+   * @returns Función para desuscribirse
+   */
+  public onDisplayUpdated(callback: (displayData: any) => void): () => void {
+    this.on('display-updated', callback);
+    return () => this.off('display-updated', callback);
+  }
+
+  /**
+   * Método genérico para suscripción con auto-cleanup
+   * Útil para hooks de React
+   * @param subscriptions Array de [evento, callback] para suscribir
+   * @returns Función para limpiar todas las suscripciones
+   */
+  public subscribe(subscriptions: Array<[string, (...args: any[]) => void]>): () => void {
+    const unsubscribers: (() => void)[] = [];
+    
+    subscriptions.forEach(([event, callback]) => {
+      this.on(event, callback);
+      unsubscribers.push(() => this.off(event, callback));
+    });
+    
+    // Retornar función que limpia todas las suscripciones
+    return () => {
+      unsubscribers.forEach(unsubscribe => unsubscribe());
+    };
+  }
+
+  /**
+   * Verifica si el WebSocket está conectado
+   * @returns true si está conectado
+   */
+  public isConnected(): boolean {
+    return this.socket?.connected || false;
+  }
+
+  /**
+   * Obtiene información del estado de la conexión
+   * @returns Estado detallado de la conexión
+   */
+  public getConnectionInfo(): {
+    status: string;
+    connected: boolean;
+    url: string;
+    hasToken: boolean;
+  } {
+    return {
+      status: this.connectionStatus,
+      connected: this.isConnected(),
+      url: SOCKET_URL,
+      hasToken: !!localStorage.getItem('token')
+    };
   }
 }
 

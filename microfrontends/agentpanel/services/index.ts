@@ -1,6 +1,0 @@
-export { authService } from './authService'
-export { ticketService } from './ticketService'
-export { queueAgentService } from './queueAgentService'
-export { validationService } from './validationService'
-export { moduloAtencionService } from './moduloAtencionService'
-export { default as api } from './api'

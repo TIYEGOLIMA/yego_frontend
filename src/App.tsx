@@ -13,19 +13,21 @@ import { MainLayout } from './shared/components/MainLayout'
 import { MaintenanceOverlay } from './components/MaintenanceOverlay'
 import SocketService from './services/socket-service'
 import { useAuthEvents } from './shared/hooks/useAuth'
-import { microfrontendService } from './services/microfrontend-service'
+import { microfrontendService } from './services'
 
-// Importar módulos de features
-import UsersModule from './features/users/users.module'
-import RolesModule from './features/roles/roles.module'
-import PermissionsModule from './features/permissions/permissions.module'
-import ModulesModule from './features/modules/modules.module'
-import ImportsModule from './features/imports/imports.module'
-import AuditModule from './features/audit/audit.module'
-import ReportsModule from './features/reports/reports.module'
-import SessionsModule from './features/sessions/sessions.module'
-import ConfigurationModule from './features/configuration/configuration.module'
-import TicketsModule from './features/tickets/tickets.module'
+// Importar módulos de features - CORE (Sistema Principal)
+import UsersModule from './features/core/users/users.module'
+import RolesModule from './features/core/roles/roles.module'
+import PermissionsModule from './features/core/permissions/permissions.module'
+import ModulesModule from './features/core/modules/modules.module'
+import ImportsModule from './features/core/imports/imports.module'
+import AuditModule from './features/core/audit/audit.module'
+import ReportsModule from './features/core/reports/reports.module'
+import SessionsModule from './features/core/sessions/sessions.module'
+import ConfigurationModule from './features/core/configuration/configuration.module'
+
+// Importar módulos de features - TICKETERA
+import TicketsModule from './features/ticketera/tickets/tickets.module'
 
 // Crear cliente de React Query
 const queryClient = new QueryClient({
@@ -42,7 +44,7 @@ const queryClient = new QueryClient({
  * Redirecciona a login si el usuario no está autenticado
  */
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const { token, user } = useAuthStore()
+  const { token } = useAuthStore()
   
   // Permitir acceso si hay token
   const isAuthenticated = !!token
