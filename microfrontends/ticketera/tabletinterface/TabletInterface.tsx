@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '../shared/components/ui/Card'
 import { Button } from '../shared/components/ui/Button'
 import { BaseLoader } from '../../shared/components/ui'
+import { authService } from '../../../src/services/core/auth-service'
 import { 
   ArrowLeft, 
   Phone, 
@@ -11,7 +12,9 @@ import {
   LogOut,
   X,
   Lock,
-  CreditCard
+  CreditCard,
+  Maximize,
+  Minimize
 } from 'lucide-react'
 // 📱 Validación de teléfono específica para TabletInterface
 const PHONE_VALIDATION = {
@@ -59,9 +62,9 @@ const authHelpers = {
 
 // 🎯 COMPONENTES ESPECÍFICOS PARA TABLETINTERFACE
 const ErrorMessage = ({ message }: { message: string }) => (
-  <div className="flex items-center justify-center text-red-600 bg-red-50 dark:bg-red-900/20 p-4 rounded-lg">
+  <div className="flex items-center justify-center text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/30 p-4 rounded-lg border-2 border-red-200 dark:border-red-800">
     <div className="w-5 h-5 mr-2">⚠️</div>
-    {message}
+    <span className="font-medium">{message}</span>
   </div>
 )
 
@@ -149,10 +152,9 @@ export default function TabletInterface() {
   const [selectedSubOption, setSelectedSubOption] = useState<number | null>(null)
   const [phoneNumber, setPhoneNumber] = useState('')
   const [showDriverModal, setShowDriverModal] = useState(false)
-  const [showExitModal, setShowExitModal] = useState(false)
   const [showTicketCreatedModal, setShowTicketCreatedModal] = useState(false)
-  const [exitPassword, setExitPassword] = useState('')
   const [currentStep, setCurrentStep] = useState<'options' | 'subOptions' | 'phone' | 'driver' | 'rating'>('options')
+  const [isFullscreen, setIsFullscreen] = useState(false)
 
   // Estados para el conductor
   const [driverData, setDriverData] = useState({
@@ -218,8 +220,8 @@ export default function TabletInterface() {
   }, [loading])
 
   const validarNumeroTicket = useCallback((numero: string) => {
-    // Debe ser exactamente 9 dígitos, ni más ni menos
-    return numero.length === 9 && /^\d+$/.test(numero)
+    // Debe ser exactamente 9 dígitos, empezar con 9
+    return numero.length === 9 && /^9\d{8}$/.test(numero)
   }, [])
 
   const validarDNI = useCallback((dni: string) => {
@@ -233,12 +235,14 @@ export default function TabletInterface() {
     if (!validarNumeroTicket(phoneNumber)) {
       if (phoneNumber.length === 0) {
         setError('Debe ingresar un número de teléfono')
+      } else if (!phoneNumber.startsWith('9')) {
+        setError('El número debe empezar con 9')
       } else if (phoneNumber.length < 9) {
         setError(`El número debe tener 9 dígitos (actualmente tiene ${phoneNumber.length})`)
       } else if (phoneNumber.length > 9) {
         setError(`El número debe tener exactamente 9 dígitos (actualmente tiene ${phoneNumber.length})`)
       } else {
-        setError('El número debe contener solo dígitos')
+        setError('El número debe contener solo dígitos y empezar con 9')
       }
       return
     }
@@ -392,18 +396,21 @@ export default function TabletInterface() {
 
   const handleCerrarSesion = useCallback(async () => {
     try {
-      await authHelpers.navigateToLogin()
+      console.log('🚪 [TabletInterface] Cerrando sesión...')
+      
+      // Llamar al servicio de logout del sistema
+      await authService.logout()
+      
+      console.log('✅ [TabletInterface] Sesión cerrada exitosamente')
+      
+      // Navegar al login
       navigate('/login')
     } catch (error) {
       console.error('❌ [TabletInterface] Error en logout:', error)
+      // Incluso si hay error, navegar al login
       navigate('/login')
     }
   }, [navigate])
-
-  const handleSalir = useCallback(() => {
-    // Abrir modal para pedir contraseña
-    setShowExitModal(true)
-  }, [])
 
   const retroceder = useCallback(() => {
     switch (currentStep) {
@@ -434,30 +441,14 @@ export default function TabletInterface() {
     setCurrentStep('phone')
   }, [])
 
-
-  const closeExitModal = useCallback(() => {
-    setShowExitModal(false)
-    setExitPassword('')
-  }, [])
-
-  const validatePasswordAndExit = useCallback(() => {
-    if (exitPassword === 'admin123') {
-      // Contraseña correcta, salir de la sesión
-      console.log('✅ [TabletInterface] Contraseña correcta (admin123), cerrando sesión...')
-      handleCerrarSesion()
-    } else {
-      setError('Contraseña incorrecta. Use: admin123')
-    }
-  }, [exitPassword, setError, handleCerrarSesion])
-
   // Renderizado de pasos
   const renderPaso1 = () => (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="text-center">
-        <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">
+        <h2 className="text-4xl font-bold text-slate-900 dark:text-white mb-3">
           Seleccione su motivo de visita
         </h2>
-        <p className="text-slate-600 dark:text-slate-300">
+        <p className="text-xl text-slate-600 dark:text-white mb-6">
           Elija la opción que mejor describa su necesidad
         </p>
       </div>
@@ -465,14 +456,14 @@ export default function TabletInterface() {
       {loading ? (
         <BaseLoader message="Cargando opciones..." />
       ) : (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-5">
           {options.map((option) => (
             <Button
               key={option.id}
               variant="ghost"
               size="lg"
               onClick={() => seleccionarOpcion(option.id)}
-              className="h-16 text-base font-medium p-3 text-center"
+              className="min-h-24 font-semibold text-center leading-tight"
               disabled={loading}
             >
               {option.name}
@@ -484,12 +475,12 @@ export default function TabletInterface() {
   )
 
   const renderPaso2 = () => (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="text-center">
-        <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">
+        <h2 className="text-4xl font-bold text-slate-900 dark:text-white mb-3">
           {selectedOption ? options.find((opt: any) => opt.id === selectedOption)?.name : ''}
         </h2>
-        <p className="text-slate-600 dark:text-slate-300">
+        <p className="text-xl text-slate-600 dark:text-white mb-6">
           Seleccione una opción específica
         </p>
       </div>
@@ -501,7 +492,7 @@ export default function TabletInterface() {
             variant="ghost"
             size="lg"
             onClick={() => seleccionarSubOpcion(option.id)}
-            className="h-16 text-base font-medium p-3 text-center"
+            className="min-h-32 font-bold text-center"
           >
             {option.name}
           </Button>
@@ -522,13 +513,13 @@ export default function TabletInterface() {
   )
 
   const renderPaso3 = () => (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="text-center">
-        <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">
+        <h2 className="text-4xl font-bold text-slate-900 dark:text-white mb-3">
           Ingrese su número de telefono
         </h2>
-        <p className="text-slate-600 dark:text-slate-300">
-          Debe tener exactamente 9 dígitos
+        <p className="text-xl text-slate-600 dark:text-white mb-6">
+          Debe empezar con 9 y tener exactamente 9 dígitos
         </p>
       </div>
 
@@ -536,11 +527,19 @@ export default function TabletInterface() {
         <input
           type="tel"
           value={phoneNumber}
-          onChange={(e) => setPhoneNumber(e.target.value)}
+          onChange={(e) => {
+            const value = e.target.value
+            // Solo permitir números y que empiece con 9
+            if (value === '') {
+              setPhoneNumber(value)
+            } else if (/^\d+$/.test(value) && value.startsWith('9')) {
+              setPhoneNumber(value)
+            }
+          }}
           maxLength={9}
-          placeholder="Ej: 123456789"
+          placeholder="Ej: 987654321"
           disabled={loading}
-          className="w-full p-4 text-lg border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent dark:bg-slate-700 dark:text-white"
+          className="w-full p-5 text-2xl !border-2 !border-red-500 dark:!border-red-500 rounded-lg focus:!ring-2 focus:!ring-red-400 focus:!border-red-500 dark:focus:!border-red-500 focus:outline-none bg-white dark:bg-slate-700 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-400 shadow-md"
         />
       </div>
 
@@ -586,30 +585,77 @@ export default function TabletInterface() {
   // Hook local para pantalla completa
   const enterFullscreen = () => {
     if (document.documentElement.requestFullscreen) {
-      document.documentElement.requestFullscreen()
+      document.documentElement.requestFullscreen().catch(err => {
+        console.log('⚠️ [TabletInterface] No se pudo activar pantalla completa:', err.message)
+      })
     }
   }
 
-  // Entrar en pantalla completa por defecto
+  const exitFullscreen = () => {
+    if (document.exitFullscreen) {
+      document.exitFullscreen().catch(err => {
+        console.log('⚠️ [TabletInterface] No se pudo salir de pantalla completa:', err.message)
+      })
+    }
+  }
+
+  const toggleFullscreen = () => {
+    if (isFullscreen) {
+      exitFullscreen()
+    } else {
+      enterFullscreen()
+    }
+  }
+
+  // Detectar cambios en el estado de pantalla completa
   useEffect(() => {
-    enterFullscreen()
-  }, [enterFullscreen])
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement)
+    }
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    
+    // Verificar estado inicial
+    setIsFullscreen(!!document.fullscreenElement)
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange)
+    }
+  }, [])
 
   return (
     <>
       <div className="min-h-screen w-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 flex items-center justify-center p-4 relative">
-      {/* Botón de salida - Siempre mostrar el botón rojo del candado */}
-      <button
-        onClick={handleSalir}
-        className="absolute top-4 right-4 z-50 bg-red-600 hover:bg-red-700 text-white p-3 rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
-        title="Salir del sistema"
-      >
-        <Lock className="w-6 h-6" />
-      </button>
+      {/* Botones de control */}
+      <div className="absolute top-4 right-4 z-50 flex space-x-2">
+        {/* Botón de pantalla completa/minimizar */}
+        <button
+          onClick={toggleFullscreen}
+          className="bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
+          title={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
+        >
+          {isFullscreen ? (
+            <Minimize className="w-6 h-6" />
+          ) : (
+            <Maximize className="w-6 h-6" />
+          )}
+        </button>
+        
+        {/* Botón de cerrar sesión - Solo visible cuando NO está en fullscreen */}
+        {!isFullscreen && (
+          <button
+            onClick={handleCerrarSesion}
+            className="bg-red-600 hover:bg-red-700 text-white p-3 rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
+            title="Cerrar sesión"
+          >
+            <LogOut className="w-6 h-6" />
+          </button>
+        )}
+      </div>
 
-      <Card className="w-full max-w-6xl">
-        <CardHeader className="text-center">
-          <CardTitle className="text-3xl font-bold text-slate-900 dark:text-white">
+      <Card className="w-full max-w-7xl">
+        <CardHeader className="text-center pb-8">
+          <CardTitle className="text-[30px] font-bold text-slate-900 dark:text-white">
             Sistema de Ticketera
           </CardTitle>
         </CardHeader>
@@ -618,12 +664,12 @@ export default function TabletInterface() {
           {currentStep === 'subOptions' && renderPaso2()}
           {currentStep === 'phone' && renderPaso3()}
           {currentStep === 'driver' && (
-            <div className="space-y-6">
+            <div className="space-y-8">
               <div className="text-center">
                 <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">
                   Ingrese los datos del conductor
                 </h2>
-                <p className="text-slate-600 dark:text-slate-300">
+                <p className="text-slate-600 dark:text-white mb-2">
                   Por favor, ingrese el nombre del conductor.
                 </p>
               </div>
@@ -633,9 +679,9 @@ export default function TabletInterface() {
                   value={`${driverData.firstName} ${driverData.lastName}`}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDriverData({ ...driverData, firstName: e.target.value })}
                   placeholder="Nombre del Conductor"
-                  className="w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg 
+                  className="w-full p-3 !border-2 !border-red-500 dark:!border-red-500 rounded-lg 
                            bg-white dark:bg-slate-700 text-slate-900 dark:text-white
-                           focus:outline-none focus:ring-2 focus:ring-blue-500"
+                           focus:outline-none focus:!ring-2 focus:!ring-red-400 focus:!border-red-500 dark:focus:!border-red-500"
                   disabled={loading}
                 />
               </div>
@@ -672,70 +718,6 @@ export default function TabletInterface() {
       </Card>
       </div>
 
-      {/* Modal de contraseña para salir */}
-      {showExitModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-xl p-6 max-w-md w-full shadow-2xl">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-slate-900 dark:text-white flex items-center">
-                <div className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center mr-2">
-                  <Lock className="w-4 h-4 text-white" />
-                </div>
-                Salir del Sistema
-              </h3>
-              <button
-                onClick={closeExitModal}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            
-            <p className="text-slate-600 dark:text-slate-400 mb-4">
-              Para salir del sistema, ingrese la contraseña: 
-              <br />
-              <span className="text-sm text-slate-500">
-                Será redirigido al login después de confirmar.
-              </span>
-            </p>
-            <div className="space-y-4">
-              <input
-                type="password"
-                value={exitPassword}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setExitPassword(e.target.value)}
-                placeholder="Ingrese contraseña"
-                className="w-full px-4 py-3 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent dark:bg-slate-700 dark:text-white"
-                onKeyPress={(e: React.KeyboardEvent<HTMLInputElement>) => e.key === 'Enter' && validatePasswordAndExit()}
-                autoFocus
-              />
-              
-              {error && (
-                <div className="text-red-600 text-sm bg-red-50 dark:bg-red-900/20 p-3 rounded-lg">
-                  {error}
-                </div>
-              )}
-              
-              <div className="flex space-x-3">
-                <Button
-                  variant="secondary"
-                  onClick={closeExitModal}
-                  className="flex-1"
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  onClick={validatePasswordAndExit}
-                  className="flex-1 bg-red-600 hover:bg-red-700"
-                >
-                  <LogOut className="w-4 h-4 mr-2" />
-                  Salir
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Modal para agregar conductor */}
       {showDriverModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -755,8 +737,8 @@ export default function TabletInterface() {
             </div>
             
             <div className="mb-4">
-              <p className="text-slate-600 dark:text-slate-300 mb-4">
-                El número <strong>{phoneNumber}</strong> no está registrado. 
+              <p className="text-slate-600 dark:text-white mb-4">
+                El número <strong className="dark:text-white">{phoneNumber}</strong> no está registrado. 
                 Seleccione el tipo de documento:
               </p>
               
@@ -796,8 +778,8 @@ export default function TabletInterface() {
               {/* Campos según el tipo seleccionado */}
               {tipoDocumento === 'dni' && (
                 <div className="space-y-3">
-                  <div className="text-center p-4 bg-red-50 dark:bg-red-900/20 rounded-lg mb-4">
-                    <p className="text-red-700 dark:text-red-300 mb-2">
+                  <div className="text-center p-4 bg-red-50 dark:bg-red-900/30 rounded-lg mb-4 border border-red-200 dark:border-red-800">
+                    <p className="text-red-700 dark:text-red-300 mb-2 font-medium">
                       Ingrese el DNI del conductor (8 dígitos)
                     </p>
                   </div>
@@ -805,11 +787,17 @@ export default function TabletInterface() {
                   <input
                     type="text"
                     value={driverData.phone}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDriverData({ ...driverData, phone: e.target.value })}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      const value = e.target.value
+                      // Solo permitir números y máximo 8 dígitos
+                      if (value === '' || (/^\d+$/.test(value) && value.length <= 8)) {
+                        setDriverData({ ...driverData, phone: value })
+                      }
+                    }}
                     placeholder="Ej: 12345678"
-                    className="w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg 
+                    className="w-full p-3 !border-2 !border-red-500 dark:!border-red-500 rounded-lg 
                              bg-white dark:bg-slate-700 text-slate-900 dark:text-white
-                             focus:outline-none focus:ring-2 focus:ring-red-500"
+                             focus:outline-none focus:!ring-2 focus:!ring-red-400 focus:!border-red-500 dark:focus:!border-red-500"
                     disabled={loading}
                     maxLength={8}
                     autoFocus
@@ -824,9 +812,9 @@ export default function TabletInterface() {
                     value={driverData.firstName}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDriverData({ ...driverData, firstName: e.target.value })}
                     placeholder="Nombre del Conductor"
-                    className="w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg 
+                    className="w-full p-3 !border-2 !border-red-500 dark:!border-red-500 rounded-lg 
                              bg-white dark:bg-slate-700 text-slate-900 dark:text-white
-                             focus:outline-none focus:ring-2 focus:ring-red-500"
+                             focus:outline-none focus:!ring-2 focus:!ring-red-400 focus:!border-red-500 dark:focus:!border-red-500"
                     disabled={loading}
                     maxLength={50}
                     autoFocus
@@ -837,9 +825,9 @@ export default function TabletInterface() {
                     value={driverData.lastName}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDriverData({ ...driverData, lastName: e.target.value })}
                     placeholder="Apellido del Conductor"
-                    className="w-full p-3 border border-slate-300 dark:border-slate-600 rounded-lg 
+                    className="w-full p-3 !border-2 !border-red-500 dark:!border-red-500 rounded-lg 
                              bg-white dark:bg-slate-700 text-slate-900 dark:text-white
-                             focus:outline-none focus:ring-2 focus:ring-red-500"
+                             focus:outline-none focus:!ring-2 focus:!ring-red-400 focus:!border-red-500 dark:focus:!border-red-500"
                     disabled={loading}
                     maxLength={50}
                   />
@@ -894,7 +882,7 @@ export default function TabletInterface() {
                 ¡Ticket Creado!
               </h3>
               
-              <p className="text-slate-600 dark:text-slate-400 mb-4">
+              <p className="text-slate-600 dark:text-white mb-4">
                 Su ticket ha sido registrado exitosamente.
               </p>
               
@@ -910,9 +898,9 @@ export default function TabletInterface() {
                 </div>
               )}
               
-              <p className="text-slate-600 dark:text-slate-400 mb-6">
-                <span className="text-sm text-slate-500">
-                  Será redirigido al inicio en <span className="font-bold text-red-600" id="countdown">5</span> segundos...
+              <p className="text-slate-600 dark:text-white mb-6">
+                <span className="text-sm text-slate-500 dark:text-white">
+                  Será redirigido al inicio en <span className="font-bold text-red-600 dark:text-red-400" id="countdown">5</span> segundos...
                 </span>
               </p>
               

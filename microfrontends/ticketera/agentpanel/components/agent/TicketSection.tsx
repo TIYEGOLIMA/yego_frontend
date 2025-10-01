@@ -44,10 +44,10 @@ export const TicketSection: React.FC<TicketSectionProps> = ({
 
 
   return (
-    <div className={`bg-white from-white to-gray-50 rounded-2xl shadow-xl border border-gray-100 p-6 ${className}`}>
+    <div className={`bg-white dark:bg-slate-800 from-white to-gray-50 rounded-2xl shadow-xl border border-gray-100 dark:border-slate-700 p-6 ${className}`}>
       <div className="mb-6">
         <div className="mb-4">
-          <h3 className="text-xl font-bold text-gray-800">{title}</h3>
+          <h3 className="text-xl font-bold text-gray-800 dark:text-white">{title}</h3>
           {autoLoading && status === 'WAITING' && (
             <div className="flex items-center mt-1 text-xs text-blue-600 font-medium">
               <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600 mr-2"></div>

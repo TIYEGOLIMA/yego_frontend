@@ -65,7 +65,7 @@ export const moduleService = {
 
   async getAllOptions(): Promise<ModuleOption[]> {
     try {
-      const response = await api.get('/modules/options')
+      const response = await api.get('/modulo-opciones/options')
       return response.data
     } catch (error) {
       console.error('❌ [moduleService] Error obteniendo opciones:', error)
@@ -75,7 +75,7 @@ export const moduleService = {
 
   async getSubOptions(parentId: number): Promise<ModuleOption[]> {
     try {
-      const response = await api.get(`/modules/${parentId}/suboptions`)
+      const response = await api.get(`/modulo-opciones/${parentId}/suboptions`)
       return response.data
     } catch (error) {
       console.error('❌ [moduleService] Error obteniendo subopciones:', error)

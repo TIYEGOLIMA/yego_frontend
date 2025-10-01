@@ -137,10 +137,10 @@ const AgentPanel: React.FC = () => {
       <div className="mb-8 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
               Panel de Agente
             </h1>
-            <p className="text-gray-700 dark:text-gray-300">
+            <p className="text-gray-700 dark:text-white">
               Módulo {selectedModule} - Gestión de Tickets
             </p>
           </div>
@@ -148,19 +148,19 @@ const AgentPanel: React.FC = () => {
             <div className="text-right">
               <div className="text-sm text-gray-600 dark:text-gray-400 flex items-center justify-end gap-2">
                 <span className="text-gray-500 dark:text-gray-400">WebSocket:</span>
-                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border ${
                   isConnected
-                    ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' 
-                    : 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
+                    ? 'bg-gray-100 dark:bg-gray-700 text-green-800 dark:text-green-200 border-green-300 dark:border-green-600' 
+                    : 'bg-gray-100 dark:bg-gray-700 text-red-800 dark:text-red-200 border-red-300 dark:border-red-600'
                 }`}>
-                  <span className="relative">
-                    <span className={`w-2 h-2 rounded-full ${
+                  <span className="relative flex items-center justify-center w-3 h-3">
+                    <span className={`w-3 h-3 rounded-full ${
                       isConnected 
                         ? 'bg-green-500' 
                         : 'bg-red-500'
                     }`}></span>
                     {isConnected && (
-                      <span className="absolute top-0 left-0 w-2 h-2 bg-green-500 rounded-full animate-ping"></span>
+                      <span className="absolute top-0 left-0 w-3 h-3 bg-green-500 rounded-full animate-ping"></span>
                     )}
                   </span>
                   {isConnected ? 'Conectado' : 'Deshabilitado (HTTP Polling)'}

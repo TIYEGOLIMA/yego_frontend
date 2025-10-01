@@ -37,6 +37,7 @@ export {
   useAgentPanel,
   useTVDisplay,
   useRatingTablet,
+  useTabletInterfaceWebSocket,
   TICKETERA_CONFIG,
   getTicketeraModuleConfig,
   canAccessTicketeraModule

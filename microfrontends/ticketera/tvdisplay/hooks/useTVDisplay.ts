@@ -19,6 +19,9 @@ export const useTVDisplay = () => {
     completados: 0
   })
   const [lastStatsUpdate, setLastStatsUpdate] = useState<Date | null>(null)
+  const [vibratingTickets, setVibratingTickets] = useState<Set<number>>(new Set())
+  const [displayQueue, setDisplayQueue] = useState<Ticket[]>([])
+  const [currentDisplayTicket, setCurrentDisplayTicket] = useState<Ticket | null>(null)
   const maxTicketsToShow = 7
 
 
@@ -164,6 +167,35 @@ export const useTVDisplay = () => {
         const exists = prev.some(t => t.id === updatedTicket.id)
         if (exists) {
           console.log('🔄 [TVDisplay] Actualizando ticket existente...')
+          
+          // 🎯 Detectar cambio de estado de WAITING a CALLED
+          const ticketAnterior = prev.find(t => t.id === updatedTicket.id)
+          if (ticketAnterior?.status === TICKET_STATUS.WAITING && 
+              updatedTicket.status === TICKET_STATUS.CALLED) {
+            console.log('🔔 [TVDisplay] ¡Ticket cambió de ESPERA a LLAMADO!')
+            
+            // 🎵 Reproducir sonido si está habilitado
+            if (soundEnabled) {
+              playNotificationSound()
+            }
+            
+            // 📳 Activar animación de vibración en el card
+            setVibratingTickets(prev => new Set(prev).add(updatedTicket.id))
+            // Remover la animación después de 3 segundos
+            setTimeout(() => {
+              setVibratingTickets(prev => {
+                const newSet = new Set(prev)
+                newSet.delete(updatedTicket.id)
+                return newSet
+              })
+            }, 3000)
+            console.log('📳 [TVDisplay] Animación de vibración activada para card')
+            
+            // 🎬 Agregar a la cola de visualización en pantalla completa
+            setDisplayQueue(prev => [...prev, ticketConNombre])
+            console.log('🎬 [TVDisplay] Ticket agregado a cola de visualización')
+          }
+          
           return prev.map(t => t.id === updatedTicket.id ? ticketConNombre : t)
         } else {
           console.log('➕ [TVDisplay] Agregando ticket actualizado...')
@@ -195,10 +227,26 @@ export const useTVDisplay = () => {
       setCalledTicket(ticketConNombre)
       setLastUpdate(new Date())
       
-      // Reproducir sonido si está habilitado
+      // 🎵 Reproducir sonido si está habilitado
       if (soundEnabled) {
         playNotificationSound()
       }
+      
+      // 📳 Activar animación de vibración en el card
+      setVibratingTickets(prev => new Set(prev).add(calledTicket.id))
+      // Remover la animación después de 3 segundos
+      setTimeout(() => {
+        setVibratingTickets(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(calledTicket.id)
+          return newSet
+        })
+      }, 3000)
+      console.log('📳 [TVDisplay] Animación de vibración activada para card llamado')
+      
+      // 🎬 Agregar a la cola de visualización en pantalla completa
+      setDisplayQueue(prev => [...prev, ticketConNombre])
+      console.log('🎬 [TVDisplay] Ticket agregado a cola de visualización')
     })
 
     // Listener para tickets completados
@@ -295,6 +343,40 @@ export const useTVDisplay = () => {
             if (prev.length !== ticketsData.length || 
                 prev.some((t, i) => t.id !== ticketsData[i]?.id || t.status !== ticketsData[i]?.status)) {
               console.log('🔄 [TVDisplay] Cambios detectados, actualizando tickets...')
+              
+              // 🎯 Detectar tickets que cambiaron de WAITING a CALLED
+              ticketsData.forEach(ticketNuevo => {
+                const ticketAnterior = prev.find(t => t.id === ticketNuevo.id)
+                if (ticketAnterior?.status === TICKET_STATUS.WAITING && 
+                    ticketNuevo.status === TICKET_STATUS.CALLED) {
+                  console.log('🔔 [TVDisplay Polling] ¡Ticket cambió de ESPERA a LLAMADO!')
+                  
+                  // 🎵 Reproducir sonido si está habilitado
+                  if (soundEnabled) {
+                    playNotificationSound()
+                  }
+                  
+                  // 📳 Activar animación de vibración en el card
+                  setVibratingTickets(prev => new Set(prev).add(ticketNuevo.id))
+                  // Remover la animación después de 3 segundos
+                  setTimeout(() => {
+                    setVibratingTickets(prev => {
+                      const newSet = new Set(prev)
+                      newSet.delete(ticketNuevo.id)
+                      return newSet
+                    })
+                  }, 3000)
+                  console.log('📳 [TVDisplay Polling] Animación de vibración activada para card')
+                  
+                  // 🎬 Agregar a la cola de visualización en pantalla completa
+                  // Cargar el ticket con nombre primero
+                  cargarNombreConductor(ticketNuevo).then(ticketConNombre => {
+                    setDisplayQueue(prev => [...prev, ticketConNombre])
+                    console.log('🎬 [TVDisplay Polling] Ticket agregado a cola de visualización')
+                  })
+                }
+              })
+              
               // Cargar nombres de conductores de forma asíncrona
               Promise.all(ticketsData.map(ticket => cargarNombreConductor(ticket)))
                 .then(ticketsConNombres => {
@@ -316,7 +398,7 @@ export const useTVDisplay = () => {
         clearInterval(interval)
       }
     }
-  }, [isConnected])
+  }, [isConnected, soundEnabled, playNotificationSound])
 
   // Función para formatear hora
   const formatearHora = useCallback((date: Date) => {
@@ -425,6 +507,45 @@ export const useTVDisplay = () => {
     setLastStatsUpdate(new Date())
   }, [ticketsEnEspera.length, ticketsLlamados.length, ticketsEnAtencion.length, stats.completados])
 
+  // 🎬 EFECTO PARA PROCESAR LA COLA DE VISUALIZACIÓN
+  useEffect(() => {
+    // Si ya hay un ticket mostrándose o la cola está vacía, no hacer nada
+    if (currentDisplayTicket !== null || displayQueue.length === 0) {
+      return
+    }
+
+    console.log('🎬 [TVDisplay] Procesando cola de visualización, tickets en cola:', displayQueue.length)
+    
+    // Obtener el primer ticket de la cola
+    const [nextTicket, ...remainingQueue] = displayQueue
+    
+    // Mostrar el ticket
+    setCurrentDisplayTicket(nextTicket)
+    setDisplayQueue(remainingQueue)
+    
+    console.log('🎬 [TVDisplay] Mostrando ticket en pantalla completa:', nextTicket.ticketNumber)
+  }, [displayQueue, currentDisplayTicket])
+
+  // 🎬 EFECTO PARA OCULTAR EL TICKET DESPUÉS DE 5 SEGUNDOS
+  useEffect(() => {
+    if (currentDisplayTicket === null) {
+      return
+    }
+
+    console.log('⏱️ [TVDisplay] Iniciando contador de 5 segundos para ticket:', currentDisplayTicket.ticketNumber)
+    
+    // Ocultar después de 5 segundos
+    const timeout = setTimeout(() => {
+      console.log('🎬 [TVDisplay] Ocultando ticket de pantalla completa')
+      setCurrentDisplayTicket(null)
+    }, 5000)
+    
+    return () => {
+      console.log('🧹 [TVDisplay] Limpiando timeout')
+      clearTimeout(timeout)
+    }
+  }, [currentDisplayTicket])
+
 
 
   return {
@@ -438,6 +559,8 @@ export const useTVDisplay = () => {
     stats,
     lastStatsUpdate,
     maxTicketsToShow,
+    vibratingTickets,
+    currentDisplayTicket,
     
     // Estados derivados
     ticketsEnEspera,

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '../shared/components/ui/Card'
 import { Button } from '../shared/components/ui/Button'
-import { Clock, CheckCircle, LogOut, Loader2, Send } from 'lucide-react'
+import { Clock, CheckCircle, LogOut, Loader2, Send, Maximize, Minimize } from 'lucide-react'
 import { TICKET_STATUS } from '../shared/utils/constants'
 import { Rating, CreateRatingData, Ticket } from './types'
 import { ratingService } from './services/ratingService'
@@ -15,6 +15,7 @@ const RatingTablet: React.FC = () => {
   const [submitting, setSubmitting] = useState(false)
   const [showThankYou, setShowThankYou] = useState(false)
   const [currentUser, setCurrentUser] = useState<any>(null)
+  const [isFullscreen, setIsFullscreen] = useState(false)
   
   const navigate = useNavigate()
 
@@ -41,40 +42,49 @@ const RatingTablet: React.FC = () => {
   useEffect(() => {
     console.log('🔌 [RatingTablet] Configurando WebSocket para tickets completados...')
     console.log('🔌 [RatingTablet] Estado conexión:', { isConnected, connectionStatus })
+    console.log('🔌 [RatingTablet] onTicketCompleted:', typeof onTicketCompleted)
+    console.log('🔌 [RatingTablet] onRatingRequested:', typeof onRatingRequested)
     
     if (!isConnected) {
       console.log('🚫 [RatingTablet] WebSocket no disponible')
       return
     }
 
+    console.log('✅ [RatingTablet] WebSocket conectado, suscribiendo a eventos...')
+
     // Suscribirse a tickets completados que necesitan rating
     const unsubscribeCompleted = onTicketCompleted((ticket: any) => {
-      console.log('🎫 [RatingTablet] Ticket completado recibido por WebSocket:', ticket.ticketNumber || ticket.id)
+      console.log('🎫🎫🎫 [RatingTablet] TICKET COMPLETADO RECIBIDO POR WEBSOCKET!')
+      console.log('🎫 [RatingTablet] Ticket completo:', ticket)
+      console.log('🎫 [RatingTablet] Ticket Number:', ticket.ticketNumber || ticket.id)
+      console.log('🎫 [RatingTablet] Ticket Status:', ticket.status)
+      console.log('🎫 [RatingTablet] Ticket Rated:', ticket.rated)
       
-      // Solo procesar tickets que necesiten rating
-      if (ticket.status === 'COMPLETED' && !ticket.rated) {
-        console.log('⭐ [RatingTablet] Preparando ticket para calificación:', ticket.ticketNumber)
-        setSelectedTicket({
-          id: ticket.id,
-          ticketNumber: ticket.ticketNumber,
-          status: 'COMPLETED',
-          createdAt: ticket.createdAt,
-          priority: ticket.priority || 1
-        })
-        setRating(0)
-        setComment('')
-      }
+      // Mostrar el modal SIEMPRE que llegue un ticket completado
+      console.log('⭐⭐⭐ [RatingTablet] Mostrando modal de calificación')
+      setSelectedTicket({
+        id: ticket.id,
+        ticketNumber: ticket.ticketNumber || `TICKET-${ticket.id}`,
+        status: 'COMPLETED',
+        createdAt: ticket.createdAt || new Date().toISOString(),
+        priority: ticket.priority || 1
+      })
+      setRating(0)
+      setComment('')
     })
 
     // Suscribirse a solicitudes específicas de rating
     const unsubscribeRatingRequested = onRatingRequested((ratingRequest: any) => {
-      console.log('⭐ [RatingTablet] Solicitud de rating recibida:', ratingRequest)
+      console.log('⭐⭐⭐ [RatingTablet] SOLICITUD DE RATING RECIBIDA!')
+      console.log('⭐ [RatingTablet] Rating request completo:', ratingRequest)
       if (ratingRequest.ticket) {
         setSelectedTicket(ratingRequest.ticket)
         setRating(0)
         setComment('')
       }
     })
+    
+    console.log('✅ [RatingTablet] Suscripciones configuradas correctamente')
     
     return () => {
       console.log('🧹 [RatingTablet] Limpiando suscripciones WebSocket')
@@ -103,20 +113,62 @@ const RatingTablet: React.FC = () => {
     setRating(value)
   }
 
-  const handleLogout = () => {
-    // 🎯 MICROFRONTEND: Solo navegar al login (el sistema principal maneja el logout)
-    console.log('🚪 [RatingTablet] Navegando al login...')
-    navigate('/login', { replace: true })
+  // 🎯 FUNCIONES DE FULLSCREEN
+  const enterFullscreen = () => {
+    const element = document.documentElement
+    if (element.requestFullscreen) {
+      element.requestFullscreen().catch(err => {
+        console.error('Error al entrar en fullscreen:', err)
+      })
+    }
+  }
+
+  const exitFullscreen = () => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(err => {
+        console.error('Error al salir de fullscreen:', err)
+      })
+    }
+  }
+
+  const toggleFullscreen = () => {
+    if (isFullscreen) {
+      exitFullscreen()
+    } else {
+      enterFullscreen()
+    }
+  }
+
+  // 🎯 EFECTO PARA DETECTAR CAMBIOS EN FULLSCREEN
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement)
+    }
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    setIsFullscreen(!!document.fullscreenElement)
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange)
+    }
+  }, [])
+
+  const handleLogout = async () => {
+    try {
+      console.log('🔄 [RatingTablet] Cerrando sesión...')
+      localStorage.removeItem('user')
+      localStorage.removeItem('token')
+      localStorage.removeItem('auth-storage')
+      navigate('/login', { replace: true })
+    } catch (error) {
+      console.error('❌ [RatingTablet] Error en logout:', error)
+      window.location.href = '/login'
+    }
   }
 
   const handleSubmit = async () => {
     if (rating === 0) {
       console.error('Debe seleccionar una calificación')
-      return
-    }
-
-    if (!comment.trim()) {
-      console.error('El comentario es requerido')
       return
     }
 
@@ -128,10 +180,16 @@ const RatingTablet: React.FC = () => {
     setSubmitting(true)
 
     try {
+      console.log('📤 [RatingTablet] Enviando calificación:', {
+        ticketId: selectedTicket.id,
+        score: rating,
+        comment: comment.trim() || undefined
+      })
+      
       await ratingService.crearRating({
         ticketId: selectedTicket.id,
         score: rating,
-        comment: comment.trim()
+        comment: comment.trim() || undefined
       })
 
       console.log('✅ [RatingTablet] Calificación enviada exitosamente')
@@ -141,7 +199,7 @@ const RatingTablet: React.FC = () => {
         ticketId: selectedTicket.id,
         ticketNumber: selectedTicket.ticketNumber,
         score: rating,
-        comment: comment.trim(),
+        comment: comment.trim() || '',
         timestamp: new Date().toISOString(),
         userId: currentUser?.id
       }
@@ -160,9 +218,15 @@ const RatingTablet: React.FC = () => {
         setShowThankYou(false)
         // Recargar tickets
       }, 3000)
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ [RatingTablet] Error enviando calificación:', error)
-      console.error('Error al enviar la calificación. Intente nuevamente.')
+      
+      // Mostrar mensaje de error más detallado
+      if (error.message?.includes('404')) {
+        alert('⚠️ El endpoint de calificaciones no está disponible en el backend.\n\nPor favor, verifica que el controlador de ratings esté creado en:\n/api/ticketera/ratings')
+      } else {
+        alert('Error al enviar la calificación. Intente nuevamente.')
+      }
     } finally {
       setSubmitting(false)
     }
@@ -194,63 +258,62 @@ const RatingTablet: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-red-50 to-white flex items-center justify-center p-4 relative">
-      {/* Botón de cerrar sesión en esquina superior derecha */}
-      <div className="absolute top-4 right-4">
-        <Button
-          onClick={handleLogout}
-          variant="ghost"
-          size="sm"
-          className="bg-white hover:bg-red-50 border border-red-200 text-red-600 hover:text-red-700"
+      {/* Botones de control en esquina superior derecha */}
+      <div className="absolute top-4 right-4 z-50 flex space-x-2">
+        {/* Botón de Fullscreen/Minimizar */}
+        <button
+          onClick={toggleFullscreen}
+          className="p-3 rounded-lg bg-blue-500 hover:bg-blue-600 text-white transition-all duration-200 shadow-lg"
+          title={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
         >
-          <LogOut className="w-4 h-4 mr-2" />
-          Cerrar Sesión
-        </Button>
+          {isFullscreen ? <Minimize className="w-6 h-6" /> : <Maximize className="w-6 h-6" />}
+        </button>
+        
+        {/* Botón de Cerrar Sesión (solo cuando NO está en fullscreen) */}
+        {!isFullscreen && (
+          <button
+            onClick={handleLogout}
+            className="p-3 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-all duration-200 shadow-lg"
+            title="Cerrar sesión"
+          >
+            <LogOut className="w-6 h-6" />
+          </button>
+        )}
       </div>
 
       {/* Pantalla de espera (cuando no hay tickets para calificar) */}
       {!selectedTicket && (
-        <Card className="w-full max-w-lg text-center">
-          <CardContent className="py-16">
-            <div className="w-24 h-24 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-8">
-              <Clock className="w-12 h-12 text-red-600" />
+        <Card className="w-full max-w-2xl text-center dark:bg-slate-800 border-2 border-red-200 dark:border-red-500">
+          <CardContent className="py-20 px-10">
+            <div className="w-32 h-32 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-10">
+              <Clock className="w-20 h-20 text-red-600 dark:text-red-400" />
             </div>
-            <h1 className="text-3xl font-bold text-slate-900 mb-4">
+            <h1 className="text-5xl font-bold text-slate-900 dark:text-white mb-8">
               Sistema de Calificación
             </h1>
-            <p className="text-lg text-slate-600 mb-2">
-              Módulo {(currentUser as any)?.moduleId || 'No asignado'}
+            <p className="text-xl text-slate-500 dark:text-slate-300 mb-10">
+              Esperando tickets completados para calificar...
             </p>
-            <p className="text-base text-slate-500 mb-6">
-              Esperando tickets completados del módulo {(currentUser as any)?.moduleId || 'No asignado'} para calificar...
-            </p>
-            <div className="flex items-center justify-center space-x-2 text-slate-500">
-              <Loader2 className="w-5 h-5 animate-spin" />
-              <span>Conectado y esperando</span>
-            </div>
             {currentUser && (
-              <div className="mt-8 p-4 bg-slate-50 rounded-lg">
-                <p className="text-sm text-slate-600">
-                  <strong>Usuario:</strong> {currentUser.name}
-                </p>
-                <p className="text-sm text-slate-600">
-                  <strong>Rol:</strong> {currentUser.role}
-                </p>
-                <p className="text-sm text-slate-600">
+              <div className="mt-10 p-8 bg-slate-50 dark:bg-slate-700 rounded-2xl space-y-6">
+                <p className="text-2xl text-slate-600 dark:text-white text-left">
                   <strong>Módulo:</strong> {(currentUser as any)?.moduleId || 'No asignado'}
                 </p>
-                <p className="text-sm text-slate-600 flex items-center justify-center gap-2">
-                  <strong>WebSocket:</strong> 
-                  <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                <div className="text-left flex items-center gap-3">
+                  <p className="text-2xl text-slate-600 dark:text-white">
+                    <strong>WebSocket:</strong>
+                  </p>
+                  <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-lg font-medium border ${
                     isConnected 
-                      ? 'bg-green-100 text-green-800' 
-                      : 'bg-red-100 text-red-800'
+                      ? 'bg-green-100 dark:bg-gray-700 text-green-800 dark:text-green-200 border-green-400 dark:border-green-600' 
+                      : 'bg-red-100 dark:bg-gray-700 text-red-800 dark:text-red-200 border-red-400 dark:border-red-600'
                   }`}>
-                    <span className={`w-2 h-2 rounded-full ${
+                    <span className={`w-3 h-3 rounded-full ${
                       isConnected ? 'bg-green-500' : 'bg-red-500'
                     }`}></span>
-                    {isConnected ? 'Conectado' : 'Deshabilitado (HTTP Polling)'}
+                    {isConnected ? 'Conectado' : 'Desconectado'}
                   </span>
-                </p>
+                </div>
               </div>
             )}
           </CardContent>
@@ -259,74 +322,88 @@ const RatingTablet: React.FC = () => {
 
       {/* Modal de calificación (cuando llega un ticket completado) */}
       {selectedTicket && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <Card className="w-full max-w-md bg-white relative">            
-            <CardHeader className="text-center bg-red-500 text-white rounded-lg">
-              <CardTitle className="mb-2 mt-5  text-white">
-                Calificar Servicio
+        <div className="fixed inset-0 bg-black bg-opacity-70 dark:bg-opacity-90 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+          <Card className="w-full max-w-2xl bg-gradient-to-br from-white to-red-50 dark:from-slate-800 dark:to-slate-900 relative border-4 border-red-400 dark:border-red-500 shadow-2xl">            
+            <CardHeader className="text-center bg-gradient-to-r from-red-500 via-red-600 to-red-500 dark:from-red-600 dark:via-red-700 dark:to-red-600 text-white rounded-t-lg py-8">
+              <div className="mb-3">
+                <div className="inline-block p-3 bg-white dark:bg-slate-800 rounded-full mb-3">
+                  <CheckCircle className="w-12 h-12 text-red-600 dark:text-red-400" />
+                </div>
+              </div>
+              <CardTitle className="mb-3 text-white text-4xl font-extrabold drop-shadow-lg">
+                ¿Cómo fue tu experiencia?
               </CardTitle>
-              <p className="text-red-100">
-                Ticket: {selectedTicket ? `#${(selectedTicket as Ticket).id}` : 'N/A'}
+              <p className="text-red-100 dark:text-white text-xl font-medium">
+                Ticket #{selectedTicket ? `${(selectedTicket as Ticket).ticketNumber}` : 'N/A'}
               </p>
             </CardHeader>
-            <CardContent className="space-y-6 p-6">
+            <CardContent className="space-y-8 p-8 bg-white dark:bg-slate-800">
               {/* Estrellas */}
               <div className="text-center">
-                <div className="flex justify-center space-x-2 mb-4">
+                <p className="text-xl font-bold text-slate-800 dark:text-white mb-4">
+                  Califica nuestro servicio
+                </p>
+                <div className="flex justify-center space-x-2 mb-4 p-5 bg-slate-50 dark:bg-slate-700 rounded-2xl border-2 border-slate-200 dark:border-slate-600">
                   {[1, 2, 3, 4, 5].map((star) => (
                     <button
                       key={star}
                       onClick={() => handleRating(star)}
-                      className={`text-4xl transition-all duration-200 ${
+                      className={`text-6xl transition-all duration-300 transform hover:scale-125 ${
                         star <= rating
-                          ? 'text-red-400 hover:text-red-500'
-                          : 'text-slate-300 hover:text-red-400'
+                          ? 'text-yellow-400 hover:text-yellow-500 drop-shadow-lg'
+                          : 'text-slate-300 dark:text-slate-600 hover:text-yellow-300'
                       }`}
                     >
                       ★
                     </button>
                   ))}
                 </div>
-                <p className="text-sm text-slate-500">
-                  {rating === 0 && 'Seleccione una calificación *'}
-                  {rating === 1 && 'Muy insatisfecho'}
-                  {rating === 2 && 'Insatisfecho'}
-                  {rating === 3 && 'Neutral'}
-                  {rating === 4 && 'Satisfecho'}
-                  {rating === 5 && 'Muy satisfecho'}
-                </p>
+                <div className={`text-xl font-bold ${
+                  rating === 0 ? 'text-slate-400 dark:text-slate-500' :
+                  rating === 1 ? 'text-red-600 dark:text-red-400' :
+                  rating === 2 ? 'text-orange-600 dark:text-orange-400' :
+                  rating === 3 ? 'text-yellow-600 dark:text-yellow-400' :
+                  rating === 4 ? 'text-lime-600 dark:text-lime-400' :
+                  'text-green-600 dark:text-green-400'
+                }`}>
+                  {rating === 0 && '⭐ Seleccione una calificación'}
+                  {rating === 1 && '😞 Muy insatisfecho'}
+                  {rating === 2 && '😕 Insatisfecho'}
+                  {rating === 3 && '😐 Neutral'}
+                  {rating === 4 && '😊 Satisfecho'}
+                  {rating === 5 && '😄 ¡Muy satisfecho!'}
+                </div>
               </div>
 
               {/* Comentario */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Escriba su comentario *
+                <label className="block text-lg font-bold text-slate-700 dark:text-white mb-3">
+                  Comentarios <span className="text-slate-400 dark:text-slate-500 font-normal">(Opcional)</span>
                 </label>
                 <textarea
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 resize-none"
-                  rows={4}
-                  placeholder="Cuéntenos sobre su experiencia..."
-                  required
+                  className="w-full px-5 py-4 text-lg border-2 border-slate-300 dark:!border-red-500 rounded-xl focus:ring-4 focus:ring-red-300 dark:focus:ring-red-600 focus:!border-red-500 dark:focus:!border-red-600 resize-none text-slate-900 dark:!text-slate-900 bg-white dark:!bg-white shadow-inner transition-all duration-200"
+                  rows={3}
+                  placeholder="¿Algo que quieras comentarnos? (Opcional)"
                 />
               </div>
 
               {/* Botón enviar */}
               <Button
                 onClick={handleSubmit}
-                disabled={rating === 0 || !comment.trim() || submitting}
-                className="w-full bg-red-600 hover:bg-red-700 text-white"
+                disabled={rating === 0 || submitting}
+                className="w-full bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 dark:from-red-600 dark:to-red-700 dark:hover:from-red-700 dark:hover:to-red-800 text-white text-xl py-6 rounded-xl shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-300 font-bold disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                 size="lg"
               >
                 {submitting ? (
                   <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Enviando...
+                    <Loader2 className="w-6 h-6 mr-2 animate-spin" />
+                    Enviando calificación...
                   </>
                 ) : (
                   <>
-                    <Send className="w-4 h-4 mr-2" />
+                    <Send className="w-6 h-6 mr-2" />
                     Enviar Calificación
                   </>
                 )}

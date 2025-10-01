@@ -45,7 +45,7 @@ export const TicketCard: React.FC<TicketCardProps> = ({
 
   return (
     <>
-      <div className="bg-white from-red-50 to-red-100 border-2 border-red-300 rounded-xl p-6 shadow-lg hover:shadow-xl transition-all duration-200">
+      <div className="bg-white dark:bg-slate-800 from-red-50 to-red-100 border-2 border-red-300 dark:border-red-500 rounded-xl p-6 shadow-lg hover:shadow-xl transition-all duration-200">
         {/* Header del ticket */}
         <div className="mb-6">
           {/* 🎯 NUEVO: Indicador de loading cuando el ticket está en proceso */}
@@ -58,7 +58,7 @@ export const TicketCard: React.FC<TicketCardProps> = ({
           
           {/* Número de ticket y estado */}
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-bold text-red-800">
+            <h3 className="text-xl font-bold text-red-800 dark:text-white">
               Ticket #{ticket.ticketNumber}
             </h3>
             <div className="flex items-center space-x-2">
@@ -84,8 +84,8 @@ export const TicketCard: React.FC<TicketCardProps> = ({
           </div>
           
           {/* 🎯 INFORMACIÓN BÁSICA: Siempre visible */}
-          <div className="bg-white/50 rounded-lg p-3 border border-red-200 mb-4">
-            <p className="text-sm text-red-700">
+          <div className="bg-white dark:bg-slate-700 rounded-lg p-3 border-2 border-red-500 dark:border-red-500 mb-4">
+            <p className="text-sm text-slate-900 dark:text-white">
               <span className="font-semibold">Conductor:</span> {ticket.driverName || ticket.licenseNumber || 'No disponible'}
             </p>
                          {/* 🎯 NUEVO: Indicador de información adicional disponible para TODOS los tickets */}
@@ -104,19 +104,19 @@ export const TicketCard: React.FC<TicketCardProps> = ({
                                 {/* 🎯 INFORMACIÓN EXPANDIDA: Visible cuando está expandida para TODOS los tickets */}
             {isExpanded && (
              <div className="space-y-3 mb-4">
-               {/* LicenseNumber si está disponible */}
-               {ticket.licenseNumber && ticket.driverName && (
-                 <div className="bg-white/50 rounded-lg p-3 border border-red-200">
-                   <p className="text-sm text-red-700">
-                     <span className="font-semibold">Número:</span> {ticket.licenseNumber}
-                   </p>
-                 </div>
-               )}
+              {/* LicenseNumber si está disponible */}
+              {ticket.licenseNumber && ticket.driverName && (
+                <div className="bg-white dark:bg-slate-700 rounded-lg p-3 border-2 border-red-500 dark:border-red-500">
+                  <p className="text-sm text-slate-900 dark:text-white">
+                    <span className="font-semibold">Número:</span> {ticket.licenseNumber}
+                  </p>
+                </div>
+              )}
               
               {/* Categoría si está disponible */}
               {ticket.categoryName && (
-                <div className="bg-white/50 rounded-lg p-3 border border-red-200">
-                  <p className="text-sm text-red-700">
+                <div className="bg-white dark:bg-slate-700 rounded-lg p-3 border-2 border-red-500 dark:border-red-500">
+                  <p className="text-sm text-slate-900 dark:text-white">
                     <span className="font-semibold">Objetivo:</span> {ticket.categoryName}
                   </p>
                 </div>
@@ -124,8 +124,8 @@ export const TicketCard: React.FC<TicketCardProps> = ({
               
               {/* Subcategoría si está disponible */}
               {ticket.subcategoryName && (
-                <div className="bg-white/50 rounded-lg p-3 border border-red-200">
-                  <p className="text-sm text-red-700">
+                <div className="bg-white dark:bg-slate-700 rounded-lg p-3 border-2 border-red-500 dark:border-red-500">
+                  <p className="text-sm text-slate-900 dark:text-white">
                     <span className="font-semibold">Subcategoría:</span> {ticket.subcategoryName}
                   </p>
                 </div>
@@ -135,16 +135,16 @@ export const TicketCard: React.FC<TicketCardProps> = ({
               {(ticket.categoryDescription || ticket.subcategoryDescription) && (
                 <div className="space-y-2">
                   {ticket.categoryDescription && (
-                    <div className="bg-white/50 rounded-lg p-3 border border-red-200">
-                      <p className="text-xs text-red-600">
+                    <div className="bg-white dark:bg-slate-700 rounded-lg p-3 border-2 border-red-500 dark:border-red-500">
+                      <p className="text-xs text-slate-900 dark:text-white">
                         <span className="font-semibold">Descripción:</span> {ticket.categoryDescription}
                       </p>
                     </div>
                   )}
                   
                   {ticket.subcategoryDescription && (
-                    <div className="bg-white/50 rounded-lg p-3 border border-red-200">
-                      <p className="text-xs text-red-600">
+                    <div className="bg-white dark:bg-slate-700 rounded-lg p-3 border-2 border-red-500 dark:border-red-500">
+                      <p className="text-xs text-slate-900 dark:text-white">
                         <span className="font-semibold">Detalle:</span> {ticket.subcategoryDescription}
                       </p>
                     </div>
@@ -158,18 +158,18 @@ export const TicketCard: React.FC<TicketCardProps> = ({
           {/* Hora de llamado y completado - Solo para tickets que no están en espera */}
           {ticket.status !== TICKET_STATUS.WAITING && (ticket.calledAt || ticket.completedAt) && (
             <div className="mb-4">
-              <h4 className="text-sm font-semibold text-red-800 mb-2">Timeline:</h4>
+              <h4 className="text-sm font-semibold text-red-800 dark:text-white mb-2">Timeline:</h4>
               <div className="space-y-2">
                 {ticket.calledAt && (
-                  <div className="bg-white/50 rounded-lg p-2 border border-red-200">
-                    <p className="text-xs text-red-600">
+                  <div className="bg-white dark:bg-slate-700 rounded-lg p-2 border-2 border-red-500 dark:border-red-500">
+                    <p className="text-xs text-slate-900 dark:text-white">
                       <span className="font-semibold">Llamado:</span> {new Date(ticket.calledAt).toLocaleString('es-ES')}
                     </p>
                   </div>
                 )}
                 {ticket.completedAt && (
-                  <div className="bg-white/50 rounded-lg p-2 border border-red-200">
-                    <p className="text-xs text-red-600">
+                  <div className="bg-white dark:bg-slate-700 rounded-lg p-2 border-2 border-red-500 dark:border-red-500">
+                    <p className="text-xs text-slate-900 dark:text-white">
                       <span className="font-semibold">Completado:</span> {new Date(ticket.completedAt).toLocaleString('es-ES')}
                     </p>
                   </div>

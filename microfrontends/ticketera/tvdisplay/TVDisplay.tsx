@@ -1,10 +1,28 @@
-import { useCallback } from 'react'
+import React, { useCallback, useState, useEffect } from 'react'
 import { Card, CardContent } from '../shared/components/ui/Card'
-import { Clock, Volume2 } from 'lucide-react'
+import { Clock, Volume2, Maximize, Minimize, LogOut } from 'lucide-react'
 import { useTVDisplay } from './hooks/useTVDisplay'
+import { useNavigate } from 'react-router-dom'
+
+// 🎯 Estilos para animación de vibración (reducida)
+const shakeAnimation = `
+  @keyframes shake {
+    0%, 100% { transform: translateX(0) scale(1); }
+    10%, 30%, 50%, 70%, 90% { transform: translateX(-3px) scale(1.02); }
+    20%, 40%, 60%, 80% { transform: translateX(3px) scale(1.02); }
+  }
+  .vibrating-card {
+    animation: shake 0.4s ease-in-out infinite;
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.6), 0 0 40px rgba(239, 68, 68, 0.3) !important;
+    border: 2px solid #ef4444 !important;
+  }
+`
 
 export const TVDisplay = () => {
   console.log('📺 [TVDisplay] Componente iniciando...')
+  
+  const navigate = useNavigate()
+  const [isFullscreen, setIsFullscreen] = useState(false)
   
   const {
     // Estados
@@ -15,6 +33,8 @@ export const TVDisplay = () => {
     stats,
     lastStatsUpdate,
     maxTicketsToShow,
+    vibratingTickets,
+    currentDisplayTicket,
     
     // Estados derivados
     ticketsEnEspera,
@@ -29,6 +49,62 @@ export const TVDisplay = () => {
     formatearFecha,
     toggleSound
   } = useTVDisplay()
+
+  // 🎯 FUNCIONES DE FULLSCREEN
+  const enterFullscreen = () => {
+    const element = document.documentElement
+    if (element.requestFullscreen) {
+      element.requestFullscreen().catch(err => {
+        console.error('Error al entrar en fullscreen:', err)
+      })
+    }
+  }
+
+  const exitFullscreen = () => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(err => {
+        console.error('Error al salir de fullscreen:', err)
+      })
+    }
+  }
+
+  const toggleFullscreen = () => {
+    if (isFullscreen) {
+      exitFullscreen()
+    } else {
+      enterFullscreen()
+    }
+  }
+
+  // 🎯 EFECTO PARA DETECTAR CAMBIOS EN FULLSCREEN
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement)
+    }
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    setIsFullscreen(!!document.fullscreenElement)
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange)
+    }
+  }, [])
+
+  // 🎯 FUNCIÓN DE LOGOUT
+  const handleLogout = async () => {
+    try {
+      console.log('🔄 [TVDisplay] Cerrando sesión...')
+      // Limpiar datos locales
+      localStorage.removeItem('user')
+      localStorage.removeItem('token')
+      localStorage.removeItem('auth-storage')
+      // Redirigir a login
+      navigate('/login', { replace: true })
+    } catch (error) {
+      console.error('❌ [TVDisplay] Error en logout:', error)
+      window.location.href = '/login'
+    }
+  }
 
   // 🎯 VALIDACIÓN: Filtrar tickets inválidos
   const ticketsEnEsperaValidos = ticketsEnEspera.filter(ticket => ticket && typeof ticket === 'object')
@@ -214,6 +290,9 @@ export const TVDisplay = () => {
       minWidth: '100vw',
       padding: '60px'
     }}>
+      {/* 🎯 Estilos CSS para animación de vibración */}
+      <style>{shakeAnimation}</style>
+      
       <div className="h-full w-full flex flex-col">
         {/* Header */}
         <div className="flex justify-between items-center mb-2">
@@ -257,6 +336,26 @@ export const TVDisplay = () => {
             >
               <Volume2 className="w-5 h-5" />
             </button>
+            
+            {/* Botón de Fullscreen/Minimizar */}
+            <button
+              onClick={toggleFullscreen}
+              className="p-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white transition-all duration-200 shadow-lg"
+              title={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
+            >
+              {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+            </button>
+            
+            {/* Botón de Cerrar Sesión (solo cuando NO está en fullscreen) */}
+            {!isFullscreen && (
+              <button
+                onClick={handleLogout}
+                className="p-2 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-all duration-200 shadow-lg"
+                title="Cerrar sesión"
+              >
+                <LogOut className="w-5 h-5" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -266,16 +365,16 @@ export const TVDisplay = () => {
           padding: '10px',
           minHeight: '500px',
           width: '100%',
-          gridTemplateColumns: '35% 65%'
+          gridTemplateColumns: '30% 70%'
         }}>
           {/* Columna izquierda - Tickets Llamados y Tickets en Atención */}
           <div className="flex flex-col gap-4 items-start">
             {/* Tickets Llamados */}
             <Card className="backdrop-blur-sm shadow-lg" style={{
                 background: '#ffffff1a',
-                height: '55%',
-                minHeight: '220px',
-                width: '98%'
+                height: '70%',
+                minHeight: '340px',
+                width: '100%'
               }}>
                 <CardContent className="p-3 h-full flex flex-col">
                   <h2 className="text-xl font-bold mb-3 text-center text-orange-200">Tickets Llamados</h2>
@@ -288,7 +387,11 @@ export const TVDisplay = () => {
                   ) : (
                     <div className="flex gap-2 flex-1 overflow-x-auto overflow-y-hidden pb-2">
                       {ticketsLlamadosValidos.map((ticket) => (
-                        <div key={ticket.id} className="flex-shrink-0" style={{ width: '200px' }}>
+                        <div 
+                          key={ticket.id} 
+                          className={`flex-shrink-0 ${vibratingTickets.has(ticket.id) ? 'vibrating-card' : ''}`}
+                          style={{ width: '200px' }}
+                        >
                           <TicketCard
                             ticket={ticket}
                             status="called"
@@ -303,9 +406,9 @@ export const TVDisplay = () => {
             {/* Tickets en Atención */}
             <Card className="backdrop-blur-sm shadow-lg" style={{
                 background: '#ffffff1a',
-                height: '55%',
-                minHeight: '220px',
-                width: '98%'
+                height: '70%',
+                minHeight: '340px',
+                width: '100%'
               }}>
                 <CardContent className="p-3 h-full flex flex-col">
                   <h2 className="text-xl font-bold mb-3 text-center text-yellow-200">Tickets en Atención</h2>
@@ -318,7 +421,11 @@ export const TVDisplay = () => {
                   ) : (
                     <div className="flex gap-2 flex-1 overflow-x-auto overflow-y-hidden pb-2">
                       {ticketsEnAtencionValidos.map((ticket) => (
-                        <div key={ticket.id} className="flex-shrink-0" style={{ width: '200px' }}>
+                        <div 
+                          key={ticket.id} 
+                          className={`flex-shrink-0 ${vibratingTickets.has(ticket.id) ? 'vibrating-card' : ''}`}
+                          style={{ width: '200px' }}
+                        >
                           <TicketCard
                             ticket={ticket}
                             status="attention"
@@ -357,9 +464,12 @@ export const TVDisplay = () => {
                   <p className="text-sm font-medium">No hay tickets en espera</p>
                 </div>
               ) : (
-                <div className="flex gap-3 flex-1 overflow-x-auto overflow-y-hidden pb-2">
+                <div className="grid grid-cols-3 gap-3 flex-1 overflow-y-auto pb-2">
                   {currentTickets.map((ticket) => (
-                    <div key={ticket.id} className="flex-shrink-0" style={{ width: '280px' }}>
+                    <div 
+                      key={ticket.id}
+                      className={vibratingTickets.has(ticket.id) ? 'vibrating-card' : ''}
+                    >
                       <TicketCard
                         ticket={ticket}
                         status="waiting"
@@ -373,8 +483,8 @@ export const TVDisplay = () => {
         </div>
 
         {/* Estadísticas */}
-        <div className="mb-10">
-          <Card className="backdrop-blur-sm border-2 shadow-lg" style={{
+        <div className="mt-32 pt-16">
+          <Card className="backdrop-blur-sm shadow-lg" style={{
             background: '#ffffff1a',
           }}>
             <CardContent className="p-3">
@@ -416,6 +526,74 @@ export const TVDisplay = () => {
           </Card>
         </div>
       </div>
+      
+      {/* 🎬 MODAL DE PANTALLA COMPLETA PARA TICKET LLAMADO */}
+      {currentDisplayTicket && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-95 animate-fadeIn">
+          <div className="text-center px-8 py-12 max-w-5xl animate-scaleIn">
+            {/* Título principal */}
+            <h2 className="text-7xl font-bold text-white mb-8 animate-pulse">
+              ¡TICKET LLAMADO!
+            </h2>
+            
+            {/* Número de ticket */}
+            <div className="bg-gradient-to-r from-red-600 to-orange-600 rounded-3xl p-12 mb-8 shadow-2xl">
+              <p className="text-4xl font-semibold text-white mb-4">
+                TICKET #
+              </p>
+              <p className="text-9xl font-bold text-white drop-shadow-lg">
+                {currentDisplayTicket.ticketNumber}
+              </p>
+            </div>
+            
+            {/* Información del conductor y módulo */}
+            <div className="grid grid-cols-2 gap-6 mb-8">
+              {/* Conductor */}
+              <div className="bg-white bg-opacity-10 backdrop-blur-md rounded-2xl p-8">
+                <p className="text-3xl font-semibold text-white mb-4">
+                  Conductor:
+                </p>
+                <p className="text-5xl font-bold text-yellow-300">
+                  {currentDisplayTicket.driverName || currentDisplayTicket.licenseNumber || 'Sin nombre'}
+                </p>
+              </div>
+              
+              {/* Módulo Asignado */}
+              <div className="bg-blue-600 bg-opacity-80 backdrop-blur-md rounded-2xl p-8">
+                <p className="text-3xl font-semibold text-white mb-4">
+                  Módulo:
+                </p>
+                <p className="text-9xl font-bold text-white">
+                  {currentDisplayTicket.moduleId || '?'}
+                </p>
+              </div>
+            </div>
+            
+            {/* Mensaje de instrucción */}
+            <p className="text-4xl text-white font-bold animate-bounce">
+              📍 Diríjase al MÓDULO {currentDisplayTicket.moduleId || '?'}
+            </p>
+          </div>
+        </div>
+      )}
+      
+      {/* Estilos para animaciones del modal */}
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes scaleIn {
+          from { transform: scale(0.8); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
+        }
+        .animate-fadeIn {
+          animation: fadeIn 0.3s ease-out;
+        }
+        .animate-scaleIn {
+          animation: scaleIn 0.5s ease-out;
+        }
+      `}</style>
     </div>
   )
 }

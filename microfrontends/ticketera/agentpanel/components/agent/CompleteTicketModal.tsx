@@ -63,7 +63,7 @@ export const CompleteTicketModal = ({
       <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-md w-full mx-4 border-2 border-red-100 dark:border-red-600">
         <div className="p-6">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-xl font-bold text-red-800 dark:text-red-300">
+            <h3 className="text-xl font-bold text-red-800 dark:text-white">
               Completar Ticket
             </h3>
             <button
@@ -97,14 +97,14 @@ export const CompleteTicketModal = ({
               </p>
             </div>
             
-            <label className="block text-sm font-bold text-red-800 dark:text-red-300 mb-3">
+            <label className="block text-sm font-bold text-red-800 dark:text-white mb-3">
               Notas de resolución (requerido)
             </label>
             <textarea
               value={notes}
               onChange={(e) => onNotesChange(e.target.value)}
               placeholder="Escribe las observaciones sobre la atención del ticket..."
-              className="w-full p-4 border-2 border-red-300 dark:border-red-600 rounded-xl resize-none focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all duration-200 text-gray-800 dark:text-black bg-black dark:bg-slate-700"
+              className="w-full p-4 border-2 border-red-300 dark:!border-red-500 rounded-xl resize-none focus:ring-2 focus:ring-red-500 focus:!border-red-500 transition-all duration-200 text-gray-800 dark:!text-slate-900 bg-white dark:!bg-white"
               rows={4}
               maxLength={1000}
               disabled={loading}
@@ -125,7 +125,7 @@ export const CompleteTicketModal = ({
             <button
               onClick={onComplete}
               disabled={loading || !notes.trim()}
-              className="flex-1 px-6 py-3 rounded-xl font-medium transition-all duration-300 transform bg-white dark:bg-slate-700 text-red-600 dark:text-red-400 border-2 border-red-600 dark:border-red-500 hover:bg-red-600/25 dark:hover:bg-red-900/50 hover:text-red-700 dark:hover:text-red-300 hover:scale-105 hover:shadow-lg hover:border-red-700 dark:hover:border-red-400 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+              className="flex-1 px-6 py-3 rounded-xl font-medium transition-all duration-300 transform bg-white dark:bg-slate-700 text-red-600 dark:text-white border-2 border-red-600 dark:border-red-500 hover:bg-red-600/25 dark:hover:bg-red-900/50 hover:text-red-700 dark:hover:text-white hover:scale-105 hover:shadow-lg hover:border-red-700 dark:hover:border-red-400 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
             >
               {loading ? (
                 <div className="flex items-center justify-center">

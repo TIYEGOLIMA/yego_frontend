@@ -243,13 +243,13 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({ onModuleSelect
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-red-600 dark:text-red-400 mb-2">
+          <h1 className="text-4xl font-bold text-red-600 dark:text-white mb-2">
             Seleccione su Módulo de Trabajo
           </h1>
-          <p className="text-lg text-gray-600 dark:text-gray-400 mb-2">
-            Hola <span className="font-semibold text-red-600 dark:text-red-400">{user?.name}</span>
+          <p className="text-lg text-gray-600 dark:text-white mb-2">
+            Hola <span className="font-semibold text-red-600 dark:text-white">{user?.name}</span>
           </p>
-          <p className="text-gray-500 dark:text-gray-500">
+          <p className="text-gray-500 dark:text-white">
             Elija el módulo en el que trabajará durante esta sesión
           </p>
           <div className="mt-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 max-w-md mx-auto">
@@ -271,7 +271,7 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({ onModuleSelect
               }`}
             >
               <CardHeader className="text-center pb-4">
-                <CardTitle className="text-xl font-bold text-red-600 dark:text-red-400">
+                <CardTitle className="text-xl font-bold text-red-600 dark:text-white">
                   Módulo {module.id}
                 </CardTitle>
               </CardHeader>

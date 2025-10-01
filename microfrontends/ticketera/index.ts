@@ -11,6 +11,7 @@ export { default as TabletInterface } from './tabletinterface/TabletInterface'
 export { useAgentPanel } from './agentpanel/hooks/useAgentPanel'
 export { useTVDisplay } from './tvdisplay/hooks/useTVDisplay'
 export { useRatingTablet } from './ratingtablet/hooks/useRatingTablet'
+export { useTabletInterfaceWebSocket } from './tabletinterface/hooks/useWebSocket'
 
 
 export const TICKETERA_CONFIG = {
