@@ -1,5 +1,4 @@
 // 🎯 COMPONENTES ESPECÍFICOS DEL AGENTPANEL
-// ❌ Button y Card eliminados - usar los de shared
 
 export { LoadingSpinner } from './LoadingSpinner'
 

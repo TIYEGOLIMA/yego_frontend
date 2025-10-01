@@ -21,7 +21,7 @@ export const TICKETERA_CONFIG = {
       name: 'Panel de Agentes',
       path: '/agent-panel',
       requiresAuth: true,
-      roles: ['OPERADOR', 'SUPERADMIN'],
+      roles: ['OPERADOR', 'SUPERADMIN', 'TV', 'PRINCIPAL', 'TABLET1', 'TABLET2'],
       description: 'Sistema de gestión de tickets para operadores'
     },
     TV_DISPLAY: {

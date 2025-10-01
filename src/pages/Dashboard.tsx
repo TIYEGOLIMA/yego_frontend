@@ -6,6 +6,7 @@ import { Button } from "../components/ui/button"
 import { Badge } from "../components/ui/badge"
 import { Switch } from "../components/ui/switch"
 import { dashboardService, DashboardData, DashboardMetrics } from "../services"
+import { RoleDebugInfo } from "../components/RoleDebugInfo"
 import { 
   Users, 
   Shield, 
@@ -254,6 +255,9 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Debug Info - Temporal */}
+      <RoleDebugInfo />
+      
       {/* Header del Dashboard */}
       <div className="glassmorphism-strong shadow-xl dark:shadow-dark-xl rounded-3xl p-6 sm:p-8">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">

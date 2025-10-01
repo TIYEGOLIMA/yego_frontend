@@ -31,7 +31,7 @@ export function useAuthEvents() {
   const triggerRefresh = useAuthStore((state) => state.triggerRefresh);
 
   useEffect(() => {
-    const socket = SocketService.getInstance();
+    const socket = SocketService;
     const handlePermissionsUpdated = () => {
       fetchProfile().then(() => {
         triggerRefresh();

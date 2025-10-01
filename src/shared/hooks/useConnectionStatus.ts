@@ -10,7 +10,7 @@ export const useConnectionStatus = () => {
   const hasBeenConnectedRef = useRef<boolean>(false);
 
   useEffect(() => {
-    const socket = SocketService.getInstance();
+    const socket = SocketService;
     
     // Obtener estado inicial
     const initialStatus = socket.getConnectionStatus();

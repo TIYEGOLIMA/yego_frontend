@@ -26,6 +26,9 @@ api.interceptors.request.use(
     const token = localStorage.getItem('token')
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
+    } else {
+      // Si no hay token, remover el header de Authorization
+      delete config.headers.Authorization
     }
     
     // También intentar obtener desde el store persistido

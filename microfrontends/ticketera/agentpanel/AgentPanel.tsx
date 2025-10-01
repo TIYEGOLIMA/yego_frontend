@@ -10,6 +10,7 @@ import './styles/index.css'
 
 // 🎯 COMPONENTE SIN WEBSOCKET: Envuelve AgentPanel para evitar conexiones WebSocket
 const AgentPanel: React.FC = () => {
+  
   // 🔐 VERIFICAR AUTENTICACIÓN
   const { currentUser, loading: authLoading } = useAuth()
   const { isConnected } = useSocket()
@@ -105,55 +106,74 @@ const AgentPanel: React.FC = () => {
     )
   }
 
+  // 🎯 VERIFICAR SI EL USUARIO NECESITA SELECCIONAR MÓDULO EN EL SISTEMA PRINCIPAL
+  // Usar el estado del store principal en lugar de localStorage para evitar problemas de sincronización
+  const userData = localStorage.getItem('user')
+  let needsModuleSelection = false
+  
+  if (userData) {
+    try {
+      const user = JSON.parse(userData)
+      needsModuleSelection = user.role === 'OPERADOR' && 
+                           (user.moduleId === null || user.moduleId === undefined || user.moduleId === '')
+    } catch (error) {
+      console.error('Error parseando datos del usuario:', error)
+    }
+  }
+
   if (showModuleSelection) {
     return (
       <div className="min-h-screen bg-gray-100 dark:bg-gray-900 p-4">
         <ModuleSelection
-          modules={modules || []}
-          onModuleSelect={seleccionarModulo}
-          loading={loading}
+          onModuleSelected={seleccionarModulo}
         />
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen">
-      <div className="max-w-7xl mx-auto p-6">
-        {/* Header con soporte dark mode */}
-        <div className="mb-8 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-                Panel de Agente
-              </h1>
-              <p className="text-gray-700 dark:text-gray-300">
-                Módulo {selectedModule} - Gestión de Tickets
-              </p>
-            </div>
-            <div className="flex items-center space-x-4">
-              <div className="text-right">
-                <div className="text-sm text-gray-600 dark:text-gray-400 flex items-center justify-end gap-2">
-                  <span className="text-gray-500 dark:text-gray-400">WebSocket:</span>
-                  <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
-                    isConnected
-                      ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' 
-                      : 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
-                  }`}>
+    <div className="w-full pt-6">
+      {/* Header con soporte dark mode */}
+      <div className="mb-8 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+              Panel de Agente
+            </h1>
+            <p className="text-gray-700 dark:text-gray-300">
+              Módulo {selectedModule} - Gestión de Tickets
+            </p>
+          </div>
+          <div className="flex items-center space-x-4">
+            <div className="text-right">
+              <div className="text-sm text-gray-600 dark:text-gray-400 flex items-center justify-end gap-2">
+                <span className="text-gray-500 dark:text-gray-400">WebSocket:</span>
+                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                  isConnected
+                    ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' 
+                    : 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
+                }`}>
+                  <span className="relative">
                     <span className={`w-2 h-2 rounded-full ${
-                      isConnected ? 'bg-green-500' : 'bg-red-500'
+                      isConnected 
+                        ? 'bg-green-500' 
+                        : 'bg-red-500'
                     }`}></span>
-                    {isConnected ? 'Conectado' : 'Deshabilitado (HTTP Polling)'}
+                    {isConnected && (
+                      <span className="absolute top-0 left-0 w-2 h-2 bg-green-500 rounded-full animate-ping"></span>
+                    )}
                   </span>
-                </div>
+                  {isConnected ? 'Conectado' : 'Deshabilitado (HTTP Polling)'}
+                </span>
               </div>
-              {/* 🚫 BOTÓN DE LOGOUT ELIMINADO - Se maneja desde el sidebar principal */}
             </div>
+            {/* 🚫 BOTÓN DE LOGOUT ELIMINADO - Se maneja desde el sidebar principal */}
           </div>
         </div>
+      </div>
 
         {/* Ticket Sections Reorganizadas */}
-        <div className="space-y-8">
+        <div className="space-y-12">
           {/* Tickets Llamados y Atendiendo (arriba) - más estrechos */}
           <div className="flex justify-center">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full lg:w-3/4">
@@ -189,6 +209,9 @@ const AgentPanel: React.FC = () => {
             </div>
           </div>
           
+          {/* Espaciado adicional para separar mejor las secciones */}
+          <div className="mt-8"></div>
+          
           {/* Tickets en Espera (abajo) - más ancho */}
           <div className="flex justify-center">
             <div className="w-full lg:w-5/6">
@@ -212,7 +235,6 @@ const AgentPanel: React.FC = () => {
             </div>
           </div>
         </div>
-      </div>
     </div>
   )
 }

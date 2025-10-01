@@ -1,10 +1,16 @@
 import React from 'react';
-import AgentPanelAdapted from './AgentPanelAdapted';
+import AgentPanel from 'microfrontends/ticketera/agentpanel/AgentPanel';
+import { SocketProvider } from 'microfrontends/ticketera/agentpanel/contexts/SocketContext';
 
-// Componente wrapper para el AgentPanel - Usa la versión adaptada local
 const AgentPanelWrapper: React.FC = () => {
-  // ✅ Usar directamente el componente local adaptado sin importación dinámica
-  return <AgentPanelAdapted />;
+  console.log('🚀 [TicketeraWrapper] TicketeraWrapper iniciando...');
+  
+  // ✅ Envolver AgentPanel con SocketProvider para el WebSocket centralizado
+  return (
+    <SocketProvider>
+      <AgentPanel />
+    </SocketProvider>
+  );
 };
 
 export default AgentPanelWrapper;

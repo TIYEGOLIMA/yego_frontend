@@ -41,40 +41,25 @@ interface Ticket {
 }
 
 export const ticketService = {
-  async getTickets(): Promise<Ticket[]> {
+  // 🎯 NUEVO: Obtener todos los tickets combinando múltiples endpoints
+  async getAllTickets(): Promise<Ticket[]> {
     try {
+      console.log('📋 [ticketService] Obteniendo todos los tickets desde /all...')
       const response = await api.get('/tickets/all')
+      console.log('📋 [ticketService] Tickets recibidos:', response.data.length)
       return response.data
     } catch (error: any) {
       if (error?.response?.status === 429) {
+        console.log('⏳ [ticketService] Rate limit, reintentando en 2 segundos...')
         await new Promise(resolve => setTimeout(resolve, 2000))
         const retryResponse = await api.get('/tickets/all')
         return retryResponse.data
       }
-      console.error('❌ [ticketService] Error obteniendo tickets:', error)
+      console.error('❌ [ticketService] Error obteniendo todos los tickets:', error)
       throw error
     }
   },
 
-  async getTicketWaiting(): Promise<Ticket[]> {
-    try {
-      const response = await api.get('/tickets/waiting')
-      return response.data
-    } catch (error) {
-      console.error('❌ [ticketService] Error obteniendo tickets en espera:', error)
-      throw error
-    }
-  },
-
-  async getCalledTickets(): Promise<Ticket[]> {
-    try {
-      const response = await api.get('/tickets/called')
-      return response.data
-    } catch (error) {
-      console.error('❌ [ticketService] Error obteniendo tickets llamados:', error)
-      throw error
-    }
-  },
 
   async getLastCalledTicket(): Promise<Ticket | null> {
     try {

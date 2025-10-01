@@ -71,7 +71,7 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
   // 🎯 SUSCRIPCIONES DE WEBSOCKET PARA ACTUALIZACIONES EN TIEMPO REAL
   useEffect(() => {
     if (!isConnected) {
-      console.log('🔌 [AgentPanel] WebSocket no conectado - esperando conexión...')
+      // console.log('🔌 [AgentPanel] WebSocket no conectado - esperando conexión...')
       return
     }
     
@@ -401,8 +401,8 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
         console.log('🎯 [AgentPanel] Cargando tickets reales para módulo:', selectedModule)
       }
       
-      // 🎯 OBTENER TODOS LOS TICKETS (incluyendo categorías y subcategorías)
-      const todosLosTicketsBackend = await ticketService.getTickets()
+      // 🎯 OBTENER TODOS LOS TICKETS usando /tickets/all
+      const todosLosTicketsBackend = await ticketService.getAllTickets()
       if (!esConsultaAutomatica) {
         console.log('🎯 [AgentPanel] Todos los tickets del backend:', todosLosTicketsBackend.length)
         console.log('🔍 [AgentPanel] DETALLES de cada ticket:')
@@ -410,6 +410,18 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
           console.log(`  ${index + 1}. ${ticket.ticketNumber}: status="${ticket.status}", moduleId=${ticket.moduleId}, agentId=${ticket.agentId}`)
         })
         console.log('🎯 [AgentPanel] Módulo seleccionado actual:', selectedModule)
+      }
+      
+      // 🎯 OBTENER AGENT ID DEL USUARIO ACTUAL
+      let currentAgentId: number | null = null
+      const userData = localStorage.getItem('user')
+      if (userData) {
+        try {
+          const user = JSON.parse(userData)
+          currentAgentId = user.id
+        } catch (error) {
+          console.error('❌ [AgentPanel] Error parseando datos del usuario:', error)
+        }
       }
       
       // 🎯 FILTRAR TICKETS RELEVANTES PARA ESTE MÓDULO
@@ -421,6 +433,7 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
           }
           return true
         }
+        
         // Mostrar tickets asignados a este módulo específico
         if (ticket.moduleId === selectedModule && (ticket.status === 'CALLED' || ticket.status === 'IN_PROGRESS')) {
           if (!esConsultaAutomatica) {
@@ -429,8 +442,16 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
           return true
         }
         
+        // 🎯 NUEVO: Mostrar tickets CALLED/IN_PROGRESS asignados a este agente (aunque no tengan moduleId)
+        if (currentAgentId && ticket.agentId === currentAgentId && (ticket.status === 'CALLED' || ticket.status === 'IN_PROGRESS')) {
+          if (!esConsultaAutomatica) {
+            console.log(`✅ [AgentPanel] Ticket ${ticket.ticketNumber} incluido: ${ticket.status} asignado a agente ${currentAgentId}`)
+          }
+          return true
+        }
+        
         if (!esConsultaAutomatica) {
-          console.log(`❌ [AgentPanel] Ticket ${ticket.ticketNumber} excluido: status="${ticket.status}", moduleId=${ticket.moduleId} (no es WAITING sin módulo ni del módulo ${selectedModule})`)
+          console.log(`❌ [AgentPanel] Ticket ${ticket.ticketNumber} excluido: status="${ticket.status}", moduleId=${ticket.moduleId}, agentId=${ticket.agentId} (no cumple criterios)`)
         }
         return false
       })
@@ -975,34 +996,6 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
         return
       }
       
-      // 🆕 PRIMERO VERIFICAR SI YA TIENE MÓDULO ASIGNADO
-      const moduloExistente = await queueAgentService.verificarYUsarModuloExistente()
-      
-      if (moduloExistente.success && moduloExistente.existing) {
-        console.log('✅ [useAgentPanel] Usuario ya tiene módulo asignado:', moduloExistente.moduleId)
-        
-        // 🎯 USAR EL MÓDULO EXISTENTE
-        setSelectedModule(moduloExistente.moduleId!)
-        setShowModuleSelection(false)
-        
-        // 🎯 LIMPIAR REGISTRO DE TICKETS LLAMADOS AL USAR MÓDULO EXISTENTE
-        console.log('🧹 [AgentPanel] Limpiando registro de tickets llamados al usar módulo existente')
-        
-        // 🎯 PERSISTIR MÓDULO EXISTENTE
-        const moduleName = modules.find(m => m.id === moduloExistente.moduleId)?.name || 'Módulo'
-        safeSetItem(`selectedModule`, moduloExistente.moduleId!.toString())
-        safeSetItem(`selectedModuleName`, moduleName)
-        
-        // 🎯 CARGAR TICKETS DEL MÓDULO EXISTENTE
-        await cargarTickets()
-        
-        mostrarError(`✅ Usando módulo existente: "${moduleName}"`)
-        return
-      }
-      
-      // 🎯 SI NO TIENE MÓDULO, ENTONCES ASIGNAR UNO NUEVO
-      await queueAgentService.asignarModuloAlUsuario(moduleId)
-      
       // Limpiar estado anterior
       setTickets([])
       
@@ -1114,19 +1107,41 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
   // 🎯 EFECTO SIMPLE: Cargar tickets cuando hay módulo
   useEffect(() => {
     if (selectedModule) {
+      console.log('🔄 [useAgentPanel] Módulo seleccionado, cargando tickets automáticamente...', selectedModule)
       cargarTickets()
+    } else {
+      console.log('⚠️ [useAgentPanel] No hay módulo seleccionado, no se cargan tickets')
     }
-  }, [selectedModule, cargarTickets])
+  }, [selectedModule]) // Removido cargarTickets de las dependencias para evitar bucles
+
+  // 🎯 EFECTO: Carga automática de tickets cada 30 segundos cuando WebSocket está conectado
+  useEffect(() => {
+    if (!selectedModule || !isConnected) {
+      return
+    }
+
+    console.log('🔄 [useAgentPanel] Configurando carga automática de tickets cada 30 segundos...')
+    
+    const interval = setInterval(() => {
+      console.log('⏰ [useAgentPanel] Carga automática de tickets...')
+      cargarTickets(true) // true = esConsultaAutomatica
+    }, 30000) // 30 segundos
+
+    return () => {
+      console.log('🛑 [useAgentPanel] Limpiando intervalo de carga automática')
+      clearInterval(interval)
+    }
+  }, [selectedModule, isConnected])
 
   // 🎯 ESTADOS DERIVADOS SIMPLES  
   const ticketsEnEspera = useMemo(() => {
     const ticketsWaiting = tickets.filter(t => t.status === 'WAITING')
     const ticketsInProgress = tickets.filter(t => t.status === 'IN_PROGRESS')
     
-    console.log('🔍 [AgentPanel] Calculando ticketsEnEspera:')
-    console.log('🔍 [AgentPanel] Total tickets:', tickets.length)
-    console.log('🔍 [AgentPanel] Tickets WAITING:', ticketsWaiting.length, ticketsWaiting.map(t => `${t.ticketNumber}(${t.status})`))
-    console.log('🔍 [AgentPanel] Tickets IN_PROGRESS:', ticketsInProgress.length)
+    // console.log('🔍 [AgentPanel] Calculando ticketsEnEspera:')
+    // console.log('🔍 [AgentPanel] Total tickets:', tickets.length)
+    // console.log('🔍 [AgentPanel] Tickets WAITING:', ticketsWaiting.length, ticketsWaiting.map(t => `${t.ticketNumber}(${t.status})`))
+    // console.log('🔍 [AgentPanel] Tickets IN_PROGRESS:', ticketsInProgress.length)
     
     // 🎯 DEBUG: Verificar detalles de tickets en espera
     if (ticketsWaiting.length > 0) {
@@ -1163,7 +1178,7 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
 
   const ticketsAtendiendo = useMemo(() => {
     const atendiendo = tickets.filter(t => t.status === 'IN_PROGRESS')
-    console.log('🔍 [AgentPanel] Calculando ticketsAtendiendo:', atendiendo.length)
+    // console.log('🔍 [AgentPanel] Calculando ticketsAtendiendo:', atendiendo.length)
     return atendiendo
   }, [tickets])
 

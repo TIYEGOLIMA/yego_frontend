@@ -1,7 +1,3 @@
-/**
- * Store de autenticación utilizando Zustand
- * Gestiona el estado de autenticación, tokens y datos del usuario
- */
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { authService } from "../services"
@@ -12,9 +8,9 @@ export interface User {
   email: string;
   name: string;
   role: string;
-  moduleId?: string | null;  // Backend devuelve string, no number
+  moduleId?: string | null;  
   active: boolean;
-  lastLogin: string;         // Backend devuelve LocalDateTime como string ISO
+  lastLogin: string;
 }
 
 export interface AuthState {
@@ -50,11 +46,13 @@ export const useAuthStore = create<AuthState>()(
             throw new Error('No se recibió token de acceso')
           }
           
-          // 🎯 VALIDAR QUE SOLO OPERADOR Y SUPERADMIN PUEDAN ACCEDER
-          const allowedRoles = ['OPERADOR', 'SUPERADMIN'];
-          if (!allowedRoles.includes(response.user.role)) {
-            throw new Error(`Acceso denegado. Solo usuarios con rol OPERADOR o SUPERADMIN pueden acceder al sistema. Tu rol actual es: ${response.user.role}`)
-          }
+          // 🎯 TODOS LOS ROLES PUEDEN ACCEDER AL SISTEMA
+          console.log(`✅ [authStore] Usuario con rol ${response.user.role} autorizado para acceder`)
+          
+          console.log('✅ [authStore] Login exitoso, guardando estado:', {
+            user: response.user,
+            token: response.accessToken ? 'presente' : 'ausente'
+          })
           
           set({ 
             user: response.user, 
@@ -65,6 +63,9 @@ export const useAuthStore = create<AuthState>()(
           localStorage.setItem("token", response.accessToken)
           localStorage.setItem("user", JSON.stringify(response.user))
           localStorage.removeItem("requiereCambioPassword")
+          
+          console.log('✅ [authStore] Estado guardado en localStorage')
+          
           return response
         } catch (error: any) {
           console.error('Error en login (store):', error);
@@ -74,13 +75,42 @@ export const useAuthStore = create<AuthState>()(
         }
       },
       logout: async () => {
-        await authService.logout()
-        set({ user: null, token: null, error: null })
-        localStorage.removeItem("requiereCambioPassword")
+        console.log('🔄 [authStore] Iniciando logout...')
+        
+        try {
+          // Desconectar WebSocket antes del logout
+          const SocketService = (await import('../services/socket-service')).default
+          if (SocketService) {
+            console.log('🔌 [authStore] Desconectando WebSocket...')
+            SocketService.disconnect()
+          }
+          
+          // Ejecutar logout del servicio
+          await authService.logout()
+          
+          // Limpiar estado del store
+          set({ user: null, token: null, error: null })
+          localStorage.removeItem("requiereCambioPassword")
+          
+          console.log('✅ [authStore] Logout completado exitosamente')
+        } catch (error) {
+          console.error('❌ [authStore] Error en logout:', error)
+          // En caso de error, limpiar estado local
+          set({ user: null, token: null, error: null })
+          localStorage.removeItem("requiereCambioPassword")
+        }
       },
       fetchProfile: async () => {
         const token = get().token
         if (!token) return
+        
+        // Verificar si el token es válido antes de hacer la petición
+        if (!authService.isTokenValid()) {
+          console.log('🚨 [store] Token inválido detectado en fetchProfile - limpiando...');
+          authService.clearLocalStorage();
+          set({ user: null, token: null, loading: false });
+          return;
+        }
         
         set({ loading: true })
         try {
@@ -88,11 +118,21 @@ export const useAuthStore = create<AuthState>()(
           console.log('🔄 Perfil actualizado desde API:', user);
           set({ user, loading: false })
           localStorage.setItem("user", JSON.stringify(user))
-        } catch (error) {
-          console.log('🔒 [store] Error en fetchProfile, ejecutando logout completo...')
+        } catch (error: any) {
+          console.log('🔒 [store] Error en fetchProfile:', error);
+          
+          // Si es error de token inválido, limpiar inmediatamente
+          if (error.response?.status === 401 || 
+              error.message?.includes('JWT signature')) {
+            console.log('🚨 [store] Token corrupto/inválido - limpiando datos...');
+            authService.clearLocalStorage();
+            set({ user: null, token: null, loading: false });
+            return;
+          }
+          
+          // Para otros errores, intentar logout normal
           set({ user: null, token: null, loading: false })
           
-          // 🎯 USAR LOGOUT COMPLETO del store para liberar módulo  
           try {
             await authService.logout()
             console.log('✅ [store] Logout automático completado desde fetchProfile')
@@ -108,6 +148,9 @@ export const useAuthStore = create<AuthState>()(
         set({ user })
         localStorage.setItem("user", JSON.stringify(user))
         localStorage.removeItem("requiereCambioPassword")
+        
+        console.log(`🔄 [authStore] Usuario actualizado: ${user.name}`);
+        console.log(`🔄 [authStore] ModuleId: ${user.moduleId}`);
       },
       triggerRefresh: () => {
         set((state) => ({ refreshTrigger: state.refreshTrigger + 1 }))
@@ -120,6 +163,15 @@ export const useAuthStore = create<AuthState>()(
         token: state.token,
         refreshTrigger: state.refreshTrigger,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (state?.user) {
+          console.log('🔄 [authStore] Estado restaurado:', {
+            user: state.user.name,
+            role: state.user.role,
+            moduleId: state.user.moduleId
+          });
+        }
+      },
     }
   )
 )

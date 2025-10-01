@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useWebSocket } from '../../../shared/hooks/useWebSocket'
 
 interface UseSocketReturn {
@@ -12,7 +12,7 @@ interface UseSocketReturn {
 
 /**
  * Hook para WebSocket específico del AgentPanel
- * Usa el WebSocket centralizado del sistema principal
+ * Usa el WebSocket centralizado del sistema principal con STOMP/SockJS
  */
 export const useSocket = (): UseSocketReturn => {
   const [latency, setLatency] = useState(0)
@@ -20,106 +20,78 @@ export const useSocket = (): UseSocketReturn => {
   const {
     isConnected,
     connectionStatus,
-    onTicketUpdated,
-    onTicketCreated,
-    onTicketCalled,
-    onTicketCompleted,
-    onQueueChanged,
-    onModuleAssigned,
-    onModuleReleased,
-    subscribe: baseSubscribe,
-    connect: baseConnect,
-    disconnect: baseDisconnect,
-    emit
-  } = useWebSocket({
-    debug: true,
-    autoReconnect: true
-  })
+    onTicketeraEvent,
+    sendTicketeraEvent
+  } = useWebSocket({ debug: true })
 
-  // Simular medición de latencia
+  // Simular latencia (en una implementación real, esto vendría del servidor)
   useEffect(() => {
     if (isConnected) {
-      const pingInterval = setInterval(() => {
-        const startTime = Date.now()
-        
-        // Enviar ping y medir respuesta
-        const success = emit('ping', { timestamp: startTime })
-        
-        if (success) {
-          // Simular latencia (en producción, el backend debería responder con 'pong')
-          setTimeout(() => {
-            const endTime = Date.now()
-            setLatency(endTime - startTime)
-          }, 50) // Latencia simulada de 50ms
-        }
-      }, 30000) // Cada 30 segundos
+      const interval = setInterval(() => {
+        setLatency(Math.floor(Math.random() * 50) + 10) // 10-60ms
+      }, 5000) // Cambiado de 1 segundo a 5 segundos para reducir re-renders
       
-      return () => clearInterval(pingInterval)
+      return () => clearInterval(interval)
     } else {
       setLatency(0)
     }
-  }, [isConnected, emit])
+  }, [isConnected])
 
-  // Implementar reconexión con autenticación
-  const reconnectWithAuth = () => {
-    console.log('🔄 [useSocket] Reconectando con autenticación...')
-    
-    const token = localStorage.getItem('token')
-    const user = JSON.parse(localStorage.getItem('user') || '{}')
-    
-    if (!token || !user.id) {
-      console.log('❌ [useSocket] No hay token o usuario para reconectar')
-      return
-    }
-    
-    // Intentar reconectar
-    baseConnect()
-  }
+  // Métodos de conexión (no necesarios con STOMP, pero mantenemos compatibilidad)
+  const connect = useCallback(() => {
+    console.log('🔌 [useSocket] Connect llamado - STOMP se conecta automáticamente')
+  }, [])
 
-  // Método de suscripción compatible con la interfaz anterior
-  const subscribe = (topic: string, callback: (message: any) => void): (() => void) | null => {
+  const disconnect = useCallback(() => {
+    console.log('🔌 [useSocket] Disconnect llamado - STOMP se desconecta automáticamente')
+  }, [])
+
+  const reconnectWithAuth = useCallback(() => {
+    console.log('🔄 [useSocket] ReconnectWithAuth llamado - STOMP se reconecta automáticamente')
+  }, [])
+
+  // Función de suscripción que mapea topics a eventos de Ticketera
+  const subscribe = useCallback((topic: string, callback: (message: any) => void): (() => void) | null => {
     console.log('🔔 [useSocket] Suscribiendo a:', topic)
     
-    // Mapear topics del SocketContext anterior a eventos del WebSocket centralizado
-    const topicMap: { [key: string]: () => () => void } = {
-      '/topic/tickets': () => onTicketUpdated(callback),
-      '/topic/ticket-updates': () => onTicketUpdated(callback),
-      '/topic/ticket-created': () => onTicketCreated(callback),
-      '/topic/ticket-called': () => onTicketCalled(callback),
-      '/topic/ticket-completed': () => onTicketCompleted(callback),
-      '/topic/queue-changes': () => onQueueChanged(callback),
-      '/topic/module-assigned': () => onModuleAssigned(callback),
-      '/topic/module-released': () => onModuleReleased(callback),
+    // Mapear topics específicos a eventos de Ticketera
+    const topicMap: { [key: string]: string } = {
+      '/topic/tickets': 'ticket_updated',
+      '/topic/ticket-updates': 'ticket_updated', 
+      '/topic/ticket-created': 'ticket_created',
+      '/topic/ticket-called': 'ticket_called',
+      '/topic/ticket-completed': 'ticket_completed',
+      '/topic/queue-changes': 'queue_changed',
+      '/topic/module-assigned': 'module_assigned',
+      '/topic/module-released': 'module_released',
     }
     
-    // Si el topic está mapeado, usar el método específico
+    // Si el topic está mapeado, suscribirse a eventos de Ticketera
     if (topicMap[topic]) {
-      return topicMap[topic]()
+      console.log(`🔔 [useSocket] Mapeando ${topic} a evento Ticketera: ${topicMap[topic]}`)
+      
+      // Suscribirse a eventos de Ticketera y filtrar por tipo
+      const unsubscribe = onTicketeraEvent((event: any) => {
+        if (event.type === topicMap[topic]) {
+          console.log(`🎫 [useSocket] Evento recibido para ${topic}:`, event)
+          callback(event.data || event)
+        }
+      })
+      
+      return unsubscribe
     }
     
-    // Para topics genéricos, usar suscripción base
-    const eventName = topic.replace('/topic/', '').replace('/', '-')
-    console.log('🔔 [useSocket] Suscripción genérica a evento:', eventName)
-    
-    return baseSubscribe([
-      [eventName, callback]
-    ])
-  }
-
-  console.log('🔌 [useSocket] Estado:', {
-    isConnected,
-    connectionStatus,
-    latency
-  })
+    // Para topics no mapeados, suscribirse directamente a eventos de Ticketera
+    console.log(`🔔 [useSocket] Suscribiéndose directamente a eventos Ticketera para: ${topic}`)
+    return onTicketeraEvent(callback)
+  }, [onTicketeraEvent])
 
   return {
     isConnected,
     latency,
-    connect: baseConnect,
-    disconnect: baseDisconnect,
+    connect,
+    disconnect,
     reconnectWithAuth,
     subscribe
   }
 }
-
-export default useSocket

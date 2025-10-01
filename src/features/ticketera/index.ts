@@ -5,7 +5,6 @@
 export { default as TicketsModule } from './tickets/tickets.module';
 
 // Componentes específicos de tickets
-export { default as AgentPanelAdapted } from './tickets/AgentPanelAdapted';
 export { default as TicketeraWrapper } from './tickets/TicketeraWrapper';
 
 // 🎯 CONFIGURACIÓN DE FEATURES TICKETERA

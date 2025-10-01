@@ -35,7 +35,11 @@ interface NavItem {
   requiredPermission?: string | null;
 }
 
-export const MainLayout: React.FC = () => {
+interface MainLayoutProps {
+  children?: React.ReactNode;
+}
+
+export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
@@ -43,6 +47,13 @@ export const MainLayout: React.FC = () => {
   const { user, logout, token } = useAuthStore()
   const { hasAnyPermission } = usePermissions()
   const { status } = useConnectionStatus()
+  
+  // Debug logs
+  console.log('🔍 [MainLayout] Renderizando con:', {
+    user: user ? { id: user.id, name: user.name, role: user.role } : null,
+    token: !!token,
+    hasChildren: !!children
+  })
   
   const navigate = useNavigate()
   const location = useLocation()
@@ -429,7 +440,7 @@ export const MainLayout: React.FC = () => {
         pt-0 min-h-screen`}>
         <main className="p-6">
           <div className="yego-container">
-            <Outlet />
+            {children || <Outlet />}
           </div>
         </main>
       </div>

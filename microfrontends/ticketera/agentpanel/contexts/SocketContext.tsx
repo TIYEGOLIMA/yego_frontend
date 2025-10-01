@@ -1,4 +1,4 @@
-import React, { createContext, useContext } from 'react'
+import React, { createContext, useContext, useMemo } from 'react'
 import { useSocket as useSocketHook } from '../hooks/useSocket'
 
 interface SocketContextType {
@@ -21,21 +21,24 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   // 🎯 USAR WEBSOCKET CENTRALIZADO EN LUGAR DE CREAR UNO PROPIO
   const socketHook = useSocketHook()
 
-  console.log('🎬 [SocketProvider] Iniciando con WebSocket centralizado')
-  console.log('🔌 [SocketProvider] Estado de conexión:', {
-    isConnected: socketHook.isConnected,
-    latency: socketHook.latency
-  })
+  // 🎯 MEMOIZAR EL CONTEXT VALUE PARA EVITAR RE-RENDERS INFINITOS
+  const contextValue: SocketContextType = useMemo(() => {
+    console.log('🎬 [SocketProvider] Iniciando con WebSocket centralizado')
+    console.log('🔌 [SocketProvider] Estado de conexión:', {
+      isConnected: socketHook.isConnected,
+      latency: socketHook.latency
+    })
 
-  const contextValue: SocketContextType = {
-    client: null, // No hay cliente STOMP, ahora usa Socket.IO centralizado
-    isConnected: socketHook.isConnected,
-    latency: socketHook.latency,
-    connect: socketHook.connect,
-    disconnect: socketHook.disconnect,
-    reconnectWithAuth: socketHook.reconnectWithAuth,
-    subscribe: socketHook.subscribe
-  }
+    return {
+      client: null, // No hay cliente STOMP, ahora usa Socket.IO centralizado
+      isConnected: socketHook.isConnected,
+      latency: socketHook.latency,
+      connect: socketHook.connect,
+      disconnect: socketHook.disconnect,
+      reconnectWithAuth: socketHook.reconnectWithAuth,
+      subscribe: socketHook.subscribe
+    }
+  }, [socketHook.isConnected, socketHook.latency, socketHook.connect, socketHook.disconnect, socketHook.reconnectWithAuth, socketHook.subscribe])
 
   return (
     <SocketContext.Provider value={contextValue}>

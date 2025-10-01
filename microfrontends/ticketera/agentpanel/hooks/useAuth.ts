@@ -12,7 +12,7 @@ export const useAuth = () => {
 
   useEffect(() => {
     const loadUserFromStorage = () => {
-      console.log('🔐 [AgentPanel] Cargando datos de usuario del sistema principal...')
+      // console.log('🔐 [AgentPanel] Cargando datos de usuario del sistema principal...')
       
       try {
         const userData = localStorage.getItem('user')
@@ -35,11 +35,11 @@ export const useAuth = () => {
           return
         }
         
-        console.log('✅ [AgentPanel] Usuario cargado:', {
-          username: user.username,
-          role: user.role,
-          moduleId: user.moduleId
-        })
+        // console.log('✅ [AgentPanel] Usuario cargado:', {
+        //   username: user.username,
+        //   role: user.role,
+        //   moduleId: user.moduleId
+        // })
         
         setCurrentUser(user)
         setLoading(false)
@@ -76,11 +76,8 @@ export const useAuth = () => {
       return false
     }
 
-    const allowedRoles = ['OPERADOR', 'SUPERADMIN', 'ADMIN']
-    if (!allowedRoles.includes(currentUser.role)) {
-      console.log('❌ [AgentPanel] Sin acceso: Rol no permitido:', currentUser.role)
-      return false
-    }
+    // 🎯 TODOS LOS ROLES PUEDEN ACCEDER AL AGENT PANEL
+    console.log(`✅ [AgentPanel] Usuario con rol ${currentUser.role} autorizado para acceder`)
 
     console.log('✅ [AgentPanel] Acceso permitido para:', currentUser.username)
     return true

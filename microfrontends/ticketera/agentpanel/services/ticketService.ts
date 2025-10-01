@@ -59,14 +59,31 @@ export const ticketService = {
     }
   },
 
-  async getTickets(): Promise<Ticket[]> {
+  async getAllTickets(): Promise<Ticket[]> {
     try {
+      console.log('🎯 [ticketService] Obteniendo todos los tickets...')
       const response = await api.get('/tickets/all')
+      console.log('✅ [ticketService] Tickets obtenidos:', response.data.length)
       return response.data
     } catch (error: any) {
       if (error?.response?.status === 429) {
         await new Promise(resolve => setTimeout(resolve, 2000))
         const retryResponse = await api.get('/tickets/all')
+        return retryResponse.data
+      }
+      console.error('❌ [ticketService] Error obteniendo todos los tickets:', error)
+      throw error
+    }
+  },
+
+  async getTickets(): Promise<Ticket[]> {
+    try {
+      const response = await api.get('/tickets/waiting')
+      return response.data
+    } catch (error: any) {
+      if (error?.response?.status === 429) {
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        const retryResponse = await api.get('/tickets/waiting')
         return retryResponse.data
       }
       console.error('❌ [ticketService] Error obteniendo tickets:', error)
@@ -114,23 +131,17 @@ export const ticketService = {
     }
   },
 
-  async callTicket(ticketId: number, agentId: number, moduleId?: number): Promise<Ticket> {
+  async callTicket(ticketId: number, agentId: number, moduleId: number): Promise<Ticket> {
     try {
-      // 🎯 Construir URL con query parameters como espera el backend
-      let url = `/tickets/${ticketId}/call?agentId=${agentId}`
-      if (moduleId) {
-        url += `&moduleId=${moduleId}`
+      console.log('🎯 [ticketService] Llamando ticket:', { ticketId, agentId, moduleId })
+      
+      if (!moduleId) {
+        throw new Error('moduleId es requerido para llamar un ticket')
       }
       
-      console.log('🎯 [ticketService] Llamando ticket con URL:', url)
-      console.log('🔍 [ticketService] Parámetros:', { ticketId, agentId, moduleId })
-      console.log('🔍 [ticketService] URL completa:', url)
-      
-      // 🎯 Enviar PATCH sin body, solo con query parameters
-      const response = await api.patch(url)
+      // 🎯 Usar el endpoint correcto: POST /{ticketId}/call/{agentId}?moduleId={moduleId}
+      const response = await api.post(`/tickets/${ticketId}/call/${agentId}?moduleId=${moduleId}`)
       console.log('✅ [ticketService] Respuesta del backend:', response.data)
-      console.log('🔍 [ticketService] Status de respuesta:', response.status)
-      console.log('🔍 [ticketService] Headers de respuesta:', response.headers)
       
       return response.data
     } catch (error: any) {
@@ -160,7 +171,11 @@ export const ticketService = {
         notes: validNotes
       }
       
-      const response = await api.patch(`/tickets/${ticketId}/complete`, requestData)
+      console.log('🎯 [ticketService] Completando ticket:', { ticketId, agentId, notes: validNotes })
+      
+      // 🎯 Usar el endpoint correcto: POST /{ticketId}/complete
+      const response = await api.post(`/tickets/${ticketId}/complete`, requestData)
+      console.log('✅ [ticketService] Respuesta del backend:', response.data)
       
       return response.data
     } catch (error: any) {
@@ -171,7 +186,12 @@ export const ticketService = {
 
   async cancelTicket(ticketId: number, agentId: number): Promise<Ticket> {
     try {
-      const response = await api.patch(`/tickets/${ticketId}/cancel?agentId=${agentId}`)
+      console.log('🎯 [ticketService] Cancelando ticket:', { ticketId, agentId })
+      
+      // 🎯 Usar el endpoint correcto: POST /{ticketId}/cancel/{agentId}
+      const response = await api.post(`/tickets/${ticketId}/cancel/${agentId}`)
+      console.log('✅ [ticketService] Respuesta del backend:', response.data)
+      
       return response.data
     } catch (error: any) {
       console.error('❌ [ticketService] Error cancelando ticket:', error)
@@ -181,7 +201,12 @@ export const ticketService = {
 
   async startTicket(ticketId: number, agentId: number): Promise<Ticket> {
     try {
-      const response = await api.patch(`/tickets/${ticketId}/start?agentId=${agentId}`)
+      console.log('🎯 [ticketService] Iniciando atención de ticket:', { ticketId, agentId })
+      
+      // 🎯 Usar el endpoint correcto: POST /{ticketId}/start/{agentId}
+      const response = await api.post(`/tickets/${ticketId}/start/${agentId}`)
+      console.log('✅ [ticketService] Respuesta del backend:', response.data)
+      
       return response.data
     } catch (error: any) {
       console.error('❌ [ticketService] Error iniciando ticket:', error)

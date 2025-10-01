@@ -1,7 +1,3 @@
-/**
- * Servicio de autenticación para comunicación con el backend
- * Gestiona login, registro, perfil y cierre de sesión
- */
 import api from './api'
 
 export interface LoginCredentials {
@@ -132,31 +128,166 @@ export const authService = {
 
   /**
    * Cierra la sesión del usuario actual
+   * Utiliza el endpoint /logout del backend que maneja la invalidación del token
    */
   async logout(): Promise<void> {
+    console.log('🔄 [authService] Iniciando proceso de logout...');
+    
     try {
       const token = localStorage.getItem('token');
       
       if (token) {
         try {
           console.log('🔄 [authService] Notificando logout al backend...');
-          // 🎯 UNA SOLA LLAMADA: Tu backend maneja todo internamente
-          await api.post('/auth/logout');
+          console.log('🔑 [authService] Token a enviar:', token.substring(0, 20) + '...');
+          
+          // Usar el endpoint correcto /auth/logout del backend
+          await api.post('/auth/logout', {}, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          
           console.log('✅ [authService] Logout exitoso en backend');
-        } catch (error) {
-          console.warn('⚠️ [authService] No se pudo hacer logout en backend:', error);
-          // Continuar con la limpieza local aunque falle el backend
+        } catch (error: any) {
+          console.warn('⚠️ [authService] Error en logout del backend:', error);
+          
+          // Si es error de token inválido (401), continuar con logout local
+          if (error.response?.status === 401) {
+            console.log('🔧 [authService] Token inválido detectado - continuando con logout local');
+          }
+          
+          // Si el error contiene "JWT signature does not match", es token corrupto
+          if (error.response?.data?.message?.includes('JWT signature') || 
+              error.message?.includes('JWT signature')) {
+            console.log('🚨 [authService] Token JWT corrupto detectado - continuando con logout local');
+          }
+          
+          // Si hay error de red, continuar con logout local
+          if (error.message === 'Network Error') {
+            console.log('🌐 [authService] Error de red - continuando con logout local');
+          }
         }
+      } else {
+        console.log('⚠️ [authService] No hay token - procediendo solo con logout local');
       }
       
-      // 🎯 Limpiar datos locales
+      // 🎯 Limpiar datos locales SIEMPRE (esto es lo más importante)
       this.clearLocalStorage();
+      console.log('✅ [authService] Logout completado exitosamente');
       
     } catch (error) {
       console.error('❌ [authService] Error en logout:', error);
       // En caso de error, al menos limpiar datos locales
       this.clearLocalStorage();
+      console.log('✅ [authService] Logout local completado por error');
     }
+  },
+
+  /**
+   * Verifica si el token actual es válido
+   * @returns true si el token es válido, false si está corrupto
+   */
+  isTokenValid(): boolean {
+    const token = localStorage.getItem('token');
+    if (!token) return false;
+    
+    try {
+      // Verificar que el token tenga el formato JWT correcto (3 partes separadas por puntos)
+      const parts = token.split('.');
+      if (parts.length !== 3) {
+        console.warn('⚠️ [authService] Token no tiene formato JWT válido');
+        return false;
+      }
+      
+      // Intentar decodificar el payload (sin verificar la firma)
+      const payload = JSON.parse(atob(parts[1]));
+      
+      // Verificar que tenga campos básicos esperados
+      if (!payload.sub || !payload.exp || !payload.iat) {
+        console.warn('⚠️ [authService] Token no tiene campos JWT requeridos');
+        return false;
+      }
+      
+      // Verificar que no haya expirado
+      const now = Math.floor(Date.now() / 1000);
+      if (payload.exp < now) {
+        console.warn('⚠️ [authService] Token ha expirado');
+        return false;
+      }
+      
+      return true;
+    } catch (error) {
+      console.warn('⚠️ [authService] Error al validar token:', error);
+      return false;
+    }
+  },
+
+  /**
+   * Limpia tokens corruptos automáticamente
+   */
+  cleanupCorruptedToken(): void {
+    if (!this.isTokenValid()) {
+      console.log('🧹 [authService] Limpiando token corrupto...');
+      this.clearLocalStorage();
+    }
+  },
+
+  /**
+   * Fuerza la limpieza completa del localStorage
+   * Útil para resolver problemas de tokens corruptos
+   */
+  forceCleanup(): void {
+    console.log('🚨 [authService] FORZANDO limpieza completa...');
+    this.clearLocalStorage();
+    
+    // Limpiar también el store de Zustand
+    if (typeof window !== 'undefined' && window.location) {
+      console.log('🔄 [authService] Recargando página para aplicar cambios...');
+      window.location.reload();
+    }
+  },
+
+  /**
+   * Diagnóstico completo del token actual
+   */
+  diagnoseToken(): void {
+    console.log('🔍 [authService] === DIAGNÓSTICO DE TOKEN ===');
+    
+    const token = localStorage.getItem('token');
+    const user = localStorage.getItem('user');
+    
+    console.log('🔑 Token presente:', !!token);
+    console.log('👤 Usuario presente:', !!user);
+    
+    if (token) {
+      console.log('🔑 Token (primeros 30 chars):', token.substring(0, 30) + '...');
+      console.log('🔑 Longitud del token:', token.length);
+      console.log('🔑 Token válido (formato):', this.isTokenValid());
+      
+      try {
+        const parts = token.split('.');
+        if (parts.length === 3) {
+          const payload = JSON.parse(atob(parts[1]));
+          console.log('📋 Payload del token:', payload);
+          console.log('⏰ Expira en:', new Date(payload.exp * 1000).toLocaleString());
+          console.log('⏰ Creado en:', new Date(payload.iat * 1000).toLocaleString());
+        }
+      } catch (e) {
+        console.log('❌ Error decodificando token:', e);
+      }
+    }
+    
+    if (user) {
+      try {
+        const userData = JSON.parse(user);
+        console.log('👤 Datos del usuario:', userData);
+      } catch (e) {
+        console.log('❌ Error parseando usuario:', e);
+      }
+    }
+    
+    console.log('🔍 === FIN DIAGNÓSTICO ===');
   },
 
   /**
@@ -168,6 +299,7 @@ export const authService = {
     // Limpiar datos de autenticación del sistema principal
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('auth-storage');
     
     // Limpiar módulos seleccionados (para cualquier usuario)
     Object.keys(localStorage).forEach(key => {
@@ -193,8 +325,9 @@ export const authService = {
     localStorage.removeItem('agentpanel_lastActivity');
     localStorage.removeItem('agentpanel_moduleAssignment');
     
-    // Limpiar headers de autenticación
+    // Limpiar headers de autenticación de la instancia de axios
     delete api.defaults.headers.common['Authorization'];
+    delete api.defaults.headers.Authorization;
     
     console.log('✅ [authService] Limpieza local completada');
   }

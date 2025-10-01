@@ -40,6 +40,11 @@ export interface ModuleAssignmentResponse {
   message: string
   moduleId?: number
   existing?: boolean
+  moduleAssignment?: {
+    moduleId: string
+    assignmentId: number
+    status: string
+  }
 }
 
 class QueueAgentService {
@@ -203,6 +208,59 @@ class QueueAgentService {
     } catch (error) {
       console.error('❌ Error obteniendo estado del agente:', error)
       return null
+    }
+  }
+
+  /**
+   * Asigna un módulo a un usuario
+   * @param userId ID del usuario
+   * @param moduleId ID del módulo a asignar
+   */
+  async assignModuleToUser(userId: number, moduleId: number): Promise<ModuleAssignmentResponse> {
+    try {
+      console.log(`🔄 [queueAgentService] Asignando módulo ${moduleId} al usuario ${userId}...`);
+      
+      const response = await api.post<any>('/queue-agents/asignar', {
+        userId,
+        moduleId
+      });
+      
+      console.log('✅ [queueAgentService] Módulo asignado exitosamente:', response.data);
+      
+      // Verificar diferentes formatos de respuesta del backend
+      let moduleAssignment;
+      
+      if (response.data.moduleId) {
+        // Formato directo con moduleId
+        moduleAssignment = {
+          moduleId: response.data.moduleId.toString(),
+          assignmentId: response.data.id || response.data.assignmentId,
+          status: response.data.status || 'assigned'
+        };
+      } else if (response.data.data && response.data.data.moduleId) {
+        // Formato anidado
+        moduleAssignment = {
+          moduleId: response.data.data.moduleId.toString(),
+          assignmentId: response.data.data.id || response.data.data.assignmentId,
+          status: response.data.data.status || 'assigned'
+        };
+      } else {
+        // Formato alternativo - usar el moduleId del parámetro
+        moduleAssignment = {
+          moduleId: moduleId.toString(),
+          assignmentId: response.data.id || response.data.assignmentId || Date.now(),
+          status: response.data.status || 'assigned'
+        };
+      }
+      
+      return {
+        success: true,
+        message: response.data.message || 'Módulo asignado exitosamente',
+        moduleAssignment: moduleAssignment
+      };
+    } catch (error: any) {
+      console.error('❌ [queueAgentService] Error asignando módulo:', error);
+      throw error;
     }
   }
 }
