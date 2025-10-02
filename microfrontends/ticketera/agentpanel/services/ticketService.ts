@@ -76,6 +76,18 @@ export const ticketService = {
     }
   },
 
+  async getTicketById(ticketId: number): Promise<Ticket> {
+    try {
+      console.log(`🎯 [ticketService] Obteniendo ticket con ID: ${ticketId}`)
+      const response = await api.get(`/tickets/${ticketId}`)
+      console.log('✅ [ticketService] Ticket obtenido:', response.data)
+      return response.data
+    } catch (error: any) {
+      console.error(`❌ [ticketService] Error obteniendo ticket con ID ${ticketId}:`, error)
+      throw new Error(`Error obteniendo ticket: ${error?.response?.data?.message || error?.message}`)
+    }
+  },
+
   async getTickets(): Promise<Ticket[]> {
     try {
       const response = await api.get('/tickets/waiting')
@@ -131,16 +143,16 @@ export const ticketService = {
     }
   },
 
-  async callTicket(ticketId: number, agentId: number, moduleId: number): Promise<Ticket> {
+  async callTicket(ticketId: number, userId: number, moduleId: number): Promise<Ticket> {
     try {
-      console.log('🎯 [ticketService] Llamando ticket:', { ticketId, agentId, moduleId })
+      console.log('🎯 [ticketService] Llamando ticket:', { ticketId, userId, moduleId })
       
       if (!moduleId) {
         throw new Error('moduleId es requerido para llamar un ticket')
       }
       
-      // 🎯 Usar el endpoint correcto: POST /{ticketId}/call/{agentId}?moduleId={moduleId}
-      const response = await api.post(`/tickets/${ticketId}/call/${agentId}?moduleId=${moduleId}`)
+      // 🎯 Usar el endpoint correcto: POST /{ticketId}/call/{userId}?moduleId={moduleId}
+      const response = await api.post(`/tickets/${ticketId}/call/${userId}?moduleId=${moduleId}`)
       console.log('✅ [ticketService] Respuesta del backend:', response.data)
       
       return response.data

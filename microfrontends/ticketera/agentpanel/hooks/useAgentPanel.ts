@@ -267,7 +267,9 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       console.log('🧹 [AgentPanel] Limpiando suscripciones WebSocket')
       subscriptions.forEach(sub => {
         try {
-          sub.unsubscribe()
+          if (sub && typeof sub.unsubscribe === 'function') {
+            sub.unsubscribe()
+          }
         } catch (error) {
           console.warn('⚠️ [AgentPanel] Error desuscribiendo:', error)
         }
@@ -766,27 +768,12 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
     try {
       console.log('🎯 [AgentPanel] Llamando ticket:', ticket.id)
       
-      // 🎯 Para tickets en espera, obtener el ID del agente del localStorage
-      let agentId = ticket.userId
-      if (!agentId) {
-        const userData = localStorage.getItem('user')
-        if (userData) {
-          try {
-            const user = JSON.parse(userData)
-            agentId = user.id
-          } catch (error) {
-            console.error('❌ [AgentPanel] Error parseando datos del usuario:', error)
-          }
-        }
-      }
-      
-      if (!agentId) {
-        mostrarError('No se pudo identificar el agente. Por favor, inicie sesión nuevamente.')
-        return
-      }
+      // 🎯 Obtener el userId del usuario logueado del localStorage
+      const user = JSON.parse(localStorage.getItem('user') || '{}')
+      const userId = user.id
       
       // Llamar ticket vía API
-      const updatedTicket = await ticketService.callTicket(ticket.id, agentId, selectedModule)
+      const updatedTicket = await ticketService.callTicket(ticket.id, userId, selectedModule)
       
       console.log('✅ [AgentPanel] Ticket llamado exitosamente:', updatedTicket)
       
