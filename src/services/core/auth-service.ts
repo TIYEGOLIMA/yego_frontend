@@ -13,7 +13,7 @@ export interface RegisterData {
 }
 
 export interface AuthResponse {
-  accessToken: string;
+  token: string;  // Backend envía 'token', no 'accessToken'
   user: {
     id: number;
     username: string;
