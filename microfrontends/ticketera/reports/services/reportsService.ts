@@ -51,17 +51,32 @@ export const reportsService = {
     }
   },
 
-  // Exportar reportes (para futuras implementaciones)
-  async exportSACPerformanceReports(format: 'excel' | 'pdf' = 'excel'): Promise<Blob> {
+  // Exportar reportes a Excel
+  async exportarAExcel(): Promise<Blob> {
     try {
-      console.log('📊 [reportsService] Exportando reportes...');
-      const response = await api.get(`/ticketera/sac-stats/export?format=${format}`, {
+      console.log('📊 [reportsService] Exportando reportes a Excel...');
+      const response = await api.get('/ticketera/sac-stats/export/excel', {
         responseType: 'blob'
       });
-      console.log('✅ [reportsService] Reportes exportados');
+      console.log('✅ [reportsService] Reportes exportados a Excel');
       return response.data;
     } catch (error) {
-      console.error('❌ [reportsService] Error exportando reportes:', error);
+      console.error('❌ [reportsService] Error exportando a Excel:', error);
+      throw error;
+    }
+  },
+
+  // Exportar reportes a imagen
+  async exportarAImagen(formato: string): Promise<Blob> {
+    try {
+      console.log('📊 [reportsService] Exportando reportes a imagen:', formato);
+      const response = await api.get(`/ticketera/sac-stats/export/image/${formato}`, {
+        responseType: 'blob'
+      });
+      console.log('✅ [reportsService] Reportes exportados a imagen');
+      return response.data;
+    } catch (error) {
+      console.error('❌ [reportsService] Error exportando a imagen:', error);
       throw error;
     }
   }

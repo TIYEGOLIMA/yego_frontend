@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '../shared/components/ui/Card'
 import { Button } from '../shared/components/ui/Button'
 import { 
@@ -11,7 +11,11 @@ import {
   Target,
   UserCheck,
   ThumbsUp,
-  MessageSquare
+  MessageSquare,
+  ChevronDown,
+  FileSpreadsheet,
+  Image,
+  Loader2
 } from 'lucide-react'
 import { reportsService, ReportData } from './services/reportsService'
 
@@ -19,6 +23,9 @@ const Reports: React.FC = () => {
   const [reportData, setReportData] = useState<ReportData | null>(null)
   const [loading, setLoading] = useState(true)
   const [currentUser, setCurrentUser] = useState<any>(null)
+  const [showExportMenu, setShowExportMenu] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const exportMenuRef = useRef<HTMLDivElement>(null)
 
   // 🎯 CARGAR DATOS DEL USUARIO
   useEffect(() => {
@@ -43,6 +50,18 @@ const Reports: React.FC = () => {
   // 🎯 CARGAR DATOS DE REPORTES DE SAC (solo una vez al montar)
   useEffect(() => {
     loadReportData()
+  }, [])
+
+  // 🎯 CERRAR MENÚ AL HACER CLIC FUERA
+  useEffect(() => {
+    const manejarClicExterno = (event: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+        setShowExportMenu(false)
+      }
+    }
+
+    document.addEventListener('mousedown', manejarClicExterno)
+    return () => document.removeEventListener('mousedown', manejarClicExterno)
   }, [])
 
   // 🎯 FUNCIONES DE ACCIÓN
@@ -80,9 +99,58 @@ const Reports: React.FC = () => {
     }
   }
 
-  const handleExport = () => {
-    console.log('📊 [Reports] Exportando reportes...')
-    // Implementar exportación
+  // 🎯 FUNCIONES DE EXPORTACIÓN
+  const descargarArchivo = (blob: Blob, nombreArchivo: string) => {
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = nombreArchivo
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+  }
+
+  const exportarAExcel = async () => {
+    try {
+      setExporting(true)
+      setShowExportMenu(false)
+      console.log('📊 [Reports] Exportando a Excel...')
+      
+      const blob = await reportsService.exportarAExcel()
+      const nombreArchivo = `reporte_sac_${new Date().toISOString().split('T')[0]}.xlsx`
+      
+      descargarArchivo(blob, nombreArchivo)
+      console.log('✅ [Reports] Exportación a Excel completada')
+    } catch (error) {
+      console.error('❌ [Reports] Error exportando a Excel:', error)
+      alert('Error al exportar a Excel. Por favor, intente nuevamente.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const exportarAImagen = async (formato: string) => {
+    try {
+      setExporting(true)
+      setShowExportMenu(false)
+      console.log('📊 [Reports] Exportando a imagen:', formato)
+      
+      const blob = await reportsService.exportarAImagen(formato)
+      const nombreArchivo = `reporte_sac_${new Date().toISOString().split('T')[0]}.${formato}`
+      
+      descargarArchivo(blob, nombreArchivo)
+      console.log('✅ [Reports] Exportación a imagen completada')
+    } catch (error) {
+      console.error('❌ [Reports] Error exportando a imagen:', error)
+      alert('Error al exportar a imagen. Por favor, intente nuevamente.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const toggleExportMenu = () => {
+    setShowExportMenu(!showExportMenu)
   }
 
   // 🎯 RENDERIZADO DE LOADING
@@ -125,14 +193,51 @@ const Reports: React.FC = () => {
                 <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
                 Actualizar
               </Button>
-              <Button
-                onClick={handleExport}
-                variant="ghost"
-                className="border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700"
-              >
-                <Download className="w-4 h-4 mr-2" />
-                Exportar
-              </Button>
+              
+              {/* Botón de exportar con menú desplegable */}
+              <div className="relative" ref={exportMenuRef}>
+                <Button
+                  onClick={toggleExportMenu}
+                  disabled={exporting}
+                  variant="ghost"
+                  className="border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center"
+                >
+                  {exporting ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Download className="w-4 h-4 mr-2" />
+                  )}
+                  Exportar
+                  <ChevronDown className="w-4 h-4 ml-2" />
+                </Button>
+
+                {/* Menú desplegable */}
+                {showExportMenu && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-50">
+                    <button
+                      onClick={exportarAExcel}
+                      className="w-full px-4 py-2 text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center"
+                    >
+                      <FileSpreadsheet className="w-4 h-4 mr-3 text-green-600 dark:text-green-400" />
+                      Exportar a Excel
+                    </button>
+                    <button
+                      onClick={() => exportarAImagen('png')}
+                      className="w-full px-4 py-2 text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center"
+                    >
+                      <Image className="w-4 h-4 mr-3 text-blue-600 dark:text-blue-400" />
+                      Exportar como PNG
+                    </button>
+                    <button
+                      onClick={() => exportarAImagen('jpg')}
+                      className="w-full px-4 py-2 text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center"
+                    >
+                      <Image className="w-4 h-4 mr-3 text-blue-600 dark:text-blue-400" />
+                      Exportar como JPG
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
