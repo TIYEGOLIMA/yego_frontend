@@ -85,7 +85,7 @@ const UsersModule: React.FC = () => {
   const [viewMode, setViewMode] = useState<'list' | 'cards'>('list');
 
   // Roles disponibles
-  const availableRoles = ['USUARIO', 'OPERADOR', 'ADMIN', 'SUPERVISOR', 'SUPERADMIN'];
+  const availableRoles = ['USUARIO', 'OPERADOR', 'SAC', 'ADMIN', 'SUPERVISOR', 'SUPERADMIN'];
 
   useEffect(() => {
     fetchUsers();

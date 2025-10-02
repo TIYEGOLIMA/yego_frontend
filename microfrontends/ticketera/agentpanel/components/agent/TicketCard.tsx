@@ -58,9 +58,28 @@ export const TicketCard: React.FC<TicketCardProps> = ({
           
           {/* Número de ticket y estado */}
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-bold text-red-800 dark:text-white">
-              Ticket #{ticket.ticketNumber}
-            </h3>
+            <div className="flex items-center space-x-2">
+              <h3 className="text-xl font-bold text-red-800 dark:text-white">
+                Ticket #{ticket.ticketNumber}
+              </h3>
+              {/* 🔔 Icono de volver a llamar para tickets CALLED */}
+              {ticket.status === TICKET_STATUS.CALLED && (
+                <button
+                  onClick={() => onCall(ticket)}
+                  disabled={isProcessing}
+                  className={`p-2 rounded-full transition-all duration-200 ${
+                    isProcessing
+                      ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                      : 'bg-orange-100 text-orange-600 hover:bg-orange-200 hover:scale-110 hover:shadow-lg'
+                  }`}
+                  title="Volver a llamar al conductor"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                  </svg>
+                </button>
+              )}
+            </div>
             <div className="flex items-center space-x-2">
               
                              {/* 🎯 NUEVO: Botón de expandir/colapsar para TODOS los tickets */}

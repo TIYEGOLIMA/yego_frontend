@@ -1,8 +1,7 @@
-import React, { useCallback, useState, useEffect } from 'react'
+import React, { useCallback } from 'react'
 import { Card, CardContent } from '../shared/components/ui/Card'
-import { Clock, Volume2, Maximize, Minimize, LogOut } from 'lucide-react'
+import { Clock, Volume2, LogOut } from 'lucide-react'
 import { useTVDisplay } from './hooks/useTVDisplay'
-import { useNavigate } from 'react-router-dom'
 
 // 🎯 Estilos para animación de vibración (reducida)
 const shakeAnimation = `
@@ -20,9 +19,6 @@ const shakeAnimation = `
 
 export const TVDisplay = () => {
   console.log('📺 [TVDisplay] Componente iniciando...')
-  
-  const navigate = useNavigate()
-  const [isFullscreen, setIsFullscreen] = useState(false)
   
   const {
     // Estados
@@ -50,58 +46,26 @@ export const TVDisplay = () => {
     toggleSound
   } = useTVDisplay()
 
-  // 🎯 FUNCIONES DE FULLSCREEN
-  const enterFullscreen = () => {
-    const element = document.documentElement
-    if (element.requestFullscreen) {
-      element.requestFullscreen().catch(err => {
-        console.error('Error al entrar en fullscreen:', err)
-      })
-    }
-  }
-
-  const exitFullscreen = () => {
-    if (document.fullscreenElement) {
-      document.exitFullscreen().catch(err => {
-        console.error('Error al salir de fullscreen:', err)
-      })
-    }
-  }
-
-  const toggleFullscreen = () => {
-    if (isFullscreen) {
-      exitFullscreen()
-    } else {
-      enterFullscreen()
-    }
-  }
-
-  // 🎯 EFECTO PARA DETECTAR CAMBIOS EN FULLSCREEN
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement)
-    }
-
-    document.addEventListener('fullscreenchange', handleFullscreenChange)
-    setIsFullscreen(!!document.fullscreenElement)
-
-    return () => {
-      document.removeEventListener('fullscreenchange', handleFullscreenChange)
-    }
-  }, [])
 
   // 🎯 FUNCIÓN DE LOGOUT
   const handleLogout = async () => {
     try {
       console.log('🔄 [TVDisplay] Cerrando sesión...')
+      
       // Limpiar datos locales
       localStorage.removeItem('user')
       localStorage.removeItem('token')
       localStorage.removeItem('auth-storage')
-      // Redirigir a login
-      navigate('/login', { replace: true })
+      
+      console.log('✅ [TVDisplay] Datos limpiados del localStorage')
+      
+      // Forzar redirección a login usando window.location
+      console.log('🔄 [TVDisplay] Redirigiendo a /login...')
+      window.location.href = '/login'
+      
     } catch (error) {
       console.error('❌ [TVDisplay] Error en logout:', error)
+      // En caso de error, forzar redirección
       window.location.href = '/login'
     }
   }
@@ -200,46 +164,15 @@ export const TVDisplay = () => {
         <div className="p-4 space-y-3">
           {/* Información del conductor */}
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                Conductor
-              </span>
-              {ticket.priority && (
-                <span 
-                  className="px-2 py-1 text-xs rounded-full font-bold text-white"
-                  style={{
-                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                    boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)'
-                  }}
-                >
-                  P{ticket.priority}
-                </span>
-              )}
-            </div>
+            <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+              Conductor
+            </span>
             <div className="text-sm font-bold text-white leading-tight">
               <DriverInfo ticket={ticket} />
             </div>
           </div>
 
-          {/* Hora de creación */}
-          <div className="flex items-center space-x-2 pt-2 border-t border-slate-600/20">
-            <div 
-              className="w-4 h-4 rounded-full flex items-center justify-center"
-              style={{
-                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
-              }}
-            >
-              <span className="text-xs">⏰</span>
-            </div>
-            <div className="flex items-center space-x-1">
-              <span className="text-xs text-slate-400">Creado:</span>
-              <span className="text-xs font-medium text-slate-300">
-                {formatearHora(new Date(ticket.createdAt))}
-              </span>
-            </div>
-          </div>
-
-          {/* 🎯 NUEVO: Hora de llamado para tickets llamados */}
+          {/* 🎯 Hora de llamado para tickets llamados */}
           {status === 'called' && ticket.calledAt && (
             <div className="flex items-center space-x-2 pt-2 border-t border-slate-600/20">
               <div 
@@ -299,16 +232,16 @@ export const TVDisplay = () => {
           <div>
             <h1 className="text-2xl font-bold mb-1 text-white">Sistema de Ticketera</h1>
             <div className="flex items-center space-x-4 text-base">
-              <div className="flex items-center text-blue-200">
+              <div className="flex items-center text-white">
                 <Clock className="w-5 h-5 mr-2" />
                 {formatearHora(currentTime)}
               </div>
-              <div className="text-blue-300">
+              <div className="text-white">
                 {formatearFecha(currentTime)}
               </div>
             </div>
             {lastUpdate && (
-              <div className="text-xs text-blue-400 mt-1 font-medium">
+              <div className="text-xs text-white mt-1 font-medium">
                 Última actualización: {formatearHora(lastUpdate)}
               </div>
             )}
@@ -337,25 +270,14 @@ export const TVDisplay = () => {
               <Volume2 className="w-5 h-5" />
             </button>
             
-            {/* Botón de Fullscreen/Minimizar */}
+            {/* Botón de Cerrar Sesión */}
             <button
-              onClick={toggleFullscreen}
-              className="p-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white transition-all duration-200 shadow-lg"
-              title={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
+              onClick={handleLogout}
+              className="p-2 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-all duration-200 shadow-lg"
+              title="Cerrar sesión"
             >
-              {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+              <LogOut className="w-5 h-5" />
             </button>
-            
-            {/* Botón de Cerrar Sesión (solo cuando NO está en fullscreen) */}
-            {!isFullscreen && (
-              <button
-                onClick={handleLogout}
-                className="p-2 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-all duration-200 shadow-lg"
-                title="Cerrar sesión"
-              >
-                <LogOut className="w-5 h-5" />
-              </button>
-            )}
           </div>
         </div>
 

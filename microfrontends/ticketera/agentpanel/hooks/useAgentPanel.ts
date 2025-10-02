@@ -1114,24 +1114,8 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
     }
   }, [selectedModule]) // Removido cargarTickets de las dependencias para evitar bucles
 
-  // 🎯 EFECTO: Carga automática de tickets cada 30 segundos cuando WebSocket está conectado
-  useEffect(() => {
-    if (!selectedModule || !isConnected) {
-      return
-    }
-
-    console.log('🔄 [useAgentPanel] Configurando carga automática de tickets cada 30 segundos...')
-    
-    const interval = setInterval(() => {
-      console.log('⏰ [useAgentPanel] Carga automática de tickets...')
-      cargarTickets(true) // true = esConsultaAutomatica
-    }, 30000) // 30 segundos
-
-    return () => {
-      console.log('🛑 [useAgentPanel] Limpiando intervalo de carga automática')
-      clearInterval(interval)
-    }
-  }, [selectedModule, isConnected])
+  // 🎯 POLLING ELIMINADO - El WebSocket maneja las actualizaciones en tiempo real
+  // Ya no es necesario el polling HTTP porque el WebSocket actualiza automáticamente
 
   // 🎯 ESTADOS DERIVADOS SIMPLES  
   const ticketsEnEspera = useMemo(() => {

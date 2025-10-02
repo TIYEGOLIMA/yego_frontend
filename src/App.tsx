@@ -8,6 +8,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from './store/auth-store'
 import { useTheme } from './hooks/useTheme'
 import { useFullscreen } from './hooks/useFullscreen'
+import { useAutoLogout } from './hooks/useAutoLogout'
 import { getRedirectPathForRole } from './utils/role-based-routing'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
@@ -25,7 +26,6 @@ import PermissionsModule from './features/core/permissions/permissions.module'
 import ModulesModule from './features/core/modules/modules.module'
 import ImportsModule from './features/core/imports/imports.module'
 import AuditModule from './features/core/audit/audit.module'
-import ReportsModule from './features/core/reports/reports.module'
 import SessionsModule from './features/core/sessions/sessions.module'
 import ConfigurationModule from './features/core/configuration/configuration.module'
 
@@ -33,13 +33,14 @@ import ConfigurationModule from './features/core/configuration/configuration.mod
 import TicketsModule from './features/ticketera/tickets/tickets.module'
 
 // Importar microfrontends para roles específicos
-import { TVDisplay, RatingTablet, TabletInterface } from '../microfrontends'
+import { TVDisplay, RatingTablet, TabletInterface, Reports } from '../microfrontends'
 
 // Debug: Verificar que los componentes se importen correctamente
 console.log('🔍 [App] Componentes importados:', {
   TVDisplay: !!TVDisplay,
   RatingTablet: !!RatingTablet,
-  TabletInterface: !!TabletInterface
+  TabletInterface: !!TabletInterface,
+  Reports: !!Reports
 })
 
 // Crear cliente de React Query
@@ -106,6 +107,9 @@ function App() {
   
   // Aplicar tema inmediatamente
   useTheme();
+  
+  // Configurar logout automático cuando se cierre el navegador
+  useAutoLogout();
   
   // Manejar pantalla completa basada en el rol
   useFullscreen();
@@ -188,6 +192,13 @@ function App() {
               </MainLayout>
             </ProtectedRoute>
           } />
+          <Route path="/reports" element={
+            <ProtectedRoute>
+              <MainLayout>
+                <TicketsModule />
+              </MainLayout>
+            </ProtectedRoute>
+          } />
           {/* Rutas específicas para roles con pantalla completa */}
           <Route path="/tv-display" element={
             <ProtectedRoute>
@@ -221,7 +232,6 @@ function App() {
             <Route path="modules" element={<ModulesModule />} />
             <Route path="imports" element={<ImportsModule />} />
             <Route path="audit" element={<AuditModule />} />
-            <Route path="reports" element={<ReportsModule />} />
             <Route path="sessions" element={<SessionsModule />} />
             <Route path="configuration" element={<ConfigurationModule />} />
           </Route>

@@ -146,8 +146,11 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({ onModuleSelect
         console.log('🔄 [ModuleSelection] Notificando al componente padre...');
         onModuleSelected?.(moduleId)
         
-        // NO redirigir aquí - dejar que App.tsx maneje la redirección automáticamente
-        console.log('✅ [ModuleSelection] Módulo asignado exitosamente, esperando redirección automática...')
+        // 🎯 FORZAR REDIRECCIÓN después de asignar módulo
+        console.log('🔄 [ModuleSelection] Redirigiendo a /tickets...')
+        setTimeout(() => {
+          window.location.href = '/tickets'
+        }, 1000) // Esperar 1 segundo para que se actualice el localStorage
         
       } else {
         console.log('❌ [ModuleSelection] Respuesta no exitosa:', response)
@@ -242,66 +245,68 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({ onModuleSelect
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-red-600 dark:text-white mb-2">
+        <div className="text-center mb-6">
+          <h1 className="text-3xl font-bold text-red-600 dark:text-white mb-2">
             Seleccione su Módulo de Trabajo
           </h1>
-          <p className="text-lg text-gray-600 dark:text-white mb-2">
+          <p className="text-base text-gray-600 dark:text-white mb-1">
             Hola <span className="font-semibold text-red-600 dark:text-white">{user?.name}</span>
           </p>
-          <p className="text-gray-500 dark:text-white">
+          <p className="text-sm text-gray-500 dark:text-white mb-3">
             Elija el módulo en el que trabajará durante esta sesión
           </p>
           <div className="mt-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 max-w-md mx-auto">
             <p className="text-sm text-red-700 dark:text-red-300 font-medium">
-              ⚠️ Es obligatorio seleccionar un módulo para continuar
+               Es obligatorio seleccionar un módulo para continuar
             </p>
           </div>
         </div>
         
-        {/* Módulos Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {modules.map((module) => (
-            <Card
-              key={module.id}
-              className={`cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-105 ${
-                assigning === module.id 
-                  ? 'ring-2 ring-red-500 bg-red-50 dark:bg-red-900/20' 
-                  : 'hover:shadow-xl border-2 border-red-200 dark:border-red-700 hover:border-red-400 dark:hover:border-red-500'
-              }`}
-            >
-              <CardHeader className="text-center pb-4">
-                <CardTitle className="text-xl font-bold text-red-600 dark:text-white">
-                  Módulo {module.id}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-6 text-center">
-                {module.description && (
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-6 min-h-[3rem]">
-                    {module.description}
-                  </p>
-                )}
-                <Button
-                  onClick={() => handleModuleSelect(module.id)}
-                  disabled={assigning !== null}
-                  className={`w-full py-3 font-medium rounded-lg transition-all ${
-                    assigning === module.id
-                      ? 'bg-red-600 hover:bg-red-700 text-white'
-                      : 'bg-red-600 hover:bg-red-700 text-white'
-                  }`}
-                >
-                  {assigning === module.id ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      Asignando...
-                    </>
-                  ) : (
-                    'Seleccionar Módulo'
+        {/* Módulos Grid - Centrado */}
+        <div className="flex justify-center">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 w-full max-w-5xl justify-items-center">
+            {modules.map((module) => (
+              <Card
+                key={module.id}
+                className={`cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-105 ${
+                  assigning === module.id 
+                    ? 'ring-2 ring-red-500 bg-red-50 dark:bg-red-900/20' 
+                    : 'hover:shadow-xl border-2 border-red-200 dark:border-red-700 hover:border-red-400 dark:hover:border-red-500'
+                }`}
+              >
+                <CardHeader className="text-center pb-4">
+                  <CardTitle className="text-xl font-bold text-red-600 dark:text-white">
+                    Módulo {module.id}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-6 text-center">
+                  {module.description && (
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-6 min-h-[3rem]">
+                      {module.description}
+                    </p>
                   )}
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
+                  <Button
+                    onClick={() => handleModuleSelect(module.id)}
+                    disabled={assigning !== null}
+                    className={`w-full py-3 font-medium rounded-lg transition-all ${
+                      assigning === module.id
+                        ? 'bg-red-600 hover:bg-red-700 text-white'
+                        : 'bg-red-600 hover:bg-red-700 text-white'
+                    }`}
+                  >
+                    {assigning === module.id ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Asignando...
+                      </>
+                    ) : (
+                      'Seleccionar Módulo'
+                    )}
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
 
       </div>

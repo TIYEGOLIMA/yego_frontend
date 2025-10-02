@@ -6,6 +6,7 @@ export { default as AgentPanel } from './agentpanel/AgentPanel'
 export { default as TVDisplay } from './tvdisplay/TVDisplay' 
 export { default as RatingTablet } from './ratingtablet/RatingTablet'
 export { default as TabletInterface } from './tabletinterface/TabletInterface'
+export { default as Reports } from './reports/Reports'
 
 // 🔧 HOOKS ESPECÍFICOS DE TICKETERA
 export { useAgentPanel } from './agentpanel/hooks/useAgentPanel'
@@ -22,7 +23,7 @@ export const TICKETERA_CONFIG = {
       name: 'Panel de Agentes',
       path: '/agent-panel',
       requiresAuth: true,
-      roles: ['OPERADOR', 'SUPERADMIN', 'TV', 'PRINCIPAL', 'TABLET1', 'TABLET2'],
+      roles: ['OPERADOR', 'SAC', 'SUPERADMIN', 'TV', 'PRINCIPAL', 'TABLET1', 'TABLET2'],
       description: 'Sistema de gestión de tickets para operadores'
     },
     TV_DISPLAY: {
@@ -45,6 +46,13 @@ export const TICKETERA_CONFIG = {
       requiresAuth: false,
       roles: [],
       description: 'Interfaz táctil para creación de tickets'
+    },
+    REPORTS: {
+      name: 'Reportes',
+      path: '/reports',
+      requiresAuth: true,
+      roles: ['OPERADOR'],
+      description: 'Sistema de reportes y estadísticas'
     }
   }
 } as const

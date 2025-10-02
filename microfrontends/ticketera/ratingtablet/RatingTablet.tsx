@@ -28,14 +28,36 @@ const RatingTablet: React.FC = () => {
     emitRatingSubmitted 
   } = useRatingWebSocket()
 
-  // Simulación de datos de usuario
+  // 🎯 CARGAR DATOS REALES DEL USUARIO
   useEffect(() => {
-    // Simulación - en producción esto vendría de un hook useAuth
-    setCurrentUser({
-      name: 'Usuario Rating',
-      role: 'Calificador',
-      moduleId: 1
-    })
+    try {
+      const userData = localStorage.getItem('user')
+      if (userData) {
+        const user = JSON.parse(userData)
+        console.log('👤 [RatingTablet] Usuario cargado:', user)
+        setCurrentUser({
+          id: user.id,
+          name: user.name,
+          username: user.username,
+          role: user.role,
+          moduleId: user.moduleId || null
+        })
+      } else {
+        console.log('⚠️ [RatingTablet] No hay datos de usuario en localStorage')
+        setCurrentUser({
+          name: 'Usuario Rating',
+          role: 'Calificador',
+          moduleId: null
+        })
+      }
+    } catch (error) {
+      console.error('❌ [RatingTablet] Error cargando datos del usuario:', error)
+      setCurrentUser({
+        name: 'Usuario Rating',
+        role: 'Calificador',
+        moduleId: null
+      })
+    }
   }, [])
 
   // 🎯 WEBSOCKET: Suscripción a tickets completados

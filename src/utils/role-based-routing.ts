@@ -18,6 +18,8 @@ export const getRedirectPathForRole = (role: string): string => {
       return '/tablet-interface'; // TabletInterface maximizado
     case 'OPERADOR': 
       return '/tickets'; // Panel de operador
+    case 'SAC': 
+      return '/tickets'; // Panel de SAC (mismo que operador)
     case 'TABLET1':
       return '/rating-tablet'; // RatingTablet #1 maximizada
     case 'TABLET2':
@@ -42,6 +44,12 @@ export const COMPLETE_ROLE_MAPPING = {
   },
   'OPERADOR': {
     description: 'Panel de operador para gestión de tickets',
+    permissions: ['MANAGE_TICKETS', 'CALL_TICKETS', 'COMPLETE_TICKETS'],
+    fullscreen: false,
+    component: 'TicketeraWrapper'
+  },
+  'SAC': {
+    description: 'Panel de SAC para gestión de tickets',
     permissions: ['MANAGE_TICKETS', 'CALL_TICKETS', 'COMPLETE_TICKETS'],
     fullscreen: false,
     component: 'TicketeraWrapper'

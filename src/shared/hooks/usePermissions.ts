@@ -1,15 +1,20 @@
 import { useAuthStore } from '../../store/auth-store';
 
 export const usePermissions = () => {
-  const { user, refreshTrigger } = useAuthStore();
+  const { user } = useAuthStore();
 
-  const hasPermission = (module: string, action: string): boolean => {
+  const hasPermission = (module: string, _action: string): boolean => {
     if (!user || !user.role) {
       return false;
     }
 
-    // Operadores solo tienen acceso a tickets
+    // Solo OPERADOR tiene acceso a reportes (NO tickets)
     if (user.role === 'OPERADOR') {
+      return module === 'reports';
+    }
+    
+    // SAC solo tiene acceso a tickets
+    if (user.role === 'SAC') {
       return module === 'tickets';
     }
 
@@ -22,8 +27,13 @@ export const usePermissions = () => {
       return false;
     }
 
-    // Operadores solo tienen acceso a tickets
+    // Solo OPERADOR tiene acceso a reportes (NO tickets)
     if (user.role === 'OPERADOR') {
+      return module === 'reports';
+    }
+    
+    // SAC solo tiene acceso a tickets
+    if (user.role === 'SAC') {
       return module === 'tickets';
     }
 
@@ -36,8 +46,15 @@ export const usePermissions = () => {
       return {};
     }
 
-    // Operadores solo tickets
+    // Solo OPERADOR tiene acceso a reportes (NO tickets)
     if (user.role === 'OPERADOR') {
+      return {
+        reports: ['read']
+      };
+    }
+    
+    // SAC solo tiene acceso a tickets
+    if (user.role === 'SAC') {
       return {
         tickets: ['read', 'write']
       };
@@ -51,7 +68,8 @@ export const usePermissions = () => {
       imports: ['read', 'write'],
       audit: ['read'],
       configuration: ['read', 'write'],
-      tickets: ['read', 'write']
+      tickets: ['read', 'write'],
+      reports: ['read', 'write']
     };
   };
 

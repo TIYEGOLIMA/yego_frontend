@@ -115,6 +115,12 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       requiredPermission: null 
     },
     { 
+      label: "Reportes", 
+      to: "/reports", 
+      icon: <BarChart4 className="h-5 w-5" />, 
+      requiredPermission: "reports"
+    },
+    { 
       label: "Tickets", 
       to: "/tickets", 
       icon: <Bell className="h-5 w-5" />, 
@@ -163,12 +169,6 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       requiredPermission: "sessions"
     },
     { 
-      label: "Reportes", 
-      to: "/reports", 
-      icon: <BarChart4 className="h-5 w-5" />, 
-      requiredPermission: "reports"
-    },
-    { 
       label: "Configuración", 
       to: "/configuration", 
       icon: <Settings2 className="h-5 w-5" />, 
@@ -178,11 +178,13 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
   // Filtrar elementos de navegación según permisos
   const filteredNavItems = navItems.filter(item => {
-    // Si el usuario es OPERADOR, solo mostrar Tickets
-    const isOperador = user?.role === 'OPERADOR';
+    // Solo OPERADOR ve Reportes (NO tickets)
+    if (user?.role === 'OPERADOR') {
+      return item.requiredPermission === 'reports';
+    }
     
-    if (isOperador) {
-      // OPERADOR solo debe ver tickets, NO dashboard
+    // SAC solo ve Tickets
+    if (user?.role === 'SAC') {
       return item.requiredPermission === 'tickets';
     }
     

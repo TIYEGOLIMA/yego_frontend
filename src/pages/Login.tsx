@@ -22,6 +22,8 @@ export default function Login() {
   useEffect(() => {
     if (token && user) {
       if (user.role === 'OPERADOR') {
+        navigate('/reports')
+      } else if (user.role === 'SAC') {
         navigate('/tickets')
       } else {
         navigate('/dashboard')
@@ -41,8 +43,10 @@ export default function Login() {
     try {
       const response = await login(credentials.username, credentials.password)
       
-      // 🎯 OPERADOR va directo a tickets, otros van a dashboard
+      // 🎯 OPERADOR va a reportes, SAC va a tickets, otros van a dashboard
       if (response.user.role === 'OPERADOR') {
+        navigate('/reports')
+      } else if (response.user.role === 'SAC') {
         navigate('/tickets')
       } else {
         navigate('/dashboard')

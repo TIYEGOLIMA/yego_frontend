@@ -34,6 +34,7 @@ export {
   TVDisplay,
   RatingTablet,
   TabletInterface,
+  Reports,
   useAgentPanel,
   useTVDisplay,
   useRatingTablet,

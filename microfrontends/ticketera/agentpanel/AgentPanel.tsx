@@ -114,7 +114,7 @@ const AgentPanel: React.FC = () => {
   if (userData) {
     try {
       const user = JSON.parse(userData)
-      needsModuleSelection = user.role === 'OPERADOR' && 
+      needsModuleSelection = (user.role === 'OPERADOR' || user.role === 'SAC') && 
                            (user.moduleId === null || user.moduleId === undefined || user.moduleId === '')
     } catch (error) {
       console.error('Error parseando datos del usuario:', error)
