@@ -58,6 +58,7 @@ export const useSocket = (): UseSocketReturn => {
     const topicMap: { [key: string]: string } = {
       '/topic/tickets': 'ticket_updated',
       '/topic/ticket-updates': 'ticket_updated', 
+      '/topic/new-ticket': 'ticket_created',
       '/topic/ticket-created': 'ticket_created',
       '/topic/ticket-called': 'ticket_called',
       '/topic/ticket-completed': 'ticket_completed',
