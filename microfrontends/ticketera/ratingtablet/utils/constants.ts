@@ -1,7 +1,7 @@
 // Configuración específica para RatingTablet (microfrontend)
 
 // 🌐 CONFIGURACIÓN DE API PARA RATINGTABLET - BACKEND JAVA 
-export const API_BASE_URL = 'http://localhost:3030/api/ticketera'
+export const API_BASE_URL = import.meta.env.VITE_AGENT_API_URL || 'https://api-int.yego.pro/api/ticketera'
 
 // 📱 CONFIGURACIÓN ESPECÍFICA PARA RATING TABLET
 export const RATING_TABLET_CONFIG = {

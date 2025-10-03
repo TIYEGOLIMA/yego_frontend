@@ -49,7 +49,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
   const connectionInfo = {
     status: connectionStatus,
     connected: isConnected,
-    url: import.meta.env.VITE_SOCKET_URL || 'http://localhost:3030',
+    url: import.meta.env.VITE_SOCKET_URL || 'https://api-int.yego.pro',
     hasToken: !!localStorage.getItem('token')
   }
 

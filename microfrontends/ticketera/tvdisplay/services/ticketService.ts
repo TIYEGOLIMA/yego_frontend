@@ -2,7 +2,7 @@ import axios from 'axios'
 
 // 🌐 API Instance inline para TVDisplay
 const api = axios.create({
-  baseURL: 'http://localhost:3030/api/ticketera',
+  baseURL: import.meta.env.VITE_AGENT_API_URL || 'https://api-int.yego.pro/api/ticketera',
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',

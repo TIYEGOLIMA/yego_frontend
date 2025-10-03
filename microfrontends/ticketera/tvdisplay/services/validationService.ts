@@ -48,7 +48,7 @@ export const validationService = {
       }
       
       // Usar fetch directo en lugar de axios para simplicidad
-      const response = await fetch(`http://localhost:3030/api/ticketera/buscar/telefono/${phoneToSearch}`, {
+      const response = await fetch(`${import.meta.env.VITE_AGENT_API_URL || 'https://api-int.yego.pro/api/ticketera'}/buscar/telefono/${phoneToSearch}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',

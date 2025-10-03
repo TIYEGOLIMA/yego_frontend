@@ -55,7 +55,7 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({ onModuleSelect
         setError(`Endpoint no encontrado: ${error.config?.baseURL}${error.config?.url}. Verifique que el backend esté corriendo en el puerto 3030.`)
       } else if (error.code === 'ECONNREFUSED' || error.message.includes('Network Error')) {
         console.log('🚨 [ModuleSelection] Error de conexión')
-        setError('No se puede conectar al backend. Verifique que el servidor esté corriendo en http://localhost:3030')
+        setError('No se puede conectar al backend. Verifique que el servidor esté corriendo en https://api-int.yego.pro')
       } else {
         setError(`Error al cargar los módulos: ${error.message}`)
       }

@@ -1,6 +1,6 @@
 // 🌐 CONFIGURACIÓN DE ENDPOINTS - BACKEND JAVA TICKETERA
-export const API_BASE_URL = 'http://localhost:3030/api/ticketera'
-export const SOCKET_URL = 'http://localhost:3030'
+export const API_BASE_URL = import.meta.env.VITE_AGENT_API_URL || 'https://api-int.yego.pro/api/ticketera'
+export const SOCKET_URL = import.meta.env.VITE_AGENT_SOCKET_URL || 'https://api-int.yego.pro'
 
 // 🏷️ ESTADOS DE TICKETS
 export const TICKET_STATUS = {
