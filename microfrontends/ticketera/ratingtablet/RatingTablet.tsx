@@ -81,9 +81,22 @@ const RatingTablet: React.FC = () => {
       console.log('🎫 [RatingTablet] Ticket Number:', ticket.ticketNumber || ticket.id)
       console.log('🎫 [RatingTablet] Ticket Status:', ticket.status)
       console.log('🎫 [RatingTablet] Ticket Rated:', ticket.rated)
+      console.log('🎫 [RatingTablet] Ticket ModuleId:', ticket.moduleId)
+      console.log('🎫 [RatingTablet] Current User ModuleId:', currentUser?.moduleId)
       
-      // Mostrar el modal SIEMPRE que llegue un ticket completado
-      console.log('⭐⭐⭐ [RatingTablet] Mostrando modal de calificación')
+      // 🎯 FILTRAR POR MÓDULO: Solo mostrar tickets del módulo asignado al usuario
+      if (currentUser?.moduleId && ticket.moduleId) {
+        const ticketModuleId = parseInt(ticket.moduleId.toString())
+        const userModuleId = parseInt(currentUser.moduleId.toString())
+        
+        if (ticketModuleId !== userModuleId) {
+          console.log(`⚠️ [RatingTablet] Ticket del módulo ${ticketModuleId} no corresponde al módulo del usuario ${userModuleId}`)
+          return
+        }
+      }
+      
+      // Mostrar el modal solo para tickets del módulo correcto
+      console.log('⭐⭐⭐ [RatingTablet] Mostrando modal de calificación para ticket del módulo correcto')
       setSelectedTicket({
         id: ticket.id,
         ticketNumber: ticket.ticketNumber || `TICKET-${ticket.id}`,
@@ -99,8 +112,22 @@ const RatingTablet: React.FC = () => {
     const unsubscribeRatingRequested = onRatingRequested((ratingRequest: any) => {
       console.log('⭐⭐⭐ [RatingTablet] SOLICITUD DE RATING RECIBIDA!')
       console.log('⭐ [RatingTablet] Rating request completo:', ratingRequest)
+      
       if (ratingRequest.ticket) {
-        setSelectedTicket(ratingRequest.ticket)
+        const ticket = ratingRequest.ticket
+        
+        // 🎯 FILTRAR POR MÓDULO: Solo mostrar tickets del módulo asignado al usuario
+        if (currentUser?.moduleId && ticket.moduleId) {
+          const ticketModuleId = parseInt(ticket.moduleId.toString())
+          const userModuleId = parseInt(currentUser.moduleId.toString())
+          
+          if (ticketModuleId !== userModuleId) {
+            console.log(`⚠️ [RatingTablet] Rating request del módulo ${ticketModuleId} no corresponde al módulo del usuario ${userModuleId}`)
+            return
+          }
+        }
+        
+        setSelectedTicket(ticket)
         setRating(0)
         setComment('')
       }
@@ -113,7 +140,7 @@ const RatingTablet: React.FC = () => {
       unsubscribeCompleted()
       unsubscribeRatingRequested()
     }
-  }, [isConnected, onTicketCompleted, onRatingRequested])
+  }, [isConnected, onTicketCompleted, onRatingRequested, currentUser])
 
   // 🎯 HTTP Polling como fallback cuando WebSocket no esté disponible
   useEffect(() => {
