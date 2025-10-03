@@ -42,7 +42,7 @@ export const useAuthStore = create<AuthState>()(
           
           
           // Login normal con token
-          if (!response.token) {
+          if (!response.accessToken) {
             throw new Error('No se recibió token de acceso')
           }
           
@@ -51,16 +51,16 @@ export const useAuthStore = create<AuthState>()(
           
           console.log('✅ [authStore] Login exitoso, guardando estado:', {
             user: response.user,
-            token: response.token ? 'presente' : 'ausente'
+            token: response.accessToken ? 'presente' : 'ausente'
           })
           
           set({ 
             user: response.user, 
-            token: response.token, 
+            token: response.accessToken, 
             loading: false,
             error: null
           })
-          localStorage.setItem("token", response.token)
+          localStorage.setItem("token", response.accessToken)
           localStorage.setItem("user", JSON.stringify(response.user))
           localStorage.removeItem("requiereCambioPassword")
           
