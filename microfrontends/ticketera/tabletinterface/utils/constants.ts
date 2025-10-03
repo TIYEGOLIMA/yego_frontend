@@ -3,7 +3,7 @@
 import { PHONE_VALIDATION } from '../../shared'
 
 // 🌐 CONFIGURACIÓN DE API PARA TABLETINTERFACE - BACKEND JAVA
-export const API_BASE_URL = 'http://localhost:3030/api/ticketera'
+export const API_BASE_URL = import.meta.env.VITE_AGENT_API_URL || 'https://api-int.yego.pro/api/ticketera'
 
 // 📱 CONFIGURACIÓN ESPECÍFICA PARA TABLET INTERFACE
 export const TABLET_INTERFACE_CONFIG = {
