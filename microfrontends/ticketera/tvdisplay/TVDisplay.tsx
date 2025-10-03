@@ -97,6 +97,7 @@ export const TVDisplay = () => {
     console.log('🔍 [TVDisplay] DriverInfo para ticket:', {
       id: ticket.id,
       phone: ticket.phone,
+      licenseNumber: ticket.licenseNumber,
       driverName: ticket.driverName,
       status: ticket.status
     })
@@ -105,9 +106,9 @@ export const TVDisplay = () => {
     if (ticket.driverName && ticket.driverName.trim() !== '') {
       console.log(`✅ [TVDisplay] Usando driverName: "${ticket.driverName}"`)
       return (
-                    <div className="text-xs font-semibold text-white leading-tight">
-              <span className="break-words">{ticket.driverName}</span>
-            </div>
+        <div className="text-xs font-semibold text-white leading-tight">
+          <span className="break-words">{ticket.driverName}</span>
+        </div>
       )
     }
     
@@ -121,8 +122,18 @@ export const TVDisplay = () => {
       )
     }
     
+    // 🎯 FALLBACK: Mostrar phone si no hay licenseNumber
+    if (ticket.phone) {
+      console.log(`📱 [TVDisplay] Mostrando phone: ${ticket.phone}`)
+      return (
+        <div className="text-xs text-slate-400">
+          📱 {ticket.phone}
+        </div>
+      )
+    }
+    
     // 🎯 ÚLTIMO RECURSO: Sin información
-    console.log(`⚠️ [TVDisplay] Sin información de conductor`)
+    console.log(`⚠️ [TVDisplay] Sin información de conductor para ticket ${ticket.id}`)
     return (
       <div className="text-xs text-slate-400">
         📱 Sin información
