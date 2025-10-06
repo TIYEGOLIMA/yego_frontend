@@ -7,6 +7,7 @@ interface UseTVDisplayWebSocketReturn {
   onTicketUpdated: (callback: (ticket: any) => void) => () => void
   onTicketCalled: (callback: (ticket: any) => void) => () => void
   onTicketCompleted: (callback: (ticket: any) => void) => () => void
+  onTicketCancelled: (callback: (ticket: any) => void) => () => void
   onDisplayUpdated: (callback: (displayData: any) => void) => () => void
   emitDisplayUpdate: (displayData: any) => boolean
   subscribe: (topic: string, callback: (message: any) => void) => () => void
@@ -64,6 +65,14 @@ export const useTVDisplayWebSocket = (): UseTVDisplayWebSocketReturn => {
     })
   }
 
+  const onTicketCancelled = (callback: (ticket: any) => void) => {
+    return onTicketeraEvent((event: any) => {
+      if (event.type === 'ticket_cancelled') {
+        callback(event.data || event)
+      }
+    })
+  }
+
   const onDisplayUpdated = (callback: (displayData: any) => void) => {
     return onTicketeraEvent((event: any) => {
       if (event.type === 'display_updated') {
@@ -90,6 +99,7 @@ export const useTVDisplayWebSocket = (): UseTVDisplayWebSocketReturn => {
       '/topic/ticket-updated': () => onTicketUpdated(callback),
       '/topic/ticket-called': () => onTicketCalled(callback),
       '/topic/ticket-completed': () => onTicketCompleted(callback),
+      '/topic/ticket-cancelled': () => onTicketCancelled(callback),
       '/topic/display-updated': () => onDisplayUpdated(callback),
     }
     
@@ -110,6 +120,7 @@ export const useTVDisplayWebSocket = (): UseTVDisplayWebSocketReturn => {
     onTicketUpdated,
     onTicketCalled,
     onTicketCompleted,
+    onTicketCancelled,
     onDisplayUpdated,
     emitDisplayUpdate,
     subscribe

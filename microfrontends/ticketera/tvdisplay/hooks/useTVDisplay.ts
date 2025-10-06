@@ -35,6 +35,7 @@ export const useTVDisplay = () => {
     onTicketUpdated,
     onTicketCalled,
     onTicketCompleted,
+    onTicketCancelled,
     onDisplayUpdated
   } = useTVDisplayWebSocket()
 
@@ -261,6 +262,18 @@ export const useTVDisplay = () => {
       setLastUpdate(new Date())
     })
 
+    // Listener para tickets cancelados
+    const unsubscribeTicketCancelled = onTicketCancelled(async (cancelledTicket) => {
+      console.log('❌ [TVDisplay] Ticket cancelado:', cancelledTicket)
+      
+      setTickets(prev => {
+        console.log('🗑️ [TVDisplay] Removiendo ticket cancelado...')
+        return prev.filter(t => t.id !== cancelledTicket.id)
+      })
+      
+      setLastUpdate(new Date())
+    })
+
     // Listener para actualizaciones de display
     const unsubscribeDisplayUpdated = onDisplayUpdated((displayData) => {
       console.log('📺 [TVDisplay] Display actualizado:', displayData)
@@ -283,6 +296,7 @@ export const useTVDisplay = () => {
       unsubscribeTicketUpdated()
       unsubscribeTicketCalled()
       unsubscribeTicketCompleted()
+      unsubscribeTicketCancelled()
       unsubscribeDisplayUpdated()
     }
   }, [isConnected, soundEnabled, cargarNombreConductor, playNotificationSound])
