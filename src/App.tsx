@@ -66,6 +66,34 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 }
 
 /**
+ * Componente para restringir acceso según rol
+ * Roles de visualización (TV, TABLET1, TABLET2) solo pueden acceder a sus rutas específicas
+ */
+const RoleRestrictedRoute = ({ children, allowedRoles }: { children: React.ReactNode, allowedRoles?: string[] }) => {
+  const { user } = useAuthStore()
+  
+  if (!user) {
+    return <Navigate to="/login" />
+  }
+  
+  // Si no se especifican roles permitidos, permitir acceso
+  if (!allowedRoles || allowedRoles.length === 0) {
+    return <>{children}</>
+  }
+  
+  // Verificar si el rol del usuario está en los roles permitidos
+  const isAllowed = allowedRoles.includes(user.role.toUpperCase())
+  
+  if (!isAllowed) {
+    // Redirigir al usuario a su ruta correspondiente según su rol
+    const redirectPath = getRedirectPathForRole(user.role)
+    return <Navigate to={redirectPath} replace />
+  }
+  
+  return <>{children}</>
+}
+
+/**
  * Componente para redirección basada en el rol del usuario
  */
 const RoleBasedRedirect = () => {
@@ -133,16 +161,20 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/tickets" element={
             <ProtectedRoute>
-              <MainLayout>
-                <TicketsModule />
-              </MainLayout>
+              <RoleRestrictedRoute allowedRoles={['SUPERADMIN', 'ADMIN', 'OPERADOR', 'SAC']}>
+                <MainLayout>
+                  <TicketsModule />
+                </MainLayout>
+              </RoleRestrictedRoute>
             </ProtectedRoute>
           } />
           <Route path="/reports" element={
             <ProtectedRoute>
-              <MainLayout>
-                <TicketsModule />
-              </MainLayout>
+              <RoleRestrictedRoute allowedRoles={['SUPERADMIN', 'ADMIN', 'OPERADOR']}>
+                <MainLayout>
+                  <TicketsModule />
+                </MainLayout>
+              </RoleRestrictedRoute>
             </ProtectedRoute>
           } />
           {/* Rutas específicas para roles con pantalla completa */}
@@ -163,7 +195,9 @@ function App() {
           } />
           <Route path="/" element={
             <ProtectedRoute>
-              <MainLayout />
+              <RoleRestrictedRoute allowedRoles={['SUPERADMIN', 'ADMIN', 'OPERADOR', 'SAC', 'PRINCIPAL']}>
+                <MainLayout />
+              </RoleRestrictedRoute>
             </ProtectedRoute>
           }>
             <Route index element={<RoleBasedRedirect />} />
