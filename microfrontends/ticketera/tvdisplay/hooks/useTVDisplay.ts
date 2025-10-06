@@ -161,6 +161,17 @@ export const useTVDisplay = () => {
     const unsubscribeTicketUpdated = onTicketUpdated(async (updatedTicket) => {
       console.log('🔄 [TVDisplay] Ticket actualizado:', updatedTicket)
       
+      // 🎯 Si el ticket está completado, removerlo de la lista
+      if (updatedTicket.status === 'COMPLETED') {
+        console.log('✅ [TVDisplay] Ticket COMPLETED detectado en actualización:', updatedTicket.id)
+        setTickets(prev => {
+          console.log('🗑️ [TVDisplay] Removiendo ticket completado...')
+          return prev.filter(t => t.id !== updatedTicket.id)
+        })
+        setLastUpdate(new Date())
+        return
+      }
+      
       // Cargar nombre del conductor para el ticket actualizado
       const ticketConNombre = await cargarNombreConductor(updatedTicket)
       
