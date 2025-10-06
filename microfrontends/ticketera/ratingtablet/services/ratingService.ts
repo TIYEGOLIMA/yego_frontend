@@ -1,5 +1,4 @@
 import { API_BASE_URL } from '../utils/constants'
-import { Rating, CreateRatingData } from '../types'
 
 // 🌐 Configuración de API para RatingTablet
 const createApiInstance = () => {

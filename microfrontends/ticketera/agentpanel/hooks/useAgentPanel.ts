@@ -444,10 +444,10 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
           return true
         }
         
-        // 🎯 NUEVO: Mostrar tickets CALLED/IN_PROGRESS asignados a este agente (aunque no tengan moduleId)
-        if (currentAgentId && ticket.agentId === currentAgentId && (ticket.status === 'CALLED' || ticket.status === 'IN_PROGRESS')) {
+        // Mostrar tickets CALLED/IN_PROGRESS asignados a este agente Y módulo
+        if (currentAgentId && ticket.agentId === currentAgentId && ticket.moduleId === selectedModule && (ticket.status === 'CALLED' || ticket.status === 'IN_PROGRESS')) {
           if (!esConsultaAutomatica) {
-            console.log(`✅ [AgentPanel] Ticket ${ticket.ticketNumber} incluido: ${ticket.status} asignado a agente ${currentAgentId}`)
+            console.log(`✅ [AgentPanel] Ticket ${ticket.ticketNumber} incluido: ${ticket.status} asignado a agente ${currentAgentId} del módulo ${selectedModule}`)
           }
           return true
         }
@@ -1099,25 +1099,25 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
     } else {
       console.log('⚠️ [useAgentPanel] No hay módulo seleccionado, no se cargan tickets')
     }
-  }, [selectedModule]) // Removido cargarTickets de las dependencias para evitar bucles
-
-  // 🎯 POLLING ELIMINADO - El WebSocket maneja las actualizaciones en tiempo real
-  // Ya no es necesario el polling HTTP porque el WebSocket actualiza automáticamente
+  }, [selectedModule]) 
 
   // 🎯 ESTADOS DERIVADOS SIMPLES  
   const ticketsEnEspera = useMemo(() => {
     const ticketsWaiting = tickets.filter(t => t.status === 'WAITING')
     const ticketsInProgress = tickets.filter(t => t.status === 'IN_PROGRESS')
     
-    // console.log('🔍 [AgentPanel] Calculando ticketsEnEspera:')
-    // console.log('🔍 [AgentPanel] Total tickets:', tickets.length)
-    // console.log('🔍 [AgentPanel] Tickets WAITING:', ticketsWaiting.length, ticketsWaiting.map(t => `${t.ticketNumber}(${t.status})`))
-    // console.log('🔍 [AgentPanel] Tickets IN_PROGRESS:', ticketsInProgress.length)
+    // 🎯 ORDENAR POR FECHA DE CREACIÓN (FIFO - First In, First Out)
+    const ticketsOrdenados = ticketsWaiting.sort((a, b) => {
+      // Usar createdAt si está disponible, sino usar id como fallback
+      const fechaA = a.createdAt ? new Date(a.createdAt).getTime() : a.id
+      const fechaB = b.createdAt ? new Date(b.createdAt).getTime() : b.id
+      return fechaA - fechaB // Orden ascendente (más antiguo primero)
+    })
     
     // 🎯 DEBUG: Verificar detalles de tickets en espera
-    if (ticketsWaiting.length > 0) {
+    if (ticketsOrdenados.length > 0) {
       console.log('📋 [AgentPanel] DETALLES de tickets en espera:')
-      ticketsWaiting.forEach((ticket, index) => {
+      ticketsOrdenados.forEach((ticket, index) => {
         console.log(`  Ticket ${index + 1} (${ticket.ticketNumber}):`, {
           driverName: ticket.driverName,
           licenseNumber: ticket.licenseNumber,
@@ -1131,16 +1131,16 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       })
     }
     
-    // Si hay tickets en proceso, solo mostrar 1 ticket en espera
+    // Si hay tickets en proceso, solo mostrar 1 ticket en espera (el más antiguo)
     if (ticketsInProgress.length > 0) {
-      const result = ticketsWaiting.slice(0, 1)
-      console.log('🔍 [AgentPanel] Hay tickets en proceso, mostrando solo 1:', result.length)
+      const result = ticketsOrdenados.slice(0, 1)
+      console.log('🔍 [AgentPanel] Hay tickets en proceso, mostrando solo el más antiguo:', result.length)
       return result
     }
     
-    // Si no hay tickets en proceso, mostrar todos los tickets en espera
-    console.log('🔍 [AgentPanel] No hay tickets en proceso, mostrando todos:', ticketsWaiting.length)
-    return ticketsWaiting
+    // Si no hay tickets en proceso, mostrar todos los tickets en espera ordenados
+    console.log('🔍 [AgentPanel] No hay tickets en proceso, mostrando todos ordenados:', ticketsOrdenados.length)
+    return ticketsOrdenados
   }, [tickets])
 
   const ticketsLlamados = useMemo(() => {
@@ -1148,10 +1148,8 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
   }, [tickets, selectedModule])
 
   const ticketsAtendiendo = useMemo(() => {
-    const atendiendo = tickets.filter(t => t.status === 'IN_PROGRESS')
-    // console.log('🔍 [AgentPanel] Calculando ticketsAtendiendo:', atendiendo.length)
-    return atendiendo
-  }, [tickets])
+    return tickets.filter(t => t.status === 'IN_PROGRESS' && t.moduleId === selectedModule)
+  }, [tickets, selectedModule])
 
   return {
     // Estados básicos
