@@ -14,12 +14,15 @@ export interface UserSession {
  */
 export const getRedirectPathForRole = (role: string): string => {
   switch (role?.toUpperCase()) {
+    case 'SUPERADMIN':
+    case 'ADMIN':
+      return '/dashboard'; // Dashboard principal para administradores
     case 'PRINCIPAL':
       return '/tablet-interface'; // TabletInterface maximizado
     case 'OPERADOR': 
-      return '/tickets'; // Panel de operador
+      return '/reports'; // Panel de reportes para operador
     case 'SAC': 
-      return '/tickets'; // Panel de SAC (mismo que operador)
+      return '/tickets'; // Panel de SAC
     case 'TABLET1':
       return '/rating-tablet'; // RatingTablet #1 maximizada
     case 'TABLET2':
@@ -36,6 +39,18 @@ export const getRedirectPathForRole = (role: string): string => {
  * Mapeo completo de roles para referencia
  */
 export const COMPLETE_ROLE_MAPPING = {
+  'SUPERADMIN': {
+    description: 'Administrador del sistema con acceso completo',
+    permissions: ['ALL_PERMISSIONS'],
+    fullscreen: false,
+    component: 'MainLayout'
+  },
+  'ADMIN': {
+    description: 'Administrador con acceso completo',
+    permissions: ['ALL_PERMISSIONS'],
+    fullscreen: false,
+    component: 'MainLayout'
+  },
   'PRINCIPAL': {
     description: 'Interfaz principal para creación de tickets',
     permissions: ['CREATE_TICKETS', 'VIEW_QUEUE'],

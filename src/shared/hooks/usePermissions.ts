@@ -27,7 +27,7 @@ export const usePermissions = () => {
       return false;
     }
 
-    // Solo OPERADOR tiene acceso a reportes (NO tickets)
+    // Solo OPERADOR tiene acceso a reportes
     if (user.role === 'OPERADOR') {
       return module === 'reports';
     }
@@ -35,6 +35,11 @@ export const usePermissions = () => {
     // SAC solo tiene acceso a tickets
     if (user.role === 'SAC') {
       return module === 'tickets';
+    }
+
+    // SUPERADMIN y ADMIN NO ven reportes ni tickets
+    if (user.role === 'SUPERADMIN' || user.role === 'ADMIN') {
+      return module !== 'reports' && module !== 'tickets';
     }
 
     // Otros roles tienen acceso completo
@@ -57,6 +62,18 @@ export const usePermissions = () => {
     if (user.role === 'SAC') {
       return {
         tickets: ['read', 'write']
+      };
+    }
+
+    // SUPERADMIN y ADMIN acceso completo EXCEPTO reportes y tickets
+    if (user.role === 'SUPERADMIN' || user.role === 'ADMIN') {
+      return {
+        users: ['read', 'write', 'delete'],
+        roles: ['read', 'write'],
+        modules: ['read', 'write'],
+        imports: ['read', 'write'],
+        audit: ['read'],
+        configuration: ['read', 'write']
       };
     }
 

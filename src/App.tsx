@@ -35,13 +35,6 @@ import TicketsModule from './features/ticketera/tickets/tickets.module'
 // Importar microfrontends para roles específicos
 import { TVDisplay, RatingTablet, TabletInterface, Reports } from '../microfrontends'
 
-// Debug: Verificar que los componentes se importen correctamente
-console.log('🔍 [App] Componentes importados:', {
-  TVDisplay: !!TVDisplay,
-  RatingTablet: !!RatingTablet,
-  TabletInterface: !!TabletInterface,
-  Reports: !!Reports
-})
 
 // Crear cliente de React Query
 const queryClient = new QueryClient({
@@ -78,9 +71,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 const RoleBasedRedirect = () => {
   const { user, token } = useAuthStore()
   
-  // Mostrar loading mientras se carga el usuario
   if (!token || !user) {
-    console.log('⏳ [RoleBasedRedirect] Esperando datos del usuario...')
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="flex flex-col items-center gap-4">
@@ -92,13 +83,15 @@ const RoleBasedRedirect = () => {
   }
   
   if (!user?.role) {
-    console.warn('⚠️ [RoleBasedRedirect] Usuario sin rol, redirigiendo al dashboard')
     return <Navigate to="/dashboard" replace />
   }
   
-  const redirectPath = getRedirectPathForRole(user.role)
-  console.log(`🎯 [RoleBasedRedirect] Redirigiendo usuario ${user.name} (${user.role}) a: ${redirectPath}`)
+  // Para SUPERADMIN y ADMIN, renderizar Dashboard directamente
+  if (user.role === 'SUPERADMIN' || user.role === 'ADMIN') {
+    return <Dashboard />
+  }
   
+  const redirectPath = getRedirectPathForRole(user.role)
   return <Navigate to={redirectPath} replace />
 }
 
@@ -114,67 +107,20 @@ function App() {
   // Manejar pantalla completa basada en el rol
   useFullscreen();
   
-  // Log detallado del estado del store
-  console.log('🔍 [App] Estado completo del store:', {
-    token: !!token,
-    user: user ? { id: user.id, name: user.name, role: user.role, moduleId: user.moduleId } : null,
-    pathname: window.location.pathname
-  });
-  
-  // Verificar localStorage
-  console.log('🔍 [App] Estado del localStorage:', {
-    token: localStorage.getItem('token') ? 'presente' : 'ausente',
-    user: localStorage.getItem('user') ? 'presente' : 'ausente'
-  });
 
-  // Verificar token corrupto al inicializar la aplicación
   useEffect(() => {
     authService.cleanupCorruptedToken();
-    
-    // Exponer métodos útiles para debugging en la consola
-    if (typeof window !== 'undefined') {
-      (window as any).authService = authService;
-      (window as any).debugAuth = {
-        diagnose: () => authService.diagnoseToken(),
-        cleanup: () => authService.forceCleanup(),
-        isValid: () => authService.isTokenValid(),
-        logout: () => authService.logout()
-      };
-      console.log('🔧 [App] Métodos de debug disponibles en window.debugAuth');
-    }
   }, []);
   
   // Suscribirse a eventos de autenticación
   useAuthEvents();
 
-  // ✅ SocketService (Socket.IO) para backend NestJS (puerto 3000)
-  // Este maneja eventos generales de la aplicación
   useEffect(() => {
-    const socket = SocketService;
-    
-    // Siempre intentar conectar el socket si hay usuario y token
-    if (
-      token &&
-      typeof token === 'string' &&
-      token.trim() !== '' &&
-      user &&
-      user.id &&
-      user.username
-    ) {
+    if (token && user) {
       const sessionId = user.id + '-' + user.username;
-      
-      // Conectar o reconectar el socket
-      if (socket.getConnectionStatus() === 'connected') {
-        console.log('🔄 [App] Token o usuario cambió, reconectando socket...');
-        socket.disconnect();
-        socket.connect(sessionId);
-      } else {
-        console.log('🚀 [App] Iniciando conexión socket...');
-        socket.connect(sessionId);
-      }
+      SocketService.connect(sessionId);
     } else {
-      console.log('🔌 [App] Sin token/usuario válido, desconectando socket...');
-      socket.disconnect();
+      SocketService.disconnect();
     }
   }, [token, user]);
 
@@ -202,30 +148,26 @@ function App() {
           {/* Rutas específicas para roles con pantalla completa */}
           <Route path="/tv-display" element={
             <ProtectedRoute>
-              {(() => { console.log('🎬 [App] Renderizando TVDisplay'); return null })()}
               <TVDisplay />
             </ProtectedRoute>
           } />
           <Route path="/rating-tablet" element={
             <ProtectedRoute>
-              {(() => { console.log('🎬 [App] Renderizando RatingTablet'); return null })()}
               <RatingTablet />
             </ProtectedRoute>
           } />
           <Route path="/tablet-interface" element={
             <ProtectedRoute>
-              {(() => { console.log('🎬 [App] Renderizando TabletInterface'); return null })()}
               <TabletInterface />
             </ProtectedRoute>
           } />
           <Route path="/" element={
             <ProtectedRoute>
-              <RoleBasedRedirect />
+              <MainLayout />
             </ProtectedRoute>
           }>
-            <Route index element={<Dashboard />} />
+            <Route index element={<RoleBasedRedirect />} />
             <Route path="dashboard" element={<Dashboard />} />
-            {/* Features: users, roles, permissions, modules, imports, audit, reports, sessions, configuration */}
             <Route path="users" element={<UsersModule />} />
             <Route path="roles" element={<RolesModule />} />
             <Route path="permissions" element={<PermissionsModule />} />
@@ -234,6 +176,8 @@ function App() {
             <Route path="audit" element={<AuditModule />} />
             <Route path="sessions" element={<SessionsModule />} />
             <Route path="configuration" element={<ConfigurationModule />} />
+            <Route path="tickets" element={<TicketsModule />} />
+            <Route path="reports" element={<TicketsModule />} />
           </Route>
           <Route path="*" element={<Navigate to="/login" />} />
         </Routes>

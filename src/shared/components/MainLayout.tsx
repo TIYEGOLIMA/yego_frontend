@@ -48,12 +48,6 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const { hasAnyPermission } = usePermissions()
   const { status } = useConnectionStatus()
   
-  // Debug logs
-  console.log('🔍 [MainLayout] Renderizando con:', {
-    user: user ? { id: user.id, name: user.name, role: user.role } : null,
-    token: !!token,
-    hasChildren: !!children
-  })
   
   const navigate = useNavigate()
   const location = useLocation()
@@ -90,17 +84,9 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
   const handleLogout = async () => {
     try {
-      console.log('🚪 [MainLayout] Iniciando logout completo...')
-      
-      // 🎯 Logout completo (ya incluye limpieza del AgentPanel)
       await logout()
       navigate('/login')
-      
-      console.log('✅ [MainLayout] Logout completado')
-      
     } catch (error) {
-      console.error('❌ [MainLayout] Error en logout:', error)
-      // Hacer logout del sistema principal aunque haya errores
       await logout()
       navigate('/login')
     }
@@ -178,7 +164,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
   // Filtrar elementos de navegación según permisos
   const filteredNavItems = navItems.filter(item => {
-    // Solo OPERADOR ve Reportes (NO tickets)
+    // Solo OPERADOR ve Reportes
     if (user?.role === 'OPERADOR') {
       return item.requiredPermission === 'reports';
     }
@@ -188,12 +174,12 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       return item.requiredPermission === 'tickets';
     }
     
-    // Para otros roles, usar la lógica normal de permisos
     // Dashboard siempre visible
-    if (!item.requiredPermission) return true;
+    if (!item.requiredPermission) {
+      return true;
+    }
     
-    const hasPermission = hasAnyPermission(item.requiredPermission);
-    return hasPermission;
+    return hasAnyPermission(item.requiredPermission);
   });
 
   // Verificar si una ruta está activa
