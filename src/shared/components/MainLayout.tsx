@@ -326,16 +326,18 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                     <span>Cambiar Contraseña</span>
                   </button>
                   
-                  <button
-                    className="w-full text-left px-4 py-2 text-sm text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 flex items-center space-x-2 transition-colors"
-                    onClick={() => {
-                      setUserMenuOpen(false);
-                      navigate('/configuration');
-                    }}
-                  >
-                    <Settings2 className="h-4 w-4" />
-                    <span>Configuración</span>
-                  </button>
+                  {hasAnyPermission('configuration') && (
+                    <button
+                      className="w-full text-left px-4 py-2 text-sm text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 flex items-center space-x-2 transition-colors"
+                      onClick={() => {
+                        setUserMenuOpen(false);
+                        navigate('/configuration');
+                      }}
+                    >
+                      <Settings2 className="h-4 w-4" />
+                      <span>Configuración</span>
+                    </button>
+                  )}
                   
                   <button
                     className="w-full text-left px-4 py-2 text-sm text-error-600 dark:text-error-400 hover:bg-error-50 dark:hover:bg-error-900/20 flex items-center space-x-2 transition-colors"

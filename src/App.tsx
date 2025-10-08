@@ -94,6 +94,34 @@ const RoleRestrictedRoute = ({ children, allowedRoles }: { children: React.React
 }
 
 /**
+ * Componente para proteger rutas según permisos del módulo
+ */
+const PermissionRoute = ({ children, module }: { children: React.ReactNode, module: string }) => {
+  const { user } = useAuthStore()
+  
+  if (!user) {
+    return <Navigate to="/login" />
+  }
+  
+  // Módulos permitidos por rol
+  const allowedModules: Record<string, string[]> = {
+    'SUPERADMIN': ['users', 'roles', 'permissions', 'modules', 'imports', 'audit', 'sessions', 'configuration'],
+    'ADMIN': ['users', 'roles', 'modules', 'dashboard'],
+    'OPERADOR': ['reports'],
+    'SAC': ['tickets']
+  }
+  
+  const userAllowedModules = allowedModules[user.role.toUpperCase()] || []
+  
+  if (!userAllowedModules.includes(module)) {
+    const redirectPath = getRedirectPathForRole(user.role)
+    return <Navigate to={redirectPath} replace />
+  }
+  
+  return <>{children}</>
+}
+
+/**
  * Componente para redirección basada en el rol del usuario
  */
 const RoleBasedRedirect = () => {
@@ -161,7 +189,7 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/tickets" element={
             <ProtectedRoute>
-              <RoleRestrictedRoute allowedRoles={['SUPERADMIN', 'ADMIN', 'OPERADOR', 'SAC']}>
+              <RoleRestrictedRoute allowedRoles={['SUPERADMIN', 'OPERADOR', 'SAC']}>
                 <MainLayout>
                   <TicketsModule />
                 </MainLayout>
@@ -170,7 +198,7 @@ function App() {
           } />
           <Route path="/reports" element={
             <ProtectedRoute>
-              <RoleRestrictedRoute allowedRoles={['SUPERADMIN', 'ADMIN', 'OPERADOR']}>
+              <RoleRestrictedRoute allowedRoles={['SUPERADMIN', 'OPERADOR']}>
                 <MainLayout>
                   <TicketsModule />
                 </MainLayout>
@@ -202,16 +230,56 @@ function App() {
           }>
             <Route index element={<RoleBasedRedirect />} />
             <Route path="dashboard" element={<Dashboard />} />
-            <Route path="users" element={<UsersModule />} />
-            <Route path="roles" element={<RolesModule />} />
-            <Route path="permissions" element={<PermissionsModule />} />
-            <Route path="modules" element={<ModulesModule />} />
-            <Route path="imports" element={<ImportsModule />} />
-            <Route path="audit" element={<AuditModule />} />
-            <Route path="sessions" element={<SessionsModule />} />
-            <Route path="configuration" element={<ConfigurationModule />} />
-            <Route path="tickets" element={<TicketsModule />} />
-            <Route path="reports" element={<TicketsModule />} />
+            <Route path="users" element={
+              <PermissionRoute module="users">
+                <UsersModule />
+              </PermissionRoute>
+            } />
+            <Route path="roles" element={
+              <PermissionRoute module="roles">
+                <RolesModule />
+              </PermissionRoute>
+            } />
+            <Route path="permissions" element={
+              <PermissionRoute module="permissions">
+                <PermissionsModule />
+              </PermissionRoute>
+            } />
+            <Route path="modules" element={
+              <PermissionRoute module="modules">
+                <ModulesModule />
+              </PermissionRoute>
+            } />
+            <Route path="imports" element={
+              <PermissionRoute module="imports">
+                <ImportsModule />
+              </PermissionRoute>
+            } />
+            <Route path="audit" element={
+              <PermissionRoute module="audit">
+                <AuditModule />
+              </PermissionRoute>
+            } />
+            <Route path="sessions" element={
+              <PermissionRoute module="sessions">
+                <SessionsModule />
+              </PermissionRoute>
+            } />
+            <Route path="configuration" element={
+              <PermissionRoute module="configuration">
+                <ConfigurationModule />
+              </PermissionRoute>
+            } />
+            <Route path="tickets" element={
+              <PermissionRoute module="tickets">
+                <TicketsModule />
+              </PermissionRoute>
+            } />
+            <Route path="reports" element={
+              <PermissionRoute module="reports">
+                <TicketsModule />
+              </PermissionRoute>
+            } />
           </Route>
           <Route path="*" element={<Navigate to="/login" />} />
         </Routes>

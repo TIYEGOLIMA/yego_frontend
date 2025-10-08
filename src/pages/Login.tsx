@@ -241,9 +241,25 @@ export default function Login() {
                       </div>
                       
                       {error && (
-                        <div className="flex items-center gap-3 p-3 sm:p-4 bg-error-50/80 dark:bg-error-900/30 border border-error-200/50 dark:border-error-800/50 rounded-lg sm:rounded-xl backdrop-blur-sm">
-                          <AlertCircle className="h-4 w-4 sm:h-5 sm:w-5 text-error-600 dark:text-error-400 flex-shrink-0" />
-                          <span className="text-sm font-medium text-error-700 dark:text-error-300">{error}</span>
+                        <div className={`flex items-center gap-3 p-3 sm:p-4 rounded-lg sm:rounded-xl backdrop-blur-sm ${
+                          error.includes('Usuario inactivo') 
+                            ? 'bg-amber-50/80 dark:bg-amber-900/30 border border-amber-200/50 dark:border-amber-800/50' 
+                            : 'bg-error-50/80 dark:bg-error-900/30 border border-error-200/50 dark:border-error-800/50'
+                        }`}>
+                          {error.includes('Usuario inactivo') ? (
+                            <Shield className="h-4 w-4 sm:h-5 sm:w-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                          ) : (
+                            <AlertCircle className="h-4 w-4 sm:h-5 sm:w-5 text-error-600 dark:text-error-400 flex-shrink-0" />
+                          )}
+                          <div className="flex-1">
+                            <span className={`text-sm font-medium ${
+                              error.includes('Usuario inactivo') 
+                                ? 'text-amber-700 dark:text-amber-300' 
+                                : 'text-error-700 dark:text-error-300'
+                            }`}>
+                              {error}
+                            </span>
+                          </div>
                         </div>
                       )}
                       

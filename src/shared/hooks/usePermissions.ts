@@ -18,6 +18,17 @@ export const usePermissions = () => {
       return module === 'tickets';
     }
 
+    // SUPERADMIN NO ve reportes ni tickets
+    if (user.role === 'SUPERADMIN') {
+      return module !== 'reports' && module !== 'tickets';
+    }
+
+    // ADMIN solo ve usuarios, módulos, roles y dashboard
+    if (user.role === 'ADMIN') {
+      const allowedModules = ['users', 'modules', 'roles', 'dashboard'];
+      return allowedModules.includes(module);
+    }
+
     // Otros roles tienen acceso completo
     return true;
   };
@@ -37,9 +48,15 @@ export const usePermissions = () => {
       return module === 'tickets';
     }
 
-    // SUPERADMIN y ADMIN NO ven reportes ni tickets
-    if (user.role === 'SUPERADMIN' || user.role === 'ADMIN') {
+    // SUPERADMIN NO ve reportes ni tickets
+    if (user.role === 'SUPERADMIN') {
       return module !== 'reports' && module !== 'tickets';
+    }
+
+    // ADMIN solo ve usuarios, módulos, roles y dashboard
+    if (user.role === 'ADMIN') {
+      const allowedModules = ['users', 'modules', 'roles', 'dashboard'];
+      return allowedModules.includes(module);
     }
 
     // Otros roles tienen acceso completo
@@ -65,8 +82,8 @@ export const usePermissions = () => {
       };
     }
 
-    // SUPERADMIN y ADMIN acceso completo EXCEPTO reportes y tickets
-    if (user.role === 'SUPERADMIN' || user.role === 'ADMIN') {
+    // SUPERADMIN acceso completo EXCEPTO reportes y tickets
+    if (user.role === 'SUPERADMIN') {
       return {
         users: ['read', 'write', 'delete'],
         roles: ['read', 'write'],
@@ -74,6 +91,15 @@ export const usePermissions = () => {
         imports: ['read', 'write'],
         audit: ['read'],
         configuration: ['read', 'write']
+      };
+    }
+
+    // ADMIN solo tiene acceso a usuarios, módulos, roles y dashboard
+    if (user.role === 'ADMIN') {
+      return {
+        users: ['read', 'write', 'delete'],
+        roles: ['read', 'write'],
+        modules: ['read', 'write']
       };
     }
 

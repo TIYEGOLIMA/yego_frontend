@@ -69,6 +69,14 @@ export const useAuthStore = create<AuthState>()(
           return response
         } catch (error: any) {
           console.error('Error en login (store):', error);
+          
+          // Manejar error específico de usuario inactivo
+          if (error.response?.status === 403 && error.response?.data?.message?.includes('Usuario inactivo')) {
+            const errorMessage = "Usuario inactivo. Contacte al administrador del sistema"
+            set({ error: errorMessage, loading: false })
+            throw new Error(errorMessage)
+          }
+          
           const errorMessage = error.response?.data?.message || error.message || "Error al iniciar sesión"
           set({ error: errorMessage, loading: false })
           throw error
