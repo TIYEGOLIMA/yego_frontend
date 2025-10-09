@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/auth-store'
 import SystemNotificationsService from '../services/system-notifications-service'
@@ -13,7 +13,7 @@ export const useSystemNotifications = () => {
     event: null
   })
 
-  const [accountBlockedToast, setAccountBlockedToast] = useState<{
+  const [accountBlockedModal, setAccountBlockedModal] = useState<{
     isVisible: boolean
     event: AccountBlockedEvent | null
   }>({
@@ -24,97 +24,82 @@ export const useSystemNotifications = () => {
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
 
-  useEffect(() => {
-    if (!user) return
-
-    // Configurar listeners para eventos del sistema
-    SystemNotificationsService.setOnForcedLogout((event: ForcedLogoutEvent) => {
-      console.log('🚨 [SystemNotifications] FORCED_LOGOUT recibido:', event)
-      
-      // Verificar si el evento es para el usuario actual
-      if (event.userId === user.id) {
-        setForcedLogoutModal({
-          isOpen: true,
-          event
-        })
-      }
-    })
-
-    SystemNotificationsService.setOnAccountBlocked((event: AccountBlockedEvent) => {
-      console.log('🚨 [SystemNotifications] ACCOUNT_BLOCKED recibido:', event)
-      
-      // Verificar si el evento es para el usuario actual
-      if (event.userId === user.id) {
-        setAccountBlockedToast({
-          isVisible: true,
-          event
-        })
-      }
-    })
-
-    return () => {
-      // Cleanup al desmontar
-      SystemNotificationsService.setOnForcedLogout(() => {})
-      SystemNotificationsService.setOnAccountBlocked(() => {})
+  // Usar useCallback para mantener referencias estables
+  const handleForcedLogoutEvent = useCallback((event: ForcedLogoutEvent) => {
+    const currentUser = useAuthStore.getState().user
+    if (currentUser && event.userId === currentUser.id) {
+      setForcedLogoutModal({
+        isOpen: true,
+        event
+      })
     }
-  }, [user])
+  }, [])
+
+  const handleAccountBlockedEvent = useCallback((event: AccountBlockedEvent) => {
+    const currentUser = useAuthStore.getState().user
+    if (currentUser && event.userId === currentUser.id) {
+      setAccountBlockedModal({
+        isVisible: true,
+        event
+      })
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!user) {
+      console.log('⚠️ No hay usuario - callbacks NO registrados')
+      return
+    }
+
+    console.log('✅ Registrando callbacks para usuario ID:', user.id, 'Nombre:', user.name)
+    
+    // Reconectar el servicio con el nuevo token
+    const token = localStorage.getItem('token')
+    if (token && !SystemNotificationsService.getConnectionStatus()) {
+      console.log('🔄 Reconectando SystemNotificationsService con token...')
+      SystemNotificationsService.reconnect()
+    }
+    
+    // Registrar callbacks
+    SystemNotificationsService.setOnForcedLogout(handleForcedLogoutEvent)
+    SystemNotificationsService.setOnAccountBlocked(handleAccountBlockedEvent)
+
+    // Cleanup al desmontar o cuando cambie el usuario
+    return () => {
+      console.log('🧹 Limpiando callbacks para usuario ID:', user.id)
+      SystemNotificationsService.setOnForcedLogout(null)
+      SystemNotificationsService.setOnAccountBlocked(null)
+    }
+  }, [user?.id, handleForcedLogoutEvent, handleAccountBlockedEvent])
 
   const handleForcedLogout = async () => {
-    console.log('🔄 [SystemNotifications] Procesando FORCED_LOGOUT...')
-    
     try {
-      // Cerrar modal
       setForcedLogoutModal({ isOpen: false, event: null })
-      
-      // Ejecutar logout
       await logout()
-      
-      // Redirigir a login
       navigate('/login')
-      
-      console.log('✅ [SystemNotifications] FORCED_LOGOUT procesado exitosamente')
     } catch (error) {
-      console.error('❌ [SystemNotifications] Error en FORCED_LOGOUT:', error)
-      // Forzar redirección incluso si hay error
+      console.error('Error en logout forzado:', error)
       navigate('/login')
     }
   }
 
   const handleAccountBlocked = async () => {
-    console.log('🔄 [SystemNotifications] Procesando ACCOUNT_BLOCKED...')
-    
     try {
-      // Cerrar toast
-      setAccountBlockedToast({ isVisible: false, event: null })
-      
-      // Ejecutar logout
+      setAccountBlockedModal({ isVisible: false, event: null })
       await logout()
-      
-      // Redirigir a login
-      navigate('/login')
-      
-      console.log('✅ [SystemNotifications] ACCOUNT_BLOCKED procesado exitosamente')
+      localStorage.clear()
+      window.location.href = '/login'
     } catch (error) {
-      console.error('❌ [SystemNotifications] Error en ACCOUNT_BLOCKED:', error)
-      // Forzar redirección incluso si hay error
-      navigate('/login')
+      console.error('Error en bloqueo de cuenta:', error)
+      localStorage.clear()
+      window.location.href = '/login'
     }
-  }
-
-  const closeForcedLogoutModal = () => {
-    setForcedLogoutModal({ isOpen: false, event: null })
-  }
-
-  const closeAccountBlockedToast = () => {
-    setAccountBlockedToast({ isVisible: false, event: null })
   }
 
   return {
     forcedLogoutModal,
-    accountBlockedToast,
+    accountBlockedModal,
     handleForcedLogout,
-    handleAccountBlocked,
-    closeForcedLogoutModal,
-    closeAccountBlockedToast
+    handleAccountBlocked
   }
 }

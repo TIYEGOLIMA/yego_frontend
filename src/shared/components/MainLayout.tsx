@@ -3,12 +3,9 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../store/auth-store'
 import { usePermissions } from '../hooks/usePermissions'
 import { useConnectionStatus } from '../hooks/useConnectionStatus'
-import { useSystemNotifications } from '../../hooks/useSystemNotifications'
 import { ThemeToggle } from './ThemeToggle'
 import { Button } from '../../components/ui/button'
 import { ChangePasswordDialog } from '../../components/ChangePasswordDialog'
-import { ForcedLogoutModal } from '../../components/ForcedLogoutModal'
-import { AccountBlockedToast } from '../../components/AccountBlockedToast'
 import { 
   Menu, 
   User, 
@@ -50,13 +47,6 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const { user, logout, token } = useAuthStore()
   const { hasAnyPermission } = usePermissions()
   const { status } = useConnectionStatus()
-  const {
-    forcedLogoutModal,
-    accountBlockedToast,
-    handleForcedLogout,
-    handleAccountBlocked,
-    closeAccountBlockedToast
-  } = useSystemNotifications()
   
   
   const navigate = useNavigate()
@@ -453,28 +443,6 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           // Opcional: mostrar mensaje de éxito o actualizar estado
         }}
       />
-
-      {/* Modal de logout forzado */}
-      {forcedLogoutModal.event && (
-        <ForcedLogoutModal
-          isOpen={forcedLogoutModal.isOpen}
-          onLogout={handleForcedLogout}
-          message={forcedLogoutModal.event.message}
-          username={forcedLogoutModal.event.username}
-        />
-      )}
-
-      {/* Toast de cuenta bloqueada */}
-      {accountBlockedToast.event && (
-        <AccountBlockedToast
-          isVisible={accountBlockedToast.isVisible}
-          onClose={closeAccountBlockedToast}
-          onLogout={handleAccountBlocked}
-          message={accountBlockedToast.event.message}
-          username={accountBlockedToast.event.username}
-          autoLogoutDelay={accountBlockedToast.event.autoLogoutDelay}
-        />
-      )}
 
     </div>
   )

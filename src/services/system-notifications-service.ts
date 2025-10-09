@@ -70,16 +70,18 @@ class SystemNotificationsService {
 
           switch (event.type) {
             case 'FORCED_LOGOUT':
+              console.log('→ Llamando onForcedLogout, existe:', !!this.onForcedLogout)
               this.onForcedLogout?.(event)
               break
             case 'ACCOUNT_BLOCKED':
+              console.log('→ Llamando onAccountBlocked, existe:', !!this.onAccountBlocked)
               this.onAccountBlocked?.(event)
               break
             case 'USER_TABLE_UPDATE':
               this.onUserTableUpdate?.(event)
               break
             default:
-              console.warn('⚠️ [SystemNotifications] Tipo de evento desconocido:', (event as any).type)
+              console.warn('⚠️ Tipo de evento desconocido:', (event as any).type)
           }
         } catch (error) {
           console.error('❌ [SystemNotifications] Error al procesar mensaje:', error)
@@ -105,16 +107,25 @@ class SystemNotificationsService {
     }, this.reconnectDelay)
   }
 
-  public setOnForcedLogout(callback: (event: ForcedLogoutEvent) => void) {
+  public setOnForcedLogout(callback: ((event: ForcedLogoutEvent) => void) | null) {
+    console.log('🔧 setOnForcedLogout:', callback ? '✅ REGISTRADO' : '❌ REMOVIDO')
     this.onForcedLogout = callback
   }
 
-  public setOnAccountBlocked(callback: (event: AccountBlockedEvent) => void) {
+  public setOnAccountBlocked(callback: ((event: AccountBlockedEvent) => void) | null) {
+    console.log('🔧 setOnAccountBlocked:', callback ? '✅ REGISTRADO' : '❌ REMOVIDO')
     this.onAccountBlocked = callback
   }
 
   public setOnUserTableUpdate(callback: ((event: UserTableUpdateEvent) => void) | null) {
     this.onUserTableUpdate = callback
+  }
+
+  public reconnect() {
+    console.log('🔄 [SystemNotifications] Forzando reconexión...')
+    this.disconnect()
+    this.reconnectAttempts = 0
+    this.connect()
   }
 
   public disconnect() {

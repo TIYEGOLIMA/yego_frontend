@@ -9,6 +9,7 @@ import { useAuthStore } from './store/auth-store'
 import { useTheme } from './hooks/useTheme'
 import { useFullscreen } from './hooks/useFullscreen'
 import { useAutoLogout } from './hooks/useAutoLogout'
+import { useSystemNotifications } from './hooks/useSystemNotifications'
 import { getRedirectPathForRole } from './utils/role-based-routing'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
@@ -34,6 +35,10 @@ import TicketsModule from './features/ticketera/tickets/tickets.module'
 
 // Importar microfrontends para roles específicos
 import { TVDisplay, RatingTablet, TabletInterface, Reports } from '../microfrontends'
+
+// Importar componentes de notificaciones del sistema
+import { ForcedLogoutModal } from './components/ForcedLogoutModal'
+import { AccountBlockedModal } from './components/AccountBlockedModal'
 
 
 // Crear cliente de React Query
@@ -151,6 +156,41 @@ const RoleBasedRedirect = () => {
   return <Navigate to={redirectPath} replace />
 }
 
+/**
+ * Componente interno que maneja las notificaciones del sistema
+ * Debe estar dentro del Router para usar useNavigate
+ */
+const SystemNotificationsHandler = () => {
+  const {
+    forcedLogoutModal,
+    accountBlockedModal,
+    handleForcedLogout,
+    handleAccountBlocked
+  } = useSystemNotifications()
+
+  return (
+    <>
+      {forcedLogoutModal.event && (
+        <ForcedLogoutModal
+          isOpen={forcedLogoutModal.isOpen}
+          onLogout={handleForcedLogout}
+          message={forcedLogoutModal.event.message}
+          username={forcedLogoutModal.event.username}
+        />
+      )}
+
+      {accountBlockedModal.event && (
+        <AccountBlockedModal
+          isOpen={accountBlockedModal.isVisible}
+          message={accountBlockedModal.event.message}
+          username={accountBlockedModal.event.username}
+          onAutoLogout={handleAccountBlocked}
+        />
+      )}
+    </>
+  )
+}
+
 function App() {
   const { token, user } = useAuthStore();
   
@@ -185,6 +225,9 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <Router>
+        {/* Notificaciones del sistema para TODOS los roles */}
+        <SystemNotificationsHandler />
+        
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/tickets" element={
