@@ -8,9 +8,9 @@ export const usePermissions = () => {
       return false;
     }
 
-    // Solo OPERADOR tiene acceso a reportes (NO tickets)
+    // OPERADOR tiene acceso a reportes y usuarios
     if (user.role === 'OPERADOR') {
-      return module === 'reports';
+      return module === 'reports' || module === 'users';
     }
     
     // SAC solo tiene acceso a tickets
@@ -38,9 +38,9 @@ export const usePermissions = () => {
       return false;
     }
 
-    // Solo OPERADOR tiene acceso a reportes
+    // OPERADOR tiene acceso a reportes y usuarios
     if (user.role === 'OPERADOR') {
-      return module === 'reports';
+      return module === 'reports' || module === 'users';
     }
     
     // SAC solo tiene acceso a tickets
@@ -68,10 +68,11 @@ export const usePermissions = () => {
       return {};
     }
 
-    // Solo OPERADOR tiene acceso a reportes (NO tickets)
+    // OPERADOR tiene acceso a reportes y usuarios (puede crear/editar OPERADOR y SAC)
     if (user.role === 'OPERADOR') {
       return {
-        reports: ['read']
+        reports: ['read'],
+        users: ['read', 'write']
       };
     }
     

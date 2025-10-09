@@ -50,6 +50,7 @@ import {
 import { useAuthStore } from '../../../store/auth-store';
 import { api } from '../../../services';
 import AccessRestricted from '../../../shared/components/AccessRestricted';
+import { ForcedLogoutModal } from '../../../components/ForcedLogoutModal';
 
 interface User {
   id: number;
@@ -95,6 +96,7 @@ const UsersModule: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [errorModal, setErrorModal] = useState<{open: boolean, message: string, title: string}>({open: false, message: '', title: ''});
   const [deleteModal, setDeleteModal] = useState<{open: boolean, user: User | null}>({open: false, user: null});
+  const [forcedLogoutModal, setForcedLogoutModal] = useState<{open: boolean, message: string}>({open: false, message: ''});
   
   // Estados de paginación
   const [currentPage, setCurrentPage] = useState(1);
@@ -102,8 +104,29 @@ const UsersModule: React.FC = () => {
   const [totalUsers, setTotalUsers] = useState(0);
   const usePagination = true;
 
-  // Roles disponibles
-  const availableRoles = ['USUARIO', 'OPERADOR', 'SAC', 'ADMIN', 'SUPERVISOR', 'SUPERADMIN'];
+  // Roles disponibles según el rol del usuario actual
+  const getAvailableRoles = () => {
+    if (!currentUser) return [];
+    
+    switch (currentUser.role.toUpperCase()) {
+      case 'SUPERADMIN':
+        // SUPERADMIN puede crear todos los roles
+        return ['OPERADOR', 'SAC', 'ADMIN', 'SUPERVISOR', 'SUPERADMIN', 'TV', 'TABLET1', 'TABLET2', 'PRINCIPAL'];
+      
+      case 'ADMIN':
+        // ADMIN puede crear todos menos SUPERADMIN
+        return ['OPERADOR', 'SAC', 'ADMIN', 'SUPERVISOR', 'TV', 'TABLET1', 'TABLET2', 'PRINCIPAL'];
+      
+      case 'OPERADOR':
+        // OPERADOR solo puede crear OPERADOR y SAC
+        return ['OPERADOR', 'SAC'];
+      
+      default:
+        return [];
+    }
+  };
+  
+  const availableRoles = getAvailableRoles();
 
   useEffect(() => {
     fetchUsers();
@@ -118,8 +141,59 @@ const UsersModule: React.FC = () => {
     return () => clearTimeout(delaySearch);
   }, [searchTerm]);
 
+  // 🔔 WebSocket listener para actualizaciones en tiempo real
+  useEffect(() => {
+    const setupWebSocket = async () => {
+      try {
+        const SystemNotificationsService = (await import('../../../services/system-notifications-service')).default;
+        
+        const handleUserTableUpdate = (event: any) => {
+          console.log('🔔 [UsersModule] Evento USER_TABLE_UPDATE recibido:', event);
+          
+          switch (event.action) {
+            case 'USER_CREATED':
+              console.log('✅ [UsersModule] Usuario creado:', event.username);
+              fetchUsers(); // Recargar la lista completa
+              break;
+              
+            case 'USER_UPDATED':
+              console.log('🔄 [UsersModule] Usuario actualizado:', event.username);
+              fetchUsers(); // Recargar la lista completa
+              break;
+              
+            case 'USER_DELETED':
+              console.log('🗑️ [UsersModule] Usuario eliminado:', event.username);
+              fetchUsers(); // Recargar la lista completa
+              break;
+              
+            case 'USER_STATUS_CHANGED':
+              console.log('🔄 [UsersModule] Estado cambiado:', event.username);
+              fetchUsers(); // Recargar la lista completa
+              break;
+              
+            default:
+              console.warn('⚠️ [UsersModule] Acción desconocida:', event.action);
+          }
+        };
+        
+        // Suscribirse al evento
+        SystemNotificationsService.setOnUserTableUpdate(handleUserTableUpdate);
+        
+        // Cleanup
+        return () => {
+          SystemNotificationsService.setOnUserTableUpdate(null);
+        };
+      } catch (error) {
+        console.error('❌ [UsersModule] Error configurando WebSocket:', error);
+      }
+    };
+    
+    setupWebSocket();
+  }, []);
+
   const fetchUsers = async () => {
     try {
+      console.log('🔍 [UsersModule] Cargando usuarios...');
       setLoading(true);
       const params: any = {};
       
@@ -136,17 +210,23 @@ const UsersModule: React.FC = () => {
         params.search = searchTerm.trim();
       }
       
+      console.log('🔍 [UsersModule] Parámetros de búsqueda:', params);
       const response = await api.get('/users', { params });
+      console.log('✅ [UsersModule] Respuesta recibida:', response.data);
       
       if (usePagination && response.data.users) {
         setUsers(response.data.users);
         setTotalUsers(response.data.total);
+        console.log(`✅ [UsersModule] ${response.data.users.length} usuarios cargados (total: ${response.data.total})`);
       } else {
         setUsers(Array.isArray(response.data) ? response.data : []);
         setTotalUsers(Array.isArray(response.data) ? response.data.length : 0);
+        console.log(`✅ [UsersModule] ${Array.isArray(response.data) ? response.data.length : 0} usuarios cargados`);
       }
-    } catch (error) {
-      console.error('Error fetching users:', error);
+    } catch (error: any) {
+      console.error('❌ [UsersModule] Error fetching users:', error);
+      console.error('❌ [UsersModule] Error details:', error.response?.data);
+      console.error('❌ [UsersModule] Status:', error.response?.status);
       setUsers([]);
       setTotalUsers(0);
     } finally {
@@ -197,10 +277,21 @@ const UsersModule: React.FC = () => {
       
       console.log('Actualizando usuario con datos:', updateData);
       
+      // 🎯 Verificar si el usuario se está actualizando a sí mismo
+      const isUpdatingSelf = currentUser && currentUser.id === id;
+      
       await api.put(`/users/${id}`, updateData);
       setEditingUser(null);
       resetForm();
       fetchUsers();
+      
+      // 🚪 Si el usuario se actualizó a sí mismo, mostrar modal de logout
+      if (isUpdatingSelf) {
+        setForcedLogoutModal({
+          open: true,
+          message: 'Has actualizado tu propio perfil. Por favor, cierra sesión para que los cambios se apliquen correctamente.'
+        });
+      }
     } catch (error: any) {
       console.error('Error actualizando usuario:', error);
       
@@ -512,6 +603,7 @@ const UsersModule: React.FC = () => {
                             <Switch
                               checked={user.active}
                               onCheckedChange={() => handleToggleUserStatus(user.id, user.active)}
+                              disabled={currentUser && currentUser.role !== 'SUPERADMIN' && user.id === currentUser.id}
                             />
                             <span className="text-sm text-neutral-600 dark:text-neutral-400">
                               {user.active ? "Activo" : "Inactivo"}
@@ -529,16 +621,19 @@ const UsersModule: React.FC = () => {
                               variant="ghost"
                               size="sm"
                               onClick={() => openEditDialog(user)}
+                              disabled={!user.active}
                             >
                               <Edit className="h-4 w-4" />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDeleteUser(user.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                            {(currentUser?.role === 'SUPERADMIN') && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDeleteUser(user.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -566,6 +661,7 @@ const UsersModule: React.FC = () => {
                     <Switch
                       checked={user.active}
                       onCheckedChange={() => handleToggleUserStatus(user.id, user.active)}
+                      disabled={currentUser && currentUser.role !== 'SUPERADMIN' && user.id === currentUser.id}
                       className="scale-90"
                     />
                   </CardHeader>
@@ -588,18 +684,21 @@ const UsersModule: React.FC = () => {
                       variant="ghost"
                       size="sm"
                       onClick={() => openEditDialog(user)}
+                      disabled={!user.active}
                       className="flex items-center justify-center h-8 w-8"
                     >
                       <Edit className="h-4 w-4" />
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDeleteUser(user.id)}
-                      className="flex items-center justify-center h-8 w-8"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    {(currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPERADMIN') && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteUser(user.id)}
+                        className="flex items-center justify-center h-8 w-8"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                 </Card>
               ))}
@@ -609,7 +708,7 @@ const UsersModule: React.FC = () => {
       </Card>
 
       {/* Paginación */}
-      {!loading && users.length > 0 && totalPages > 1 && (
+      {!loading && users.length > 0 && (
         <Card>
           <CardContent className="pt-6">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -766,6 +865,7 @@ const UsersModule: React.FC = () => {
               <Select 
                 value={formData.role} 
                 onValueChange={(value) => setFormData({ ...formData, role: value })}
+                disabled={!!editingUser && currentUser && currentUser.role !== 'ADMIN' && currentUser.role !== 'SUPERADMIN'}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Seleccionar rol" />
@@ -887,6 +987,17 @@ const UsersModule: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Modal de Forced Logout cuando el usuario se actualiza a sí mismo */}
+      <ForcedLogoutModal
+        isOpen={forcedLogoutModal.open}
+        onLogout={() => {
+          localStorage.clear();
+          window.location.href = '/login';
+        }}
+        message={forcedLogoutModal.message}
+        username={currentUser?.name || ''}
+      />
     </div>
   );
 };
