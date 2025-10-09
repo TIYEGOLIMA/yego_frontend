@@ -25,7 +25,8 @@ class SystemNotificationsService {
       }
 
       // Usar variable de entorno para la URL del WebSocket
-      const wsUrl = import.meta.env.VITE_SYSTEM_WS_URL || 'http://localhost:3030/ws'
+      const wsUrl = import.meta.env.VITE_SYSTEM_WS_URL || import.meta.env.VITE_STOMP_URL || 'http://localhost:3030/ws'
+      console.log('🔗 [SystemNotifications] Conectando a:', wsUrl)
       const socket = new SockJS(wsUrl)
       this.client = new Client({
         webSocketFactory: () => socket,
