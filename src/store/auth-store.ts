@@ -70,9 +70,19 @@ export const useAuthStore = create<AuthState>()(
         } catch (error: any) {
           console.error('Error en login (store):', error);
           
-          // Manejar error específico de usuario inactivo
-          if (error.response?.status === 403 && error.response?.data?.message?.includes('Usuario inactivo')) {
-            const errorMessage = "Usuario inactivo. Contacte al administrador del sistema"
+          // Manejar error específico de usuario inactivo (403)
+          if (error.response?.status === 403) {
+            const backendMessage = error.response?.data?.message || ''
+            
+            // Si el mensaje del backend menciona "inactivo" o si simplemente es un 403, asumir usuario inactivo
+            if (backendMessage.toLowerCase().includes('inactivo') || backendMessage.toLowerCase().includes('inactive')) {
+              const errorMessage = "Usuario inactivo. Contacte al administrador del sistema"
+              set({ error: errorMessage, loading: false })
+              throw new Error(errorMessage)
+            }
+            
+            // Otros errores 403
+            const errorMessage = backendMessage || "Acceso denegado. Contacte al administrador del sistema"
             set({ error: errorMessage, loading: false })
             throw new Error(errorMessage)
           }

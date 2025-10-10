@@ -274,36 +274,7 @@ export default function Login() {
                         {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
                       </Button>
                     </form>
-                    
-                    {/* Credenciales de desarrollo con glassmorphism */}
-                    {import.meta.env.DEV && (
-                      <div className="pt-4 sm:pt-6 border-t border-white/20 dark:border-neutral-800/50">
-                        <div className="relative glassmorphism-glow">
-                          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-indigo-500/5 dark:from-blue-400/10 dark:to-indigo-500/10 rounded-lg sm:rounded-xl blur-lg"></div>
-                          <div className="relative p-3 sm:p-5 glassmorphism-light rounded-lg sm:rounded-xl">
-                            <p className="text-center text-xs sm:text-sm font-medium text-neutral-600 dark:text-neutral-400 mb-3 sm:mb-4 flex items-center justify-center gap-2">
-                              <Sparkles className="h-3 w-3 sm:h-4 sm:w-4 animate-sparkle" />
-                              Credenciales de Prueba
-                            </p>
-                            <Button
-                              type="button"
-                              variant="glassmorphism"
-                              size="sm"
-                              className="w-full"
-                              onClick={handleDemoLogin}
-                            >
-                              <div className="flex items-center justify-between w-full">
-                                <div className="text-left">
-                                  <div className="font-medium text-neutral-900 dark:text-white text-sm">Superadmin</div>
-                                  <div className="text-xs opacity-75 text-neutral-600 dark:text-neutral-400">superadmin / superadmin123</div>
-                                </div>
-                                <LogIn className="h-3 w-3 sm:h-4 sm:w-4" />
-                              </div>
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
+
                   </CardContent>
                 </Card>
               </div>
