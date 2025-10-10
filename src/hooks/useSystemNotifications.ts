@@ -46,17 +46,11 @@ export const useSystemNotifications = () => {
   }, [])
 
   useEffect(() => {
-    if (!user) {
-      console.log('⚠️ No hay usuario - callbacks NO registrados')
-      return
-    }
-
-    console.log('✅ Registrando callbacks para usuario ID:', user.id, 'Nombre:', user.name)
+    if (!user) return
     
     // Reconectar el servicio con el nuevo token
     const token = localStorage.getItem('token')
     if (token && !SystemNotificationsService.getConnectionStatus()) {
-      console.log('🔄 Reconectando SystemNotificationsService con token...')
       SystemNotificationsService.reconnect()
     }
     
@@ -66,7 +60,6 @@ export const useSystemNotifications = () => {
 
     // Cleanup al desmontar o cuando cambie el usuario
     return () => {
-      console.log('🧹 Limpiando callbacks para usuario ID:', user.id)
       SystemNotificationsService.setOnForcedLogout(null)
       SystemNotificationsService.setOnAccountBlocked(null)
     }
