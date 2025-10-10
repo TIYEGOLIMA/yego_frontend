@@ -12,7 +12,13 @@ export const useAutoLogout = () => {
     // Solo ejecutar si hay usuario autenticado
     if (!user || !token) return
 
-    console.log('🔄 [useAutoLogout] Configurando logout automático...')
+    // Estos usuarios deben mantenerse logueados hasta que presionen logout manualmente
+    if (user.role === 'TABLET1' || user.role === 'TABLET2' || user.role === 'SAC' || user.role === 'TV' || user.role === 'PRINCIPAL') {
+      console.log('📱 [useAutoLogout] Rol', user.role, '- Auto-logout deshabilitado')
+      return
+    }
+
+    console.log('🔄 [useAutoLogout] Configurando logout automático para rol:', user.role)
 
     // 🎯 Función para ejecutar logout
     const performLogout = async () => {
@@ -28,19 +34,13 @@ export const useAutoLogout = () => {
       }
     }
 
-    // 🎯 Evento cuando se pierde la conexión (offline)
-    const handleOffline = () => {
-      console.log('📡 [useAutoLogout] Conexión perdida, ejecutando logout...')
-      performLogout()
-    }
+    // 🚫 NO configurar ningún evento de auto-logout
+    // El usuario debe hacer logout manualmente
+    console.log('✅ [useAutoLogout] Auto-logout configurado pero sin eventos activos')
 
-    // Agregar event listener solo para offline (no beforeunload para evitar problemas con refresh)
-    window.addEventListener('offline', handleOffline)
-
-    // Cleanup function
+    // Cleanup function (vacía por ahora)
     return () => {
-      console.log('🧹 [useAutoLogout] Limpiando event listeners...')
-      window.removeEventListener('offline', handleOffline)
+      console.log('🧹 [useAutoLogout] Limpiando...')
     }
   }, [user, token, logout])
 
