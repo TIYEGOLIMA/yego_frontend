@@ -77,8 +77,9 @@ export const useAuthStore = create<AuthState>()(
             errorMessage = "Usuario inactivo. Contacte al administrador del sistema"
           }
           // Manejar error de credenciales inválidas (401)
+          // Siempre mostrar mensaje amigable para 401, ignorando el mensaje del backend
           else if (error.response?.status === 401) {
-            errorMessage = error.response?.data?.message || error.response?.data?.error || "Credenciales inválidas. Verifique su usuario y contraseña"
+            errorMessage = "Credenciales inválidas. Verifique su usuario y contraseña"
           }
           // Manejar error de red
           else if (error.message === 'Network Error') {
