@@ -103,11 +103,33 @@ export const authService = {
    */
   async changePassword(data: ChangePasswordData): Promise<any> {
     try {
-      const response = await api.post('/auth/change-password', data);
+      console.log('🔐 [authService] Iniciando cambio de contraseña...');
+      const response = await api.post('/auth/change-password', {
+        currentPassword: data.currentPassword,
+        newPassword: data.newPassword,
+        confirmPassword: data.confirmPassword
+      });
+      console.log('✅ [authService] Contraseña cambiada exitosamente');
       return response.data;
     } catch (error: any) {
-      console.error('Error en cambio de contraseña:', error.response?.data || error.message);
-      throw error;
+      console.error('❌ [authService] Error en cambio de contraseña:', error.response?.data || error.message);
+      
+      // Extraer mensaje del backend si existe
+      const backendMessage = error.response?.data?.message || error.response?.data?.error;
+  
+      
+      // Para errores 400, 401, 403, 422 - probablemente validación de contraseña
+      if ([400, 401, 403, 422].includes(error.response?.status)) {
+        throw new Error('La contraseña actual es incorrecta');
+      }
+      
+      // Para error 500 - probablemente también es contraseña incorrecta en este contexto
+      if (error.response?.status === 500) {
+        throw new Error('La contraseña actual es incorrecta');
+      }
+      
+      // Para otros errores, usar el mensaje del backend o mensaje genérico
+      throw new Error(backendMessage || 'Error al cambiar la contraseña. Verifique los datos ingresados');
     }
   },
 

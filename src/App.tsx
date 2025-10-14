@@ -34,7 +34,7 @@ import ConfigurationModule from './features/core/configuration/configuration.mod
 import TicketsModule from './features/ticketera/tickets/tickets.module'
 
 // Importar microfrontends para roles específicos
-import { TVDisplay, RatingTablet, TabletInterface, Reports } from '../microfrontends'
+import { TVDisplay, RatingTablet, TabletInterface, Reports, GarantizadoModule } from '../microfrontends'
 
 // Importar componentes de notificaciones del sistema
 import { ForcedLogoutModal } from './components/ForcedLogoutModal'
@@ -111,7 +111,7 @@ const PermissionRoute = ({ children, module }: { children: React.ReactNode, modu
   // Módulos permitidos por rol
   const allowedModules: Record<string, string[]> = {
     'SUPERADMIN': ['users', 'roles', 'permissions', 'modules', 'imports', 'audit', 'sessions', 'configuration', 'reports'],
-    'ADMIN': ['users', 'roles', 'modules', 'dashboard', 'reports'],
+    'ADMIN': ['users', 'roles', 'modules', 'dashboard', 'reports', 'garantizado'],
     'OPERADOR': ['reports', 'users'],
     'SAC': ['tickets']
   }
@@ -320,9 +320,14 @@ function App() {
             } />
             <Route path="reports" element={
               <PermissionRoute module="reports">
-                <TicketsModule />
+                <Reports />
               </PermissionRoute>
             } />
+           <Route path="garantizado" element={
+             <PermissionRoute module="garantizado">
+               <GarantizadoModule />
+             </PermissionRoute>
+           } />
           </Route>
           <Route path="*" element={<Navigate to="/login" />} />
         </Routes>

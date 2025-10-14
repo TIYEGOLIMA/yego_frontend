@@ -24,7 +24,10 @@ import {
   ChevronRight, 
   Bell, 
   HelpCircle, 
-  Lock 
+  Lock,
+  ChevronDown,
+  Server,
+  Shield
 } from 'lucide-react'
 
 interface NavItem {
@@ -44,6 +47,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [changePasswordOpen, setChangePasswordOpen] = useState(false)
+  const [sistemasDropdownOpen, setSistemasDropdownOpen] = useState(false)
   const { user, logout, token } = useAuthStore()
   const { hasAnyPermission } = usePermissions()
   const { status } = useConnectionStatus()
@@ -101,10 +105,10 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       requiredPermission: null 
     },
     { 
-      label: "Reportes", 
-      to: "/reports", 
-      icon: <BarChart4 className="h-5 w-5" />, 
-      requiredPermission: "reports"
+      label: "Sistemas", 
+      to: "dropdown", 
+      icon: <Server className="h-5 w-5" />, 
+      requiredPermission: "systems"
     },
     { 
       label: "Tickets", 
@@ -164,9 +168,14 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
   // Filtrar elementos de navegación según permisos
   const filteredNavItems = navItems.filter(item => {
-    // OPERADOR ve Reportes y Usuarios
+    // Dashboard siempre visible
+    if (!item.requiredPermission) {
+      return true;
+    }
+    
+    // OPERADOR ve Sistemas y Usuarios
     if (user?.role === 'OPERADOR') {
-      return item.requiredPermission === 'reports' || item.requiredPermission === 'users';
+      return item.requiredPermission === 'users' || item.requiredPermission === 'systems';
     }
     
     // SAC solo ve Tickets
@@ -174,9 +183,15 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       return item.requiredPermission === 'tickets';
     }
     
-    // Dashboard siempre visible
-    if (!item.requiredPermission) {
-      return true;
+    // SUPERADMIN ve todo EXCEPTO tickets
+    if (user?.role === 'SUPERADMIN') {
+      return item.requiredPermission !== 'tickets';
+    }
+    
+    // ADMIN ve usuarios, roles, módulos y sistemas
+    if (user?.role === 'ADMIN') {
+      const allowedModules = ['users', 'roles', 'modules', 'systems'];
+      return allowedModules.includes(item.requiredPermission);
     }
     
     return hasAnyPermission(item.requiredPermission);
@@ -189,6 +204,30 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       return true;
     }
     return location.pathname === path || location.pathname.startsWith(path + '/')
+  }
+
+  // Obtener opciones disponibles del dropdown de Sistemas
+  const getSistemasOptions = () => {
+    const options = [
+      { 
+        label: "Reportes", 
+        to: "/reports", 
+        icon: <BarChart4 className="h-4 w-4" />, 
+        permission: "reports"
+      }
+    ];
+
+    // Solo ADMIN puede ver Garantizado
+    if (user?.role === 'ADMIN') {
+      options.push({
+        label: "Garantizado", 
+        to: "/garantizado", 
+        icon: <Shield className="h-4 w-4" />, 
+        permission: "garantizado"
+      });
+    }
+
+    return options;
   }
 
   // Obtener el título de la página actual
@@ -221,6 +260,33 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       setSidebarOpen(false)
     }
   }, [location.pathname])
+
+  // Expandir automáticamente el menú de Sistemas cuando una opción está activa
+  useEffect(() => {
+    const sistemasOptions = getSistemasOptions();
+    const hasActiveOption = sistemasOptions.some(option => isActive(option.to));
+    
+    // Solo auto-expandir si hay una opción activa, no forzar cierre
+    if (hasActiveOption && !sistemasDropdownOpen) {
+      setSistemasDropdownOpen(true);
+    }
+  }, [location.pathname])
+
+  // Cerrar menú de Sistemas al hacer clic fuera
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (sistemasDropdownOpen && !(event.target as Element).closest('.sistemas-menu-container')) {
+        setSistemasDropdownOpen(false);
+      }
+    }
+    
+    if (sistemasDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [sistemasDropdownOpen])
 
   return (
     <div className="min-h-screen bg-background-secondary dark:bg-background-dark">
@@ -332,6 +398,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                       onClick={() => {
                         setUserMenuOpen(false);
                         navigate('/configuration');
+                        setSistemasDropdownOpen(false);
                       }}
                     >
                       <Settings2 className="h-4 w-4" />
@@ -375,10 +442,80 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
           {filteredNavItems.map((item) => {
             const isActiveItem = isActive(item.to);
+            
+            // Manejar el menú expandible de Sistemas
+            if (item.to === 'dropdown') {
+              const sistemasOptions = getSistemasOptions();
+              const hasActiveOption = sistemasOptions.some(option => isActive(option.to));
+              
+              return (
+                <div key={item.label} className="sistemas-menu-container">
+                  {/* Botón principal de Sistemas */}
+                  <button
+                    onClick={() => setSistemasDropdownOpen(!sistemasDropdownOpen)}
+                    className={`w-full flex items-center relative transition-colors ${
+                      hasActiveOption 
+                        ? 'yego-nav-item-active' 
+                        : 'yego-nav-item-inactive'
+                    }`}
+                    title={sidebarCollapsed ? item.label : undefined}
+                  >
+                    <div className="flex items-center justify-center">
+                      {item.icon}
+                    </div>
+                    {!sidebarCollapsed && (
+                      <>
+                        <span className="ml-3 flex-1 text-left font-medium text-sm truncate">{item.label}</span>
+                        <ChevronDown className={`h-4 w-4 ml-2 transition-transform ${sistemasDropdownOpen ? 'rotate-180' : ''}`} />
+                      </>
+                    )}
+                    {(hasActiveOption || sistemasDropdownOpen) && !sidebarCollapsed && (
+                      <span className="yego-nav-indicator" />
+                    )}
+                    {(hasActiveOption || sistemasDropdownOpen) && sidebarCollapsed && (
+                      <span className="yego-nav-indicator" />
+                    )}
+                  </button>
+                  
+                  {/* Submenú expandible dentro del sidebar */}
+                  {sistemasDropdownOpen && !sidebarCollapsed && (
+                    <div className="ml-4 mt-2 space-y-1 border-l-2 border-gray-200 pl-3">
+                      {sistemasOptions.map((option) => {
+                        const isOptionActive = isActive(option.to);
+                        return (
+                          <button
+                            key={option.to}
+                            onClick={() => {
+                              navigate(option.to);
+                              setSistemasDropdownOpen(false);
+                            }}
+                            className={`${isOptionActive ? 'bg-transparent border-2 border-red-500 rounded-lg text-gray-800 dark:text-white p-' : 'yego-nav-item-inactive'} w-full flex items-center relative text-sm pl-3 py-3`}
+                          >
+                            <div className="flex items-center justify-center">
+                              {option.icon}
+                            </div>
+                            <span className="ml-3 flex-1 text-left font-medium text-sm truncate">{option.label}</span>
+                            {isOptionActive && (
+                              <span className="yego-nav-indicator" />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+            
+            // Elementos normales de navegación
             return (
               <button
                 key={item.to}
-                onClick={() => navigate(item.to)}
+                onClick={() => {
+                  navigate(item.to);
+                  // Cerrar menú de Sistemas al navegar a otra sección
+                  setSistemasDropdownOpen(false);
+                }}
                 className={`${isActiveItem ? 'yego-nav-item-active' : 'yego-nav-item-inactive'} w-full flex items-center relative`}
                 title={sidebarCollapsed ? item.label : undefined}
               >

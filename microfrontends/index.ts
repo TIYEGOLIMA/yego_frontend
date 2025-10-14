@@ -44,6 +44,9 @@ export {
   canAccessTicketeraModule
 } from './ticketera'
 
+// 🏆 SISTEMA GARANTIZADO - Gestión de garantías de conductores
+export { GarantizadoModule } from '../src/features/core/garantizado'
+
 export type { TicketeraModuleKey } from './ticketera'
 
 // 🎯 SISTEMA OKR - Objetivos y Resultados Clave (preparado para futuro)

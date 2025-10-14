@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -33,6 +33,25 @@ export const ChangePasswordDialog: React.FC<ChangePasswordDialogProps> = ({
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [passwordErrors, setPasswordErrors] = useState<string[]>([]);
+
+  // Limpiar todo cuando se abre el diálogo
+  useEffect(() => {
+    if (isOpen) {
+      setFormData({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      });
+      setError('');
+      setSuccess(false);
+      setPasswordErrors([]);
+      setShowPasswords({
+        current: false,
+        new: false,
+        confirm: false
+      });
+    }
+  }, [isOpen]);
 
   const validatePassword = (password: string): { isValid: boolean; errors: string[] } => {
     const errors: string[] = [];
@@ -101,15 +120,23 @@ export const ChangePasswordDialog: React.FC<ChangePasswordDialogProps> = ({
     try {
       await authService.changePassword(formData);
       setSuccess(true);
-      setFormData({
-        currentPassword: '',
-        newPassword: '',
-        confirmPassword: ''
-      });
-      setPasswordErrors([]);
       
       // Cerrar después de 2 segundos
       setTimeout(() => {
+        // Limpiar todos los estados antes de cerrar
+        setFormData({
+          currentPassword: '',
+          newPassword: '',
+          confirmPassword: ''
+        });
+        setError('');
+        setSuccess(false);
+        setPasswordErrors([]);
+        setShowPasswords({
+          current: false,
+          new: false,
+          confirm: false
+        });
         onClose();
         onSuccess?.();
       }, 2000);
@@ -123,6 +150,7 @@ export const ChangePasswordDialog: React.FC<ChangePasswordDialogProps> = ({
 
   const handleClose = () => {
     if (!loading) {
+      // Limpiar todos los estados
       setFormData({
         currentPassword: '',
         newPassword: '',
@@ -131,6 +159,11 @@ export const ChangePasswordDialog: React.FC<ChangePasswordDialogProps> = ({
       setError('');
       setSuccess(false);
       setPasswordErrors([]);
+      setShowPasswords({
+        current: false,
+        new: false,
+        confirm: false
+      });
       onClose();
     }
   };
