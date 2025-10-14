@@ -55,8 +55,12 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
+    // Verificar si el error es del endpoint de login
+    const isLoginRequest = error.config?.url?.includes('/auth/login')
+    
     // Manejar errores de autenticación (401)
-    if (error.response?.status === 401) {
+    // NO interceptar errores 401 del login (credenciales incorrectas)
+    if (error.response?.status === 401 && !isLoginRequest) {
       console.log('🔒 [api] Error 401 - Token expirado, ejecutando logout completo...')
       
       // 🎯 USAR EL MISMO MÉTODO QUE EL LOGOUT MANUAL

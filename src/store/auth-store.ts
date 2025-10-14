@@ -70,16 +70,27 @@ export const useAuthStore = create<AuthState>()(
         } catch (error: any) {
           console.error('Error en login (store):', error);
           
+          let errorMessage = "Error al iniciar sesión"
+          
           // Manejar error específico de usuario inactivo (403)
           if (error.response?.status === 403) {
-            const errorMessage = "Usuario inactivo. Contacte al administrador del sistema"
-            set({ error: errorMessage, loading: false })
-            throw new Error(errorMessage)
+            errorMessage = "Usuario inactivo. Contacte al administrador del sistema"
+          }
+          // Manejar error de credenciales inválidas (401)
+          else if (error.response?.status === 401) {
+            errorMessage = error.response?.data?.message || error.response?.data?.error || "Credenciales inválidas. Verifique su usuario y contraseña"
+          }
+          // Manejar error de red
+          else if (error.message === 'Network Error') {
+            errorMessage = "Error de conexión. Verifique su conexión a internet"
+          }
+          // Otros errores
+          else {
+            errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || "Error al iniciar sesión"
           }
           
-          const errorMessage = error.response?.data?.message || error.message || "Error al iniciar sesión"
           set({ error: errorMessage, loading: false })
-          throw error
+          throw new Error(errorMessage)
         }
       },
       logout: async () => {

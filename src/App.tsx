@@ -110,8 +110,8 @@ const PermissionRoute = ({ children, module }: { children: React.ReactNode, modu
   
   // Módulos permitidos por rol
   const allowedModules: Record<string, string[]> = {
-    'SUPERADMIN': ['users', 'roles', 'permissions', 'modules', 'imports', 'audit', 'sessions', 'configuration'],
-    'ADMIN': ['users', 'roles', 'modules', 'dashboard'],
+    'SUPERADMIN': ['users', 'roles', 'permissions', 'modules', 'imports', 'audit', 'sessions', 'configuration', 'reports'],
+    'ADMIN': ['users', 'roles', 'modules', 'dashboard', 'reports'],
     'OPERADOR': ['reports', 'users'],
     'SAC': ['tickets']
   }
@@ -241,7 +241,7 @@ function App() {
           } />
           <Route path="/reports" element={
             <ProtectedRoute>
-              <RoleRestrictedRoute allowedRoles={['SUPERADMIN', 'OPERADOR']}>
+              <RoleRestrictedRoute allowedRoles={['SUPERADMIN', 'ADMIN', 'OPERADOR']}>
                 <MainLayout>
                   <TicketsModule />
                 </MainLayout>

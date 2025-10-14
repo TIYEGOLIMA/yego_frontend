@@ -18,14 +18,14 @@ export const usePermissions = () => {
       return module === 'tickets';
     }
 
-    // SUPERADMIN NO ve reportes ni tickets
+    // SUPERADMIN NO ve tickets
     if (user.role === 'SUPERADMIN') {
-      return module !== 'reports' && module !== 'tickets';
+      return module !== 'tickets';
     }
 
-    // ADMIN solo ve usuarios, módulos, roles y dashboard
+    // ADMIN solo ve usuarios, módulos, roles, dashboard y reportes
     if (user.role === 'ADMIN') {
-      const allowedModules = ['users', 'modules', 'roles', 'dashboard'];
+      const allowedModules = ['users', 'modules', 'roles', 'dashboard', 'reports'];
       return allowedModules.includes(module);
     }
 
@@ -48,14 +48,14 @@ export const usePermissions = () => {
       return module === 'tickets';
     }
 
-    // SUPERADMIN NO ve reportes ni tickets
+    // SUPERADMIN NO ve tickets
     if (user.role === 'SUPERADMIN') {
-      return module !== 'reports' && module !== 'tickets';
+      return module !== 'tickets';
     }
 
-    // ADMIN solo ve usuarios, módulos, roles y dashboard
+    // ADMIN solo ve usuarios, módulos, roles, dashboard y reportes
     if (user.role === 'ADMIN') {
-      const allowedModules = ['users', 'modules', 'roles', 'dashboard'];
+      const allowedModules = ['users', 'modules', 'roles', 'dashboard', 'reports'];
       return allowedModules.includes(module);
     }
 
@@ -83,7 +83,7 @@ export const usePermissions = () => {
       };
     }
 
-    // SUPERADMIN acceso completo EXCEPTO reportes y tickets
+    // SUPERADMIN acceso completo EXCEPTO tickets
     if (user.role === 'SUPERADMIN') {
       return {
         users: ['read', 'write', 'delete'],
@@ -91,16 +91,18 @@ export const usePermissions = () => {
         modules: ['read', 'write'],
         imports: ['read', 'write'],
         audit: ['read'],
-        configuration: ['read', 'write']
+        configuration: ['read', 'write'],
+        reports: ['read']
       };
     }
 
-    // ADMIN solo tiene acceso a usuarios, módulos, roles y dashboard
+    // ADMIN solo tiene acceso a usuarios, módulos, roles, dashboard y reportes
     if (user.role === 'ADMIN') {
       return {
         users: ['read', 'write', 'delete'],
         roles: ['read', 'write'],
-        modules: ['read', 'write']
+        modules: ['read', 'write'],
+        reports: ['read']
       };
     }
 
