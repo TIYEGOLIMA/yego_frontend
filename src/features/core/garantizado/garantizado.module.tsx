@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Input } from '../../../components/ui/input';
 import { Button } from '../../../components/ui/button';
+import { Switch } from '../../../components/ui/switch';
 import { 
   Search, 
   Filter, 
@@ -9,8 +10,11 @@ import {
   User, 
   Car,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Shield,
+  ShieldOff
 } from 'lucide-react';
+import { api } from '../../../services/core/api';
 
 interface GarantizadoData {
   id: string;
@@ -29,7 +33,15 @@ interface GarantizadoData {
   diferencia: number;
   semana: number;
   viajesActuales: number;
-  flota: 'YEGO BLACK' | 'YEGO' | 'YEGO PLUS';
+  flota: string;
+  flotaId: string;
+}
+
+interface FlotaResponse {
+  flotaId: string;
+  flotaName: string;
+  flotaCity: string;
+  flotaSpecifications: string[];
 }
 
 export const GarantizadoModule: React.FC = () => {
@@ -37,14 +49,58 @@ export const GarantizadoModule: React.FC = () => {
   const [filteredData, setFilteredData] = useState<GarantizadoData[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'TODOS' | 'GARANTIZADO' | 'NO GARANTIZADO'>('TODOS');
-  const [flotaFilter, setFlotaFilter] = useState<'SELECCIONAR' | 'YEGO BLACK' | 'YEGO' | 'YEGO PLUS'>('SELECCIONAR');
+  const [flotaFilter, setFlotaFilter] = useState<string>('SELECCIONAR');
+  const [flotas, setFlotas] = useState<FlotaResponse[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingFlotas, setLoadingFlotas] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [siteAccessEnabled, setSiteAccessEnabled] = useState(true);
   const itemsPerPage = 6;
 
   // Función para calcular el TOTAL según la fórmula: =W2+X2+Y2+Z2-AA2+AB2
   const calculateTotal = (efectivo: number, pagoSinEfectivo: number, comYango: number, comYego: number, boSemAnt: number, boSemAct: number) => {
     return efectivo + pagoSinEfectivo + comYango + comYego - boSemAnt + boSemAct;
+  };
+
+  // Función para cargar flotas desde la API
+  const cargarFlotas = async () => {
+    try {
+      setLoadingFlotas(true);
+      console.log('🔍 [GarantizadoModule] Cargando flotas...');
+      
+      const response = await api.get('/garantizado/flotas');
+      console.log('✅ [GarantizadoModule] Flotas cargadas:', response.data);
+      
+      setFlotas(response.data);
+    } catch (error: any) {
+      console.error('❌ [GarantizadoModule] Error al cargar flotas:', error);
+      setFlotas([]);
+    } finally {
+      setLoadingFlotas(false);
+    }
+  };
+
+  // Función para manejar el cambio de estado del acceso al sitio
+  const handleSiteAccessChange = async (enabled: boolean) => {
+    try {
+      console.log(`🔄 [GarantizadoModule] Cambiando acceso al sitio a: ${enabled ? 'HABILITADO' : 'DESHABILITADO'}`);
+      
+      // Aquí puedes agregar la llamada a la API para actualizar el estado en el backend
+      // await api.post('/garantizado/site-access', { enabled });
+      
+      setSiteAccessEnabled(enabled);
+      
+      // Mostrar notificación
+      if (enabled) {
+        console.log('✅ Acceso al sitio HABILITADO');
+      } else {
+        console.log('🔒 Acceso al sitio DESHABILITADO');
+      }
+    } catch (error) {
+      console.error('❌ Error al cambiar el acceso al sitio:', error);
+      // Revertir el cambio si hay error
+      setSiteAccessEnabled(!enabled);
+    }
   };
 
   // Función para calcular GARANTIZADO según la fórmula condicional
@@ -85,7 +141,8 @@ export const GarantizadoModule: React.FC = () => {
       diferencia: 0, // Se calculará después
       semana: 35,
       viajesActuales: 111,
-      flota: 'YEGO BLACK'
+      flota: 'YEGO BLACK',
+      flotaId: '1'
     },
     {
       id: '2',
@@ -104,7 +161,8 @@ export const GarantizadoModule: React.FC = () => {
       diferencia: 0, // Se calculará después
       semana: 35,
       viajesActuales: 104,
-      flota: 'YEGO'
+      flota: 'YEGO',
+      flotaId: '2'
     },
     {
       id: '3',
@@ -123,7 +181,8 @@ export const GarantizadoModule: React.FC = () => {
       diferencia: 0, // Se calculará después
       semana: 35,
       viajesActuales: 141,
-      flota: 'YEGO BLACK'
+      flota: 'YEGO BLACK',
+      flotaId: 'c054c8b5dfe14e75b882943b2a252706'
     },
     {
       id: '4',
@@ -142,7 +201,8 @@ export const GarantizadoModule: React.FC = () => {
       diferencia: 0, // Se calculará después
       semana: 35,
       viajesActuales: 78,
-      flota: 'YEGO PLUS'
+      flota: 'YEGO PLUS',
+      flotaId: '3'
     },
     {
       id: '5',
@@ -161,7 +221,8 @@ export const GarantizadoModule: React.FC = () => {
       diferencia: 0, // Se calculará después
       semana: 35,
       viajesActuales: 95,
-      flota: 'YEGO BLACK'
+      flota: 'YEGO BLACK',
+      flotaId: 'c054c8b5dfe14e75b882943b2a252706'
     },
     {
       id: '6',
@@ -180,7 +241,8 @@ export const GarantizadoModule: React.FC = () => {
       diferencia: 0, // Se calculará después
       semana: 35,
       viajesActuales: 128,
-      flota: 'YEGO'
+      flota: 'YEGO',
+      flotaId: '2'
     },
     {
       id: '7',
@@ -199,7 +261,8 @@ export const GarantizadoModule: React.FC = () => {
       diferencia: 0, // Se calculará después
       semana: 35,
       viajesActuales: 87,
-      flota: 'YEGO PLUS'
+      flota: 'YEGO PLUS',
+      flotaId: '3'
     },
     {
       id: '8',
@@ -218,7 +281,8 @@ export const GarantizadoModule: React.FC = () => {
       diferencia: 0, // Se calculará después
       semana: 35,
       viajesActuales: 156,
-      flota: 'YEGO BLACK'
+      flota: 'YEGO BLACK',
+      flotaId: 'c054c8b5dfe14e75b882943b2a252706'
     },
     {
       id: '9',
@@ -237,7 +301,8 @@ export const GarantizadoModule: React.FC = () => {
       diferencia: 0, // Se calculará después
       semana: 35,
       viajesActuales: 72,
-      flota: 'YEGO'
+      flota: 'YEGO',
+      flotaId: '2'
     },
     {
       id: '10',
@@ -256,7 +321,8 @@ export const GarantizadoModule: React.FC = () => {
       diferencia: 0, // Se calculará después
       semana: 35,
       viajesActuales: 134,
-      flota: 'YEGO PLUS'
+      flota: 'YEGO PLUS',
+      flotaId: '3'
     },
     {
       id: '11',
@@ -275,7 +341,8 @@ export const GarantizadoModule: React.FC = () => {
       diferencia: 0, // Se calculará después
       semana: 35,
       viajesActuales: 98,
-      flota: 'YEGO BLACK'
+      flota: 'YEGO BLACK',
+      flotaId: '1'
     },
     {
       id: '12',
@@ -294,7 +361,8 @@ export const GarantizadoModule: React.FC = () => {
       diferencia: 0, // Se calculará después
       semana: 35,
       viajesActuales: 165,
-      flota: 'YEGO'
+      flota: 'YEGO',
+      flotaId: '2'
     },
     {
       id: '13',
@@ -313,7 +381,8 @@ export const GarantizadoModule: React.FC = () => {
       diferencia: 0, // Se calculará después
       semana: 35,
       viajesActuales: 82,
-      flota: 'YEGO PLUS'
+      flota: 'YEGO PLUS',
+      flotaId: '3'
     },
     {
       id: '14',
@@ -332,7 +401,8 @@ export const GarantizadoModule: React.FC = () => {
       diferencia: 0, // Se calculará después
       semana: 35,
       viajesActuales: 142,
-      flota: 'YEGO BLACK'
+      flota: 'YEGO BLACK',
+      flotaId: '1'
     },
     {
       id: '15',
@@ -351,11 +421,15 @@ export const GarantizadoModule: React.FC = () => {
       diferencia: 0, // Se calculará después
       semana: 35,
       viajesActuales: 76,
-      flota: 'YEGO'
+      flota: 'YEGO',
+      flotaId: '2'
     }
   ];
 
   useEffect(() => {
+    // Cargar flotas al inicializar el componente
+    cargarFlotas();
+    
     // Simular carga de datos
     setTimeout(() => {
       // Calcular diferencia para cada conductor
@@ -391,7 +465,7 @@ export const GarantizadoModule: React.FC = () => {
 
     // Filtrar por flota - solo si se ha seleccionado una flota
     if (flotaFilter !== 'SELECCIONAR') {
-      filtered = filtered.filter(item => item.flota === flotaFilter);
+      filtered = filtered.filter(item => item.flotaId === flotaFilter);
     } else {
       // Si no se ha seleccionado flota, no mostrar conductores
       filtered = [];
@@ -483,6 +557,50 @@ export const GarantizadoModule: React.FC = () => {
         </div>
       </div>
 
+      {/* Control de Acceso al Sitio */}
+      <Card className={`border-0 ${siteAccessEnabled ? 'border-green-200 bg-green-50 dark:bg-green-950/20 dark:border-green-800' : 'border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-800'}`}>
+        <CardContent className="p-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              {siteAccessEnabled ? (
+                <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
+                  <Shield className="h-6 w-6 text-green-600 dark:text-green-400" />
+                </div>
+              ) : (
+                <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
+                  <ShieldOff className="h-6 w-6 text-red-600 dark:text-red-400" />
+                </div>
+              )}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  {siteAccessEnabled ? 'Sitio Web Habilitado' : 'Sitio Web Bloqueado'}
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  {siteAccessEnabled 
+                    ? 'Los conductores pueden acceder al sitio web normalmente' 
+                    : 'El acceso al sitio web está bloqueado para todos los conductores'}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="text-right">
+                <div className={`text-sm font-medium ${siteAccessEnabled ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                  {siteAccessEnabled ? 'ACTIVO' : 'BLOQUEADO'}
+                </div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">
+                  Estado actual
+                </div>
+              </div>
+              <Switch
+                checked={siteAccessEnabled}
+                onCheckedChange={handleSiteAccessChange}
+                className="data-[state=checked]:bg-green-600"
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Filtros */}
       <Card>
         <CardHeader>
@@ -516,13 +634,23 @@ export const GarantizadoModule: React.FC = () => {
             <div>
               <select
                 value={flotaFilter}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFlotaFilter(e.target.value as 'SELECCIONAR' | 'YEGO BLACK' | 'YEGO' | 'YEGO PLUS')}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFlotaFilter(e.target.value)}
                 className="w-full px-3 py-2 h-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                disabled={loadingFlotas || flotas.length === 0}
               >
-                <option value="SELECCIONAR">Seleccionar flota</option>
-                <option value="YEGO BLACK">Yego Black</option>
-                <option value="YEGO">Yego</option>
-                <option value="YEGO PLUS">Yego Plus</option>
+                <option value="SELECCIONAR">
+                  {loadingFlotas 
+                    ? 'Cargando flotas...' 
+                    : flotas.length === 0 
+                      ? 'Error al cargar flotas' 
+                      : 'Seleccionar flota'
+                  }
+                </option>
+                {flotas.map((flota) => (
+                  <option key={flota.flotaId} value={flota.flotaId}>
+                    {flota.flotaName}
+                  </option>
+                ))}
               </select>
             </div>
           </div>

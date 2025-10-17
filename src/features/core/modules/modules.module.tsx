@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { 
   Table, 
   TableBody, 
@@ -31,213 +31,314 @@ import {
   Edit, 
   Trash2, 
   Search,
-  ToggleLeft,
-  ToggleRight,
-  Eye,
-  EyeOff,
+  CheckCircle,
+  AlertCircle,
+  Globe,
   Save,
   X,
-  Database,
-  Filter
+  AlertTriangle
 } from 'lucide-react';
 import { useAuth } from "@/shared/hooks/useAuth";
 import { api } from '../../../services';
 import AccessRestricted from '@/shared/components/AccessRestricted';
+import SocketService from '../../../services/socket-service';
 
-interface Module {
+// Interfaces para Sistemas Externos
+interface SistemaExternoResponse {
   id: number;
-  name: string;
-  description: string;
-  route: string;
-  icon: string;
-  order: number;
-  active: boolean;
-  visible: boolean;
-  permissions: string[];
+  nombre: string;
+  descripcion: string;
+  url: string; // Campo que envía el backend
+  estado: 'ACTIVO' | 'MANTENIMIENTO' | 'ERROR' | 'INACTIVO';
+  tipo: string;
+  ultimoCheck: string;
+  activo: boolean;
   createdAt: string;
   updatedAt: string;
 }
 
-interface CreateModuleData {
-  name: string;
-  description: string;
-  route: string;
-  icon: string;
-  order: number;
-  active: boolean;
-  visible: boolean;
-  permissions: string[];
+interface CreateSistemaExternoData {
+  nombre: string;
+  descripcion: string;
+  url: string;
 }
 
-const ModulesModule: React.FC = () => {
+interface SistemaEstadoCambiadoEvent {
+  sistemaId: number;
+  nombre: string;
+  path: string;
+  urlCompleta: string;
+  estadoAnterior: string;
+  estadoNuevo: string;
+  tipo: string;
+  timestamp: string;
+}
+
+interface SistemaVerificadoEvent {
+  sistemaId: number;
+  nombre: string;
+  path: string;
+  urlCompleta: string;
+  estado: string;
+  tipo: string;
+  timestamp: string;
+  exitoso: boolean;
+  mensaje: string;
+}
+
+const SistemasExternosModule: React.FC = () => {
   const authState = useAuth();
-  const [modules, setModules] = useState<Module[]>([]);
+  const [sistemas, setSistemas] = useState<SistemaExternoResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [showInactive, setShowInactive] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string>('TODOS');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [editingModule, setEditingModule] = useState<Module | null>(null);
-  const [formData, setFormData] = useState<CreateModuleData>({
-    name: '',
-    description: '',
-    route: '',
-    icon: '',
-    order: 0,
-    active: true,
-    visible: true,
-    permissions: []
+  const [editingSistema, setEditingSistema] = useState<SistemaExternoResponse | null>(null);
+  const [notifications, setNotifications] = useState<Array<{id: string, message: string, type: 'success' | 'error' | 'warning'}>>([]);
+
+  const [isConnected, setIsConnected] = useState(false);
+  const [deleteModal, setDeleteModal] = useState<{open: boolean, sistema: SistemaExternoResponse | null}>({open: false, sistema: null});
+
+  const [formData, setFormData] = useState<CreateSistemaExternoData>({
+    nombre: '',
+    descripcion: '',
+    url: ''
   });
 
-  const availableIcons = [
-    'users', 'settings', 'shield', 'file-text', 'upload', 
-    'layers', 'database', 'activity', 'calendar', 'bar-chart',
-    'home', 'user', 'lock', 'unlock', 'eye', 'eye-off'
+
+  const estadosSistema = [
+    { value: 'ACTIVO', label: 'Activo', color: 'green' },
+    { value: 'MANTENIMIENTO', label: 'Mantenimiento', color: 'orange' },
+    { value: 'ERROR', label: 'Error', color: 'red' },
+    { value: 'INACTIVO', label: 'Inactivo', color: 'gray' }
   ];
 
-  const availablePermissions = [
-    'users.create', 'users.read', 'users.update', 'users.delete',
-    'roles.create', 'roles.read', 'roles.update', 'roles.delete',
-    'permissions.create', 'permissions.read', 'permissions.update', 'permissions.delete',
-    'modules.create', 'modules.read', 'modules.update', 'modules.delete',
-    'imports.create', 'imports.read', 'imports.update', 'imports.delete'
-  ];
+  // Función para formatear timestamp
+  const formatTimestamp = (timestamp: string) => {
+    return new Date(timestamp).toLocaleString('es-PE');
+  };
 
+
+  // Configurar WebSocket usando el servicio centralizado
   useEffect(() => {
-    fetchModules();
+    const handleStatusChange = (status: string) => {
+      setIsConnected(status === 'connected');
+    };
+
+    // Suscribirse a cambios de estado del socket
+    SocketService.onStatusChange(handleStatusChange);
+    
+    // Obtener estado actual
+    setIsConnected(SocketService.getConnectionStatus() === 'connected');
+
+    // Suscribirse a eventos de sistemas externos
+    SocketService.on('sistemas-externos', handleSistemaEvent);
+    SocketService.on('sistema-estado-cambiado', handleEstadoCambiado);
+    SocketService.on('sistema-verificado', handleSistemaVerificado);
+
+    return () => {
+      SocketService.offStatusChange(handleStatusChange);
+      SocketService.off('sistemas-externos', handleSistemaEvent);
+      SocketService.off('sistema-estado-cambiado', handleEstadoCambiado);
+      SocketService.off('sistema-verificado', handleSistemaVerificado);
+    };
   }, []);
 
-  const fetchModules = async () => {
+
+  const handleSistemaEvent = (event: any) => {
+    console.log('📡 Evento de sistema recibido:', event);
+    fetchSistemas(); // Actualizar la lista
+  };
+
+  const handleEstadoCambiado = (event: SistemaEstadoCambiadoEvent) => {
+    console.log('🔄 Estado cambiado:', event);
+    
+    // Actualizar el sistema en la lista
+    setSistemas(prev => prev.map(sistema => 
+      sistema.id === event.sistemaId 
+        ? { ...sistema, estado: event.estadoNuevo as any, updatedAt: event.timestamp }
+        : sistema
+    ));
+
+    // Mostrar notificación
+    showNotification(
+      `${event.nombre} cambió de ${event.estadoAnterior} a ${event.estadoNuevo}`,
+      event.estadoNuevo === 'ERROR' ? 'error' : 'success'
+    );
+  };
+
+  const handleSistemaVerificado = (event: SistemaVerificadoEvent) => {
+    console.log('✅ Sistema verificado:', event);
+    
+    
+    if (event.exitoso) {
+      showNotification(`${event.nombre} está funcionando correctamente`, 'success');
+    } else {
+      showNotification(`${event.nombre} no responde: ${event.mensaje}`, 'error');
+    }
+
+    // Actualizar último check
+    setSistemas(prev => prev.map(sistema => 
+      sistema.id === event.sistemaId 
+        ? { ...sistema, ultimoCheck: event.timestamp }
+        : sistema
+    ));
+  };
+
+  const showNotification = (message: string, type: 'success' | 'error' | 'warning') => {
+    const id = Date.now().toString();
+    const notification = { id, message, type };
+    
+    setNotifications(prev => [...prev, notification]);
+    
+    // Remover notificación después de 5 segundos
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 5000);
+
+    // Sonido de alerta para errores
+    if (type === 'error') {
+      // Aquí puedes agregar sonido de alerta
+      console.log('🔔 Alerta de error:', message);
+    }
+  };
+
+
+  useEffect(() => {
+    fetchSistemas();
+  }, []);
+
+  const fetchSistemas = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/modules/all');
-      setModules(response.data);
+      const response = await api.get('/sistemas-externos');
+      setSistemas(response.data);
     } catch (error) {
-      console.error('Error fetching modules:', error);
+      console.error('Error fetching sistemas externos:', error);
+      showNotification('Error al cargar sistemas externos', 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCreateModule = async () => {
+  const handleCreateSistema = async () => {
     try {
-      await api.post('/modules', formData);
+      const dataToSend = {
+        ...formData,
+        tipo: 'GARANTIZADO',
+        activo: true
+      };
+      await api.post('/sistemas-externos', dataToSend);
       setIsCreateDialogOpen(false);
       setFormData({
-        name: '',
-        description: '',
-        route: '',
-        icon: '',
-        order: 0,
-        active: true,
-        visible: true,
-        permissions: []
+        nombre: '',
+        descripcion: '',
+        url: ''
       });
-      fetchModules();
-    } catch (error) {
-      console.error('Error creating module:', error);
+      fetchSistemas();
+      showNotification('Sistema externo creado exitosamente', 'success');
+    } catch (error: any) {
+      console.error('Error creating sistema externo:', error);
+      showNotification(error.response?.data?.message || 'Error al crear sistema externo', 'error');
     }
   };
 
-  const handleUpdateModule = async (id: number) => {
+  const handleUpdateSistema = async (id: number) => {
     try {
-      await api.patch(`/modules/${id}`, formData);
-      setEditingModule(null);
+      const dataToSend = {
+        ...formData,
+        tipo: 'GARANTIZADO',
+        activo: true
+      };
+      await api.put(`/sistemas-externos/${id}`, dataToSend);
+      setEditingSistema(null);
       setFormData({
-        name: '',
-        description: '',
-        route: '',
-        icon: '',
-        order: 0,
-        active: true,
-        visible: true,
-        permissions: []
+        nombre: '',
+        descripcion: '',
+        url: ''
       });
-      fetchModules();
-    } catch (error) {
-      console.error('Error updating module:', error);
+      fetchSistemas();
+      showNotification('Sistema externo actualizado exitosamente', 'success');
+    } catch (error: any) {
+      console.error('Error updating sistema externo:', error);
+      showNotification(error.response?.data?.message || 'Error al actualizar sistema externo', 'error');
     }
   };
 
-  const handleDeleteModule = async (id: number) => {
-    if (window.confirm('¿Estás seguro de que quieres eliminar este módulo?')) {
+  const handleDeleteSistema = (sistema: SistemaExternoResponse) => {
+    setDeleteModal({ open: true, sistema });
+  };
+
+  const confirmDeleteSistema = async () => {
+    if (deleteModal.sistema) {
       try {
-        await api.delete(`/modules/${id}`);
-        fetchModules();
-      } catch (error) {
-        console.error('Error deleting module:', error);
+        await api.delete(`/sistemas-externos/${deleteModal.sistema.id}`);
+        setDeleteModal({ open: false, sistema: null });
+        fetchSistemas();
+        showNotification('Sistema externo eliminado exitosamente', 'success');
+      } catch (error: any) {
+        console.error('Error deleting sistema externo:', error);
+        showNotification(error.response?.data?.message || 'Error al eliminar sistema externo', 'error');
       }
     }
   };
 
-  const handleToggleActive = async (module: Module) => {
-    try {
-      await api.patch(`/modules/${module.id}`, {
-        active: !module.active
-      });
-      fetchModules();
-    } catch (error) {
-      console.error('Error toggling module status:', error);
-    }
-  };
 
-  const handleToggleVisible = async (module: Module) => {
-    try {
-      await api.patch(`/modules/${module.id}`, {
-        visible: !module.visible
-      });
-      fetchModules();
-    } catch (error) {
-      console.error('Error toggling module visibility:', error);
-    }
-  };
 
-  const filteredModules = modules.filter(module => {
-    // Filtrar por búsqueda
-    const matchesSearch = module.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         module.description.toLowerCase().includes(searchTerm.toLowerCase());
+  const handleToggleActive = async (sistema: SistemaExternoResponse) => {
+    const nuevoEstado = !sistema.activo;
     
-    // Filtrar por estado activo/inactivo
-    const matchesStatus = showInactive ? true : module.active;
+    try {
+      console.log(`🔄 Cambiando estado del sistema "${sistema.nombre}" de ${sistema.activo ? 'ACTIVO' : 'INACTIVO'} a ${nuevoEstado ? 'ACTIVO' : 'INACTIVO'}`);
+      
+      // Enviar petición al backend para cambiar el estado
+      await api.put(`/sistemas-externos/${sistema.id}/toggle-active`, {
+        activo: nuevoEstado
+      });
+      
+      // Actualizar la lista
+      fetchSistemas();
+      
+      // Mostrar notificación
+      if (nuevoEstado) {
+        showNotification(`✅ Sistema "${sistema.nombre}" activado correctamente`, 'success');
+      } else {
+        showNotification(`⚠️ Sistema "${sistema.nombre}" desactivado - Se notificará al sistema externo`, 'warning');
+      }
+      
+    } catch (error: any) {
+      console.error('❌ Error cambiando estado del sistema:', error);
+      showNotification(error.response?.data?.message || 'Error al cambiar estado del sistema', 'error');
+    }
+  };
+
+  const filteredSistemas = sistemas.filter(sistema => {
+    const matchesSearch = sistema.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         sistema.descripcion.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         sistema.url.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesStatus = statusFilter === 'TODOS' || sistema.estado === statusFilter;
     
     return matchesSearch && matchesStatus;
   });
 
-  const openEditDialog = (module: Module) => {
-    setEditingModule(module);
+  const openEditDialog = (sistema: SistemaExternoResponse) => {
+    setEditingSistema(sistema);
     setFormData({
-      name: module.name,
-      description: module.description,
-      route: module.route,
-      icon: module.icon,
-      order: module.order,
-      active: module.active,
-      visible: module.visible,
-      permissions: module.permissions
+      nombre: sistema.nombre,
+      descripcion: sistema.descripcion,
+      url: sistema.url || '' // Usar el campo url que envía el backend
     });
   };
 
   const closeDialog = () => {
     setIsCreateDialogOpen(false);
-    setEditingModule(null);
+    setEditingSistema(null);
     setFormData({
-      name: '',
-      description: '',
-      route: '',
-      icon: '',
-      order: 0,
-      active: true,
-      visible: true,
-      permissions: []
+      nombre: '',
+      descripcion: '',
+      url: ''
     });
-  };
-
-  const handlePermissionToggle = (permission: string) => {
-    const currentPermissions = formData.permissions;
-    const newPermissions = currentPermissions.includes(permission)
-      ? currentPermissions.filter(p => p !== permission)
-      : [...currentPermissions, permission];
-    
-    setFormData({ ...formData, permissions: newPermissions });
   };
 
   if (!authState || !authState.isAuthenticated) {
@@ -246,24 +347,54 @@ const ModulesModule: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Notificaciones */}
+      {notifications.length > 0 && (
+        <div className="fixed top-4 right-4 z-50 space-y-2">
+          {notifications.map(notification => (
+            <div
+              key={notification.id}
+              className={`p-4 rounded-lg shadow-lg max-w-sm ${
+                notification.type === 'success' ? 'bg-green-500 text-white' :
+                notification.type === 'error' ? 'bg-red-500 text-white' :
+                'bg-orange-500 text-white'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                {notification.type === 'success' ? <CheckCircle className="h-5 w-5" /> :
+                 notification.type === 'error' ? <AlertTriangle className="h-5 w-5" /> :
+                 <AlertCircle className="h-5 w-5" />}
+                <span className="text-sm font-medium">{notification.message}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="yego-heading-1 mb-2">
-            Gestión de Módulos
+            Sistemas Externos
           </h1>
           <p className="yego-body">
-            Administra los módulos del sistema de forma dinámica
+            Gestión y monitoreo de sistemas externos en tiempo real
           </p>
+          <div className="flex items-center gap-2 mt-2">
+            <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+            <span className="text-sm text-gray-600 dark:text-gray-400">
+              WebSocket {isConnected ? 'Conectado' : 'Desconectado'}
+            </span>
+          </div>
         </div>
         <Button 
           variant="primary"
           onClick={() => setIsCreateDialogOpen(true)}
           leftIcon={<Plus className="h-4 w-4" />}
         >
-          Nuevo Módulo
+          Nuevo Sistema
         </Button>
       </div>
+
 
       {/* Search and Filters */}
       <Card>
@@ -272,31 +403,35 @@ const ModulesModule: React.FC = () => {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400 w-4 h-4" />
               <Input
-                placeholder="Buscar módulos..."
+                placeholder="Buscar sistemas externos..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"
               />
             </div>
-            <Button
-              variant={showInactive ? "primary" : "secondary"}
-              size="sm"
-              onClick={() => setShowInactive(!showInactive)}
-              leftIcon={<Filter className="h-4 w-4" />}
-              className="whitespace-nowrap"
-            >
-              {showInactive ? "Ocultar inactivos" : "Mostrar inactivos"}
-            </Button>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-full sm:w-48">
+                <SelectValue placeholder="Filtrar por estado" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="TODOS">Todos los estados</SelectItem>
+                {estadosSistema.map(estado => (
+                  <SelectItem key={estado.value} value={estado.value}>
+                    {estado.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>
 
-      {/* Modules Table */}
+      {/* Sistemas Table */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Database className="h-5 w-5 text-primary-500" />
-            Módulos del Sistema
+            <Globe className="h-5 w-5 text-primary-500" />
+            Sistemas Externos ({filteredSistemas.length})
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -304,15 +439,15 @@ const ModulesModule: React.FC = () => {
             <div className="flex items-center justify-center py-12">
               <div className="flex flex-col items-center gap-4">
                 <div className="w-10 h-10 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
-                <p className="yego-body-sm">Cargando módulos...</p>
+                <p className="yego-body-sm">Cargando sistemas externos...</p>
               </div>
             </div>
-          ) : filteredModules.length === 0 ? (
+          ) : filteredSistemas.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
-              <Database className="h-12 w-12 text-neutral-300 dark:text-neutral-600 mb-4" />
-              <h3 className="yego-heading-4 mb-2">No se encontraron módulos</h3>
+              <Globe className="h-12 w-12 text-neutral-300 dark:text-neutral-600 mb-4" />
+              <h3 className="yego-heading-4 mb-2">No se encontraron sistemas</h3>
               <p className="yego-body-sm max-w-md">
-                No hay módulos que coincidan con tu búsqueda. Intenta con otros términos o crea un nuevo módulo.
+                No hay sistemas externos que coincidan con tu búsqueda. Intenta con otros términos o crea un nuevo sistema.
               </p>
             </div>
           ) : (
@@ -320,79 +455,62 @@ const ModulesModule: React.FC = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Orden</TableHead>
                     <TableHead>Nombre</TableHead>
                     <TableHead>Descripción</TableHead>
-                    <TableHead>Ruta</TableHead>
-                    <TableHead>Estado</TableHead>
-                    <TableHead>Visibilidad</TableHead>
+                    <TableHead>Path</TableHead>
+                    <TableHead>Último Check</TableHead>
+                    <TableHead>Activo</TableHead>
                     <TableHead>Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredModules.map((module) => (
-                    <TableRow key={module.id} className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors">
-                      <TableCell>{module.order}</TableCell>
-                      <TableCell className="font-medium text-neutral-900 dark:text-neutral-100">{module.name}</TableCell>
-                      <TableCell>{module.description}</TableCell>
-                      <TableCell>
-                        <code className="text-xs bg-neutral-100 dark:bg-neutral-800 px-2 py-1 rounded font-mono">
-                          {module.route}
-                        </code>
+                  {filteredSistemas.map((sistema) => (
+                    <TableRow key={sistema.id} className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors">
+                      <TableCell className="font-medium text-neutral-900 dark:text-neutral-100">
+                        {sistema.nombre}
                       </TableCell>
+                      <TableCell>{sistema.descripcion}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
+                          <code className="text-xs bg-neutral-100 dark:bg-neutral-800 px-2 py-1 rounded font-mono">
+                            {sistema.url || 'Sin URL'}
+                          </code>
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleToggleActive(module)}
-                            className={module.active ? 'text-success-600 dark:text-success-400' : 'text-error-600 dark:text-error-400'}
+                            onClick={() => window.open(sistema.url, '_blank')}
+                            className="p-1 h-6 w-6"
+                            disabled={!sistema.url}
                           >
-                            {module.active ? (
-                              <ToggleRight className="h-5 w-5" />
-                            ) : (
-                              <ToggleLeft className="h-5 w-5" />
-                            )}
+                            <Globe className="h-3 w-3" />
                           </Button>
-                          <Badge variant={module.active ? "success" : "error"}>
-                            {module.active ? "Activo" : "Inactivo"}
-                          </Badge>
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleToggleVisible(module)}
-                            className={module.visible ? 'text-primary-600 dark:text-primary-400' : 'text-neutral-500 dark:text-neutral-500'}
-                          >
-                            {module.visible ? (
-                              <Eye className="h-5 w-5" />
-                            ) : (
-                              <EyeOff className="h-5 w-5" />
-                            )}
-                          </Button>
-                          <Badge variant={module.visible ? "primary" : "secondary"}>
-                            {module.visible ? "Visible" : "Oculto"}
-                          </Badge>
-                        </div>
+                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                          {sistema.ultimoCheck ? formatTimestamp(sistema.ultimoCheck) : 'Nunca'}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <Switch
+                          checked={sistema.activo}
+                          onCheckedChange={() => handleToggleActive(sistema)}
+                          className="data-[state=checked]:bg-green-600"
+                        />
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-2">
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => openEditDialog(module)}
-                            className="text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300"
+                            onClick={() => openEditDialog(sistema)}
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleDeleteModule(module.id)}
-                            className="text-error-600 dark:text-error-400 hover:text-error-700 dark:hover:text-error-300"
+                            onClick={() => handleDeleteSistema(sistema)}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -408,120 +526,48 @@ const ModulesModule: React.FC = () => {
       </Card>
 
       {/* Create/Edit Dialog */}
-      <Dialog open={isCreateDialogOpen || !!editingModule} onOpenChange={closeDialog}>
+      <Dialog open={isCreateDialogOpen || !!editingSistema} onOpenChange={closeDialog}>
         <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Database className="h-5 w-5 text-primary-500" />
-              {editingModule ? 'Editar Módulo' : 'Crear Nuevo Módulo'}
+              <Globe className="h-5 w-5 text-primary-500" />
+              {editingSistema ? 'Editar Sistema Externo' : 'Crear Nuevo Sistema Externo'}
             </DialogTitle>
             <DialogDescription>
-              {editingModule
-                ? 'Edita los datos del módulo seleccionado.'
-                : 'Completa el formulario para crear un nuevo módulo en el sistema.'}
+              {editingSistema
+                ? 'Edita los datos del sistema externo seleccionado.'
+                : 'Completa el formulario para crear un nuevo sistema externo.'}
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-6 mt-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Nombre</label>
-                <Input
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="Gestión de Usuarios"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Orden</label>
-                <Input
-                  type="number"
-                  value={formData.order}
-                  onChange={(e) => setFormData({ ...formData, order: parseInt(e.target.value) || 0 })}
-                  placeholder="1"
-                />
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Nombre</label>
+              <Input
+                value={formData.nombre}
+                onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                placeholder="Sistema Garantizado"
+              />
             </div>
             
             <div>
               <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Descripción</label>
               <Input
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Administrar usuarios del sistema"
+                value={formData.descripcion}
+                onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
+                placeholder="Sistema de garantías de Yego"
               />
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Ruta</label>
+              <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">URL</label>
               <Input
-                value={formData.route}
-                onChange={(e) => setFormData({ ...formData, route: e.target.value })}
-                placeholder="/users"
+                value={formData.url}
+                onChange={(e) => setFormData({ ...formData, url: e.target.value })}
+                placeholder="http://localhost:8081/api/pagos"
               />
             </div>
             
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Icono</label>
-              <Select value={formData.icon} onValueChange={(value) => setFormData({ ...formData, icon: value })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar icono" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableIcons.map(icon => (
-                    <SelectItem key={icon} value={icon}>
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 bg-neutral-100 dark:bg-neutral-800 rounded-md flex items-center justify-center">
-                          <span className="text-neutral-700 dark:text-neutral-300">{icon}</span>
-                        </div>
-                        <span>{icon}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="active"
-                  checked={formData.active}
-                  onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
-                  className="rounded border-neutral-300 dark:border-neutral-700 text-primary-500 focus:ring-primary-500 dark:bg-neutral-700"
-                />
-                <label htmlFor="active" className="text-sm font-medium text-neutral-700 dark:text-neutral-300">Activo</label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="visible"
-                  checked={formData.visible}
-                  onChange={(e) => setFormData({ ...formData, visible: e.target.checked })}
-                  className="rounded border-neutral-300 dark:border-neutral-700 text-primary-500 focus:ring-primary-500 dark:bg-neutral-700"
-                />
-                <label htmlFor="visible" className="text-sm font-medium text-neutral-700 dark:text-neutral-300">Visible</label>
-              </div>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Permisos Requeridos</label>
-              <div className="grid grid-cols-2 gap-2 mt-2 max-h-40 overflow-y-auto border border-neutral-200 dark:border-neutral-700 rounded-lg p-3">
-                {availablePermissions.map(permission => (
-                  <div key={permission} className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id={permission}
-                      checked={formData.permissions.includes(permission)}
-                      onChange={() => handlePermissionToggle(permission)}
-                      className="rounded border-neutral-300 dark:border-neutral-700 text-primary-500 focus:ring-primary-500 dark:bg-neutral-700"
-                    />
-                    <label htmlFor={permission} className="text-sm text-neutral-700 dark:text-neutral-300">{permission}</label>
-                  </div>
-                ))}
-              </div>
-            </div>
           </div>
           
           <DialogFooter className="mt-6">
@@ -534,10 +580,63 @@ const ModulesModule: React.FC = () => {
             </Button>
             <Button 
               variant="primary"
-              onClick={() => editingModule ? handleUpdateModule(editingModule.id) : handleCreateModule()}
+              onClick={() => editingSistema ? handleUpdateSistema(editingSistema.id) : handleCreateSistema()}
               leftIcon={<Save className="h-4 w-4" />}
             >
-              {editingModule ? 'Actualizar' : 'Crear'}
+              {editingSistema ? 'Actualizar' : 'Crear'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Confirmación de Eliminación */}
+      <Dialog open={deleteModal.open} onOpenChange={() => setDeleteModal({open: false, sistema: null})}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-error-600 dark:text-error-400">
+              <Trash2 className="h-5 w-5" />
+              Confirmar Eliminación
+            </DialogTitle>
+            <DialogDescription>
+              Esta acción no se puede deshacer. Se eliminará permanentemente el sistema externo y todos sus datos.
+            </DialogDescription>
+          </DialogHeader>
+          {deleteModal.sistema && (
+            <div className="py-4">
+              <div className="bg-neutral-50 dark:bg-neutral-800 rounded-lg p-4 border border-neutral-200 dark:border-neutral-700">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-neutral-100 dark:bg-neutral-700 rounded-full flex items-center justify-center">
+                    <Globe className="h-5 w-5 text-neutral-500" />
+                  </div>
+                  <div>
+                    <div className="font-semibold text-neutral-900 dark:text-white">
+                      {deleteModal.sistema.nombre}
+                    </div>
+                    <div className="text-sm text-neutral-500">
+                      {deleteModal.sistema.descripcion}
+                    </div>
+                    <div className="text-xs text-neutral-400 mt-1">
+                      {deleteModal.sistema.url} • {deleteModal.sistema.tipo}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setDeleteModal({open: false, sistema: null})}
+              className="flex-1"
+            >
+              Cancelar
+            </Button>
+            <Button 
+              variant="danger"
+              onClick={confirmDeleteSistema}
+              className="flex-1"
+            >
+              Eliminar Sistema
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -546,7 +645,4 @@ const ModulesModule: React.FC = () => {
   );
 };
 
-export default ModulesModule;
-
-
-
+export default SistemasExternosModule;

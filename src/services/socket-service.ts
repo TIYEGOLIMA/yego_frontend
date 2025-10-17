@@ -171,6 +171,9 @@ class SocketService {
           // Suscribirse a eventos de Ticketera
           this.subscribeToTicketeraEvents();
           
+          // Suscribirse a eventos de Sistemas Externos
+          this.subscribeToSistemasExternosEvents();
+          
           // Iniciar heartbeat para detectar desconexiones
           this.startHeartbeat();
         },
@@ -303,6 +306,53 @@ class SocketService {
     });
 
     console.log('✅ [SocketService] Suscrito a todos los topics de tickets');
+  }
+
+  /**
+   * Suscribirse a eventos de Sistemas Externos
+   */
+  private subscribeToSistemasExternosEvents() {
+    if (!this.stompClient || !this.stompClient.connected) {
+      console.log('⚠️ [SocketService] Cliente STOMP no conectado, no se pueden suscribir eventos de sistemas externos');
+      return;
+    }
+
+    // 🎯 SUSCRIBIRSE AL TOPIC PRINCIPAL: /topic/sistemas-externos
+    this.stompClient.subscribe('/topic/sistemas-externos', (message: IMessage) => {
+      try {
+        const event = JSON.parse(message.body);
+        console.log('🌐 [SocketService] Evento de sistemas externos recibido:', event);
+        
+        // Emitir evento genérico de sistemas externos
+        this.emit('sistemas-externos', event);
+      } catch (error) {
+        console.error('❌ [SocketService] Error procesando evento de sistemas externos:', error);
+      }
+    });
+
+    // 🎯 Topic para cambios de estado
+    this.stompClient.subscribe('/topic/sistema-estado-cambiado', (message: IMessage) => {
+      try {
+        const event = JSON.parse(message.body);
+        console.log('🔄 [SocketService] Estado de sistema cambiado:', event);
+        this.emit('sistema-estado-cambiado', event);
+      } catch (error) {
+        console.error('❌ [SocketService] Error procesando cambio de estado:', error);
+      }
+    });
+
+    // 🎯 Topic para verificaciones
+    this.stompClient.subscribe('/topic/sistema-verificado', (message: IMessage) => {
+      try {
+        const event = JSON.parse(message.body);
+        console.log('✅ [SocketService] Sistema verificado:', event);
+        this.emit('sistema-verificado', event);
+      } catch (error) {
+        console.error('❌ [SocketService] Error procesando verificación:', error);
+      }
+    });
+
+    console.log('✅ [SocketService] Suscrito a todos los topics de sistemas externos');
   }
 
   /**

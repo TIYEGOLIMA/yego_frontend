@@ -1,98 +1,85 @@
-import { useState, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useAuthStore } from '../store/auth-store'
-import SystemNotificationsService from '../services/system-notifications-service'
-import { ForcedLogoutEvent, AccountBlockedEvent } from '../types/system-notifications'
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuthStore } from '../store/auth-store';
+import systemNotificationsService from '../services/system-notifications-service';
+import { ForcedLogoutEvent, AccountBlockedEvent } from '../types/system-notifications';
+
+export interface SystemNotificationsState {
+  forcedLogoutModal: {
+    isOpen: boolean;
+    event: ForcedLogoutEvent | null;
+  };
+  accountBlockedModal: {
+    isVisible: boolean;
+    event: AccountBlockedEvent | null;
+  };
+}
 
 export const useSystemNotifications = () => {
-  const [forcedLogoutModal, setForcedLogoutModal] = useState<{
-    isOpen: boolean
-    event: ForcedLogoutEvent | null
-  }>({
+  const navigate = useNavigate();
+  const { logout } = useAuthStore();
+  
+  const [forcedLogoutModal, setForcedLogoutModal] = useState({
     isOpen: false,
-    event: null
-  })
-
-  const [accountBlockedModal, setAccountBlockedModal] = useState<{
-    isVisible: boolean
-    event: AccountBlockedEvent | null
-  }>({
+    event: null as ForcedLogoutEvent | null
+  });
+  
+  const [accountBlockedModal, setAccountBlockedModal] = useState({
     isVisible: false,
-    event: null
-  })
+    event: null as AccountBlockedEvent | null
+  });
 
-  const { user, logout } = useAuthStore()
-  const navigate = useNavigate()
-
-  // Usar useCallback para mantener referencias estables
-  const handleForcedLogoutEvent = useCallback((event: ForcedLogoutEvent) => {
-    const currentUser = useAuthStore.getState().user
-    if (currentUser && event.userId === currentUser.id) {
+  useEffect(() => {
+    // Configurar callbacks para eventos del sistema
+    systemNotificationsService.setOnForcedLogout((event: ForcedLogoutEvent) => {
+      console.log('🚪 [SystemNotifications] Forced logout event received:', event);
       setForcedLogoutModal({
         isOpen: true,
         event
-      })
-    }
-  }, [])
+      });
+    });
 
-  const handleAccountBlockedEvent = useCallback((event: AccountBlockedEvent) => {
-    const currentUser = useAuthStore.getState().user
-    if (currentUser && event.userId === currentUser.id) {
+    systemNotificationsService.setOnAccountBlocked((event: AccountBlockedEvent) => {
+      console.log('🚫 [SystemNotifications] Account blocked event received:', event);
       setAccountBlockedModal({
         isVisible: true,
         event
-      })
-    }
-  }, [])
+      });
+    });
 
-  useEffect(() => {
-    if (!user) return
-    
-    // Reconectar el servicio con el nuevo token
-    const token = localStorage.getItem('token')
-    if (token && !SystemNotificationsService.getConnectionStatus()) {
-      SystemNotificationsService.reconnect()
-    }
-    
-    // Registrar callbacks
-    SystemNotificationsService.setOnForcedLogout(handleForcedLogoutEvent)
-    SystemNotificationsService.setOnAccountBlocked(handleAccountBlockedEvent)
-
-    // Cleanup al desmontar o cuando cambie el usuario
+    // Cleanup al desmontar
     return () => {
-      SystemNotificationsService.setOnForcedLogout(null)
-      SystemNotificationsService.setOnAccountBlocked(null)
-    }
-  }, [user?.id, handleForcedLogoutEvent, handleAccountBlockedEvent])
+      systemNotificationsService.setOnForcedLogout(null);
+      systemNotificationsService.setOnAccountBlocked(null);
+    };
+  }, []);
 
-  const handleForcedLogout = async () => {
-    try {
-      setForcedLogoutModal({ isOpen: false, event: null })
-      await logout()
-      navigate('/login')
-    } catch (error) {
-      console.error('Error en logout forzado:', error)
-      navigate('/login')
-    }
-  }
+  const handleForcedLogout = () => {
+    console.log('🚪 [SystemNotifications] Handling forced logout');
+    logout();
+    setForcedLogoutModal({
+      isOpen: false,
+      event: null
+    });
+    navigate('/login');
+  };
 
-  const handleAccountBlocked = async () => {
-    try {
-      setAccountBlockedModal({ isVisible: false, event: null })
-      await logout()
-      localStorage.clear()
-      window.location.href = '/login'
-    } catch (error) {
-      console.error('Error en bloqueo de cuenta:', error)
-      localStorage.clear()
-      window.location.href = '/login'
-    }
-  }
+  const handleAccountBlocked = () => {
+    console.log('🚫 [SystemNotifications] Handling account blocked');
+    logout();
+    setAccountBlockedModal({
+      isVisible: false,
+      event: null
+    });
+    navigate('/login');
+  };
 
   return {
     forcedLogoutModal,
     accountBlockedModal,
     handleForcedLogout,
     handleAccountBlocked
-  }
-}
+  };
+};
+
+export default useSystemNotifications;
