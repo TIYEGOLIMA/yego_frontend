@@ -98,6 +98,24 @@ const UsersModule: React.FC = () => {
   const [deleteModal, setDeleteModal] = useState<{open: boolean, user: User | null}>({open: false, user: null});
   const [forcedLogoutModal, setForcedLogoutModal] = useState<{open: boolean, message: string}>({open: false, message: ''});
   
+  // Función para validar requisitos de contraseña
+  const validatePassword = (password: string) => {
+    const hasUpperCase = /[A-Z]/.test(password);
+    const hasLowerCase = /[a-z]/.test(password);
+    const hasNumbers = /\d/.test(password);
+    const hasSpecialChar = /[!@#$%^&*(),.?\":{}|<>]/.test(password);
+    const isLongEnough = password.length >= 8;
+
+    return {
+      hasUpperCase,
+      hasLowerCase,
+      hasNumbers,
+      hasSpecialChar,
+      isLongEnough,
+      isValid: hasUpperCase && hasLowerCase && hasNumbers && hasSpecialChar && isLongEnough
+    };
+  };
+  
   // Estados de paginación
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -243,6 +261,17 @@ const UsersModule: React.FC = () => {
         return;
       }
 
+      // Validar requisitos de contraseña
+      const passwordValidation = validatePassword(formData.password);
+      if (!passwordValidation.isValid) {
+        setErrorModal({
+          open: true,
+          title: 'Error de Validación de Contraseña',
+          message: 'La contraseña no cumple con los requisitos de seguridad. Debe tener al menos una letra mayúscula, una minúscula, un número, un carácter especial y mínimo 8 caracteres.'
+        });
+        return;
+      }
+
       const userData = {
         username: formData.username.trim(),
         email: formData.email.trim(),
@@ -295,6 +324,16 @@ const UsersModule: React.FC = () => {
       
       // Solo incluir password si tiene contenido, sino enviar undefined
       if (formData.password && formData.password.trim() !== '') {
+        // Validar requisitos de contraseña solo si se está actualizando
+        const passwordValidation = validatePassword(formData.password);
+        if (!passwordValidation.isValid) {
+          setErrorModal({
+            open: true,
+            title: 'Error de Validación de Contraseña',
+            message: 'La contraseña no cumple con los requisitos de seguridad. Debe tener al menos una letra mayúscula, una minúscula, un número, un carácter especial y mínimo 8 caracteres.'
+          });
+          return;
+        }
         updateData.password = formData.password;
       } else {
         updateData.password = null;
@@ -883,6 +922,37 @@ const UsersModule: React.FC = () => {
                   )}
                 </button>
               </div>
+              
+              {/* Validación de contraseña */}
+              {formData.password && (
+                <div className="mt-2 space-y-1">
+                  <div className="text-xs text-neutral-600 dark:text-neutral-400 mb-2">
+                    La contraseña debe cumplir con los siguientes requisitos:
+                  </div>
+                  <div className="space-y-1">
+                    <div className={`flex items-center text-xs ${validatePassword(formData.password).hasUpperCase ? 'text-green-600' : 'text-red-600'}`}>
+                      <div className={`w-2 h-2 rounded-full mr-2 ${validatePassword(formData.password).hasUpperCase ? 'bg-green-600' : 'bg-red-600'}`}></div>
+                      Al menos una letra mayúscula (A-Z)
+                    </div>
+                    <div className={`flex items-center text-xs ${validatePassword(formData.password).hasLowerCase ? 'text-green-600' : 'text-red-600'}`}>
+                      <div className={`w-2 h-2 rounded-full mr-2 ${validatePassword(formData.password).hasLowerCase ? 'bg-green-600' : 'bg-red-600'}`}></div>
+                      Al menos una letra minúscula (a-z)
+                    </div>
+                    <div className={`flex items-center text-xs ${validatePassword(formData.password).hasNumbers ? 'text-green-600' : 'text-red-600'}`}>
+                      <div className={`w-2 h-2 rounded-full mr-2 ${validatePassword(formData.password).hasNumbers ? 'bg-green-600' : 'bg-red-600'}`}></div>
+                      Al menos un número (0-9)
+                    </div>
+                    <div className={`flex items-center text-xs ${validatePassword(formData.password).hasSpecialChar ? 'text-green-600' : 'text-red-600'}`}>
+                      <div className={`w-2 h-2 rounded-full mr-2 ${validatePassword(formData.password).hasSpecialChar ? 'bg-green-600' : 'bg-red-600'}`}></div>
+                      Al menos un carácter especial (!@#$%^&*(),.?":{}|&lt;&gt;)
+                    </div>
+                    <div className={`flex items-center text-xs ${validatePassword(formData.password).isLongEnough ? 'text-green-600' : 'text-red-600'}`}>
+                      <div className={`w-2 h-2 rounded-full mr-2 ${validatePassword(formData.password).isLongEnough ? 'bg-green-600' : 'bg-red-600'}`}></div>
+                      Mínimo 8 caracteres
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             
             <div>
