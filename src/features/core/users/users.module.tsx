@@ -224,9 +224,6 @@ const UsersModule: React.FC = () => {
         console.log(`✅ [UsersModule] ${Array.isArray(response.data) ? response.data.length : 0} usuarios cargados`);
       }
     } catch (error: any) {
-      console.error('❌ [UsersModule] Error fetching users:', error);
-      console.error('❌ [UsersModule] Error details:', error.response?.data);
-      console.error('❌ [UsersModule] Status:', error.response?.status);
       setUsers([]);
       setTotalUsers(0);
     } finally {
@@ -236,24 +233,52 @@ const UsersModule: React.FC = () => {
 
   const handleCreateUser = async () => {
     try {
+      // Validar campos requeridos
+      if (!formData.username.trim() || !formData.email.trim() || !formData.password.trim() || !formData.name.trim()) {
+        setErrorModal({
+          open: true,
+          title: 'Error de Validación',
+          message: 'Todos los campos son obligatorios'
+        });
+        return;
+      }
+
       const userData = {
-        username: formData.username,
-        email: formData.email,
+        username: formData.username.trim(),
+        email: formData.email.trim(),
         password: formData.password,
-        name: formData.name,
+        name: formData.name.trim(),
         role: formData.role,
         active: formData.active !== undefined ? formData.active : true,
-        moduleId: formData.moduleId
+        moduleId: formData.moduleId || null
       };
       
-      console.log('Creando usuario con datos:', userData);
+      await api.post('/users/create', userData);
       
-      await api.post('/users', userData);
       setIsCreateDialogOpen(false);
       resetForm();
       fetchUsers();
-    } catch (error) {
-      console.error('Error creating user:', error);
+    } catch (error: any) {
+      console.error('❌ Error creating user:', error);
+      
+      let errorMessage = 'Error al crear usuario';
+      
+      if (error.response?.status === 400) {
+        errorMessage = 'Datos inválidos. Verifica que todos los campos estén correctos.';
+        if (error.response?.data?.message) {
+          errorMessage = error.response.data.message;
+        }
+      } else if (error.response?.status === 409) {
+        errorMessage = 'El usuario ya existe (username o email duplicado)';
+      } else if (error.response?.status === 403) {
+        errorMessage = 'No tienes permisos para crear usuarios';
+      }
+      
+      setErrorModal({
+        open: true,
+        title: 'Error al Crear Usuario',
+        message: errorMessage
+      });
     }
   };
 
@@ -625,7 +650,7 @@ const UsersModule: React.FC = () => {
                             >
                               <Edit className="h-4 w-4" />
                             </Button>
-                            {(currentUser?.role === 'SUPERADMIN') && (
+                            {currentUser?.role === 'SUPERADMIN' && (
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -689,7 +714,7 @@ const UsersModule: React.FC = () => {
                     >
                       <Edit className="h-4 w-4" />
                     </Button>
-                    {(currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPERADMIN') && (
+                    {currentUser?.role === 'SUPERADMIN' && (
                       <Button
                         variant="ghost"
                         size="sm"

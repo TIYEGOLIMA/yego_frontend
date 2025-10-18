@@ -174,6 +174,9 @@ class SocketService {
           // Suscribirse a eventos de Sistemas Externos
           this.subscribeToSistemasExternosEvents();
           
+          // Suscribirse a eventos de Garantizado
+          this.subscribeToGarantizadoEvents();
+          
           // Iniciar heartbeat para detectar desconexiones
           this.startHeartbeat();
         },
@@ -353,6 +356,47 @@ class SocketService {
     });
 
     console.log('✅ [SocketService] Suscrito a todos los topics de sistemas externos');
+  }
+
+  /**
+   * Suscribirse a eventos de Garantizado
+   */
+  private subscribeToGarantizadoEvents() {
+    if (!this.stompClient || !this.stompClient.connected) {
+      console.log('⚠️ [SocketService] Cliente STOMP no conectado, no se pueden suscribir eventos de garantizado');
+      return;
+    }
+
+    // 🎯 SUSCRIBIRSE AL TOPIC PRINCIPAL: /topic/garantizado
+    this.stompClient.subscribe('/topic/garantizado', (message: IMessage) => {
+      try {
+        const event = JSON.parse(message.body);
+        console.log('📊 [SocketService] Evento de garantizado recibido:', event);
+        
+        // Emitir evento genérico de garantizado
+        this.emit('garantizado', event);
+      } catch (error) {
+        console.error('❌ [SocketService] Error procesando evento de garantizado:', error);
+      }
+    });
+
+    // 🎯 Topic para actualizaciones de tabla
+    this.stompClient.subscribe('/topic/system', (message: IMessage) => {
+      try {
+        const event = JSON.parse(message.body);
+        console.log('🔔 [SocketService] Evento del sistema recibido:', event);
+        
+        // Si es un evento de garantizado, emitirlo
+        if (event.type === 'GARANTIZADO_TABLE_UPDATE') {
+          console.log('📊 [SocketService] Actualización de tabla de garantizado recibida');
+          this.emit('garantizado', event);
+        }
+      } catch (error) {
+        console.error('❌ [SocketService] Error procesando evento del sistema:', error);
+      }
+    });
+
+    console.log('✅ [SocketService] Suscrito a todos los topics de garantizado');
   }
 
   /**

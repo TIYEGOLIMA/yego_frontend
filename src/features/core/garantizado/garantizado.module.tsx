@@ -11,30 +11,37 @@ import {
   Car,
   ChevronLeft,
   ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   Shield,
-  ShieldOff
+  ShieldOff,
+  X
 } from 'lucide-react';
 import { api } from '../../../services/core/api';
+import socketService from '../../../services/socket-service';
 
 interface GarantizadoData {
-  id: string;
+  id: number;
   nombreCompleto: string;
   numeroLicencia: string;
   telefono: string;
   viajes: number;
-  efectivo: number;        // W2
-  pagoSinEfectivo: number; // X2
-  comYango: number;        // Y2
-  comYego: number;         // Z2
-  boSemAnt: number;        // AA2 (se resta)
-  boSemAct: number;        // AB2
-  total: number;           // =W2+X2+Y2+Z2-AA2+AB2
-  garantizado: number;     // =SI(AB2=$AM$10,$AN$10,SI(AB2=$AM$9,$AN$9,SI(AB2=$AM$8,$AN$8,SI(AB2=$AM$5,$AN$5,SI(AB2=$AM$4,$AN$4,SI(AB2=$AM$3,$AN$3,))))))
+  efectivo: number;
+  pagoSinEfectivo: number;
+  comYango: number;
+  comYego: number;
+  boSemAnt: number;
+  boSemAct: number;
+  total: number;
+  garantizado: number;
   diferencia: number;
-  semana: number;
+  semana: string;
   viajesActuales: number;
-  flota: string;
   flotaId: string;
+  garantizadoValor: string;
+  fechaCreacion: string;
+  fechaActualizacion: string;
+  activo: boolean;
 }
 
 interface FlotaResponse {
@@ -44,23 +51,34 @@ interface FlotaResponse {
   flotaSpecifications: string[];
 }
 
+
 export const GarantizadoModule: React.FC = () => {
+  
   const [data, setData] = useState<GarantizadoData[]>([]);
   const [filteredData, setFilteredData] = useState<GarantizadoData[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'TODOS' | 'GARANTIZADO' | 'NO GARANTIZADO'>('TODOS');
-  const [flotaFilter, setFlotaFilter] = useState<string>('SELECCIONAR');
+  const [statusFilter, setStatusFilter] = useState<string>('');
+  const [flotaFilter, setFlotaFilter] = useState<string>('');
   const [flotas, setFlotas] = useState<FlotaResponse[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingTable, setLoadingTable] = useState(false);
   const [loadingFlotas, setLoadingFlotas] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [siteAccessEnabled, setSiteAccessEnabled] = useState(true);
-  const itemsPerPage = 6;
+  const [itemsPerPage] = useState(6);
+  const [totalConductores, setTotalConductores] = useState(0);
+  const [semanaActual, setSemanaActual] = useState<string>('');
+  const [showUpdateNotification, setShowUpdateNotification] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportFilters, setExportFilters] = useState({
+    flotaId: '',
+    estado: '',
+    semana: ''
+  });
 
-  // Función para calcular el TOTAL según la fórmula: =W2+X2+Y2+Z2-AA2+AB2
-  const calculateTotal = (efectivo: number, pagoSinEfectivo: number, comYango: number, comYego: number, boSemAnt: number, boSemAct: number) => {
-    return efectivo + pagoSinEfectivo + comYango + comYego - boSemAnt + boSemAct;
-  };
+  // El backend ya calcula todo automáticamente, no necesitamos calcular nada en el frontend
+
 
   // Función para cargar flotas desde la API
   const cargarFlotas = async () => {
@@ -68,7 +86,7 @@ export const GarantizadoModule: React.FC = () => {
       setLoadingFlotas(true);
       console.log('🔍 [GarantizadoModule] Cargando flotas...');
       
-      const response = await api.get('/garantizado/flotas');
+      const response = await api.get('/flota/todas');
       console.log('✅ [GarantizadoModule] Flotas cargadas:', response.data);
       
       setFlotas(response.data);
@@ -103,393 +121,265 @@ export const GarantizadoModule: React.FC = () => {
     }
   };
 
-  // Función para calcular GARANTIZADO según la fórmula condicional
-  // =SI(AB2=$AM$10,$AN$10,SI(AB2=$AM$9,$AN$9,SI(AB2=$AM$8,$AM$8,SI(AB2=$AM$5,$AN$5,SI(AB2=$AM$4,$AN$4,SI(AB2=$AM$3,$AN$3,))))))
-  const calculateGarantizado = (boSemAct: number) => {
-    // Tabla de rangos de garantizado (estos valores deberían venir de la configuración)
-    // Basándome en los datos de ejemplo, estos son los rangos aproximados
-    const garantizadoRanges = [
-      { min: 0, max: 50, garantizado: 285 },    // $AM$3, $AN$3
-      { min: 51, max: 100, garantizado: 520 },  // $AM$4, $AN$4  
-      { min: 101, max: 150, garantizado: 750 }, // $AM$5, $AN$5
-      { min: 151, max: 200, garantizado: 950 }, // $AM$8, $AN$8
-      { min: 201, max: 250, garantizado: 1250 }, // $AM$9, $AN$9
-      { min: 251, max: 9999, garantizado: 1450 } // $AM$10, $AN$10
-    ];
+  // El backend ya calcula el garantizado automáticamente basado en los rangos configurados
 
-    // Buscar el rango correspondiente al boSemAct
-    const range = garantizadoRanges.find(r => boSemAct >= r.min && boSemAct <= r.max);
-    return range ? range.garantizado : 285; // Default a 285 si no encuentra rango
-  };
-
-  // Datos de ejemplo basados en la hoja de cálculo
-  const mockData: GarantizadoData[] = [
-    {
-      id: '1',
-      nombreCompleto: 'Jorge Darwin Fuertes Buendia',
-      numeroLicencia: 'Q43845121',
-      telefono: '968538129',
-      viajes: 111,
-      efectivo: 871.1,
-      pagoSinEfectivo: 557.54,
-      comYango: -147.16,
-      comYego: -26.82,
-      boSemAnt: 520,
-      boSemAct: 0,
-      total: calculateTotal(871.1, 557.54, -147.16, -26.82, 520, 0),
-      garantizado: calculateGarantizado(0),
-      diferencia: 0, // Se calculará después
-      semana: 35,
-      viajesActuales: 111,
-      flota: 'YEGO BLACK',
-      flotaId: '1'
-    },
-    {
-      id: '2',
-      nombreCompleto: 'Efrain Jesús Guzmán Silva',
-      numeroLicencia: 'Q006120225',
-      telefono: '927174104',
-      viajes: 104,
-      efectivo: 83,
-      pagoSinEfectivo: 1076.7,
-      comYango: -388.96,
-      comYego: -137.22,
-      boSemAnt: -33.49,
-      boSemAct: 285,
-      total: calculateTotal(83, 1076.7, -388.96, -137.22, -33.49, 285),
-      garantizado: calculateGarantizado(285),
-      diferencia: 0, // Se calculará después
-      semana: 35,
-      viajesActuales: 104,
-      flota: 'YEGO',
-      flotaId: '2'
-    },
-    {
-      id: '3',
-      nombreCompleto: 'Fernando Neville Del Portal Gonzales',
-      numeroLicencia: 'Q07185617',
-      telefono: '982770175',
-      viajes: 141,
-      efectivo: 80,
-      pagoSinEfectivo: 945.5,
-      comYango: -425.81,
-      comYego: -128.09,
-      boSemAnt: -32.02,
-      boSemAct: 285,
-      total: calculateTotal(80, 945.5, -425.81, -128.09, -32.02, 285),
-      garantizado: calculateGarantizado(285),
-      diferencia: 0, // Se calculará después
-      semana: 35,
-      viajesActuales: 141,
-      flota: 'YEGO BLACK',
-      flotaId: 'c054c8b5dfe14e75b882943b2a252706'
-    },
-    {
-      id: '4',
-      nombreCompleto: 'Walter Angello Laureano Castillo',
-      numeroLicencia: 'Q44117234',
-      telefono: '926863461',
-      viajes: 78,
-      efectivo: 899.5,
-      pagoSinEfectivo: 161.25,
-      comYango: -181.06,
-      comYego: -28.96,
-      boSemAnt: 285,
-      boSemAct: 285,
-      total: calculateTotal(899.5, 161.25, -181.06, -28.96, 285, 285),
-      garantizado: calculateGarantizado(285),
-      diferencia: 0, // Se calculará después
-      semana: 35,
-      viajesActuales: 78,
-      flota: 'YEGO PLUS',
-      flotaId: '3'
-    },
-    {
-      id: '5',
-      nombreCompleto: 'Carlos Alberto Mendoza Rojas',
-      numeroLicencia: 'Q12345678',
-      telefono: '987654321',
-      viajes: 95,
-      efectivo: 750.25,
-      pagoSinEfectivo: 420.80,
-      comYango: -150.30,
-      comYego: -45.15,
-      boSemAnt: 200,
-      boSemAct: 350,
-      total: calculateTotal(750.25, 420.80, -150.30, -45.15, 200, 350),
-      garantizado: calculateGarantizado(350),
-      diferencia: 0, // Se calculará después
-      semana: 35,
-      viajesActuales: 95,
-      flota: 'YEGO BLACK',
-      flotaId: 'c054c8b5dfe14e75b882943b2a252706'
-    },
-    {
-      id: '6',
-      nombreCompleto: 'Miguel Ángel Torres Vásquez',
-      numeroLicencia: 'Q87654321',
-      telefono: '912345678',
-      viajes: 128,
-      efectivo: 1100.00,
-      pagoSinEfectivo: 680.50,
-      comYango: -220.75,
-      comYego: -55.25,
-      boSemAnt: 400,
-      boSemAct: 520,
-      total: calculateTotal(1100.00, 680.50, -220.75, -55.25, 400, 520),
-      garantizado: calculateGarantizado(520),
-      diferencia: 0, // Se calculará después
-      semana: 35,
-      viajesActuales: 128,
-      flota: 'YEGO',
-      flotaId: '2'
-    },
-    {
-      id: '7',
-      nombreCompleto: 'Roberto Carlos Silva Morales',
-      numeroLicencia: 'Q11223344',
-      telefono: '955566677',
-      viajes: 87,
-      efectivo: 650.75,
-      pagoSinEfectivo: 380.20,
-      comYango: -120.45,
-      comYego: -35.80,
-      boSemAnt: 150,
-      boSemAct: 285,
-      total: calculateTotal(650.75, 380.20, -120.45, -35.80, 150, 285),
-      garantizado: calculateGarantizado(285),
-      diferencia: 0, // Se calculará después
-      semana: 35,
-      viajesActuales: 87,
-      flota: 'YEGO PLUS',
-      flotaId: '3'
-    },
-    {
-      id: '8',
-      nombreCompleto: 'Luis Fernando Herrera Castro',
-      numeroLicencia: 'Q55667788',
-      telefono: '988899900',
-      viajes: 156,
-      efectivo: 1250.30,
-      pagoSinEfectivo: 780.65,
-      comYango: -280.90,
-      comYego: -65.40,
-      boSemAnt: 500,
-      boSemAct: 750,
-      total: calculateTotal(1250.30, 780.65, -280.90, -65.40, 500, 750),
-      garantizado: calculateGarantizado(750),
-      diferencia: 0, // Se calculará después
-      semana: 35,
-      viajesActuales: 156,
-      flota: 'YEGO BLACK',
-      flotaId: 'c054c8b5dfe14e75b882943b2a252706'
-    },
-    {
-      id: '9',
-      nombreCompleto: 'Antonio José Ramírez López',
-      numeroLicencia: 'Q99887766',
-      telefono: '933344455',
-      viajes: 72,
-      efectivo: 580.40,
-      pagoSinEfectivo: 320.15,
-      comYango: -95.20,
-      comYego: -28.60,
-      boSemAnt: 100,
-      boSemAct: 285,
-      total: calculateTotal(580.40, 320.15, -95.20, -28.60, 100, 285),
-      garantizado: calculateGarantizado(285),
-      diferencia: 0, // Se calculará después
-      semana: 35,
-      viajesActuales: 72,
-      flota: 'YEGO',
-      flotaId: '2'
-    },
-    {
-      id: '10',
-      nombreCompleto: 'Diego Armando Gutiérrez Paredes',
-      numeroLicencia: 'Q44556677',
-      telefono: '977788899',
-      viajes: 134,
-      efectivo: 980.60,
-      pagoSinEfectivo: 620.35,
-      comYango: -240.15,
-      comYego: -58.90,
-      boSemAnt: 450,
-      boSemAct: 650,
-      total: calculateTotal(980.60, 620.35, -240.15, -58.90, 450, 650),
-      garantizado: calculateGarantizado(650),
-      diferencia: 0, // Se calculará después
-      semana: 35,
-      viajesActuales: 134,
-      flota: 'YEGO PLUS',
-      flotaId: '3'
-    },
-    {
-      id: '11',
-      nombreCompleto: 'Sergio Eduardo Flores Sánchez',
-      numeroLicencia: 'Q88990011',
-      telefono: '944455566',
-      viajes: 98,
-      efectivo: 720.85,
-      pagoSinEfectivo: 450.70,
-      comYango: -160.25,
-      comYego: -42.10,
-      boSemAnt: 250,
-      boSemAct: 400,
-      total: calculateTotal(720.85, 450.70, -160.25, -42.10, 250, 400),
-      garantizado: calculateGarantizado(400),
-      diferencia: 0, // Se calculará después
-      semana: 35,
-      viajesActuales: 98,
-      flota: 'YEGO BLACK',
-      flotaId: '1'
-    },
-    {
-      id: '12',
-      nombreCompleto: 'Ricardo Manuel Vargas Jiménez',
-      numeroLicencia: 'Q22334455',
-      telefono: '966677788',
-      viajes: 165,
-      efectivo: 1350.90,
-      pagoSinEfectivo: 850.25,
-      comYango: -310.60,
-      comYego: -72.85,
-      boSemAnt: 600,
-      boSemAct: 850,
-      total: calculateTotal(1350.90, 850.25, -310.60, -72.85, 600, 850),
-      garantizado: calculateGarantizado(850),
-      diferencia: 0, // Se calculará después
-      semana: 35,
-      viajesActuales: 165,
-      flota: 'YEGO',
-      flotaId: '2'
-    },
-    {
-      id: '13',
-      nombreCompleto: 'Javier Alejandro Medina Ruiz',
-      numeroLicencia: 'Q66778899',
-      telefono: '911122233',
-      viajes: 82,
-      efectivo: 610.35,
-      pagoSinEfectivo: 340.80,
-      comYango: -105.50,
-      comYego: -31.25,
-      boSemAnt: 120,
-      boSemAct: 285,
-      total: calculateTotal(610.35, 340.80, -105.50, -31.25, 120, 285),
-      garantizado: calculateGarantizado(285),
-      diferencia: 0, // Se calculará después
-      semana: 35,
-      viajesActuales: 82,
-      flota: 'YEGO PLUS',
-      flotaId: '3'
-    },
-    {
-      id: '14',
-      nombreCompleto: 'Andrés Felipe Castro Vega',
-      numeroLicencia: 'Q33445566',
-      telefono: '955577799',
-      viajes: 142,
-      efectivo: 1020.75,
-      pagoSinEfectivo: 640.90,
-      comYango: -250.40,
-      comYego: -60.15,
-      boSemAnt: 480,
-      boSemAct: 680,
-      total: calculateTotal(1020.75, 640.90, -250.40, -60.15, 480, 680),
-      garantizado: calculateGarantizado(680),
-      diferencia: 0, // Se calculará después
-      semana: 35,
-      viajesActuales: 142,
-      flota: 'YEGO BLACK',
-      flotaId: '1'
-    },
-    {
-      id: '15',
-      nombreCompleto: 'Óscar David Peña Rodríguez',
-      numeroLicencia: 'Q77889900',
-      telefono: '922233344',
-      viajes: 76,
-      efectivo: 590.20,
-      pagoSinEfectivo: 310.45,
-      comYango: -90.75,
-      comYego: -26.80,
-      boSemAnt: 110,
-      boSemAct: 285,
-      total: calculateTotal(590.20, 310.45, -90.75, -26.80, 110, 285),
-      garantizado: calculateGarantizado(285),
-      diferencia: 0, // Se calculará después
-      semana: 35,
-      viajesActuales: 76,
-      flota: 'YEGO',
-      flotaId: '2'
+  // Función para cargar conductores desde la API
+  const cargarConductores = async (isInitialLoad = false) => {
+    try {
+      if (isInitialLoad) {
+        setLoading(true);
+      } else {
+        setLoadingTable(true);
+      }
+      console.log('🔍 [GarantizadoModule] Cargando conductores...');
+      
+      let endpoint = '/garantizado/procesar-semana-actual'; // Por defecto semana actual
+      
+      // Si hay una flota seleccionada, usar el endpoint específico de flota
+      if (flotaFilter && flotaFilter !== '') {
+        endpoint = `/garantizado/flota/${flotaFilter}`;
+      }
+      
+      console.log('📡 [GarantizadoModule] Llamando endpoint:', endpoint);
+      
+      const response = await api.get(endpoint);
+      console.log('✅ [GarantizadoModule] Conductores cargados:', response.data);
+      
+      // Manejar el response del backend que viene con este formato:
+      // { "semanaActual": "SEMANA42", "conductores": [...] }
+      let conductoresData: GarantizadoData[] = [];
+      let semanaActualFromResponse = '';
+      
+      if (response.data && response.data.conductores && Array.isArray(response.data.conductores)) {
+        // Formato actual del backend: { semanaActual, conductores }
+        conductoresData = response.data.conductores;
+        semanaActualFromResponse = response.data.semanaActual || '';
+      } else if (Array.isArray(response.data)) {
+        // Si viene como array directo (fallback)
+        conductoresData = response.data;
+        if (conductoresData.length > 0 && conductoresData[0].semana) {
+          semanaActualFromResponse = conductoresData[0].semana;
+        }
+      } else if (response.data && response.data.content && Array.isArray(response.data.content)) {
+        // Si viene como objeto con content (paginación - fallback)
+        conductoresData = response.data.content;
+        semanaActualFromResponse = response.data.semanaActual || '';
+      } else {
+        // Fallback: asegurar que siempre sea un array
+        conductoresData = [];
+        console.warn('⚠️ [GarantizadoModule] Response no tiene formato esperado:', response.data);
+      }
+      
+      // Establecer la semana actual
+      if (semanaActualFromResponse) {
+        setSemanaActual(semanaActualFromResponse);
+      }
+      
+      // Asegurar que siempre sean arrays
+      const safeConductoresData = Array.isArray(conductoresData) ? conductoresData : [];
+      
+      setData(safeConductoresData);
+      setFilteredData(safeConductoresData);
+      setTotalConductores(safeConductoresData.length);
+      
+    } catch (error: any) {
+      console.error('❌ [GarantizadoModule] Error al cargar conductores:', error);
+      setData([]);
+      setFilteredData([]);
+      setTotalConductores(0);
+    } finally {
+      if (isInitialLoad) {
+        setLoading(false);
+      } else {
+        setLoadingTable(false);
+      }
     }
-  ];
+  };
 
   useEffect(() => {
     // Cargar flotas al inicializar el componente
     cargarFlotas();
-    
-    // Simular carga de datos
-    setTimeout(() => {
-      // Calcular diferencia para cada conductor
-      const dataWithCalculations = mockData.map(item => ({
-        ...item,
-        diferencia: item.garantizado - item.total
-      }));
+    // Cargar conductores de la semana actual al inicio
+    cargarConductores(true); // true = carga inicial
+
+    // Configurar WebSocket para actualizaciones automáticas
+    const handleGarantizadoUpdate = (event: any) => {
+      console.log('📊 [GarantizadoModule] Evento de garantizado recibido:', event);
       
-      setData(dataWithCalculations);
-      setFilteredData(dataWithCalculations);
-      setLoading(false);
-    }, 1000);
+      if (event.type === 'GARANTIZADO_TABLE_UPDATE') {
+        console.log('🔄 [GarantizadoModule] Actualizando tabla con datos del WebSocket');
+        
+        // Actualizar datos con los recibidos del WebSocket
+        const conductoresData = event.conductores || [];
+        const semanaActualFromEvent = event.semanaActual || '';
+        
+        setData(conductoresData);
+        setFilteredData(conductoresData);
+        setTotalConductores(conductoresData.length);
+        
+        if (semanaActualFromEvent) {
+          setSemanaActual(semanaActualFromEvent);
+        }
+        
+        // Mostrar notificación de actualización
+        console.log(`✅ [GarantizadoModule] Tabla actualizada: ${conductoresData.length} conductores`);
+        
+        // Mostrar notificación visual
+        setShowUpdateNotification(true);
+        setTimeout(() => {
+          setShowUpdateNotification(false);
+        }, 5000); // Ocultar después de 5 segundos
+      }
+    };
+
+    // Suscribirse a eventos de garantizado
+    socketService.on('garantizado', handleGarantizadoUpdate);
+
+    // Cleanup: desuscribirse cuando el componente se desmonte
+    return () => {
+      socketService.off('garantizado', handleGarantizadoUpdate);
+    };
   }, []);
 
+  // Cargar conductores cuando cambie la flota seleccionada
   useEffect(() => {
-    let filtered = data;
+    cargarConductores(false); // false = no es carga inicial, solo tabla
+    setCurrentPage(1); // Resetear a la primera página cuando cambie la flota
+  }, [flotaFilter]);
 
-    // Filtrar por término de búsqueda
-    if (searchTerm) {
+  // Aplicar filtros localmente cuando cambien los términos de búsqueda o status
+  useEffect(() => {
+    const safeData = Array.isArray(data) ? data : [];
+    let filtered = safeData;
+
+    // Filtrar por término de búsqueda si existe
+    if (searchTerm && searchTerm.trim() !== '') {
+      const searchLower = searchTerm.toLowerCase();
       filtered = filtered.filter(item =>
-        item.nombreCompleto.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.numeroLicencia.toLowerCase().includes(searchTerm.toLowerCase())
+        item.nombreCompleto.toLowerCase().includes(searchLower) ||
+        item.numeroLicencia.toLowerCase().includes(searchLower)
       );
     }
-
-    // Filtrar por status (calculado automáticamente)
-    if (statusFilter !== 'TODOS') {
-      filtered = filtered.filter(item => {
-        const estadoCalculado = determinarEstadoAutomatico(item.total, item.garantizado);
-        return estadoCalculado === statusFilter;
-      });
+    
+    // Filtrar por status si existe
+    if (statusFilter && statusFilter !== '' && statusFilter !== 'TODOS') {
+      filtered = filtered.filter(item =>
+        item.garantizadoValor === statusFilter
+      );
     }
-
-    // Filtrar por flota - solo si se ha seleccionado una flota
-    if (flotaFilter !== 'SELECCIONAR') {
-      filtered = filtered.filter(item => item.flotaId === flotaFilter);
-    } else {
-      // Si no se ha seleccionado flota, no mostrar conductores
-      filtered = [];
-    }
-
+    
     setFilteredData(filtered);
-    // Resetear a la primera página cuando cambien los filtros
-    setCurrentPage(1);
-  }, [data, searchTerm, statusFilter, flotaFilter]);
+    setTotalConductores(filtered.length);
+    setCurrentPage(1); // Resetear a la primera página cuando cambien los filtros
+  }, [data, searchTerm, statusFilter]);
 
-  // Calcular datos paginados
-  const totalPages = Math.ceil(filteredData.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedData = filteredData.slice(startIndex, endIndex);
-
-  // Función para determinar automáticamente el estado basado en los cálculos
-  const determinarEstadoAutomatico = (total: number, garantizado: number) => {
-    const diferencia = garantizado - total;
-    // Si la diferencia es positiva (garantizado > total), el conductor SÍ tiene garantía
-    // Si la diferencia es negativa (garantizado < total), el conductor NO tiene garantía
-    return diferencia > 0 ? 'GARANTIZADO' : 'NO GARANTIZADO';
+  // Funciones de paginación
+  const totalPages = Math.ceil(totalConductores / itemsPerPage);
+  
+  const handlePageChange = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
   };
 
+  // Calcular datos paginados
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const safeFilteredData = Array.isArray(filteredData) ? filteredData : [];
+  const paginatedData = safeFilteredData.slice(startIndex, endIndex);
+
+  // El backend ya calcula el estado automáticamente
+
+  // Función para abrir modal de exportación
+  const handleOpenExportModal = () => {
+    console.log('🔍 [GarantizadoModule] Abriendo modal de exportación...');
+    console.log('📊 [GarantizadoModule] Flotas disponibles:', flotas);
+    console.log('📊 [GarantizadoModule] Flota actual:', flotaFilter);
+    console.log('📊 [GarantizadoModule] Estado actual:', statusFilter);
+    console.log('📊 [GarantizadoModule] Semana actual:', semanaActual);
+    
+    setExportFilters({
+      flotaId: flotaFilter || '',
+      estado: statusFilter || '',
+      semana: semanaActual || ''
+    });
+    setShowExportModal(true);
+  };
+
+  // Función para exportar datos a Excel
+  const handleExportExcel = async () => {
+    try {
+      setExporting(true);
+      console.log('📊 [GarantizadoModule] Iniciando exportación a Excel...');
+      
+      // Usar filtros del modal
+      let endpoint = '/garantizado/export/excel';
+      const params: any = {};
+      
+      if (exportFilters.flotaId && exportFilters.flotaId !== '') {
+        params.flotaId = exportFilters.flotaId;
+      }
+      
+      if (exportFilters.estado && exportFilters.estado !== '') {
+        params.estado = exportFilters.estado;
+      }
+      
+      if (exportFilters.semana && exportFilters.semana !== '') {
+        params.semana = exportFilters.semana;
+      }
+      
+      console.log('📡 [GarantizadoModule] Llamando endpoint:', endpoint, 'con params:', params);
+      
+      const response = await api.get(endpoint, {
+        params,
+        responseType: 'blob' // Importante para archivos binarios
+      });
+      
+      // Crear el archivo Excel
+      const blob = new Blob([response.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+      
+      // Crear URL temporal para descarga
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      // Nombre del archivo con fecha y semana
+      const fecha = new Date().toISOString().split('T')[0];
+      const nombreArchivo = `conductores_garantizado_${exportFilters.semana || 'semana'}_${fecha}.xlsx`;
+      link.download = nombreArchivo;
+      
+      // Descargar archivo
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      console.log('✅ [GarantizadoModule] Archivo Excel descargado exitosamente');
+      
+      // Cerrar modal después de exportar exitosamente
+      setShowExportModal(false);
+      
+    } catch (error: any) {
+      console.error('❌ [GarantizadoModule] Error al exportar Excel:', error);
+      
+      let errorMessage = 'Error al exportar datos';
+      
+      if (error.response?.status === 404) {
+        errorMessage = 'No se encontraron datos para exportar';
+      } else if (error.response?.status === 500) {
+        errorMessage = 'Error interno del servidor al generar el archivo';
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      }
+      
+      alert(`Error: ${errorMessage}`);
+    } finally {
+      setExporting(false);
+    }
+  };
+  
   const formatCurrency = (amount: number) => {
     return `S/.${new Intl.NumberFormat('es-PE', {
       minimumFractionDigits: 0,
@@ -497,10 +387,8 @@ export const GarantizadoModule: React.FC = () => {
     }).format(amount)}`;
   };
 
-  const getStatusBadge = (total: number, garantizado: number) => {
-    const estadoCalculado = determinarEstadoAutomatico(total, garantizado);
-    
-    if (estadoCalculado === 'GARANTIZADO') {
+  const getStatusBadge = (garantizadoValor: string) => {
+    if (garantizadoValor === 'Garantizado') {
       return (
         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
           <span className="w-1.5 h-1.5 bg-green-400 rounded-full mr-1.5"></span>
@@ -535,6 +423,14 @@ export const GarantizadoModule: React.FC = () => {
 
   return (
     <div className="p-8 space-y-6">
+      {/* Notificación de actualización */}
+      {showUpdateNotification && (
+        <div className="fixed top-4 right-4 z-50 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-pulse">
+          <div className="w-2 h-2 bg-white rounded-full"></div>
+          <span className="font-medium">📊 Tabla actualizada automáticamente</span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -546,13 +442,19 @@ export const GarantizadoModule: React.FC = () => {
           </p>
           <div className="mt-2 inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">
             <span className="w-2 h-2 bg-red-400 rounded-full mr-2"></span>
-            Semana 35 del período de garantía
+             {semanaActual ? `${semanaActual} del período de garantizado` : 'Cargando semana...'}
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="px-6 py-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="px-6 py-2"
+            onClick={handleOpenExportModal}
+            disabled={filteredData.length === 0}
+          >
             <Download className="h-4 w-4 mr-2" />
-            Exportar
+            Exportar Excel
           </Button>
         </div>
       </div>
@@ -623,12 +525,13 @@ export const GarantizadoModule: React.FC = () => {
             <div>
               <select
                 value={statusFilter}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setStatusFilter(e.target.value as 'TODOS' | 'GARANTIZADO' | 'NO GARANTIZADO')}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setStatusFilter(e.target.value)}
                 className="w-full px-3 py-2 h-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               >
+                <option value="">Seleccionar estado</option>
                 <option value="TODOS">Todos los estados</option>
-                <option value="GARANTIZADO">Garantizado</option>
-                <option value="NO GARANTIZADO">No Garantizado</option>
+                <option value="Garantizado">Garantizado</option>
+                <option value="No Garantizado">No Garantizado</option>
               </select>
             </div>
             <div>
@@ -638,7 +541,7 @@ export const GarantizadoModule: React.FC = () => {
                 className="w-full px-3 py-2 h-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                 disabled={loadingFlotas || flotas.length === 0}
               >
-                <option value="SELECCIONAR">
+                <option value="">
                   {loadingFlotas 
                     ? 'Cargando flotas...' 
                     : flotas.length === 0 
@@ -659,11 +562,27 @@ export const GarantizadoModule: React.FC = () => {
 
       {/* Tabla de Datos */}
       <Card>
-        <CardHeader>
-          <CardTitle>Conductores y Métricas Financieras</CardTitle>
+        <CardHeader className=" border-b border-red-200 dark:border-red-800">
+          <CardTitle className="text-xl font-bold text-red-800 dark:text-red-200 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Shield className="h-6 w-6" />
+              Control del período de garantizado
+            </div>
+            {loadingTable && (
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-red-600"></div>
+            )}
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          {loadingTable ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="flex flex-col items-center gap-4">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Cargando conductores...</p>
+              </div>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
             <table className="w-full table-auto min-w-[1600px]">
               <thead>
                 <tr className="border-b border-gray-200 dark:border-gray-700">
@@ -773,89 +692,205 @@ export const GarantizadoModule: React.FC = () => {
                       </div>
                     </td>
                   <td className="py-5 px-6 text-center">
-                    {getStatusBadge(item.total, item.garantizado)}
+                    {getStatusBadge(item.garantizadoValor)}
                   </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
-
-          {paginatedData.length === 0 && (
-            <div className="text-center py-12">
-              {flotaFilter === 'SELECCIONAR' ? (
-                <>
-                  <Car className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                    Selecciona una flota
-                  </h3>
-                  <p className="text-gray-500 dark:text-gray-400">
-                    Por favor selecciona una flota para ver los conductores con garantía
-                  </p>
-                </>
-              ) : (
-                <>
-                  <Car className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                    No se encontraron conductores
-                  </h3>
-                  <p className="text-gray-500 dark:text-gray-400">
-                    Intenta ajustar los filtros de búsqueda
-                  </p>
-                </>
-              )}
             </div>
-          )}
-
-          {/* Controles de Paginación */}
-          {filteredData.length > 0 && (
-            <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 dark:border-gray-700">
-              <div className="text-sm text-gray-700 dark:text-gray-300">
-                Mostrando {startIndex + 1} a {Math.min(endIndex, filteredData.length)} de {filteredData.length} conductores
+            )}
+            {paginatedData.length === 0 && (
+              <div className="text-center py-12">
+                <Car className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                  {flotaFilter === '' ? 'Selecciona una flota' : 'No se encontraron conductores'}
+                </h3>
+                <p className="text-gray-500 dark:text-gray-400">
+                  {flotaFilter === '' 
+                    ? 'Por favor selecciona una flota para ver los conductores con garantía'
+                    : 'Intenta ajustar los filtros de búsqueda o selecciona otra flota'
+                  }
+                </p>
               </div>
-              {totalPages > 1 && (
+            )}
+
+            {/* Controles de Paginación */}
+            {safeFilteredData.length > 0 && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+                <div className="text-sm text-gray-600 dark:text-gray-400">
+                  Mostrando {startIndex + 1} a {Math.min(endIndex, totalConductores)} de {totalConductores} conductores
+                </div>
+                
                 <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                    onClick={() => handlePageChange(1)}
                     disabled={currentPage === 1}
-                    className="flex items-center gap-2 px-6 py-2 whitespace-nowrap"
+                    className="h-8 w-8 p-0"
                   >
-                    <ChevronLeft className="h-4 w-4 flex-shrink-0" />
-                    <span>Anterior</span>
+                    <ChevronsLeft className="h-4 w-4" />
                   </Button>
                   
-                  <div className="flex items-center gap-1">
-                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className="h-8 w-8 p-0"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+                    
+                    return (
                       <Button
-                        key={page}
-                        variant={currentPage === page ? "primary" : "outline"}
+                        key={pageNum}
+                        variant={currentPage === pageNum ? 'primary' : 'outline'}
                         size="sm"
-                        onClick={() => setCurrentPage(page)}
-                        className="w-8 h-8 p-0"
+                        onClick={() => handlePageChange(pageNum)}
+                        className="h-8 w-8 p-0"
                       >
-                        {page}
+                        {pageNum}
                       </Button>
-                    ))}
-                  </div>
+                    );
+                  })}
 
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                    onClick={() => handlePageChange(currentPage + 1)}
                     disabled={currentPage === totalPages}
-                    className="flex items-center gap-2 px-6 py-2 whitespace-nowrap"
+                    className="h-8 w-8 p-0"
                   >
-                    <span>Siguiente</span>
-                    <ChevronRight className="h-4 w-4 flex-shrink-0" />
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(totalPages)}
+                    disabled={currentPage === totalPages}
+                    className="h-8 w-8 p-0"
+                  >
+                    <ChevronsRight className="h-4 w-4" />
                   </Button>
                 </div>
-              )}
-            </div>
-          )}
+              </div>
+            )}
         </CardContent>
       </Card>
+
+      {/* Modal de Exportación Excel */}
+      {showExportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-96 max-w-md mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Exportar a Excel
+              </h3>
+              <button
+                onClick={() => setShowExportModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Filtro de Flota */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Flota
+                </label>
+                <select
+                  value={exportFilters.flotaId}
+                  onChange={(e) => setExportFilters(prev => ({ ...prev, flotaId: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  disabled={loadingFlotas}
+                >
+                  <option value="">
+                    {loadingFlotas ? 'Cargando flotas...' : 'Todas las flotas'}
+                  </option>
+                  {flotas.map((flota) => (
+                    <option key={flota.flotaId} value={flota.flotaId}>
+                      {flota.flotaName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Filtro de Estado */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Estado
+                </label>
+                <select
+                  value={exportFilters.estado}
+                  onChange={(e) => setExportFilters(prev => ({ ...prev, estado: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                >
+                  <option value="">Todos los estados</option>
+                  <option value="Garantizado">Garantizado</option>
+                  <option value="No Garantizado">No Garantizado</option>
+                </select>
+              </div>
+
+              {/* Filtro de Semana */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Semana
+                </label>
+                <input
+                  type="text"
+                  value={exportFilters.semana}
+                  readOnly
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 dark:bg-gray-600 dark:border-gray-600 dark:text-white cursor-not-allowed"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <Button
+                variant="outline"
+                onClick={() => setShowExportModal(false)}
+                disabled={exporting}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleExportExcel}
+                disabled={exporting}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                {exporting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Exportando...
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4 mr-2" />
+                    Exportar
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

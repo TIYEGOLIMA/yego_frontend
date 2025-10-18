@@ -507,13 +507,15 @@ const SistemasExternosModule: React.FC = () => {
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeleteSistema(sistema)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          {authState.isSuperAdmin && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteSistema(sistema)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
