@@ -217,8 +217,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       }
     ];
 
-    // Solo ADMIN puede ver Garantizado
-    if (user?.role === 'ADMIN') {
+    // Solo ADMIN y SUPERADMIN pueden ver Garantizado
+    if (user?.role === 'ADMIN' || user?.role === 'SUPERADMIN') {
       options.push({
         label: "Garantizado", 
         to: "/garantizado", 

@@ -226,7 +226,7 @@ export const GarantizadoModule: React.FC = () => {
         
         // Mostrar notificación visual
         setShowUpdateNotification(true);
-        setTimeout(() => {
+    setTimeout(() => {
           setShowUpdateNotification(false);
         }, 5000); // Ocultar después de 5 segundos
       }
@@ -267,7 +267,7 @@ export const GarantizadoModule: React.FC = () => {
         item.garantizadoValor === statusFilter
       );
     }
-    
+
     setFilteredData(filtered);
     setTotalConductores(filtered.length);
     setCurrentPage(1); // Resetear a la primera página cuando cambien los filtros
@@ -379,7 +379,7 @@ export const GarantizadoModule: React.FC = () => {
       setExporting(false);
     }
   };
-  
+
   const formatCurrency = (amount: number) => {
     return `S/.${new Intl.NumberFormat('es-PE', {
       minimumFractionDigits: 0,
@@ -582,7 +582,7 @@ export const GarantizadoModule: React.FC = () => {
               </div>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+          <div className="overflow-x-auto">
             <table className="w-full table-auto min-w-[1600px]">
               <thead>
                 <tr className="border-b border-gray-200 dark:border-gray-700">
@@ -698,29 +698,29 @@ export const GarantizadoModule: React.FC = () => {
                 ))}
               </tbody>
             </table>
-            </div>
+          </div>
             )}
-            {paginatedData.length === 0 && (
-              <div className="text-center py-12">
-                <Car className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+          {paginatedData.length === 0 && (
+            <div className="text-center py-12">
+                  <Car className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
                   {flotaFilter === '' ? 'Selecciona una flota' : 'No se encontraron conductores'}
-                </h3>
-                <p className="text-gray-500 dark:text-gray-400">
+                  </h3>
+                  <p className="text-gray-500 dark:text-gray-400">
                   {flotaFilter === '' 
                     ? 'Por favor selecciona una flota para ver los conductores con garantía'
                     : 'Intenta ajustar los filtros de búsqueda o selecciona otra flota'
                   }
                 </p>
-              </div>
-            )}
+            </div>
+          )}
 
-            {/* Controles de Paginación */}
+          {/* Controles de Paginación */}
             {safeFilteredData.length > 0 && (
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
                 <div className="text-sm text-gray-600 dark:text-gray-400">
                   Mostrando {startIndex + 1} a {Math.min(endIndex, totalConductores)} de {totalConductores} conductores
-                </div>
+              </div>
                 
                 <div className="flex items-center gap-2">
                   <Button
@@ -733,15 +733,15 @@ export const GarantizadoModule: React.FC = () => {
                     <ChevronsLeft className="h-4 w-4" />
                   </Button>
                   
-                  <Button
+                      <Button
                     variant="outline"
-                    size="sm"
+                        size="sm"
                     onClick={() => handlePageChange(currentPage - 1)}
                     disabled={currentPage === 1}
                     className="h-8 w-8 p-0"
-                  >
+                      >
                     <ChevronLeft className="h-4 w-4" />
-                  </Button>
+                      </Button>
 
                   {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                     let pageNum;
@@ -788,8 +788,8 @@ export const GarantizadoModule: React.FC = () => {
                     <ChevronsRight className="h-4 w-4" />
                   </Button>
                 </div>
-              </div>
-            )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
