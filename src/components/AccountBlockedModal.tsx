@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { AlertTriangle, Ban } from 'lucide-react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 
 interface AccountBlockedModalProps {
   isOpen: boolean
@@ -15,7 +15,8 @@ export const AccountBlockedModal: React.FC<AccountBlockedModalProps> = ({
   username,
   onAutoLogout
 }) => {
-  const [countdown, setCountdown] = useState(3)
+  console.log('🚫 [AccountBlockedModal] Renderizando - isOpen:', isOpen, 'message:', message, 'username:', username);
+  const [countdown, setCountdown] = useState(5)
 
   useEffect(() => {
     if (!isOpen) return
@@ -47,6 +48,9 @@ export const AccountBlockedModal: React.FC<AccountBlockedModalProps> = ({
             <Ban className="h-6 w-6" />
             Cuenta Bloqueada
           </DialogTitle>
+          <DialogDescription>
+            {message}
+          </DialogDescription>
         </DialogHeader>
         
         <div className="space-y-4">

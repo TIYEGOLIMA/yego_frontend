@@ -1,7 +1,7 @@
 import React from 'react'
 import { AlertTriangle, LogOut } from 'lucide-react'
 import { Button } from './ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog'
 
 interface ForcedLogoutModalProps {
   isOpen: boolean
@@ -24,6 +24,9 @@ export const ForcedLogoutModal: React.FC<ForcedLogoutModalProps> = ({
             <AlertTriangle className="h-5 w-5" />
             Sesión Requerida
           </DialogTitle>
+          <DialogDescription>
+            {message}
+          </DialogDescription>
         </DialogHeader>
         
         <div className="space-y-4">

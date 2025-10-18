@@ -30,6 +30,8 @@ export const useSystemNotifications = () => {
   });
 
   useEffect(() => {
+    console.log('🔧 [SystemNotifications] Configurando callbacks del hook...');
+    
     // Configurar callbacks para eventos del sistema
     systemNotificationsService.setOnForcedLogout((event: ForcedLogoutEvent) => {
       console.log('🚪 [SystemNotifications] Forced logout event received:', event);
@@ -41,14 +43,25 @@ export const useSystemNotifications = () => {
 
     systemNotificationsService.setOnAccountBlocked((event: AccountBlockedEvent) => {
       console.log('🚫 [SystemNotifications] Account blocked event received:', event);
+      console.log('🚫 [SystemNotifications] Actualizando estado del modal...');
       setAccountBlockedModal({
         isVisible: true,
         event
       });
+      console.log('🚫 [SystemNotifications] Estado actualizado - isVisible: true');
     });
+
+    // Verificar si el servicio está conectado, si no, reconectar
+    setTimeout(() => {
+      if (!systemNotificationsService.getConnectionStatus()) {
+        console.log('🔄 [SystemNotifications] Servicio no conectado, forzando reconexión...');
+        systemNotificationsService.forceReconnect();
+      }
+    }, 2000);
 
     // Cleanup al desmontar
     return () => {
+      console.log('🧹 [SystemNotifications] Limpiando callbacks...');
       systemNotificationsService.setOnForcedLogout(null);
       systemNotificationsService.setOnAccountBlocked(null);
     };
@@ -66,11 +79,11 @@ export const useSystemNotifications = () => {
 
   const handleAccountBlocked = () => {
     console.log('🚫 [SystemNotifications] Handling account blocked');
-    logout();
     setAccountBlockedModal({
       isVisible: false,
       event: null
     });
+    logout();
     navigate('/login');
   };
 

@@ -30,6 +30,7 @@ class SystemNotificationsService {
           Authorization: `Bearer ${token}`
         },
         onConnect: () => {
+          console.log('✅ [SystemNotifications] Conectado al WebSocket del sistema')
           this.isConnected = true
           this.reconnectAttempts = 0
           this.subscribe()
@@ -56,8 +57,12 @@ class SystemNotificationsService {
   }
 
   private subscribe() {
-    if (!this.client || !this.isConnected) return
+    if (!this.client || !this.isConnected) {
+      console.log('⚠️ [SystemNotifications] No se puede suscribir - cliente no conectado')
+      return
+    }
 
+    console.log('🔔 [SystemNotifications] Suscribiéndose a /topic/system')
     try {
       // Obtener el usuario actual del token
       const token = localStorage.getItem('token')
@@ -86,11 +91,21 @@ class SystemNotificationsService {
           switch (event.type) {
             case 'FORCED_LOGOUT':
               console.log('🚪 [SystemNotifications] Procesando FORCED_LOGOUT para usuario actual')
-              this.onForcedLogout?.(event)
+              console.log('🚪 [SystemNotifications] Callback disponible:', !!this.onForcedLogout)
+              if (this.onForcedLogout) {
+                this.onForcedLogout(event)
+              } else {
+                console.warn('⚠️ [SystemNotifications] Callback de FORCED_LOGOUT no configurado')
+              }
               break
             case 'ACCOUNT_BLOCKED':
               console.log('🚫 [SystemNotifications] Procesando ACCOUNT_BLOCKED para usuario actual')
-              this.onAccountBlocked?.(event)
+              console.log('🚫 [SystemNotifications] Callback disponible:', !!this.onAccountBlocked)
+              if (this.onAccountBlocked) {
+                this.onAccountBlocked(event)
+              } else {
+                console.warn('⚠️ [SystemNotifications] Callback de ACCOUNT_BLOCKED no configurado')
+              }
               break
             case 'USER_TABLE_UPDATE':
               console.log('👥 [SystemNotifications] Procesando USER_TABLE_UPDATE')
@@ -116,10 +131,12 @@ class SystemNotificationsService {
   }
 
   public setOnForcedLogout(callback: ((event: ForcedLogoutEvent) => void) | null) {
+    console.log('🔧 [SystemNotifications] Configurando callback de forced logout:', !!callback)
     this.onForcedLogout = callback
   }
 
   public setOnAccountBlocked(callback: ((event: AccountBlockedEvent) => void) | null) {
+    console.log('🔧 [SystemNotifications] Configurando callback de account blocked:', !!callback)
     this.onAccountBlocked = callback
   }
 
@@ -128,9 +145,19 @@ class SystemNotificationsService {
   }
 
   public reconnect() {
+    console.log('🔄 [SystemNotifications] Reconectando servicio...')
     this.disconnect()
     this.reconnectAttempts = 0
     this.connect()
+  }
+
+  public forceReconnect() {
+    console.log('🔄 [SystemNotifications] Forzando reconexión del servicio...')
+    this.disconnect()
+    setTimeout(() => {
+      this.reconnectAttempts = 0
+      this.connect()
+    }, 1000)
   }
 
   public disconnect() {
@@ -147,3 +174,4 @@ class SystemNotificationsService {
 }
 
 export default new SystemNotificationsService()
+

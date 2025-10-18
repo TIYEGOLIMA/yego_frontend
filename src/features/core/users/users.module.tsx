@@ -115,7 +115,6 @@ const UsersModule: React.FC = () => {
       isValid: hasUpperCase && hasLowerCase && hasNumbers && hasSpecialChar && isLongEnough
     };
   };
-  
   // Estados de paginación
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -1013,6 +1012,9 @@ const UsersModule: React.FC = () => {
               <X className="h-5 w-5" />
               {errorModal.title}
             </DialogTitle>
+            <DialogDescription>
+              {errorModal.message}
+            </DialogDescription>
           </DialogHeader>
           <div className="py-4">
             <p className="text-sm text-neutral-700 dark:text-neutral-300 whitespace-pre-line">

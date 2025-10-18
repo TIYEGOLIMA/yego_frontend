@@ -168,6 +168,9 @@ const SystemNotificationsHandler = () => {
     handleAccountBlocked
   } = useSystemNotifications()
 
+  console.log('🔍 [SystemNotificationsHandler] Renderizando - forcedLogoutModal:', forcedLogoutModal);
+  console.log('🔍 [SystemNotificationsHandler] Renderizando - accountBlockedModal:', accountBlockedModal);
+
   return (
     <>
       {forcedLogoutModal.event && (
