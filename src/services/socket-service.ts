@@ -386,6 +386,29 @@ class SocketService {
         const event = JSON.parse(message.body);
         console.log('🔔 [SocketService] Evento del sistema recibido:', event);
         
+        // Filtrar eventos por usuario para ACCOUNT_BLOCKED y FORCED_LOGOUT
+        if (event.type === 'ACCOUNT_BLOCKED' || event.type === 'FORCED_LOGOUT') {
+          const token = localStorage.getItem('token');
+          let currentUserId: number | null = null;
+          
+          if (token) {
+            try {
+              const payload = JSON.parse(atob(token.split('.')[1]));
+              currentUserId = payload.userId || payload.id;
+            } catch (error) {
+              console.warn('⚠️ [SocketService] No se pudo obtener userId del token:', error);
+            }
+          }
+
+          // Solo procesar si el evento es para el usuario actual
+          if (event.userId && currentUserId && event.userId !== currentUserId) {
+            console.log(`🚫 [SocketService] Evento ${event.type} ignorado - destinado para userId ${event.userId}, usuario actual ${currentUserId}`);
+            return;
+          }
+          
+          console.log(`✅ [SocketService] Procesando evento ${event.type} para usuario actual`);
+        }
+        
         // Si es un evento de garantizado, emitirlo
         if (event.type === 'GARANTIZADO_TABLE_UPDATE') {
           console.log('📊 [SocketService] Actualización de tabla de garantizado recibida');
