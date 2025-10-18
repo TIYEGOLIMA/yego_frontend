@@ -59,23 +59,46 @@ class SystemNotificationsService {
     if (!this.client || !this.isConnected) return
 
     try {
+      // Obtener el usuario actual del token
+      const token = localStorage.getItem('token')
+      let currentUserId: number | null = null
+      
+      if (token) {
+        try {
+          const payload = JSON.parse(atob(token.split('.')[1]))
+          currentUserId = payload.userId || payload.id
+        } catch (error) {
+          console.warn('⚠️ [SystemNotifications] No se pudo obtener userId del token:', error)
+        }
+      }
+
       this.client.subscribe('/topic/system', (message) => {
         try {
           const event: SystemEvent = JSON.parse(message.body)
+          console.log('🔔 [SystemNotifications] Evento del sistema recibido:', event)
+
+          // Filtrar eventos por usuario - solo procesar si el evento es para el usuario actual
+          if (event.userId && currentUserId && event.userId !== currentUserId) {
+            console.log(`🚫 [SystemNotifications] Evento ignorado - destinado para userId ${event.userId}, usuario actual ${currentUserId}`)
+            return
+          }
 
           switch (event.type) {
             case 'FORCED_LOGOUT':
+              console.log('🚪 [SystemNotifications] Procesando FORCED_LOGOUT para usuario actual')
               this.onForcedLogout?.(event)
               break
             case 'ACCOUNT_BLOCKED':
+              console.log('🚫 [SystemNotifications] Procesando ACCOUNT_BLOCKED para usuario actual')
               this.onAccountBlocked?.(event)
               break
             case 'USER_TABLE_UPDATE':
+              console.log('👥 [SystemNotifications] Procesando USER_TABLE_UPDATE')
               this.onUserTableUpdate?.(event)
               break
           }
         } catch (error) {
-          console.error('Error al procesar mensaje del sistema:', error)
+          console.error('❌ [SystemNotifications] Error al procesar mensaje del sistema:', error)
         }
       })
     } catch (error) {
