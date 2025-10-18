@@ -177,6 +177,9 @@ class SocketService {
           // Suscribirse a eventos de Garantizado
           this.subscribeToGarantizadoEvents();
           
+          // Suscribirse a eventos específicos del usuario
+          this.subscribeToUserEvents();
+          
           // Iniciar heartbeat para detectar desconexiones
           this.startHeartbeat();
         },
@@ -356,6 +359,56 @@ class SocketService {
     });
 
     console.log('✅ [SocketService] Suscrito a todos los topics de sistemas externos');
+  }
+
+  /**
+   * Suscribirse a eventos específicos del usuario actual
+   */
+  private subscribeToUserEvents() {
+    if (!this.stompClient || !this.stompClient.connected) {
+      console.log('⚠️ [SocketService] Cliente STOMP no conectado, no se pueden suscribir eventos de usuario');
+      return;
+    }
+
+    // Obtener el ID del usuario actual del token
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.log('⚠️ [SocketService] No hay token, no se puede suscribir a eventos de usuario');
+      return;
+    }
+
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      const userId = payload.userId || payload.id;
+      
+      if (!userId) {
+        console.log('⚠️ [SocketService] No se pudo obtener userId del token');
+        return;
+      }
+
+      // Suscribirse al topic específico del usuario
+      this.stompClient.subscribe(`/topic/user/${userId}`, (message: IMessage) => {
+        try {
+          const event = JSON.parse(message.body);
+          console.log('👤 [SocketService] Evento de usuario recibido:', event);
+          
+          // Procesar eventos específicos del usuario
+          if (event.type === 'ACCOUNT_BLOCKED') {
+            console.log('🚨 [SocketService] Cuenta bloqueada, cerrando sesión...');
+            this.emit('account-blocked', event);
+          } else if (event.type === 'FORCED_LOGOUT') {
+            console.log('🚨 [SocketService] Logout forzado, cerrando sesión...');
+            this.emit('forced-logout', event);
+          }
+        } catch (error) {
+          console.error('❌ [SocketService] Error procesando evento de usuario:', error);
+        }
+      });
+
+      console.log(`✅ [SocketService] Suscrito a eventos del usuario ${userId}`);
+    } catch (error) {
+      console.error('❌ [SocketService] Error obteniendo userId del token:', error);
+    }
   }
 
   /**

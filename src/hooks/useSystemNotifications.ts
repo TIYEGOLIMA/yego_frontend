@@ -35,6 +35,27 @@ export const useSystemNotifications = () => {
     // Configurar callbacks para eventos del sistema
     systemNotificationsService.setOnForcedLogout((event: ForcedLogoutEvent) => {
       console.log('🚪 [SystemNotifications] Forced logout event received:', event);
+      
+      // Verificar si el usuario actual está realmente autenticado
+      const currentUser = useAuthStore.getState().user;
+      if (!currentUser || !currentUser.id) {
+        console.log('🚪 [SystemNotifications] Usuario no autenticado, ignorando evento FORCED_LOGOUT');
+        return;
+      }
+      
+      // Verificar si el evento es para el usuario actual
+      if (event.userId && event.userId !== currentUser.id) {
+        console.log(`🚪 [SystemNotifications] FORCED_LOGOUT ignorado - destinado para userId ${event.userId}, usuario actual ${currentUser.id}`);
+        return;
+      }
+      
+      // Verificar si el evento tiene username y no coincide con el usuario actual
+      if (event.username && event.username !== currentUser.username) {
+        console.log(`🚪 [SystemNotifications] FORCED_LOGOUT ignorado - destinado para username ${event.username}, usuario actual ${currentUser.username}`);
+        return;
+      }
+      
+      console.log('🚪 [SystemNotifications] Mostrando modal FORCED_LOGOUT para usuario actual');
       setForcedLogoutModal({
         isOpen: true,
         event
@@ -43,12 +64,31 @@ export const useSystemNotifications = () => {
 
     systemNotificationsService.setOnAccountBlocked((event: AccountBlockedEvent) => {
       console.log('🚫 [SystemNotifications] Account blocked event received:', event);
-      console.log('🚫 [SystemNotifications] Actualizando estado del modal...');
+      
+      // Verificar si el usuario actual está realmente autenticado
+      const currentUser = useAuthStore.getState().user;
+      if (!currentUser || !currentUser.id) {
+        console.log('🚫 [SystemNotifications] Usuario no autenticado, ignorando evento ACCOUNT_BLOCKED');
+        return;
+      }
+      
+      // Verificar si el evento es para el usuario actual
+      if (event.userId && event.userId !== currentUser.id) {
+        console.log(`🚫 [SystemNotifications] ACCOUNT_BLOCKED ignorado - destinado para userId ${event.userId}, usuario actual ${currentUser.id}`);
+        return;
+      }
+      
+      // Verificar si el evento tiene username y no coincide con el usuario actual
+      if (event.username && event.username !== currentUser.username) {
+        console.log(`🚫 [SystemNotifications] ACCOUNT_BLOCKED ignorado - destinado para username ${event.username}, usuario actual ${currentUser.username}`);
+        return;
+      }
+      
+      console.log('🚫 [SystemNotifications] Mostrando modal ACCOUNT_BLOCKED para usuario actual');
       setAccountBlockedModal({
         isVisible: true,
         event
       });
-      console.log('🚫 [SystemNotifications] Estado actualizado - isVisible: true');
     });
 
     // Verificar si el servicio está conectado, si no, reconectar

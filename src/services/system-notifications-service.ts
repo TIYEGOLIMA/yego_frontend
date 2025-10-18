@@ -62,7 +62,7 @@ class SystemNotificationsService {
       return
     }
 
-    console.log('🔔 [SystemNotifications] Suscribiéndose a /topic/system')
+    console.log('🔔 [SystemNotifications] Suscribiéndose a topics del sistema')
     try {
       // Obtener el usuario actual del token
       const token = localStorage.getItem('token')
@@ -77,6 +77,7 @@ class SystemNotificationsService {
         }
       }
 
+      // Suscribirse al topic global para eventos generales (USER_TABLE_UPDATE)
       this.client.subscribe('/topic/system', (message) => {
         try {
           const event: SystemEvent = JSON.parse(message.body)
@@ -116,6 +117,44 @@ class SystemNotificationsService {
           console.error('❌ [SystemNotifications] Error al procesar mensaje del sistema:', error)
         }
       })
+
+      // Suscribirse al topic específico del usuario para eventos personales
+      if (currentUserId) {
+        console.log(`🔔 [SystemNotifications] Suscribiéndose a /topic/user/${currentUserId}`)
+        this.client.subscribe(`/topic/user/${currentUserId}`, (message) => {
+          try {
+            const event: SystemEvent = JSON.parse(message.body)
+            console.log('🔔 [SystemNotifications] Evento personal recibido:', event)
+
+            switch (event.type) {
+              case 'FORCED_LOGOUT':
+                console.log('🚪 [SystemNotifications] Procesando FORCED_LOGOUT personal')
+                console.log('🚪 [SystemNotifications] Callback disponible:', !!this.onForcedLogout)
+                if (this.onForcedLogout) {
+                  this.onForcedLogout(event)
+                } else {
+                  console.warn('⚠️ [SystemNotifications] Callback de FORCED_LOGOUT no configurado')
+                }
+                break
+              case 'ACCOUNT_BLOCKED':
+                console.log('🚫 [SystemNotifications] Procesando ACCOUNT_BLOCKED personal')
+                console.log('🚫 [SystemNotifications] Callback disponible:', !!this.onAccountBlocked)
+                if (this.onAccountBlocked) {
+                  this.onAccountBlocked(event)
+                } else {
+                  console.warn('⚠️ [SystemNotifications] Callback de ACCOUNT_BLOCKED no configurado')
+                }
+                break
+              default:
+                console.log('🔔 [SystemNotifications] Evento personal no reconocido:', event.type)
+            }
+          } catch (error) {
+            console.error('❌ [SystemNotifications] Error al procesar mensaje personal:', error)
+          }
+        })
+      } else {
+        console.warn('⚠️ [SystemNotifications] No se pudo obtener userId para suscripción personal')
+      }
     } catch (error) {
       console.error('❌ [SystemNotifications] Error al suscribirse:', error)
     }
