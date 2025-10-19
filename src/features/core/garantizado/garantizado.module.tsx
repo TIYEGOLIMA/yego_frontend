@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Input } from '../../../components/ui/input';
 import { Button } from '../../../components/ui/button';
@@ -68,8 +68,12 @@ export const GarantizadoModule: React.FC = () => {
   const [itemsPerPage] = useState(6);
   const [totalConductores, setTotalConductores] = useState(0);
   const [semanaActual, setSemanaActual] = useState<string>('');
+  const [semanaAnterior, setSemanaAnterior] = useState<string>('');
   const [showUpdateNotification, setShowUpdateNotification] = useState(false);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const hasLoadedRef = useRef(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportFilters, setExportFilters] = useState({
     flotaId: '',
@@ -125,15 +129,23 @@ export const GarantizadoModule: React.FC = () => {
 
   // Función para cargar conductores desde la API
   const cargarConductores = async (isInitialLoad = false) => {
+    // Protección contra llamadas múltiples en carga inicial
+    if (isInitialLoad && hasLoadedRef.current) {
+      console.log('⚠️ [GarantizadoModule] Ya se cargó una vez, evitando llamada duplicada');
+      return;
+    }
+
     try {
       if (isInitialLoad) {
         setLoading(true);
+        hasLoadedRef.current = true;
+        setHasLoadedOnce(true);
       } else {
         setLoadingTable(true);
       }
       console.log('🔍 [GarantizadoModule] Cargando conductores...');
       
-      let endpoint = '/garantizado/procesar-semana-actual'; // Por defecto semana actual
+      let endpoint = '/garantizado/procesar-semana-anterior'; // Por defecto semana anterior
       
       // Si hay una flota seleccionada, usar el endpoint específico de flota
       if (flotaFilter && flotaFilter !== '') {
@@ -146,33 +158,42 @@ export const GarantizadoModule: React.FC = () => {
       console.log('✅ [GarantizadoModule] Conductores cargados:', response.data);
       
       // Manejar el response del backend que viene con este formato:
-      // { "semanaActual": "SEMANA42", "conductores": [...] }
+      // { "semanaAnterior": "SEMANA41", "semanaActual": "SEMANA42", "conductores": [...] }
       let conductoresData: GarantizadoData[] = [];
       let semanaActualFromResponse = '';
+      let semanaAnteriorFromResponse = '';
       
       if (response.data && response.data.conductores && Array.isArray(response.data.conductores)) {
-        // Formato actual del backend: { semanaActual, conductores }
+        // Formato actual del backend: { semanaAnterior, semanaActual, conductores }
         conductoresData = response.data.conductores;
         semanaActualFromResponse = response.data.semanaActual || '';
+        semanaAnteriorFromResponse = response.data.semanaAnterior || '';
       } else if (Array.isArray(response.data)) {
         // Si viene como array directo (fallback)
         conductoresData = response.data;
         if (conductoresData.length > 0 && conductoresData[0].semana) {
           semanaActualFromResponse = conductoresData[0].semana;
+          semanaAnteriorFromResponse = conductoresData[0].semana;
         }
       } else if (response.data && response.data.content && Array.isArray(response.data.content)) {
         // Si viene como objeto con content (paginación - fallback)
         conductoresData = response.data.content;
         semanaActualFromResponse = response.data.semanaActual || '';
+        semanaAnteriorFromResponse = response.data.semanaAnterior || '';
       } else {
         // Fallback: asegurar que siempre sea un array
         conductoresData = [];
         console.warn('⚠️ [GarantizadoModule] Response no tiene formato esperado:', response.data);
       }
       
-      // Establecer la semana actual
+      // Establecer la semana actual (para el texto del período)
       if (semanaActualFromResponse) {
         setSemanaActual(semanaActualFromResponse);
+      }
+      
+      // Establecer la semana anterior (para mostrar en la tabla)
+      if (semanaAnteriorFromResponse) {
+        setSemanaAnterior(semanaAnteriorFromResponse);
       }
       
       // Asegurar que siempre sean arrays
@@ -181,6 +202,11 @@ export const GarantizadoModule: React.FC = () => {
       setData(safeConductoresData);
       setFilteredData(safeConductoresData);
       setTotalConductores(safeConductoresData.length);
+      
+      // Marcar que la carga inicial se completó
+      if (isInitialLoad) {
+        setInitialLoadDone(true);
+      }
       
     } catch (error: any) {
       console.error('❌ [GarantizadoModule] Error al cargar conductores:', error);
@@ -197,10 +223,15 @@ export const GarantizadoModule: React.FC = () => {
   };
 
   useEffect(() => {
+    console.log('🚀 [GarantizadoModule] Montando componente - Iniciando carga...');
+    
     // Cargar flotas al inicializar el componente
     cargarFlotas();
-    // Cargar conductores de la semana actual al inicio
-    cargarConductores(true); // true = carga inicial
+    
+    // Cargar conductores SOLO UNA VEZ al inicializar
+    if (!hasLoadedRef.current) {
+      cargarConductores(true); // true = carga inicial
+    }
 
     // Configurar WebSocket para actualizaciones automáticas
     const handleGarantizadoUpdate = (event: any) => {
@@ -212,6 +243,7 @@ export const GarantizadoModule: React.FC = () => {
         // Actualizar datos con los recibidos del WebSocket
         const conductoresData = event.conductores || [];
         const semanaActualFromEvent = event.semanaActual || '';
+        const semanaAnteriorFromEvent = event.semanaAnterior || '';
         
         setData(conductoresData);
         setFilteredData(conductoresData);
@@ -219,6 +251,10 @@ export const GarantizadoModule: React.FC = () => {
         
         if (semanaActualFromEvent) {
           setSemanaActual(semanaActualFromEvent);
+        }
+        
+        if (semanaAnteriorFromEvent) {
+          setSemanaAnterior(semanaAnteriorFromEvent);
         }
         
         // Mostrar notificación de actualización
@@ -239,13 +275,16 @@ export const GarantizadoModule: React.FC = () => {
     return () => {
       socketService.off('garantizado', handleGarantizadoUpdate);
     };
-  }, []);
+  }, []); // Array vacío para que solo se ejecute una vez
 
   // Cargar conductores cuando cambie la flota seleccionada
   useEffect(() => {
-    cargarConductores(false); // false = no es carga inicial, solo tabla
-    setCurrentPage(1); // Resetear a la primera página cuando cambie la flota
-  }, [flotaFilter]);
+    // Solo cargar si ya se hizo la carga inicial y flotaFilter cambió de un valor válido
+    if (initialLoadDone && flotaFilter !== undefined) {
+      cargarConductores(false); // false = no es carga inicial, solo tabla
+      setCurrentPage(1); // Resetear a la primera página cuando cambie la flota
+    }
+  }, [flotaFilter, initialLoadDone]);
 
   // Aplicar filtros localmente cuando cambien los términos de búsqueda o status
   useEffect(() => {
@@ -297,11 +336,12 @@ export const GarantizadoModule: React.FC = () => {
     console.log('📊 [GarantizadoModule] Flota actual:', flotaFilter);
     console.log('📊 [GarantizadoModule] Estado actual:', statusFilter);
     console.log('📊 [GarantizadoModule] Semana actual:', semanaActual);
+    console.log('📊 [GarantizadoModule] Semana anterior:', semanaAnterior);
     
     setExportFilters({
       flotaId: flotaFilter || '',
       estado: statusFilter || '',
-      semana: semanaActual || ''
+      semana: semanaAnterior || '' // Usar semana anterior por defecto
     });
     setShowExportModal(true);
   };
@@ -566,7 +606,7 @@ export const GarantizadoModule: React.FC = () => {
           <CardTitle className="text-xl font-bold text-red-800 dark:text-red-200 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Shield className="h-6 w-6" />
-              Control del período de garantizado
+              Control del período de garantizado - {semanaAnterior || 'Cargando...'}
             </div>
             {loadingTable && (
               <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-red-600"></div>
