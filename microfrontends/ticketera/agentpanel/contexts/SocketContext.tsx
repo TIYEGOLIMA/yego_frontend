@@ -17,7 +17,7 @@ const SocketContext = createContext<SocketContextType | undefined>(undefined)
  * SocketProvider actualizado para usar el WebSocket centralizado
  * Mantiene la misma interfaz para compatibilidad con componentes existentes
  */
-export function SocketProvider({ children }: { children: React.ReactNode }) {
+export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
   // 🎯 USAR WEBSOCKET CENTRALIZADO EN LUGAR DE CREAR UNO PROPIO
   const socketHook = useSocketHook()
 
@@ -61,4 +61,3 @@ export const useSocket = () => {
 
 // Exportar también el context para compatibilidad
 export { SocketContext }
-export default SocketContext

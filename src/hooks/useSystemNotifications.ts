@@ -31,6 +31,13 @@ export const useSystemNotifications = () => {
 
   useEffect(() => {
     console.log('🔧 [SystemNotifications] Configurando callbacks del hook...');
+    console.log('🔧 [SystemNotifications] Estado de conexión:', systemNotificationsService.connectionStatus);
+    
+    // Forzar reconexión si no está conectado
+    if (!systemNotificationsService.connectionStatus) {
+      console.log('🔧 [SystemNotifications] Forzando reconexión...');
+      systemNotificationsService.forceReconnect();
+    }
     
     // Configurar callbacks para eventos del sistema
     systemNotificationsService.setOnForcedLogout((event: ForcedLogoutEvent) => {

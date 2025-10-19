@@ -392,14 +392,14 @@ class SocketService {
           const event = JSON.parse(message.body);
           console.log('👤 [SocketService] Evento de usuario recibido:', event);
           
-          // Procesar eventos específicos del usuario
-          if (event.type === 'ACCOUNT_BLOCKED') {
-            console.log('🚨 [SocketService] Cuenta bloqueada, cerrando sesión...');
-            this.emit('account-blocked', event);
-          } else if (event.type === 'FORCED_LOGOUT') {
-            console.log('🚨 [SocketService] Logout forzado, cerrando sesión...');
-            this.emit('forced-logout', event);
+          // Los eventos ACCOUNT_BLOCKED y FORCED_LOGOUT son procesados por SystemNotificationsService
+          if (event.type === 'ACCOUNT_BLOCKED' || event.type === 'FORCED_LOGOUT') {
+            console.log(`🚫 [SocketService] Evento ${event.type} ignorado - debe ser procesado por SystemNotificationsService`);
+            return;
           }
+          
+          // Procesar otros eventos específicos del usuario si los hay
+          console.log(`🔔 [SocketService] Evento de usuario procesado: ${event.type}`);
         } catch (error) {
           console.error('❌ [SocketService] Error procesando evento de usuario:', error);
         }
@@ -439,27 +439,11 @@ class SocketService {
         const event = JSON.parse(message.body);
         console.log('🔔 [SocketService] Evento del sistema recibido:', event);
         
-        // Filtrar eventos por usuario para ACCOUNT_BLOCKED y FORCED_LOGOUT
+        // Los eventos ACCOUNT_BLOCKED y FORCED_LOGOUT ahora llegan por /topic/user/{userId}
+        // No procesarlos aquí para evitar conflictos con SystemNotificationsService
         if (event.type === 'ACCOUNT_BLOCKED' || event.type === 'FORCED_LOGOUT') {
-          const token = localStorage.getItem('token');
-          let currentUserId: number | null = null;
-          
-          if (token) {
-            try {
-              const payload = JSON.parse(atob(token.split('.')[1]));
-              currentUserId = payload.userId || payload.id;
-            } catch (error) {
-              console.warn('⚠️ [SocketService] No se pudo obtener userId del token:', error);
-            }
-          }
-
-          // Solo procesar si el evento es para el usuario actual
-          if (event.userId && currentUserId && event.userId !== currentUserId) {
-            console.log(`🚫 [SocketService] Evento ${event.type} ignorado - destinado para userId ${event.userId}, usuario actual ${currentUserId}`);
-            return;
-          }
-          
-          console.log(`✅ [SocketService] Procesando evento ${event.type} para usuario actual`);
+          console.log(`🚫 [SocketService] Evento ${event.type} ignorado - debe ser procesado por SystemNotificationsService`);
+          return;
         }
         
         // Si es un evento de garantizado, emitirlo

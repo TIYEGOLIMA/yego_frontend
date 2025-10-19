@@ -5,6 +5,10 @@ import { SystemEvent, ForcedLogoutEvent, AccountBlockedEvent, UserTableUpdateEve
 class SystemNotificationsService {
   private client: Client | null = null
   private isConnected = false
+
+  public get connectionStatus() {
+    return this.isConnected
+  }
   private reconnectAttempts = 0
   private maxReconnectAttempts = 5
   private reconnectDelay = 3000
@@ -121,7 +125,11 @@ class SystemNotificationsService {
       // Suscribirse al topic específico del usuario para eventos personales
       if (currentUserId) {
         console.log(`🔔 [SystemNotifications] Suscribiéndose a /topic/user/${currentUserId}`)
+        console.log(`🔔 [SystemNotifications] Cliente disponible:`, !!this.client)
+        console.log(`🔔 [SystemNotifications] Estado de conexión:`, this.connectionStatus)
+        
         this.client.subscribe(`/topic/user/${currentUserId}`, (message) => {
+          console.log(`🔔 [SystemNotifications] MENSAJE RECIBIDO en /topic/user/${currentUserId}:`, message.body)
           try {
             const event: SystemEvent = JSON.parse(message.body)
             console.log('🔔 [SystemNotifications] Evento personal recibido:', event)
