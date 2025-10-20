@@ -149,6 +149,38 @@ export const authService = {
   },
 
   /**
+   * Renueva el token JWT actual
+   * @returns Nueva respuesta de autenticación con token renovado
+   */
+  async refreshToken(): Promise<AuthResponse> {
+    try {
+      console.log('🔄 [authService] Renovando token JWT...');
+      const response = await api.post<AuthResponse>('/auth/refresh');
+      console.log('✅ [authService] Token renovado exitosamente');
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ [authService] Error renovando token:', error.response?.data || error.message);
+      throw error;
+    }
+  },
+
+  /**
+   * Verifica si el token actual es válido
+   * @returns true si el token es válido, false si no
+   */
+  async verifyToken(): Promise<boolean> {
+    try {
+      console.log('🔍 [authService] Verificando token JWT...');
+      await api.get('/auth/verify');
+      console.log('✅ [authService] Token válido');
+      return true;
+    } catch (error: any) {
+      console.warn('⚠️ [authService] Token inválido:', error.response?.data || error.message);
+      return false;
+    }
+  },
+
+  /**
    * Cierra la sesión del usuario actual
    * Utiliza el endpoint /logout del backend que maneja la invalidación del token
    */

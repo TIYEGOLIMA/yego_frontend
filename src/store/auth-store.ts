@@ -126,10 +126,26 @@ export const useAuthStore = create<AuthState>()(
         
         // Verificar si el token es válido antes de hacer la petición
         if (!authService.isTokenValid()) {
-          console.log('🚨 [store] Token inválido detectado en fetchProfile - limpiando...');
-          authService.clearLocalStorage();
-          set({ user: null, token: null, loading: false });
-          return;
+          console.log('🚨 [store] Token inválido detectado en fetchProfile - intentando renovar...');
+          
+          try {
+            // Intentar renovar el token
+            const refreshResponse = await authService.refreshToken()
+            set({ 
+              user: refreshResponse.user, 
+              token: refreshResponse.accessToken,
+              loading: false 
+            })
+            localStorage.setItem("token", refreshResponse.accessToken)
+            localStorage.setItem("user", JSON.stringify(refreshResponse.user))
+            console.log('✅ [store] Token renovado exitosamente en fetchProfile')
+            return
+          } catch (refreshError) {
+            console.log('❌ [store] Error renovando token - limpiando datos...');
+            authService.clearLocalStorage();
+            set({ user: null, token: null, loading: false });
+            return;
+          }
         }
         
         set({ loading: true })
@@ -141,13 +157,28 @@ export const useAuthStore = create<AuthState>()(
         } catch (error: any) {
           console.log('🔒 [store] Error en fetchProfile:', error);
           
-          // Si es error de token inválido, limpiar inmediatamente
+          // Si es error de token inválido, intentar renovar primero
           if (error.response?.status === 401 || 
               error.message?.includes('JWT signature')) {
-            console.log('🚨 [store] Token corrupto/inválido - limpiando datos...');
-            authService.clearLocalStorage();
-            set({ user: null, token: null, loading: false });
-            return;
+            console.log('🚨 [store] Token expirado - intentando renovar...');
+            
+            try {
+              const refreshResponse = await authService.refreshToken()
+              set({ 
+                user: refreshResponse.user, 
+                token: refreshResponse.accessToken,
+                loading: false 
+              })
+              localStorage.setItem("token", refreshResponse.accessToken)
+              localStorage.setItem("user", JSON.stringify(refreshResponse.user))
+              console.log('✅ [store] Token renovado exitosamente en fetchProfile')
+              return
+            } catch (refreshError) {
+              console.log('❌ [store] Error renovando token - limpiando datos...');
+              authService.clearLocalStorage();
+              set({ user: null, token: null, loading: false });
+              return;
+            }
           }
           
           // Para otros errores, intentar logout normal

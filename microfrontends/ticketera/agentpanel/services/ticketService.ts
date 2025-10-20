@@ -23,6 +23,39 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+// 🔄 Interceptor para manejar renovación automática de tokens
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    if (error.response?.status === 401) {
+      try {
+        console.log('🔄 [ticketService] Token expirado, intentando renovar...')
+        
+        const currentToken = localStorage.getItem('token')
+        if (currentToken) {
+          // Usar el endpoint específico de ticketera
+          const refreshResponse = await api.post('/ticketera/auth/refresh', {}, {
+            headers: { 'Authorization': `Bearer ${currentToken}` }
+          })
+          
+          // Actualizar token
+          const newToken = refreshResponse.data.accessToken
+          localStorage.setItem('token', newToken)
+          
+          // Reintentar request original
+          error.config.headers['Authorization'] = `Bearer ${newToken}`
+          return api.request(error.config)
+        }
+      } catch (refreshError) {
+        console.warn('⚠️ [ticketService] Error renovando token:', refreshError)
+        // Redirigir a login si no podemos renovar
+        window.location.href = '/login'
+      }
+    }
+    return Promise.reject(error)
+  }
+)
+
 export const ticketService = {
   async createTicket(data: CreateTicketData): Promise<Ticket> {
     try {

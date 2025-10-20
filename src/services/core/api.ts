@@ -55,19 +55,52 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    // Verificar si el error es del endpoint de login
+    // Verificar si el error es del endpoint de login o refresh
     const isLoginRequest = error.config?.url?.includes('/auth/login')
+    const isRefreshRequest = error.config?.url?.includes('/auth/refresh')
+    const isTicketeraRefreshRequest = error.config?.url?.includes('/ticketera/auth/refresh')
     
     // Manejar errores de autenticación (401)
-    // NO interceptar errores 401 del login (credenciales incorrectas)
-    if (error.response?.status === 401 && !isLoginRequest) {
-      console.log('🔒 [api] Error 401 - Token expirado, ejecutando logout completo...')
+    // NO interceptar errores 401 del login o refresh (credenciales incorrectas o token inválido)
+    if (error.response?.status === 401 && !isLoginRequest && !isRefreshRequest && !isTicketeraRefreshRequest) {
+      console.log('🔒 [api] Error 401 - Token expirado, intentando renovar...')
       
-      // 🎯 USAR EL MISMO MÉTODO QUE EL LOGOUT MANUAL
+      // Intentar renovar el token antes de hacer logout
       try {
-        // Usar directamente el authService importado
+        const currentToken = localStorage.getItem('token')
+        if (currentToken) {
+          console.log('🔄 [api] Intentando renovar token...')
+          
+          // Determinar qué endpoint de refresh usar según el contexto
+          const refreshUrl = window.location.pathname.includes('/ticketera') 
+            ? '/ticketera/auth/refresh' 
+            : '/auth/refresh'
+          
+          const refreshResponse = await api.post(refreshUrl, {}, {
+            headers: { 'Authorization': `Bearer ${currentToken}` }
+          })
+          
+          // Actualizar token en localStorage
+          const newToken = refreshResponse.data.accessToken
+          localStorage.setItem('token', newToken)
+          
+          // Actualizar header de autorización
+          api.defaults.headers.common['Authorization'] = `Bearer ${newToken}`
+          
+          // Reintentar request original con nuevo token
+          error.config.headers['Authorization'] = `Bearer ${newToken}`
+          console.log('✅ [api] Token renovado exitosamente, reintentando request...')
+          
+          return api.request(error.config)
+        }
+      } catch (refreshError) {
+        console.warn('⚠️ [api] Error renovando token, ejecutando logout...', refreshError)
+      }
+      
+      // Si la renovación falla, hacer logout completo
+      try {
         await authService.logout()
-        console.log('✅ [api] Logout automático completado con limpieza del AgentPanel')
+        console.log('✅ [api] Logout automático completado')
       } catch (logoutError) {
         console.warn('⚠️ [api] Error en logout automático, limpiando localmente:', logoutError)
         // Fallback: al menos limpiar datos básicos

@@ -44,6 +44,14 @@ interface GarantizadoData {
   activo: boolean;
 }
 
+interface RegistroData {
+  yegLicenciaNumero: string;
+  yegFechaRegistro: string;
+  yegFlota: string;
+  flotaNombre: string;
+  yegSemana: string;
+}
+
 interface FlotaResponse {
   id: string;
   name: string;
@@ -71,7 +79,6 @@ export const GarantizadoModule: React.FC = () => {
   const [semanaAnterior, setSemanaAnterior] = useState<string>('');
   const [showUpdateNotification, setShowUpdateNotification] = useState(false);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
-  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [exporting, setExporting] = useState(false);
   const hasLoadedRef = useRef(false);
   const [showExportModal, setShowExportModal] = useState(false);
@@ -80,6 +87,9 @@ export const GarantizadoModule: React.FC = () => {
     estado: '',
     semana: ''
   });
+  const [showRegistros, setShowRegistros] = useState(false);
+  const [registrosData, setRegistrosData] = useState<RegistroData[]>([]);
+  const [loadingRegistros, setLoadingRegistros] = useState(false);
 
   // El backend ya calcula todo automáticamente, no necesitamos calcular nada en el frontend
 
@@ -99,6 +109,43 @@ export const GarantizadoModule: React.FC = () => {
       setFlotas([]);
     } finally {
       setLoadingFlotas(false);
+    }
+  };
+
+  // Función para cargar registros de la semana actual desde garantizadoRegistro
+  const cargarRegistrosSemanaActual = async (flotaId?: string) => {
+    try {
+      setLoadingRegistros(true);
+      console.log('🔍 [GarantizadoModule] Cargando registros de la semana actual...');
+      
+      // Construir endpoint con filtro de flota si se proporciona
+      let endpoint = '/garantizado/registros/semana-actual';
+      if (flotaId && flotaId !== '') {
+        endpoint = `/garantizado/registros/semana-actual?flotaId=${flotaId}`;
+      }
+      
+      const response = await api.get(endpoint);
+      console.log('✅ [GarantizadoModule] Registros cargados:', response.data);
+      
+      // Manejar el response del backend con la nueva estructura
+      let registrosData: RegistroData[] = [];
+      
+      if (response.data && Array.isArray(response.data)) {
+        registrosData = response.data;
+      } else if (response.data && response.data.registros && Array.isArray(response.data.registros)) {
+        registrosData = response.data.registros;
+      } else {
+        console.warn('⚠️ [GarantizadoModule] Response no tiene formato esperado:', response.data);
+        registrosData = [];
+      }
+      
+      setRegistrosData(registrosData);
+      
+    } catch (error: any) {
+      console.error('❌ [GarantizadoModule] Error al cargar registros:', error);
+      setRegistrosData([]);
+    } finally {
+      setLoadingRegistros(false);
     }
   };
 
@@ -139,7 +186,6 @@ export const GarantizadoModule: React.FC = () => {
       if (isInitialLoad) {
         setLoading(true);
         hasLoadedRef.current = true;
-        setHasLoadedOnce(true);
       } else {
         setLoadingTable(true);
       }
@@ -286,31 +332,74 @@ export const GarantizadoModule: React.FC = () => {
     }
   }, [flotaFilter, initialLoadDone]);
 
+  // Cargar registros cuando se active la vista de registros
+  useEffect(() => {
+    if (showRegistros && registrosData.length === 0) {
+      cargarRegistrosSemanaActual();
+    }
+  }, [showRegistros]);
+
+  // Recargar registros cuando cambie el filtro de flota en vista de registros
+  useEffect(() => {
+    if (showRegistros && initialLoadDone) {
+      cargarRegistrosSemanaActual(flotaFilter);
+      setCurrentPage(1);
+    }
+  }, [flotaFilter, showRegistros, initialLoadDone]);
+
   // Aplicar filtros localmente cuando cambien los términos de búsqueda o status
   useEffect(() => {
-    const safeData = Array.isArray(data) ? data : [];
-    let filtered = safeData;
+    if (showRegistros) {
+      // Para vista de registros, usar datos de registros
+      const safeData = Array.isArray(registrosData) ? registrosData : [];
+      let filtered = safeData;
 
-    // Filtrar por término de búsqueda si existe
-    if (searchTerm && searchTerm.trim() !== '') {
-      const searchLower = searchTerm.toLowerCase();
-      filtered = filtered.filter(item =>
-        item.nombreCompleto.toLowerCase().includes(searchLower) ||
-        item.numeroLicencia.toLowerCase().includes(searchLower)
-      );
-    }
-    
-    // Filtrar por status si existe
-    if (statusFilter && statusFilter !== '' && statusFilter !== 'TODOS') {
-      filtered = filtered.filter(item =>
-        item.garantizadoValor === statusFilter
-      );
-    }
+      // Filtrar por término de búsqueda si existe (buscar en licencia y flota)
+      if (searchTerm && searchTerm.trim() !== '') {
+        const searchLower = searchTerm.toLowerCase();
+        filtered = filtered.filter(item =>
+          item.yegLicenciaNumero.toLowerCase().includes(searchLower) ||
+          item.flotaNombre.toLowerCase().includes(searchLower) ||
+          item.yegFlota.toLowerCase().includes(searchLower)
+        );
+      }
 
-    setFilteredData(filtered);
-    setTotalConductores(filtered.length);
-    setCurrentPage(1); // Resetear a la primera página cuando cambien los filtros
-  }, [data, searchTerm, statusFilter]);
+      // Filtrar por flota si existe (para vista de registros)
+      if (flotaFilter && flotaFilter !== '') {
+        filtered = filtered.filter(item =>
+          item.yegFlota === flotaFilter
+        );
+      }
+
+      setFilteredData(filtered as any);
+      setTotalConductores(filtered.length);
+      setCurrentPage(1);
+    } else {
+      // Para vista de garantizado, usar datos normales
+      const safeData = Array.isArray(data) ? data : [];
+      let filtered = safeData;
+
+      // Filtrar por término de búsqueda si existe
+      if (searchTerm && searchTerm.trim() !== '') {
+        const searchLower = searchTerm.toLowerCase();
+        filtered = filtered.filter(item =>
+          item.nombreCompleto.toLowerCase().includes(searchLower) ||
+          item.numeroLicencia.toLowerCase().includes(searchLower)
+        );
+      }
+      
+      // Filtrar por status si existe (solo para vista de garantizado)
+      if (statusFilter && statusFilter !== '' && statusFilter !== 'TODOS') {
+        filtered = filtered.filter(item =>
+          item.garantizadoValor === statusFilter
+        );
+      }
+
+      setFilteredData(filtered);
+      setTotalConductores(filtered.length);
+      setCurrentPage(1);
+    }
+  }, [data, registrosData, showRegistros, searchTerm, statusFilter, flotaFilter]);
 
   // Funciones de paginación
   const totalPages = Math.ceil(totalConductores / itemsPerPage);
@@ -562,18 +651,20 @@ export const GarantizadoModule: React.FC = () => {
                 className="pl-10 px-3 py-2 h-10"
               />
             </div>
-            <div>
-              <select
-                value={statusFilter}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setStatusFilter(e.target.value)}
-                className="w-full px-3 py-2 h-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-              >
-                <option value="">Seleccionar estado</option>
-                <option value="TODOS">Todos los estados</option>
-                <option value="Garantizado">Garantizado</option>
-                <option value="No Garantizado">No Garantizado</option>
-              </select>
-            </div>
+            {!showRegistros && (
+              <div>
+                <select
+                  value={statusFilter}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setStatusFilter(e.target.value)}
+                  className="w-full px-3 py-2 h-10 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                >
+                  <option value="">Seleccionar estado</option>
+                  <option value="TODOS">Todos los estados</option>
+                  <option value="Garantizado">Garantizado</option>
+                  <option value="No Garantizado">No Garantizado</option>
+                </select>
+              </div>
+            )}
             <div>
               <select
                 value={flotaFilter}
@@ -606,134 +697,198 @@ export const GarantizadoModule: React.FC = () => {
           <CardTitle className="text-xl font-bold text-red-800 dark:text-red-200 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Shield className="h-6 w-6" />
-              Control del período de garantizado - {semanaAnterior || 'Cargando...'}
+              {showRegistros ? `Registros de Conductores - ${registrosData.length} registros` : 'Control del período de garantizado'} - {!showRegistros && (semanaAnterior || 'Cargando...')}
             </div>
-            {loadingTable && (
-              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-red-600"></div>
-            )}
+            <div className="flex items-center gap-4">
+              {(loadingTable || loadingRegistros) && (
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-red-600"></div>
+              )}
+              {/* Switch para alternar vista */}
+              <div className="flex items-center gap-3 bg-gray-100 dark:bg-gray-800 rounded-lg p-2">
+                <span className={`text-sm font-medium ${!showRegistros ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                  Garantizado
+                </span>
+                <Switch
+                  checked={showRegistros}
+                  onCheckedChange={setShowRegistros}
+                  className="data-[state=checked]:bg-blue-600"
+                />
+                <span className={`text-sm font-medium ${showRegistros ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                  Registros
+                </span>
+              </div>
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {loadingTable ? (
+          {(loadingTable || loadingRegistros) ? (
             <div className="flex items-center justify-center py-12">
               <div className="flex flex-col items-center gap-4">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Cargando conductores...</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  {showRegistros ? 'Cargando registros...' : 'Cargando conductores...'}
+                </p>
               </div>
             </div>
           ) : (
           <div className="overflow-x-auto">
-            <table className="w-full table-auto min-w-[1600px]">
+            <table className={`w-full table-auto ${showRegistros ? 'min-w-[600px]' : 'min-w-[1600px]'}`}>
               <thead>
                 <tr className="border-b border-gray-200 dark:border-gray-700">
-                  <th className="text-left py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[250px]">
-                    Conductor
-                  </th>
-                  <th className="text-left py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[120px]">
-                    Licencia
-                  </th>
-                  <th className="text-left py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[120px]">
-                    Teléfono
-                  </th>
-                  <th className="text-center py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[120px]">
-                    Viajes
-                  </th>
-                  <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[120px]">
-                    Efectivo
-                  </th>
-                  <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[130px]">
-                    Sin Efectivo
-                  </th>
-                  <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[120px]">
-                    Com. Yango
-                  </th>
-                  <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[120px]">
-                    Com. Yego
-                  </th>
-                  <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[110px]">
-                    Bono Ant.
-                  </th>
-                  <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[110px]">
-                    Bono Act.
-                  </th>
-                  <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[110px]">
-                    Total
-                  </th>
-                  <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[120px]">
-                    Garantizado
-                  </th>
-                  <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[120px]">
-                    Diferencia
-                  </th>
-                  <th className="text-center py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[130px]">
-                    Estado
-                  </th>
+                  {!showRegistros ? (
+                    <>
+                      <th className="text-left py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[250px]">
+                        Conductor
+                      </th>
+                      <th className="text-left py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[120px]">
+                        Licencia
+                      </th>
+                      <th className="text-left py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[120px]">
+                        Teléfono
+                      </th>
+                      <th className="text-center py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[120px]">
+                        Viajes
+                      </th>
+                      <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[120px]">
+                        Efectivo
+                      </th>
+                      <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[130px]">
+                        Sin Efectivo
+                      </th>
+                      <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[120px]">
+                        Com. Yango
+                      </th>
+                      <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[120px]">
+                        Com. Yego
+                      </th>
+                      <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[110px]">
+                        Bono Ant.
+                      </th>
+                      <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[110px]">
+                        Bono Act.
+                      </th>
+                      <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[110px]">
+                        Total
+                      </th>
+                      <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[120px]">
+                        Garantizado
+                      </th>
+                      <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[120px]">
+                        Diferencia
+                      </th>
+                      <th className="text-center py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[130px]">
+                        Estado
+                      </th>
+                    </>
+                  ) : (
+                    <>
+                      <th className="text-left py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[120px]">
+                        Licencia
+                      </th>
+                      <th className="text-center py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[120px]">
+                        Fecha Registro
+                      </th>
+                      <th className="text-center py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[150px]">
+                        Flota
+                      </th>
+                      <th className="text-center py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[120px]">
+                        Semana
+                      </th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody>
-                {paginatedData.map((item) => (
-                  <tr key={item.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800">
-                    <td className="py-5 px-6">
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
-                          <User className="h-5 w-5 text-red-600" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="font-medium text-gray-900 dark:text-white text-base">
-                            {item.nombreCompleto}
+                {paginatedData.map((item, index) => (
+                  <tr key={showRegistros ? index : item.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800">
+                    {!showRegistros ? (
+                      <>
+                        <td className="py-5 px-6">
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+                              <User className="h-5 w-5 text-red-600" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="font-medium text-gray-900 dark:text-white text-base">
+                                {item.nombreCompleto}
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-5 px-6 text-sm font-mono text-gray-700 dark:text-gray-300">
-                      {item.numeroLicencia}
-                    </td>
-                    <td className="py-5 px-6 text-sm text-gray-700 dark:text-gray-300">
-                      {item.telefono}
-                    </td>
-                    <td className="py-5 px-6 text-center">
-                      <span className="font-medium text-gray-900 dark:text-white text-lg">
-                        {item.viajes}
-                      </span>
-                    </td>
-                    <td className="py-5 px-6 text-right text-sm font-mono text-gray-700 dark:text-gray-300">
-                      {formatCurrency(item.efectivo)}
-                    </td>
-                    <td className="py-5 px-6 text-right text-sm font-mono text-gray-700 dark:text-gray-300">
-                      {formatCurrency(item.pagoSinEfectivo)}
-                    </td>
-                    <td className="py-5 px-6 text-right text-sm font-mono">
-                      <span className={item.comYango >= 0 ? 'text-green-600' : 'text-red-600'}>
-                        {formatCurrency(item.comYango)}
-                      </span>
-                    </td>
-                    <td className="py-5 px-6 text-right text-sm font-mono">
-                      <span className={item.comYego >= 0 ? 'text-green-600' : 'text-red-600'}>
-                        {formatCurrency(item.comYego)}
-                      </span>
-                    </td>
-                    <td className="py-5 px-6 text-right text-sm font-mono text-gray-700 dark:text-gray-300">
-                      {formatCurrency(item.boSemAnt)}
-                    </td>
-                    <td className="py-5 px-6 text-right text-sm font-mono text-gray-700 dark:text-gray-300">
-                      {formatCurrency(item.boSemAct)}
-                    </td>
-                    <td className="py-5 px-6 text-right text-sm font-mono text-gray-900 dark:text-white">
-                      {formatCurrency(item.total)}
-                    </td>
-                    <td className="py-5 px-6 text-right">
-                      <div className="font-medium text-red-600 dark:text-red-400 text-base">
-                        {formatCurrency(item.garantizado)}
-                      </div>
-                    </td>
-                    <td className="py-5 px-6 text-right">
-                      <div className={`font-medium text-base ${item.diferencia >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {formatCurrency(item.diferencia)}
-                      </div>
-                    </td>
-                  <td className="py-5 px-6 text-center">
-                    {getStatusBadge(item.garantizadoValor)}
-                  </td>
+                        </td>
+                        <td className="py-5 px-6 text-sm font-mono text-gray-700 dark:text-gray-300">
+                          {item.numeroLicencia}
+                        </td>
+                        <td className="py-5 px-6 text-sm text-gray-700 dark:text-gray-300">
+                          {item.telefono}
+                        </td>
+                        <td className="py-5 px-6 text-center">
+                          <span className="font-medium text-gray-900 dark:text-white text-lg">
+                            {item.viajes}
+                          </span>
+                        </td>
+                        <td className="py-5 px-6 text-right text-sm font-mono text-gray-700 dark:text-gray-300">
+                          {formatCurrency(item.efectivo)}
+                        </td>
+                        <td className="py-5 px-6 text-right text-sm font-mono text-gray-700 dark:text-gray-300">
+                          {formatCurrency(item.pagoSinEfectivo)}
+                        </td>
+                        <td className="py-5 px-6 text-right text-sm font-mono">
+                          <span className={item.comYango >= 0 ? 'text-green-600' : 'text-red-600'}>
+                            {formatCurrency(item.comYango)}
+                          </span>
+                        </td>
+                        <td className="py-5 px-6 text-right text-sm font-mono">
+                          <span className={item.comYego >= 0 ? 'text-green-600' : 'text-red-600'}>
+                            {formatCurrency(item.comYego)}
+                          </span>
+                        </td>
+                        <td className="py-5 px-6 text-right text-sm font-mono text-gray-700 dark:text-gray-300">
+                          {formatCurrency(item.boSemAnt)}
+                        </td>
+                        <td className="py-5 px-6 text-right text-sm font-mono text-gray-700 dark:text-gray-300">
+                          {formatCurrency(item.boSemAct)}
+                        </td>
+                        <td className="py-5 px-6 text-right text-sm font-mono text-gray-900 dark:text-white">
+                          {formatCurrency(item.total)}
+                        </td>
+                        <td className="py-5 px-6 text-right">
+                          <div className="font-medium text-red-600 dark:text-red-400 text-base">
+                            {formatCurrency(item.garantizado)}
+                          </div>
+                        </td>
+                        <td className="py-5 px-6 text-right">
+                          <div className={`font-medium text-base ${item.diferencia >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {formatCurrency(item.diferencia)}
+                          </div>
+                        </td>
+                        <td className="py-5 px-6 text-center">
+                          {getStatusBadge(item.garantizadoValor)}
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="py-5 px-6 text-sm font-mono text-gray-700 dark:text-gray-300">
+                          {(item as any).yegLicenciaNumero}
+                        </td>
+                        <td className="py-5 px-6 text-center text-sm text-gray-600 dark:text-gray-400">
+                          {new Date((item as any).yegFechaRegistro).toLocaleDateString('es-PE')}
+                        </td>
+                        <td className="py-5 px-6 text-center text-sm text-gray-600 dark:text-gray-400">
+                          <div className="font-medium text-gray-900 dark:text-white">
+                            {(item as any).flotaNombre}
+                          </div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">
+                            {(item as any).yegFlota}
+                          </div>
+                        </td>
+                        <td className="py-5 px-6 text-center">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400">
+                            <span className="w-1.5 h-1.5 bg-blue-400 rounded-full mr-1.5"></span>
+                            {(item as any).yegSemana}
+                          </span>
+                        </td>
+                      </>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -744,12 +899,18 @@ export const GarantizadoModule: React.FC = () => {
             <div className="text-center py-12">
                   <Car className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                   <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                  {flotaFilter === '' ? 'Selecciona una flota' : 'No se encontraron conductores'}
+                  {showRegistros 
+                    ? 'No hay registros de la semana actual' 
+                    : (flotaFilter === '' ? 'Selecciona una flota' : 'No se encontraron conductores')
+                  }
                   </h3>
                   <p className="text-gray-500 dark:text-gray-400">
-                  {flotaFilter === '' 
-                    ? 'Por favor selecciona una flota para ver los conductores con garantía'
-                    : 'Intenta ajustar los filtros de búsqueda o selecciona otra flota'
+                  {showRegistros 
+                    ? 'No se encontraron registros de conductores para la semana actual'
+                    : (flotaFilter === '' 
+                      ? 'Por favor selecciona una flota para ver los conductores con garantía'
+                      : 'Intenta ajustar los filtros de búsqueda o selecciona otra flota'
+                    )
                   }
                 </p>
             </div>
@@ -759,7 +920,10 @@ export const GarantizadoModule: React.FC = () => {
             {safeFilteredData.length > 0 && (
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
                 <div className="text-sm text-gray-600 dark:text-gray-400">
-                  Mostrando {startIndex + 1} a {Math.min(endIndex, totalConductores)} de {totalConductores} conductores
+                  {showRegistros 
+                    ? `Mostrando ${startIndex + 1} a ${Math.min(endIndex, totalConductores)} de ${totalConductores} registros de la semana actual`
+                    : `Mostrando ${startIndex + 1} a ${Math.min(endIndex, totalConductores)} de ${totalConductores} conductores`
+                  }
               </div>
                 
                 <div className="flex items-center gap-2">

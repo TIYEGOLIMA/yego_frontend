@@ -1,0 +1,62 @@
+import { useEffect, useCallback } from 'react'
+import { ticketeraAuthService } from '../services'
+
+/**
+ * Hook específico para manejar la renovación automática de tokens JWT en ticketera
+ * Verifica y renueva el token cada cierto tiempo para evitar deslogueos inesperados
+ */
+export const useTicketeraTokenRefresh = (intervalMinutes: number = 30) => {
+  const refreshToken = useCallback(async () => {
+    try {
+      console.log('🔄 [useTicketeraTokenRefresh] Verificando token de ticketera...')
+      
+      // Verificar si el token es válido
+      const isValid = await ticketeraAuthService.verifyToken()
+      
+      if (!isValid) {
+        console.log('🔄 [useTicketeraTokenRefresh] Token inválido, renovando...')
+        const refreshResponse = await ticketeraAuthService.refreshToken()
+        
+        // Actualizar localStorage
+        localStorage.setItem('token', refreshResponse.accessToken)
+        localStorage.setItem('user', JSON.stringify(refreshResponse.user))
+        
+        console.log('✅ [useTicketeraTokenRefresh] Token de ticketera renovado exitosamente')
+      } else {
+        console.log('✅ [useTicketeraTokenRefresh] Token de ticketera válido')
+      }
+    } catch (error) {
+      console.warn('⚠️ [useTicketeraTokenRefresh] Error verificando/renovando token:', error)
+      
+      // Si hay error, hacer logout
+      try {
+        // Limpiar datos locales
+        localStorage.removeItem('token')
+        localStorage.removeItem('user')
+        localStorage.removeItem('auth-storage')
+        
+        // Redirigir a login
+        window.location.href = '/login'
+      } catch (logoutError) {
+        console.error('❌ [useTicketeraTokenRefresh] Error en logout:', logoutError)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    // Solo ejecutar si estamos en el contexto de ticketera
+    if (window.location.pathname.includes('/ticketera')) {
+      // Verificar token al montar el componente
+      refreshToken()
+
+      // Configurar intervalo de verificación
+      const interval = setInterval(refreshToken, intervalMinutes * 60 * 1000)
+
+      return () => {
+        clearInterval(interval)
+      }
+    }
+  }, [refreshToken, intervalMinutes])
+
+  return { refreshToken }
+}

@@ -26,3 +26,9 @@ export {
   type AuthResponse,
   type ChangePasswordData
 } from './core';
+
+// 🎫 SERVICIOS TICKETERA
+export {
+  ticketeraAuthService,
+  type TicketeraAuthResponse
+} from './ticketera-auth-service';
