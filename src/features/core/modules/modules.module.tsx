@@ -108,8 +108,6 @@ const SistemasExternosModule: React.FC = () => {
 
   const estadosSistema = [
     { value: 'ACTIVO', label: 'Activo', color: 'green' },
-    { value: 'MANTENIMIENTO', label: 'Mantenimiento', color: 'orange' },
-    { value: 'ERROR', label: 'Error', color: 'red' },
     { value: 'INACTIVO', label: 'Inactivo', color: 'gray' }
   ];
 
@@ -211,11 +209,11 @@ const SistemasExternosModule: React.FC = () => {
   const fetchSistemas = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/sistemas-externos');
+      const response = await api.get('/modules');
       setSistemas(response.data);
     } catch (error) {
-      console.error('Error fetching sistemas externos:', error);
-      showNotification('Error al cargar sistemas externos', 'error');
+      console.error('Error fetching módulos externos:', error);
+      showNotification('Error al cargar módulos externos', 'error');
     } finally {
       setLoading(false);
     }
@@ -228,7 +226,7 @@ const SistemasExternosModule: React.FC = () => {
         tipo: 'GARANTIZADO',
         activo: true
       };
-      await api.post('/sistemas-externos', dataToSend);
+      await api.post('/modules', dataToSend);
       setIsCreateDialogOpen(false);
       setFormData({
         nombre: '',
@@ -236,7 +234,6 @@ const SistemasExternosModule: React.FC = () => {
         url: ''
       });
       fetchSistemas();
-      showNotification('Sistema externo creado exitosamente', 'success');
     } catch (error: any) {
       console.error('Error creating sistema externo:', error);
       showNotification(error.response?.data?.message || 'Error al crear sistema externo', 'error');
@@ -250,7 +247,7 @@ const SistemasExternosModule: React.FC = () => {
         tipo: 'GARANTIZADO',
         activo: true
       };
-      await api.put(`/sistemas-externos/${id}`, dataToSend);
+      await api.put(`/modules/${id}`, dataToSend);
       setEditingSistema(null);
       setFormData({
         nombre: '',
@@ -258,7 +255,6 @@ const SistemasExternosModule: React.FC = () => {
         url: ''
       });
       fetchSistemas();
-      showNotification('Sistema externo actualizado exitosamente', 'success');
     } catch (error: any) {
       console.error('Error updating sistema externo:', error);
       showNotification(error.response?.data?.message || 'Error al actualizar sistema externo', 'error');
@@ -272,10 +268,9 @@ const SistemasExternosModule: React.FC = () => {
   const confirmDeleteSistema = async () => {
     if (deleteModal.sistema) {
       try {
-        await api.delete(`/sistemas-externos/${deleteModal.sistema.id}`);
+        await api.delete(`/modules/${deleteModal.sistema.id}`);
         setDeleteModal({ open: false, sistema: null });
-        fetchSistemas();
-        showNotification('Sistema externo eliminado exitosamente', 'success');
+      fetchSistemas();
       } catch (error: any) {
         console.error('Error deleting sistema externo:', error);
         showNotification(error.response?.data?.message || 'Error al eliminar sistema externo', 'error');
@@ -291,23 +286,34 @@ const SistemasExternosModule: React.FC = () => {
     try {
       console.log(`🔄 Cambiando estado del sistema "${sistema.nombre}" de ${sistema.activo ? 'ACTIVO' : 'INACTIVO'} a ${nuevoEstado ? 'ACTIVO' : 'INACTIVO'}`);
       
+      // Actualizar el estado local inmediatamente para una mejor UX
+      setSistemas(prevSistemas => 
+        prevSistemas.map(s => 
+          s.id === sistema.id 
+            ? { ...s, activo: nuevoEstado, updatedAt: new Date().toISOString() }
+            : s
+        )
+      );
+      
       // Enviar petición al backend para cambiar el estado
-      await api.put(`/sistemas-externos/${sistema.id}/toggle-active`, {
+      await api.put(`/modules/${sistema.id}/toggle-active`, {
         activo: nuevoEstado
       });
       
-      // Actualizar la lista
-      fetchSistemas();
-      
-      // Mostrar notificación
-      if (nuevoEstado) {
-        showNotification(`✅ Sistema "${sistema.nombre}" activado correctamente`, 'success');
-      } else {
-        showNotification(`⚠️ Sistema "${sistema.nombre}" desactivado - Se notificará al sistema externo`, 'warning');
-      }
+      // Cambio realizado exitosamente
       
     } catch (error: any) {
       console.error('❌ Error cambiando estado del sistema:', error);
+      
+      // Revertir el cambio local si hay error
+      setSistemas(prevSistemas => 
+        prevSistemas.map(s => 
+          s.id === sistema.id 
+            ? { ...s, activo: sistema.activo, updatedAt: sistema.updatedAt }
+            : s
+        )
+      );
+      
       showNotification(error.response?.data?.message || 'Error al cambiar estado del sistema', 'error');
     }
   };
@@ -317,7 +323,9 @@ const SistemasExternosModule: React.FC = () => {
                          sistema.descripcion.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          sistema.url.toLowerCase().includes(searchTerm.toLowerCase());
     
-    const matchesStatus = statusFilter === 'TODOS' || sistema.estado === statusFilter;
+    const matchesStatus = statusFilter === 'TODOS' || 
+                         (statusFilter === 'ACTIVO' && sistema.activo) ||
+                         (statusFilter === 'INACTIVO' && !sistema.activo);
     
     return matchesSearch && matchesStatus;
   });
@@ -374,10 +382,10 @@ const SistemasExternosModule: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="yego-heading-1 mb-2">
-            Sistemas Externos
+            Módulos Externos
           </h1>
           <p className="yego-body">
-            Gestión y monitoreo de sistemas externos en tiempo real
+            Gestión y monitoreo de módulos externos en tiempo real
           </p>
           <div className="flex items-center gap-2 mt-2">
             <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
@@ -391,7 +399,7 @@ const SistemasExternosModule: React.FC = () => {
           onClick={() => setIsCreateDialogOpen(true)}
           leftIcon={<Plus className="h-4 w-4" />}
         >
-          Nuevo Sistema
+          Nuevo Módulo
         </Button>
       </div>
 
@@ -403,7 +411,7 @@ const SistemasExternosModule: React.FC = () => {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400 w-4 h-4" />
               <Input
-                placeholder="Buscar sistemas externos..."
+                placeholder="Buscar módulos externos..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"
@@ -431,7 +439,7 @@ const SistemasExternosModule: React.FC = () => {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Globe className="h-5 w-5 text-primary-500" />
-            Sistemas Externos ({filteredSistemas.length})
+            Módulos Externos ({filteredSistemas.length})
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -439,15 +447,15 @@ const SistemasExternosModule: React.FC = () => {
             <div className="flex items-center justify-center py-12">
               <div className="flex flex-col items-center gap-4">
                 <div className="w-10 h-10 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
-                <p className="yego-body-sm">Cargando sistemas externos...</p>
+                <p className="yego-body-sm">Cargando módulos externos...</p>
               </div>
             </div>
           ) : filteredSistemas.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Globe className="h-12 w-12 text-neutral-300 dark:text-neutral-600 mb-4" />
-              <h3 className="yego-heading-4 mb-2">No se encontraron sistemas</h3>
+              <h3 className="yego-heading-4 mb-2">No se encontraron módulos</h3>
               <p className="yego-body-sm max-w-md">
-                No hay sistemas externos que coincidan con tu búsqueda. Intenta con otros términos o crea un nuevo sistema.
+                No hay módulos externos que coincidan con tu búsqueda. Intenta con otros términos o crea un nuevo módulo.
               </p>
             </div>
           ) : (
@@ -533,12 +541,12 @@ const SistemasExternosModule: React.FC = () => {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Globe className="h-5 w-5 text-primary-500" />
-              {editingSistema ? 'Editar Sistema Externo' : 'Crear Nuevo Sistema Externo'}
+              {editingSistema ? 'Editar Módulo Externo' : 'Crear Nuevo Módulo Externo'}
             </DialogTitle>
             <DialogDescription>
               {editingSistema
-                ? 'Edita los datos del sistema externo seleccionado.'
-                : 'Completa el formulario para crear un nuevo sistema externo.'}
+                ? 'Edita los datos del módulo externo seleccionado.'
+                : 'Completa el formulario para crear un nuevo módulo externo.'}
             </DialogDescription>
           </DialogHeader>
           
@@ -548,7 +556,7 @@ const SistemasExternosModule: React.FC = () => {
               <Input
                 value={formData.nombre}
                 onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                placeholder="Sistema Garantizado"
+                placeholder="Módulo Garantizado"
               />
             </div>
             
@@ -557,7 +565,7 @@ const SistemasExternosModule: React.FC = () => {
               <Input
                 value={formData.descripcion}
                 onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
-                placeholder="Sistema de garantías de Yego"
+                placeholder="Módulo de garantías de Yego"
               />
             </div>
             
@@ -600,7 +608,7 @@ const SistemasExternosModule: React.FC = () => {
               Confirmar Eliminación
             </DialogTitle>
             <DialogDescription>
-              Esta acción no se puede deshacer. Se eliminará permanentemente el sistema externo y todos sus datos.
+              Esta acción no se puede deshacer. Se eliminará permanentemente el módulo externo y todos sus datos.
             </DialogDescription>
           </DialogHeader>
           {deleteModal.sistema && (
@@ -638,7 +646,7 @@ const SistemasExternosModule: React.FC = () => {
               onClick={confirmDeleteSistema}
               className="flex-1"
             >
-              Eliminar Sistema
+              Eliminar Módulo
             </Button>
           </DialogFooter>
         </DialogContent>
