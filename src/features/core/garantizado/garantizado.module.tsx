@@ -45,10 +45,10 @@ interface GarantizadoData {
 }
 
 interface FlotaResponse {
-  flotaId: string;
-  flotaName: string;
-  flotaCity: string;
-  flotaSpecifications: string[];
+  id: string;
+  name: string;
+  city: string;
+  specifications: string[];
 }
 
 
@@ -590,8 +590,8 @@ export const GarantizadoModule: React.FC = () => {
                   }
                 </option>
                 {flotas.map((flota) => (
-                  <option key={flota.flotaId} value={flota.flotaId}>
-                    {flota.flotaName}
+                  <option key={flota.id} value={flota.id}>
+                    {flota.name}
                   </option>
                 ))}
               </select>
@@ -865,8 +865,8 @@ export const GarantizadoModule: React.FC = () => {
                     {loadingFlotas ? 'Cargando flotas...' : 'Todas las flotas'}
                   </option>
                   {flotas.map((flota) => (
-                    <option key={flota.flotaId} value={flota.flotaId}>
-                      {flota.flotaName}
+                    <option key={flota.id} value={flota.id}>
+                      {flota.name}
                     </option>
                   ))}
                 </select>
