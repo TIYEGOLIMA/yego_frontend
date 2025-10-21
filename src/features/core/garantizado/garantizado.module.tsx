@@ -72,7 +72,6 @@ export const GarantizadoModule: React.FC = () => {
   const [loadingTable, setLoadingTable] = useState(false);
   const [loadingFlotas, setLoadingFlotas] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
-  const [siteAccessEnabled, setSiteAccessEnabled] = useState(true);
   const [itemsPerPage] = useState(6);
   const [totalConductores, setTotalConductores] = useState(0);
   const [semanaActual, setSemanaActual] = useState<string>('');
@@ -149,28 +148,6 @@ export const GarantizadoModule: React.FC = () => {
     }
   };
 
-  // Función para manejar el cambio de estado del acceso al sitio
-  const handleSiteAccessChange = async (enabled: boolean) => {
-    try {
-      console.log(`🔄 [GarantizadoModule] Cambiando acceso al sitio a: ${enabled ? 'HABILITADO' : 'DESHABILITADO'}`);
-      
-      // Aquí puedes agregar la llamada a la API para actualizar el estado en el backend
-      // await api.post('/garantizado/site-access', { enabled });
-      
-      setSiteAccessEnabled(enabled);
-      
-      // Mostrar notificación
-      if (enabled) {
-        console.log('✅ Acceso al sitio HABILITADO');
-      } else {
-        console.log('🔒 Acceso al sitio DESHABILITADO');
-      }
-    } catch (error) {
-      console.error('❌ Error al cambiar el acceso al sitio:', error);
-      // Revertir el cambio si hay error
-      setSiteAccessEnabled(!enabled);
-    }
-  };
 
   // El backend ya calcula el garantizado automáticamente basado en los rangos configurados
 
@@ -551,7 +528,7 @@ export const GarantizadoModule: React.FC = () => {
   }
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-6 space-y-6 max-w-none w-full">
       {/* Notificación de actualización */}
       {showUpdateNotification && (
         <div className="fixed top-4 right-4 z-50 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-pulse">
@@ -588,49 +565,57 @@ export const GarantizadoModule: React.FC = () => {
         </div>
       </div>
 
-      {/* Control de Acceso al Sitio */}
-      <Card className={`border-0 ${siteAccessEnabled ? 'border-green-200 bg-green-50 dark:bg-green-950/20 dark:border-green-800' : 'border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-800'}`}>
-        <CardContent className="p-0">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              {siteAccessEnabled ? (
-                <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
-                  <Shield className="h-6 w-6 text-green-600 dark:text-green-400" />
-                </div>
-              ) : (
-                <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
-                  <ShieldOff className="h-6 w-6 text-red-600 dark:text-red-400" />
-                </div>
-              )}
+      {/* Cards de Estadísticas */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-4xl">
+        {/* Total de Conductores */}
+        <Card className="border-0 bg-blue-50 dark:bg-blue-950/20">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                  {siteAccessEnabled ? 'Sitio Web Habilitado' : 'Sitio Web Bloqueado'}
-                </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  {siteAccessEnabled 
-                    ? 'Los conductores pueden acceder al sitio web normalmente' 
-                    : 'El acceso al sitio web está bloqueado para todos los conductores'}
+                <p className="text-sm font-medium text-blue-600 dark:text-blue-400">Total Conductores</p>
+                <p className="text-4xl font-bold text-blue-900 dark:text-blue-100">{totalConductores}</p>
+              </div>
+              <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
+                <User className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Conductores Garantizados */}
+        <Card className="border-0 bg-green-50 dark:bg-green-950/20">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-green-600 dark:text-green-400">Garantizados</p>
+                <p className="text-4xl font-bold text-green-900 dark:text-green-100">
+                  {filteredData.filter(item => item.garantizadoValor === 'Garantizado').length}
                 </p>
               </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="text-right">
-                <div className={`text-sm font-medium ${siteAccessEnabled ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                  {siteAccessEnabled ? 'ACTIVO' : 'BLOQUEADO'}
-                </div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">
-                  Estado actual
-                </div>
+              <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
+                <Shield className="h-6 w-6 text-green-600 dark:text-green-400" />
               </div>
-              <Switch
-                checked={siteAccessEnabled}
-                onCheckedChange={handleSiteAccessChange}
-                className="data-[state=checked]:bg-green-600"
-              />
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+
+        {/* Conductores No Garantizados */}
+        <Card className="border-0 bg-red-50 dark:bg-red-950/20">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-red-600 dark:text-red-400">No Garantizados</p>
+                <p className="text-4xl font-bold text-red-900 dark:text-red-100">
+                  {filteredData.filter(item => item.garantizadoValor === 'No Garantizado').length}
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
+                <ShieldOff className="h-6 w-6 text-red-600 dark:text-red-400" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Filtros */}
       <Card>
@@ -641,7 +626,7 @@ export const GarantizadoModule: React.FC = () => {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:max-w-4xl">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
               <Input
@@ -732,66 +717,66 @@ export const GarantizadoModule: React.FC = () => {
             </div>
           ) : (
           <div className="overflow-x-auto">
-            <table className={`w-full table-auto ${showRegistros ? 'min-w-[600px]' : 'min-w-[1600px]'}`}>
+            <table className={`w-full table-auto ${showRegistros ? 'min-w-[800px]' : 'min-w-[1800px]'}`}>
               <thead>
                 <tr className="border-b border-gray-200 dark:border-gray-700">
                   {!showRegistros ? (
                     <>
-                      <th className="text-left py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[250px]">
+                      <th className="text-left py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[280px]">
                         Conductor
                       </th>
-                      <th className="text-left py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[120px]">
+                      <th className="text-left py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[140px]">
                         Licencia
                       </th>
-                      <th className="text-left py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[120px]">
+                      <th className="text-left py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[140px]">
                         Teléfono
                       </th>
-                      <th className="text-center py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[120px]">
+                      <th className="text-center py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[100px]">
                         Viajes
                       </th>
-                      <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[120px]">
+                      <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[130px]">
                         Efectivo
                       </th>
-                      <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[130px]">
+                      <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[140px]">
                         Sin Efectivo
                       </th>
-                      <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[120px]">
+                      <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[130px]">
                         Com. Yango
                       </th>
-                      <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[120px]">
+                      <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[130px]">
                         Com. Yego
                       </th>
-                      <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[110px]">
+                      <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[120px]">
                         Bono Ant.
                       </th>
-                      <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[110px]">
+                      <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[120px]">
                         Bono Act.
                       </th>
-                      <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[110px]">
+                      <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[120px]">
                         Total
                       </th>
-                      <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[120px]">
+                      <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[130px]">
                         Garantizado
                       </th>
-                      <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[120px]">
+                      <th className="text-right py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[130px]">
                         Diferencia
                       </th>
-                      <th className="text-center py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[130px]">
+                      <th className="text-center py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[140px]">
                         Estado
                       </th>
                     </>
                   ) : (
                     <>
-                      <th className="text-left py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[120px]">
+                      <th className="text-left py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[140px]">
                         Licencia
                       </th>
-                      <th className="text-center py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[120px]">
+                      <th className="text-center py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[140px]">
                         Fecha Registro
                       </th>
-                      <th className="text-center py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[150px]">
+                      <th className="text-center py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[180px]">
                         Flota
                       </th>
-                      <th className="text-center py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[120px]">
+                      <th className="text-center py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[140px]">
                         Semana
                       </th>
                     </>

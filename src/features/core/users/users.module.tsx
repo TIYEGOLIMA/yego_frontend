@@ -54,19 +54,22 @@ import { ForcedLogoutModal } from '../../../components/ForcedLogoutModal';
 
 interface User {
   id: number;
+  dni?: string;
   username: string;
   name: string;
+  lastName?: string;
   email: string;
   role: string;
-  moduleId?: number;
   active: boolean;
   createdAt: string;
   lastLogin?: string;
 }
 
 interface CreateUserData {
+  dni?: string;
   username: string;
   name: string;
+  lastName?: string;
   email: string;
   password: string;
   role: string;
@@ -82,8 +85,10 @@ const UsersModule: React.FC = () => {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [formData, setFormData] = useState<CreateUserData>({
+    dni: '',
     username: '',
     name: '',
+    lastName: '',
     email: '',
     password: '',
     role: 'usuario',
@@ -144,6 +149,21 @@ const UsersModule: React.FC = () => {
   };
   
   const availableRoles = getAvailableRoles();
+
+  // Función helper para mostrar nombre completo (primer nombre + primer apellido)
+  const getDisplayName = (user: User) => {
+    const firstName = user.name?.split(' ')[0] || '';
+    const firstLastName = user.lastName?.split(' ')[0] || '';
+    
+    if (firstName && firstLastName) {
+      return `${firstName} ${firstLastName}`;
+    } else if (firstName) {
+      return firstName;
+    } else if (user.name) {
+      return user.name;
+    }
+    return 'Sin nombre';
+  };
 
   useEffect(() => {
     fetchUsers();
@@ -208,6 +228,36 @@ const UsersModule: React.FC = () => {
     setupWebSocket();
   }, []);
 
+  // 🔍 Consultar datos por DNI cuando cambie el valor
+  useEffect(() => {
+    if (formData.dni && formData.dni.length === 8) {
+      // Verificar que solo contenga números
+      const esSoloNumeros = /^\d+$/.test(formData.dni);
+      
+      if (esSoloNumeros) {
+        consultarDatosDNI(formData.dni);
+      } else {
+        // Si contiene letras, no consultar API y limpiar campos
+        setFormData(prev => ({
+          ...prev,
+          name: '',
+          lastName: '',
+          username: '',
+          email: ''
+        }));
+      }
+    } else if (formData.dni && formData.dni.length !== 8) {
+      // Limpiar campos cuando el documento no tiene exactamente 8 dígitos
+      setFormData(prev => ({
+        ...prev,
+        name: '',
+        lastName: '',
+        username: '',
+        email: ''
+      }));
+    }
+  }, [formData.dni]);
+
   const fetchUsers = async () => {
     try {
       console.log('🔍 [UsersModule] Cargando usuarios...');
@@ -248,6 +298,76 @@ const UsersModule: React.FC = () => {
     }
   };
 
+  const consultarDatosDNI = async (dni: string) => {
+    try {
+      console.log('🔍 Consultando datos para DNI:', dni);
+      
+      if (!dni || dni.length !== 8) {
+        console.log('⚠️ DNI inválido, debe tener 8 dígitos');
+        return;
+      }
+
+      const response = await fetch(`http://167.235.28.114:5000/api/v2/dni/${dni}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': 'Basic c3lzdGVtM3c6NkVpWmpwaWp4a1hUZUFDbw==',
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('✅ Datos obtenidos:', data);
+      
+      if (data && data.status === 200) {
+        const datos = data;
+        
+        // Generar nombre con formato correcto
+        const nombres = datos.nombres
+          .toLowerCase()
+          .split(' ')
+          .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
+        
+        // Generar apellidos con formato correcto
+        const apellidos = `${datos.apellido_paterno} ${datos.apellido_materno}`
+          .toLowerCase()
+          .split(' ')
+          .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
+        
+        // Generar username: primera inicial del nombre + apellido paterno
+        const primerNombre = datos.nombres.split(' ')[0];
+        const inicialNombre = primerNombre.charAt(0).toLowerCase();
+        const apellidoPaterno = datos.apellido_paterno.toLowerCase();
+        const username = `${inicialNombre}${apellidoPaterno}`;
+        
+        // Generar email: username + dominio yego
+        const email = `${username}@yego.com`;
+        
+        // Actualizar el formulario con los datos obtenidos
+        setFormData(prev => ({
+          ...prev,
+          name: nombres,
+          lastName: apellidos,
+          username: username,
+          email: email
+        }));
+
+      }
+    } catch (error: any) {
+      console.error('❌ Error al consultar DNI:', error);
+      setErrorModal({
+        open: true,
+        title: 'Error al Consultar DNI',
+        message: 'No se pudieron obtener los datos del DNI. Verifica que el número sea correcto.'
+      });
+    }
+  };
+
   const handleCreateUser = async () => {
     try {
       // Validar campos requeridos
@@ -272,13 +392,14 @@ const UsersModule: React.FC = () => {
       }
 
       const userData = {
+        dni: formData.dni?.trim() || null,
         username: formData.username.trim(),
         email: formData.email.trim(),
         password: formData.password,
         name: formData.name.trim(),
+        lastName: formData.lastName?.trim() || '',
         role: formData.role,
-        active: formData.active !== undefined ? formData.active : true,
-        moduleId: formData.moduleId || null
+        active: formData.active !== undefined ? formData.active : true
       };
       
       await api.post('/users/create', userData);
@@ -313,12 +434,13 @@ const UsersModule: React.FC = () => {
   const handleUpdateUser = async (id: number) => {
     try {
       const updateData: any = {
+        dni: formData.dni?.trim() || null,
         username: formData.username,
         email: formData.email,
         name: formData.name,
+        lastName: formData.lastName || '',
         role: formData.role,
-        active: formData.active,
-        moduleId: formData.moduleId
+        active: formData.active
       };
       
       // Solo incluir password si tiene contenido, sino enviar undefined
@@ -463,25 +585,27 @@ const UsersModule: React.FC = () => {
   const openEditDialog = (user: User) => {
     setEditingUser(user);
     setFormData({
+      dni: user.dni || '',
       username: user.username,
       name: user.name,
+      lastName: user.lastName || '',
       email: user.email,
       password: '', // Siempre vacío por seguridad
       role: user.role,
-      active: user.active,
-      moduleId: user.moduleId
+      active: user.active
     });
   };
 
   const resetForm = () => {
     setFormData({
+      dni: '',
       username: '',
       name: '',
+      lastName: '',
       email: '',
       password: '',
       role: 'usuario',
-      active: true,
-      moduleId: undefined
+      active: true
     });
   };
 
@@ -497,7 +621,7 @@ const UsersModule: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -522,12 +646,17 @@ const UsersModule: React.FC = () => {
         <CardContent className="pt-6">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-500 w-5 h-5 pointer-events-none z-10" />
-            <Input
-              placeholder="Buscar usuarios por nombre, email, username o rol..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-12"
-            />
+             <Input
+               placeholder="Buscar usuarios por nombre, email, username o rol..."
+               value={searchTerm}
+               onChange={(e) => {
+                 const value = e.target.value;
+                 // Convertir primera letra a mayúscula
+                 const formattedValue = value.charAt(0).toUpperCase() + value.slice(1);
+                 setSearchTerm(formattedValue);
+               }}
+               className="pl-12"
+             />
           </div>
         </CardContent>
       </Card>
@@ -640,7 +769,7 @@ const UsersModule: React.FC = () => {
                             </div>
                             <div>
                               <div className="font-medium text-neutral-900 dark:text-neutral-100">
-                                {user.name || 'Sin nombre'}
+                                {getDisplayName(user)}
                               </div>
                               <div className="text-xs text-neutral-500">
                                 @{user.username}
@@ -716,7 +845,7 @@ const UsersModule: React.FC = () => {
                       </div>
                       <div>
                         <div className="font-semibold text-neutral-900 dark:text-neutral-100">
-                          {user.name || 'Sin nombre'}
+                          {getDisplayName(user)}
                         </div>
                         <div className="text-xs text-neutral-500">@{user.username}</div>
                       </div>
@@ -869,6 +998,16 @@ const UsersModule: React.FC = () => {
           
           <div className="space-y-4 mt-4">
             <div>
+              <label className="block text-sm font-medium mb-1">Documento de Identidad</label>
+              <Input
+                value={formData.dni || ''}
+                onChange={(e) => setFormData({ ...formData, dni: e.target.value })}
+                placeholder="Ingresar DNI o CEE"
+                disabled={!!editingUser}
+              />
+            </div>
+
+            <div>
               <label className="block text-sm font-medium mb-1">Username</label>
               <Input
                 value={formData.username}
@@ -877,13 +1016,42 @@ const UsersModule: React.FC = () => {
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-1">Nombre Completo</label>
-              <Input
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Juan Pérez"
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Nombre</label>
+                <Input
+                  value={formData.name}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    // Convertir primera letra de cada palabra a mayúscula y el resto a minúscula
+                    const formattedValue = value
+                      .toLowerCase()
+                      .split(' ')
+                      .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
+                      .join(' ');
+                    setFormData({ ...formData, name: formattedValue });
+                  }}
+                  placeholder="Juan Carlos"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1">Apellidos</label>
+                <Input
+                  value={formData.lastName || ''}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    // Convertir primera letra de cada palabra a mayúscula y el resto a minúscula
+                    const formattedValue = value
+                      .toLowerCase()
+                      .split(' ')
+                      .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
+                      .join(' ');
+                    setFormData({ ...formData, lastName: formattedValue });
+                  }}
+                  placeholder="Pérez Rodríguez"
+                />
+              </div>
             </div>
             
             <div>
@@ -961,7 +1129,7 @@ const UsersModule: React.FC = () => {
                 onValueChange={(value) => setFormData({ ...formData, role: value })}
                 disabled={!!editingUser && currentUser && currentUser.role !== 'ADMIN' && currentUser.role !== 'SUPERADMIN'}
               >
-                <SelectTrigger>
+                <SelectTrigger className="focus:ring-0 focus:ring-offset-0 hover:bg-transparent">
                   <SelectValue placeholder="Seleccionar rol" />
                 </SelectTrigger>
                 <SelectContent>
@@ -974,15 +1142,6 @@ const UsersModule: React.FC = () => {
               </Select>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-1">ID del Módulo (opcional)</label>
-              <Input
-                type="number"
-                value={formData.moduleId || ''}
-                onChange={(e) => setFormData({ ...formData, moduleId: e.target.value ? parseInt(e.target.value) : undefined })}
-                placeholder="1"
-              />
-            </div>
 
           </div>
           
@@ -1053,7 +1212,7 @@ const UsersModule: React.FC = () => {
                   </div>
                   <div>
                     <div className="font-semibold text-neutral-900 dark:text-white">
-                      {deleteModal.user.name || 'Sin nombre'}
+                      {getDisplayName(deleteModal.user)}
                     </div>
                     <div className="text-sm text-neutral-500">
                       @{deleteModal.user.username} • {deleteModal.user.email}
