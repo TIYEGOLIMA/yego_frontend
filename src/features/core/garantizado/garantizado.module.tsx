@@ -86,7 +86,7 @@ export const GarantizadoModule: React.FC = () => {
     estado: '',
     semana: ''
   });
-  const [showRegistros, setShowRegistros] = useState(false);
+  const [showRegistros, setShowRegistros] = useState(true);
   const [registrosData, setRegistrosData] = useState<RegistroData[]>([]);
   const [loadingRegistros, setLoadingRegistros] = useState(false);
 
@@ -250,6 +250,9 @@ export const GarantizadoModule: React.FC = () => {
     
     // Cargar flotas al inicializar el componente
     cargarFlotas();
+    
+    // Cargar registros por defecto ya que showRegistros = true
+    cargarRegistrosSemanaActual();
     
     // Cargar conductores SOLO UNA VEZ al inicializar
     if (!hasLoadedRef.current) {
@@ -690,16 +693,16 @@ export const GarantizadoModule: React.FC = () => {
               )}
               {/* Switch para alternar vista */}
               <div className="flex items-center gap-3 bg-gray-100 dark:bg-gray-800 rounded-lg p-2">
-                <span className={`text-sm font-medium ${!showRegistros ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
-                  Garantizado
-                </span>
-                <Switch
-                  checked={showRegistros}
-                  onCheckedChange={setShowRegistros}
-                  className="data-[state=checked]:bg-blue-600"
-                />
                 <span className={`text-sm font-medium ${showRegistros ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}>
                   Registros
+                </span>
+                <Switch
+                  checked={!showRegistros}
+                  onCheckedChange={(checked) => setShowRegistros(!checked)}
+                  className="data-[state=checked]:bg-blue-600"
+                />
+                <span className={`text-sm font-medium ${!showRegistros ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                  Garantizado
                 </span>
               </div>
             </div>
