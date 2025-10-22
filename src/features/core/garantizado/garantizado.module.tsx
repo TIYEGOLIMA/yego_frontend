@@ -865,9 +865,6 @@ export const GarantizadoModule: React.FC = () => {
                           <div className="font-medium text-gray-900 dark:text-white">
                             {(item as any).flotaNombre}
                           </div>
-                          <div className="text-xs text-gray-500 dark:text-gray-400">
-                            {(item as any).yegFlota}
-                          </div>
                         </td>
                         <td className="py-5 px-6 text-center">
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400">
