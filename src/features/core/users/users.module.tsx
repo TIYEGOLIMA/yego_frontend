@@ -307,22 +307,11 @@ const UsersModule: React.FC = () => {
         return;
       }
 
-      const response = await fetch(`http://167.235.28.114:5000/api/v2/dni/${dni}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': 'Basic c3lzdGVtM3c6NkVpWmpwaWp4a1hUZUFDbw==',
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
+      const response = await api.get(`/users/dni/${dni}`);
+      const data = response.data;
       console.log('✅ Datos obtenidos:', data);
       
-      if (data && data.status === 200) {
+      if (data && data.success) {
         const datos = data;
         
         // Generar nombre con formato correcto
@@ -333,7 +322,7 @@ const UsersModule: React.FC = () => {
           .join(' ');
         
         // Generar apellidos con formato correcto
-        const apellidos = `${datos.apellido_paterno} ${datos.apellido_materno}`
+        const apellidos = `${datos.apellidoPaterno} ${datos.apellidoMaterno}`
           .toLowerCase()
           .split(' ')
           .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
@@ -342,7 +331,7 @@ const UsersModule: React.FC = () => {
         // Generar username: primera inicial del nombre + apellido paterno
         const primerNombre = datos.nombres.split(' ')[0];
         const inicialNombre = primerNombre.charAt(0).toLowerCase();
-        const apellidoPaterno = datos.apellido_paterno.toLowerCase();
+        const apellidoPaterno = datos.apellidoPaterno.toLowerCase();
         const username = `${inicialNombre}${apellidoPaterno}`;
         
         // Generar email: username + dominio yego
