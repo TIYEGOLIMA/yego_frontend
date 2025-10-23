@@ -12,6 +12,7 @@ export {
   ImportsModule,
   ReportsModule,
   ModulesModule,
+  AsistenciaModule,
   CORE_FEATURES_CONFIG
 } from './core';
 
@@ -34,7 +35,7 @@ export const FEATURES_REGISTRY = {
   core: {
     name: 'Sistema Principal',
     path: '/features/core',
-    features: ['audit', 'configuration', 'users', 'permissions', 'roles', 'sessions', 'imports', 'reports', 'modules']
+    features: ['audit', 'configuration', 'users', 'permissions', 'roles', 'sessions', 'imports', 'reports', 'modules', 'asistencia']
   },
   ticketera: {
     name: 'Ticketera',

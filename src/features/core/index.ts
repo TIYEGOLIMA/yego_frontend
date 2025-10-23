@@ -13,6 +13,7 @@ export { default as SessionsModule } from './sessions/sessions.module';
 export { default as ImportsModule } from './imports/imports.module';
 export { default as ReportsModule } from './reports/reports.module';
 export { default as ModulesModule } from './modules/modules.module';
+export { AsistenciaModule } from './asistencia';
 
 // 🎯 CONFIGURACIÓN DE FEATURES CORE
 export const CORE_FEATURES_CONFIG = {
@@ -21,6 +22,6 @@ export const CORE_FEATURES_CONFIG = {
   version: '1.0.0',
   features: [
     'audit', 'configuration', 'users', 'permissions', 'roles', 
-    'sessions', 'imports', 'reports', 'modules'
+    'sessions', 'imports', 'reports', 'modules', 'asistencia'
   ]
 } as const;

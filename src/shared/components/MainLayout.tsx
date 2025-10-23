@@ -27,7 +27,8 @@ import {
   Lock,
   ChevronDown,
   Server,
-  Shield
+  Shield,
+  Clock
 } from 'lucide-react'
 
 interface NavItem {
@@ -226,6 +227,14 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         permission: "garantizado"
       });
     }
+
+    // Todos los usuarios pueden ver Asistencia
+    options.push({
+      label: "Asistencia", 
+      to: "/asistencia", 
+      icon: <Clock className="h-4 w-4" />, 
+      permission: "asistencia"
+    });
 
     return options;
   }

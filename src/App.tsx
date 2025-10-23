@@ -29,6 +29,7 @@ import ImportsModule from './features/core/imports/imports.module'
 import AuditModule from './features/core/audit/audit.module'
 import SessionsModule from './features/core/sessions/sessions.module'
 import ConfigurationModule from './features/core/configuration/configuration.module'
+import { AsistenciaModule } from './features/core/asistencia'
 
 // Importar módulos de features - TICKETERA
 import TicketsModule from './features/ticketera/tickets/tickets.module'
@@ -110,10 +111,10 @@ const PermissionRoute = ({ children, module }: { children: React.ReactNode, modu
   
   // Módulos permitidos por rol
   const allowedModules: Record<string, string[]> = {
-    'SUPERADMIN': ['users', 'roles', 'permissions', 'modules', 'imports', 'audit', 'sessions', 'configuration', 'reports', 'garantizado'],
-    'ADMIN': ['users', 'roles', 'modules', 'dashboard', 'reports', 'garantizado'],
-    'OPERADOR': ['reports', 'users'],
-    'SAC': ['tickets']
+    'SUPERADMIN': ['users', 'roles', 'permissions', 'modules', 'imports', 'audit', 'sessions', 'configuration', 'reports', 'garantizado', 'asistencia'],
+    'ADMIN': ['users', 'roles', 'modules', 'dashboard', 'reports', 'garantizado', 'asistencia'],
+    'OPERADOR': ['reports', 'users', 'asistencia'],
+    'SAC': ['tickets', 'asistencia']
   }
   
   const userAllowedModules = allowedModules[user.role.toUpperCase()] || []
@@ -329,6 +330,11 @@ function App() {
            <Route path="garantizado" element={
              <PermissionRoute module="garantizado">
                <GarantizadoModule />
+             </PermissionRoute>
+           } />
+           <Route path="asistencia" element={
+             <PermissionRoute module="asistencia">
+               <AsistenciaModule />
              </PermissionRoute>
            } />
           </Route>
