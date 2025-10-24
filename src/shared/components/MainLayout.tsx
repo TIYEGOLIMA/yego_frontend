@@ -209,14 +209,17 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
   // Obtener opciones disponibles del dropdown de Sistemas
   const getSistemasOptions = () => {
-    const options = [
-      { 
+    const options = [];
+
+    // Solo ADMIN y SUPERADMIN pueden ver Reportes en el dropdown de Sistemas
+    if (user?.role === 'ADMIN' || user?.role === 'SUPERADMIN') {
+      options.push({
         label: "Reportes", 
         to: "/reports", 
         icon: <BarChart4 className="h-4 w-4" />, 
         permission: "reports"
-      }
-    ];
+      });
+    }
 
     // Solo ADMIN y SUPERADMIN pueden ver Garantizado
     if (user?.role === 'ADMIN' || user?.role === 'SUPERADMIN') {
