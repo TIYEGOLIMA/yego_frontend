@@ -4,6 +4,13 @@ import { Input } from '../../../components/ui/input';
 import { Button } from '../../../components/ui/button';
 import { Switch } from '../../../components/ui/switch';
 import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from '../../../components/ui/select';
+import { 
   Search, 
   Filter, 
   Download, 
@@ -39,6 +46,7 @@ interface GarantizadoData {
   viajesActuales: number;
   flotaId: string;
   garantizadoValor: string;
+  estadoPago: 'No Pagado' | 'Pagado' | 'N/A';
   fechaCreacion: string;
   fechaActualizacion: string;
   activo: boolean;
@@ -72,7 +80,7 @@ export const GarantizadoModule: React.FC = () => {
   const [loadingTable, setLoadingTable] = useState(false);
   const [loadingFlotas, setLoadingFlotas] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(6);
+  const [itemsPerPage, setItemsPerPage] = useState(6);
   const [totalConductores, setTotalConductores] = useState(0);
   const [semanaActual, setSemanaActual] = useState<string>('');
   const [semanaAnterior, setSemanaAnterior] = useState<string>('');
@@ -80,6 +88,7 @@ export const GarantizadoModule: React.FC = () => {
   const [initialLoadDone, setInitialLoadDone] = useState(false);
   const [exporting, setExporting] = useState(false);
   const hasLoadedRef = useRef(false);
+  const hasLoadedRegistrosRef = useRef(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportFilters, setExportFilters] = useState({
     flotaId: '',
@@ -89,6 +98,12 @@ export const GarantizadoModule: React.FC = () => {
   const [showRegistros, setShowRegistros] = useState(true);
   const [registrosData, setRegistrosData] = useState<RegistroData[]>([]);
   const [loadingRegistros, setLoadingRegistros] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [pendingPaymentChange, setPendingPaymentChange] = useState<{
+    conductorId: number;
+    nuevoEstado: 'No Pagado' | 'Pagado' | 'N/A';
+    conductorNombre: string;
+  } | null>(null);
 
   // El backend ya calcula todo automáticamente, no necesitamos calcular nada en el frontend
 
@@ -251,8 +266,11 @@ export const GarantizadoModule: React.FC = () => {
     // Cargar flotas al inicializar el componente
     cargarFlotas();
     
-    // Cargar registros por defecto ya que showRegistros = true
-    cargarRegistrosSemanaActual();
+    // Cargar registros SOLO UNA VEZ al inicializar
+    if (!hasLoadedRegistrosRef.current) {
+      cargarRegistrosSemanaActual();
+      hasLoadedRegistrosRef.current = true;
+    }
     
     // Cargar conductores SOLO UNA VEZ al inicializar
     if (!hasLoadedRef.current) {
@@ -312,18 +330,16 @@ export const GarantizadoModule: React.FC = () => {
     }
   }, [flotaFilter, initialLoadDone]);
 
-  // Cargar registros cuando se active la vista de registros
+  // Resetear a página 1 y items por página a 6 cuando se cambia de vista
   useEffect(() => {
-    if (showRegistros && registrosData.length === 0) {
-      cargarRegistrosSemanaActual();
-    }
+    setCurrentPage(1);
+    setItemsPerPage(6);
   }, [showRegistros]);
 
   // Recargar registros cuando cambie el filtro de flota en vista de registros
   useEffect(() => {
-    if (showRegistros && initialLoadDone) {
+    if (showRegistros && initialLoadDone && hasLoadedRegistrosRef.current) {
       cargarRegistrosSemanaActual(flotaFilter);
-      setCurrentPage(1);
     }
   }, [flotaFilter, showRegistros, initialLoadDone]);
 
@@ -388,6 +404,11 @@ export const GarantizadoModule: React.FC = () => {
     if (page >= 1 && page <= totalPages) {
       setCurrentPage(page);
     }
+  };
+
+  const handleItemsPerPageChange = (value: string) => {
+    setItemsPerPage(parseInt(value));
+    setCurrentPage(1);
   };
 
   // Calcular datos paginados
@@ -514,6 +535,128 @@ export const GarantizadoModule: React.FC = () => {
     );
   };
 
+  // Función para cambiar estado de pago desde el combo
+  const handleCambiarEstadoPago = async (conductorId: number, nuevoEstado: 'No Pagado' | 'Pagado' | 'N/A') => {
+    // Buscar el conductor para obtener su nombre
+    const conductor = data.find(c => c.id === conductorId);
+    if (!conductor) {
+      console.error('❌ [GarantizadoModule] Conductor no encontrado');
+      return;
+    }
+
+    // Mostrar modal de confirmación
+    setPendingPaymentChange({
+      conductorId,
+      nuevoEstado,
+      conductorNombre: conductor.nombreCompleto
+    });
+    setShowConfirmModal(true);
+  };
+
+  // Función para confirmar el cambio de estado
+  const confirmarCambioEstado = async () => {
+    if (!pendingPaymentChange) return;
+
+    const { conductorId, nuevoEstado } = pendingPaymentChange;
+    
+    try {
+      console.log('💳 [GarantizadoModule] Confirmando cambio de estado de pago conductor ID:', conductorId, 'a:', nuevoEstado);
+      
+      // Si es "Pagado", usar el endpoint específico
+      if (nuevoEstado === 'Pagado') {
+        const response = await api.put(`/garantizado/marcar-pagado/${conductorId}`);
+        
+        console.log('📡 [GarantizadoModule] Respuesta del servidor:', response.data);
+        
+        // Si la respuesta es exitosa (status 200), considerar como éxito
+        if (response.status === 200) {
+          console.log('✅ [GarantizadoModule] Conductor marcado como pagado exitosamente');
+          
+          // Actualizar el estado del conductor en la lista local
+          setData(prevData => 
+            prevData.map(conductor => 
+              conductor.id === conductorId 
+                ? { ...conductor, estadoPago: 'Pagado' as const }
+                : conductor
+            )
+          );
+          
+          setFilteredData(prevData => 
+            prevData.map(conductor => 
+              conductor.id === conductorId 
+                ? { ...conductor, estadoPago: 'Pagado' as const }
+                : conductor
+            )
+          );
+          
+          // Cerrar modal inmediatamente
+          setShowConfirmModal(false);
+          setPendingPaymentChange(null);
+        } else {
+          throw new Error('Error inesperado del servidor');
+        }
+      } else {
+        // Para otros estados, actualizar directamente en la UI
+        setData(prevData => 
+          prevData.map(conductor => 
+            conductor.id === conductorId 
+              ? { ...conductor, estadoPago: nuevoEstado }
+              : conductor
+          )
+        );
+        
+        setFilteredData(prevData => 
+          prevData.map(conductor => 
+            conductor.id === conductorId 
+              ? { ...conductor, estadoPago: nuevoEstado }
+              : conductor
+          )
+        );
+        
+        console.log(`✅ [GarantizadoModule] Estado cambiado a: ${nuevoEstado}`);
+        
+        // Cerrar modal
+        setShowConfirmModal(false);
+        setPendingPaymentChange(null);
+      }
+      
+    } catch (error: any) {
+      console.error('❌ [GarantizadoModule] Error al cambiar estado de pago:', error);
+      console.error('❌ [GarantizadoModule] Error details:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      
+      let errorMessage = 'Error al cambiar estado de pago';
+      
+      if (error.response?.status === 400) {
+        errorMessage = error.response.data?.message || 'El conductor no está garantizado';
+      } else if (error.response?.status === 404) {
+        errorMessage = 'Conductor no encontrado';
+      } else if (error.response?.status === 500) {
+        errorMessage = 'Error interno del servidor';
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      // Solo mostrar error en consola, no alert
+      console.error(`❌ Error al cambiar estado: ${errorMessage}`);
+      
+      // Cerrar modal
+      setShowConfirmModal(false);
+      setPendingPaymentChange(null);
+    }
+  };
+
+  // Función para cancelar el cambio
+  const cancelarCambioEstado = () => {
+    setShowConfirmModal(false);
+    setPendingPaymentChange(null);
+  };
+
 
   if (loading) {
     return (
@@ -631,6 +774,26 @@ export const GarantizadoModule: React.FC = () => {
           </CardTitle>
         </CardHeader>
         <CardContent>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Por página:</span>
+                <Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}>
+                  <SelectTrigger className="w-20">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="6">6</SelectItem>
+                    <SelectItem value="10">10</SelectItem>
+                    <SelectItem value="20">20</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                    <SelectItem value="100">100</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+          
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
@@ -769,6 +932,9 @@ export const GarantizadoModule: React.FC = () => {
                       <th className="text-center py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[140px]">
                         Estado
                       </th>
+                      <th className="text-center py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[160px]">
+                        Estado de Pago
+                      </th>
                     </>
                   ) : (
                     <>
@@ -854,6 +1020,58 @@ export const GarantizadoModule: React.FC = () => {
                         <td className="py-5 px-6 text-center">
                           {getStatusBadge(item.garantizadoValor)}
                         </td>
+                        <td className="py-5 px-6 text-center">
+                          {item.garantizadoValor === 'Garantizado' ? (
+                            <select
+                              value={item.estadoPago || 'No Pagado'}
+                              onChange={(e) => handleCambiarEstadoPago(item.id, e.target.value as 'No Pagado' | 'Pagado' | 'N/A')}
+                              disabled={item.estadoPago === 'Pagado'}
+                              className={`px-4 py-2 text-xs font-medium rounded-lg border-2 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all text-center
+                                ${item.estadoPago === 'Pagado' 
+                                  ? 'bg-green-50 text-green-800 border-green-300 dark:bg-green-900/20 dark:text-green-300 dark:border-green-700 cursor-not-allowed opacity-75 appearance-none' 
+                                  : 'bg-red-50 text-red-800 border-red-300 dark:bg-red-900/20 dark:text-red-300 dark:border-red-700 hover:bg-red-100 hover:border-red-400 dark:hover:bg-red-900/30 cursor-pointer'
+                                }
+                              `}
+                              style={item.estadoPago === 'Pagado' ? { appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none', backgroundImage: 'none' } : {}}
+                            >
+                              <option 
+                                value="No Pagado" 
+                                className="bg-red-50 text-red-800 dark:bg-red-900/20 dark:text-red-300 rounded-lg"
+                                style={{ 
+                                  backgroundColor: '#fef2f2', 
+                                  color: '#991b1b',
+                                  padding: '8px',
+                                  fontSize: '14px',
+                                  fontWeight: '500',
+                                  borderRadius: '8px',
+                                  margin: '4px'
+                                }}
+                              >
+                                No Pagado
+                              </option>
+                              <option 
+                                value="Pagado" 
+                                className="bg-green-50 text-green-800 dark:bg-green-900/20 dark:text-green-300 rounded-lg"
+                                style={{ 
+                                  backgroundColor: '#dcfce7', 
+                                  color: '#166534',
+                                  padding: '8px',
+                                  fontSize: '14px',
+                                  fontWeight: '500',
+                                  borderRadius: '8px',
+                                  margin: '4px'
+                                }}
+                              >
+                                Pagado
+                              </option>
+                            </select>
+                          ) : (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                              <span className="w-1.5 h-1.5 bg-gray-400 rounded-full mr-1.5"></span>
+                              N/A
+                            </span>
+                          )}
+                        </td>
                       </>
                     ) : (
                       <>
@@ -906,7 +1124,7 @@ export const GarantizadoModule: React.FC = () => {
           {/* Controles de Paginación */}
             {safeFilteredData.length > 0 && (
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
-                <div className="text-sm text-gray-600 dark:text-gray-400">
+              <div className="text-sm text-gray-600 dark:text-gray-400">
                   {showRegistros 
                     ? `Mostrando ${startIndex + 1} a ${Math.min(endIndex, totalConductores)} de ${totalConductores} registros de la semana actual`
                     : `Mostrando ${startIndex + 1} a ${Math.min(endIndex, totalConductores)} de ${totalConductores} conductores`
@@ -1077,6 +1295,60 @@ export const GarantizadoModule: React.FC = () => {
                     Exportar
                   </>
                 )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmación de Cambio de Estado */}
+      {showConfirmModal && pendingPaymentChange && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-96 max-w-md mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Confirmar Cambio de Estado
+              </h3>
+              <button
+                onClick={cancelarCambioEstado}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="text-sm text-gray-600 dark:text-gray-400">
+                <p>¿Estás seguro de que deseas cambiar el estado de pago de:</p>
+                <p className="font-medium text-gray-900 dark:text-white mt-1">
+                  {pendingPaymentChange.conductorNombre}
+                </p>
+                <p className="mt-2">
+                  <span className="text-gray-500">Nuevo estado:</span>
+                  <span className={`ml-2 px-2 py-1 rounded text-xs font-medium ${
+                    pendingPaymentChange.nuevoEstado === 'Pagado' 
+                      ? 'bg-green-100 text-green-800' 
+                      : 'bg-red-100 text-red-800'
+                  }`}>
+                    {pendingPaymentChange.nuevoEstado}
+                  </span>
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <Button
+                variant="outline"
+                onClick={cancelarCambioEstado}
+                className="px-4 py-2"
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={confirmarCambioEstado}
+                className="px-4 py-2 text-white bg-red-600 hover:bg-red-700"
+              >
+                Confirmar Cambio
               </Button>
             </div>
           </div>
