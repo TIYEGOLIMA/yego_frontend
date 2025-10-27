@@ -555,16 +555,18 @@ export const GarantizadoModule: React.FC = () => {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="px-6 py-2"
-            onClick={handleOpenExportModal}
-            disabled={filteredData.length === 0}
-          >
-            <Download className="h-4 w-4 mr-2" />
-            Exportar Excel
-          </Button>
+          {!showRegistros && (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="px-6 py-2"
+              onClick={handleOpenExportModal}
+              disabled={filteredData.length === 0}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Exportar Excel
+            </Button>
+          )}
         </div>
       </div>
 
