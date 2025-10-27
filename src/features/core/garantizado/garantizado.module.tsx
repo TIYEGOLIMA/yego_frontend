@@ -240,9 +240,16 @@ export const GarantizadoModule: React.FC = () => {
       // Asegurar que siempre sean arrays
       const safeConductoresData = Array.isArray(conductoresData) ? conductoresData : [];
       
-      setData(safeConductoresData);
-      setFilteredData(safeConductoresData);
-      setTotalConductores(safeConductoresData.length);
+      // Ordenar: Garantizados primero, luego No Garantizados
+      const sortedData = safeConductoresData.sort((a, b) => {
+        if (a.garantizadoValor === 'Garantizado' && b.garantizadoValor !== 'Garantizado') return -1;
+        if (a.garantizadoValor !== 'Garantizado' && b.garantizadoValor === 'Garantizado') return 1;
+        return 0;
+      });
+      
+      setData(sortedData);
+      setFilteredData(sortedData);
+      setTotalConductores(sortedData.length);
       
       // Actualizar total de diferencia garantizados desde la respuesta del backend
       if (response.data && typeof response.data.totalDiferenciaGarantizados === 'number') {
@@ -298,9 +305,16 @@ export const GarantizadoModule: React.FC = () => {
         const semanaActualFromEvent = event.semanaActual || '';
         const semanaAnteriorFromEvent = event.semanaAnterior || '';
         
-        setData(conductoresData);
-        setFilteredData(conductoresData);
-        setTotalConductores(conductoresData.length);
+        // Ordenar: Garantizados primero, luego No Garantizados
+        const sortedData = conductoresData.sort((a: any, b: any) => {
+          if (a.garantizadoValor === 'Garantizado' && b.garantizadoValor !== 'Garantizado') return -1;
+          if (a.garantizadoValor !== 'Garantizado' && b.garantizadoValor === 'Garantizado') return 1;
+          return 0;
+        });
+        
+        setData(sortedData);
+        setFilteredData(sortedData);
+        setTotalConductores(sortedData.length);
         
         if (semanaActualFromEvent) {
           setSemanaActual(semanaActualFromEvent);
@@ -399,6 +413,13 @@ export const GarantizadoModule: React.FC = () => {
           item.garantizadoValor === statusFilter
         );
       }
+
+      // Ordenar: Garantizados primero, luego No Garantizados
+      filtered = filtered.sort((a, b) => {
+        if (a.garantizadoValor === 'Garantizado' && b.garantizadoValor !== 'Garantizado') return -1;
+        if (a.garantizadoValor !== 'Garantizado' && b.garantizadoValor === 'Garantizado') return 1;
+        return 0;
+      });
 
       setFilteredData(filtered);
       setTotalConductores(filtered.length);
