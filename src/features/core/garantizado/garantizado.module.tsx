@@ -48,6 +48,7 @@ interface GarantizadoData {
   horasTrabajadas: string;
   garantizadoValor: string;
   estadoPago: 'No Pagado' | 'Pagado' | 'N/A';
+  motivoRechazo: string | null;
   fechaCreacion: string;
   fechaActualizacion: string;
   activo: boolean;
@@ -99,6 +100,7 @@ export const GarantizadoModule: React.FC = () => {
   const [showRegistros, setShowRegistros] = useState(true);
   const [registrosData, setRegistrosData] = useState<RegistroData[]>([]);
   const [loadingRegistros, setLoadingRegistros] = useState(false);
+  const [totalDiferenciaGarantizados, setTotalDiferenciaGarantizados] = useState(0);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingPaymentChange, setPendingPaymentChange] = useState<{
     conductorId: number;
@@ -242,6 +244,11 @@ export const GarantizadoModule: React.FC = () => {
       setFilteredData(safeConductoresData);
       setTotalConductores(safeConductoresData.length);
       
+      // Actualizar total de diferencia garantizados desde la respuesta del backend
+      if (response.data && typeof response.data.totalDiferenciaGarantizados === 'number') {
+        setTotalDiferenciaGarantizados(response.data.totalDiferenciaGarantizados);
+      }
+      
       // Marcar que la carga inicial se completó
       if (isInitialLoad) {
         setInitialLoadDone(true);
@@ -252,6 +259,7 @@ export const GarantizadoModule: React.FC = () => {
       setData([]);
       setFilteredData([]);
       setTotalConductores(0);
+      setTotalDiferenciaGarantizados(0);
     } finally {
       if (isInitialLoad) {
         setLoading(false);
@@ -715,9 +723,9 @@ export const GarantizadoModule: React.FC = () => {
       </div>
 
       {/* Cards de Estadísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-4xl">
+      <div className={`grid grid-cols-1 ${showRegistros ? 'md:grid-cols-1 justify-items-start' : 'md:grid-cols-4'} gap-4`}>
         {/* Total de Conductores */}
-        <Card className="border-0 bg-blue-50 dark:bg-blue-950/20">
+        <Card className={`border-0 bg-blue-50 dark:bg-blue-950/20 ${showRegistros ? 'w-64' : ''}`}>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -732,38 +740,61 @@ export const GarantizadoModule: React.FC = () => {
         </Card>
 
         {/* Conductores Garantizados */}
-        <Card className="border-0 bg-green-50 dark:bg-green-950/20">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-green-600 dark:text-green-400">Garantizados</p>
-                <p className="text-4xl font-bold text-green-900 dark:text-green-100">
-                  {filteredData.filter(item => item.garantizadoValor === 'Garantizado').length}
-                </p>
+        {!showRegistros && (
+          <Card className="border-0 bg-green-50 dark:bg-green-950/20">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-green-600 dark:text-green-400">Garantizados</p>
+                  <p className="text-4xl font-bold text-green-900 dark:text-green-100">
+                    {filteredData.filter(item => item.garantizadoValor === 'Garantizado').length}
+                  </p>
+                </div>
+                <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
+                  <Shield className="h-6 w-6 text-green-600 dark:text-green-400" />
+                </div>
               </div>
-              <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
-                <Shield className="h-6 w-6 text-green-600 dark:text-green-400" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Conductores No Garantizados */}
-        <Card className="border-0 bg-red-50 dark:bg-red-950/20">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-red-600 dark:text-red-400">No Garantizados</p>
-                <p className="text-4xl font-bold text-red-900 dark:text-red-100">
-                  {filteredData.filter(item => item.garantizadoValor === 'No Garantizado').length}
-                </p>
+        {!showRegistros && (
+          <Card className="border-0 bg-red-50 dark:bg-red-950/20">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-red-600 dark:text-red-400">No Garantizados</p>
+                  <p className="text-4xl font-bold text-red-900 dark:text-red-100">
+                    {filteredData.filter(item => item.garantizadoValor === 'No Garantizado').length}
+                  </p>
+                </div>
+                <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
+                  <ShieldOff className="h-6 w-6 text-red-600 dark:text-red-400" />
+                </div>
               </div>
-              <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
-                <ShieldOff className="h-6 w-6 text-red-600 dark:text-red-400" />
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Total Garantizado */}
+        {!showRegistros && (
+          <Card className="border-0 bg-blue-50 dark:bg-blue-950/20">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-blue-600 dark:text-blue-400">Total Garantizado</p>
+                  <p className="text-4xl font-bold text-blue-900 dark:text-blue-100">
+                    {formatCurrency(totalDiferenciaGarantizados)}
+                  </p>
+                </div>
+                <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
+                  <Shield className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Filtros */}
@@ -919,6 +950,9 @@ export const GarantizadoModule: React.FC = () => {
                       <th className="text-center py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[160px]">
                         Estado de Pago
                       </th>
+                      <th className="text-center py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[180px]">
+                        Motivo Rechazo
+                      </th>
                     </>
                   ) : (
                     <>
@@ -1060,6 +1094,11 @@ export const GarantizadoModule: React.FC = () => {
                               N/A
                             </span>
                           )}
+                        </td>
+                        <td className="py-5 px-6 text-center">
+                          <div className="text-sm text-gray-600 dark:text-gray-400">
+                            {item.motivoRechazo || '-'}
+                          </div>
                         </td>
                       </>
                     ) : (
