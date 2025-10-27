@@ -45,6 +45,7 @@ interface GarantizadoData {
   semana: string;
   viajesActuales: number;
   flotaId: string;
+  horasTrabajadas: string;
   garantizadoValor: string;
   estadoPago: 'No Pagado' | 'Pagado' | 'N/A';
   fechaCreacion: string;
@@ -774,26 +775,6 @@ export const GarantizadoModule: React.FC = () => {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Por página:</span>
-                <Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}>
-                  <SelectTrigger className="w-20">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="6">6</SelectItem>
-                    <SelectItem value="10">10</SelectItem>
-                    <SelectItem value="20">20</SelectItem>
-                    <SelectItem value="50">50</SelectItem>
-                    <SelectItem value="100">100</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-          
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
@@ -930,6 +911,9 @@ export const GarantizadoModule: React.FC = () => {
                         Diferencia
                       </th>
                       <th className="text-center py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[140px]">
+                        Horas Trabajadas
+                      </th>
+                      <th className="text-center py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[140px]">
                         Estado
                       </th>
                       <th className="text-center py-4 px-6 font-medium text-gray-900 dark:text-white min-w-[160px]">
@@ -1015,6 +999,11 @@ export const GarantizadoModule: React.FC = () => {
                         <td className="py-5 px-6 text-right">
                           <div className={`font-medium text-base ${item.diferencia >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                             {formatCurrency(item.diferencia)}
+                          </div>
+                        </td>
+                        <td className="py-5 px-6 text-center">
+                          <div className="font-medium text-base text-blue-600 dark:text-blue-400">
+                            {item.horasTrabajadas || '0'} hrs
                           </div>
                         </td>
                         <td className="py-5 px-6 text-center">
@@ -1124,11 +1113,29 @@ export const GarantizadoModule: React.FC = () => {
           {/* Controles de Paginación */}
             {safeFilteredData.length > 0 && (
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
-              <div className="text-sm text-gray-600 dark:text-gray-400">
+              <div className="flex items-center gap-4">
+                <div className="text-sm text-gray-600 dark:text-gray-400">
                   {showRegistros 
                     ? `Mostrando ${startIndex + 1} a ${Math.min(endIndex, totalConductores)} de ${totalConductores} registros de la semana actual`
                     : `Mostrando ${startIndex + 1} a ${Math.min(endIndex, totalConductores)} de ${totalConductores} conductores`
                   }
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600 dark:text-gray-400">Por página:</span>
+                  <Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}>
+                    <SelectTrigger className="w-20">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="6">6</SelectItem>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="20">20</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
                 
                 <div className="flex items-center gap-2">
