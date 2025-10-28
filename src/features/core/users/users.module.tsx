@@ -65,6 +65,13 @@ interface User {
   lastLogin?: string;
 }
 
+interface Role {
+  id: number;
+  name: string;
+  description?: string;
+  active: boolean;
+}
+
 interface CreateUserData {
   dni?: string;
   username: string;
@@ -72,9 +79,8 @@ interface CreateUserData {
   lastName?: string;
   email: string;
   password: string;
-  role: string;
+  roleId: number;
   active?: boolean;
-  moduleId?: number;
 }
 
 const UsersModule: React.FC = () => {
@@ -84,6 +90,7 @@ const UsersModule: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [availableRoles, setAvailableRoles] = useState<Role[]>([]);
   const [formData, setFormData] = useState<CreateUserData>({
     dni: '',
     username: '',
@@ -91,9 +98,8 @@ const UsersModule: React.FC = () => {
     lastName: '',
     email: '',
     password: '',
-    role: 'usuario',
-    active: true,
-    moduleId: undefined
+    roleId: 0,
+    active: true
   });
 
   const [userStatus, setUserStatus] = useState<'true' | 'false' | 'all'>('all');
@@ -124,31 +130,17 @@ const UsersModule: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [totalUsers, setTotalUsers] = useState(0);
-  const usePagination = true;
 
-  // Roles disponibles según el rol del usuario actual
-  const getAvailableRoles = () => {
-    if (!currentUser) return [];
-    
-    switch (currentUser.role.toUpperCase()) {
-      case 'SUPERADMIN':
-        // SUPERADMIN puede crear todos los roles
-        return ['OPERADOR', 'SAC', 'ADMIN', 'SUPERVISOR', 'SUPERADMIN', 'TV', 'TABLET1', 'TABLET2', 'PRINCIPAL'];
-      
-      case 'ADMIN':
-        // ADMIN puede crear todos menos SUPERADMIN
-        return ['OPERADOR', 'SAC', 'ADMIN', 'SUPERVISOR', 'TV', 'TABLET1', 'TABLET2', 'PRINCIPAL'];
-      
-      case 'OPERADOR':
-        // OPERADOR solo puede crear OPERADOR y SAC
-        return ['OPERADOR', 'SAC'];
-      
-      default:
-        return [];
+  const fetchAvailableRoles = async () => {
+    try {
+      const response = await api.get('/roles/find-all-active');
+      const roles = Array.isArray(response.data) ? response.data : [];
+      setAvailableRoles(roles);
+    } catch (error: any) {
+      console.error('Error cargando roles:', error);
+      setAvailableRoles([]);
     }
   };
-  
-  const availableRoles = getAvailableRoles();
 
   // Función helper para mostrar nombre completo (primer nombre + primer apellido)
   const getDisplayName = (user: User) => {
@@ -167,7 +159,11 @@ const UsersModule: React.FC = () => {
 
   useEffect(() => {
     fetchUsers();
-  }, [userStatus, currentPage, itemsPerPage, usePagination]);
+  }, [userStatus, currentPage, itemsPerPage]);
+
+  useEffect(() => {
+    fetchAvailableRoles();
+  }, []);
 
   useEffect(() => {
     const delaySearch = setTimeout(() => {
@@ -239,7 +235,6 @@ const UsersModule: React.FC = () => {
 
   const fetchUsers = async () => {
     try {
-      console.log('🔍 [UsersModule] Cargando usuarios...');
       setLoading(true);
       const params: any = {};
       
@@ -247,27 +242,21 @@ const UsersModule: React.FC = () => {
         params.active = userStatus === 'true';
       }
       
-      if (usePagination) {
-        params.page = currentPage;
-        params.limit = itemsPerPage;
-      }
+      params.page = currentPage;
+      params.limit = itemsPerPage;
       
       if (searchTerm.trim()) {
         params.search = searchTerm.trim();
       }
       
-      console.log('🔍 [UsersModule] Parámetros de búsqueda:', params);
       const response = await api.get('/users', { params });
-      console.log('✅ [UsersModule] Respuesta recibida:', response.data);
       
-      if (usePagination && response.data.users) {
+      if (response.data.users) {
         setUsers(response.data.users);
         setTotalUsers(response.data.total);
-        console.log(`✅ [UsersModule] ${response.data.users.length} usuarios cargados (total: ${response.data.total})`);
       } else {
         setUsers(Array.isArray(response.data) ? response.data : []);
         setTotalUsers(Array.isArray(response.data) ? response.data.length : 0);
-        console.log(`✅ [UsersModule] ${Array.isArray(response.data) ? response.data.length : 0} usuarios cargados`);
       }
     } catch (error: any) {
       setUsers([]);
@@ -279,11 +268,8 @@ const UsersModule: React.FC = () => {
 
   const consultarDatosDNI = async (dni: string) => {
     try {
-      console.log('🔍 Consultando datos para DNI:', dni);
-      
       const response = await api.get(`/users/dni/${dni}`);
       const data = response.data;
-      console.log('✅ Datos obtenidos:', data);
       
       if (data && data.success) {
         const datos = data;
@@ -322,7 +308,7 @@ const UsersModule: React.FC = () => {
 
       }
     } catch (error: any) {
-      console.error('❌ Error al consultar DNI:', error);
+      console.error('Error al consultar DNI:', error);
       clearUserFields();
       setErrorModal({
         open: true,
@@ -362,7 +348,7 @@ const UsersModule: React.FC = () => {
         password: formData.password,
         name: formData.name.trim(),
         lastName: formData.lastName?.trim() || '',
-        role: formData.role,
+        roleId: formData.roleId,
         active: formData.active !== undefined ? formData.active : true
       };
       
@@ -403,7 +389,7 @@ const UsersModule: React.FC = () => {
         email: formData.email,
         name: formData.name,
         lastName: formData.lastName || '',
-        role: formData.role,
+        roleId: formData.roleId,
         active: formData.active
       };
       
@@ -548,6 +534,8 @@ const UsersModule: React.FC = () => {
 
   const openEditDialog = (user: User) => {
     setEditingUser(user);
+    // Buscar el ID del rol basado en el nombre
+    const roleObj = availableRoles.find(role => role.name === user.role);
     setFormData({
       dni: user.dni || '',
       username: user.username,
@@ -555,7 +543,7 @@ const UsersModule: React.FC = () => {
       lastName: user.lastName || '',
       email: user.email,
       password: '', // Siempre vacío por seguridad
-      role: user.role,
+      roleId: roleObj?.id || 0,
       active: user.active
     });
   };
@@ -578,7 +566,7 @@ const UsersModule: React.FC = () => {
       lastName: '',
       email: '',
       password: '',
-      role: 'usuario',
+      roleId: 0,
       active: true
     });
   };
@@ -1103,8 +1091,8 @@ const UsersModule: React.FC = () => {
             <div>
               <label className="block text-sm font-medium mb-1">Rol</label>
               <Select 
-                value={formData.role} 
-                onValueChange={(value) => setFormData({ ...formData, role: value })}
+                value={formData.roleId.toString()} 
+                onValueChange={(value) => setFormData({ ...formData, roleId: parseInt(value) })}
                 disabled={!!editingUser && currentUser && currentUser.role !== 'ADMIN' && currentUser.role !== 'SUPERADMIN'}
               >
                 <SelectTrigger className="focus:ring-0 focus:ring-offset-0 hover:bg-transparent">
@@ -1112,8 +1100,8 @@ const UsersModule: React.FC = () => {
                 </SelectTrigger>
                 <SelectContent>
                   {availableRoles.map(role => (
-                    <SelectItem key={role} value={role}>
-                      {role}
+                    <SelectItem key={role.id} value={role.id.toString()}>
+                      {role.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

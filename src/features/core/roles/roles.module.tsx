@@ -21,6 +21,13 @@ import {
 } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
 import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from '@/components/ui/select';
+import { 
   Plus, 
   Edit, 
   Trash2, 
@@ -28,8 +35,13 @@ import {
   Search,
   Users,
   Calendar,
+  X,
   Save,
-  X
+  Filter,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight
 } from 'lucide-react';
 import { useAuth } from "@/shared/hooks/useAuth";
 import { api } from '../../../services';
@@ -43,13 +55,16 @@ interface Role {
   active: boolean;
   createdAt: string;
   updatedAt: string;
+  userCount?: number; // Cantidad de usuarios con este rol
 }
 
 interface Permission {
   id: number;
   name: string;
+  description: string;
   module: string;
   action: string;
+  active: boolean;
 }
 
 interface CreateRoleData {
@@ -72,6 +87,9 @@ const RolesModule: React.FC = () => {
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [roleStatus, setRoleStatus] = useState<'true' | 'false' | 'all'>('all');
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [currentPage, setCurrentPage] = useState(1);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -100,6 +118,10 @@ const RolesModule: React.FC = () => {
     fetchPermissions();
   }, []);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, roleStatus]);
+
   const fetchRoles = async () => {
     try {
       setLoading(true);
@@ -114,75 +136,42 @@ const RolesModule: React.FC = () => {
 
   const fetchPermissions = async () => {
     try {
-      // Definir permisos estáticos basados en la estructura que veo en la imagen
-      const staticPermissions = [
-        // Módulo Audit
-        { id: 1, name: 'Leer', module: 'audit', action: 'read' },
-        
-        // Módulo Users  
-        { id: 2, name: 'Leer', module: 'users', action: 'read' },
-        { id: 3, name: 'Crear', module: 'users', action: 'create' },
-        { id: 4, name: 'Actualizar', module: 'users', action: 'update' },
-        { id: 5, name: 'Eliminar', module: 'users', action: 'delete' },
-        
-        // Módulo Imports
-        { id: 6, name: 'Leer', module: 'imports', action: 'read' },
-        { id: 7, name: 'Crear', module: 'imports', action: 'create' },
-        { id: 8, name: 'Actualizar', module: 'imports', action: 'update' },
-        { id: 9, name: 'Eliminar', module: 'imports', action: 'delete' },
-        
-        // Módulo Configuration
-        { id: 10, name: 'Leer', module: 'configuration', action: 'read' },
-        { id: 11, name: 'Actualizar', module: 'configuration', action: 'update' },
-        
-        // Módulo Roles
-        { id: 12, name: 'Leer', module: 'roles', action: 'read' },
-        { id: 13, name: 'Crear', module: 'roles', action: 'create' },
-        { id: 14, name: 'Actualizar', module: 'roles', action: 'update' },
-        { id: 15, name: 'Eliminar', module: 'roles', action: 'delete' },
-        
-        // Módulo Modules
-        { id: 16, name: 'Leer', module: 'modules', action: 'read' },
-        { id: 17, name: 'Crear', module: 'modules', action: 'create' },
-        { id: 18, name: 'Actualizar', module: 'modules', action: 'update' },
-        { id: 19, name: 'Eliminar', module: 'modules', action: 'delete' },
-        
-        // Módulo Permissions
-        { id: 20, name: 'Leer', module: 'permissions', action: 'read' },
-        { id: 21, name: 'Crear', module: 'permissions', action: 'create' },
-        { id: 22, name: 'Actualizar', module: 'permissions', action: 'update' },
-        { id: 23, name: 'Eliminar', module: 'permissions', action: 'delete' }
-      ];
-      
-      setPermissions(staticPermissions);
+      const response = await api.get('/permissions/find-all-active');
+      setPermissions(response.data || []);
     } catch (error) {
-      console.error('Error setting permissions:', error);
+      console.error('Error fetching permissions:', error);
+      setPermissions([]);
     }
+  };
+
+  const cleanPermissions = (): Record<string, any> => {
+    const clean: Record<string, any> = {};
+    for (const module of Object.keys(groupedPermissions)) {
+      const actions = formData.permissions[module];
+      if (Array.isArray(actions) && actions.length > 0) {
+        clean[module] = actions;
+      }
+    }
+    return clean;
+  };
+
+  const resetForm = () => {
+    setFormData(initialFormData);
+    setEditingRole(null);
+    setIsCreateDialogOpen(false);
   };
 
   const handleCreateRole = async () => {
     try {
-      // Limpiar permisos vacíos antes de enviar
-      const cleanPermissions: Record<string, any> = {};
-      for (const module of Object.keys(groupedPermissions)) {
-        const actions = formData.permissions[module];
-        if (Array.isArray(actions) && actions.length > 0) {
-          cleanPermissions[module] = actions;
-        }
-      }
-
       const createData: CreateRoleData = {
         name: formData.name,
         description: formData.description,
-        permissions: cleanPermissions,
+        permissions: cleanPermissions(),
         active: formData.active
       };
 
-      console.log('📤 Creando rol:', JSON.stringify(createData, null, 2));
       await api.post('/roles/create', createData);
-      
-      setIsCreateDialogOpen(false);
-      setFormData(initialFormData);
+      resetForm();
       fetchRoles();
     } catch (error) {
       console.error('Error creating role:', error);
@@ -193,27 +182,15 @@ const RolesModule: React.FC = () => {
     if (!editingRole) return;
 
     try {
-      // Limpiar permisos vacíos antes de enviar
-      const cleanPermissions: Record<string, any> = {};
-      for (const module of Object.keys(groupedPermissions)) {
-        const actions = formData.permissions[module];
-        if (Array.isArray(actions) && actions.length > 0) {
-          cleanPermissions[module] = actions;
-        }
-      }
-
       const updateData: UpdateRoleData = {
         name: formData.name,
         description: formData.description,
-        permissions: cleanPermissions,
+        permissions: cleanPermissions(),
         active: formData.active
       };
 
-      console.log('📤 Actualizando rol:', JSON.stringify(updateData, null, 2));
       await api.put(`/roles/update/${editingRole.id}`, updateData);
-      
-      setEditingRole(null);
-      setFormData(initialFormData);
+      resetForm();
       fetchRoles();
     } catch (error) {
       console.error('Error updating role:', error);
@@ -243,37 +220,69 @@ const RolesModule: React.FC = () => {
     setRoleToDelete(null);
   };
 
-  const toggleRoleState = (id: number) => {
+  const handleToggleRoleStatus = async (id: number) => {
+    // Guardar el estado original para rollback
+    const originalRole = roles.find(role => role.id === id);
+    if (!originalRole) return;
+
+    // Optimistic update
     setRoles(prevRoles => 
       prevRoles.map(role => 
         role.id === id ? { ...role, active: !role.active } : role
       )
     );
-  };
 
-  const handleToggleRoleStatus = async (id: number) => {
     try {
-      // Actualizar estado local inmediatamente
-      toggleRoleState(id);
-      
-      // Llamar al backend
-      await api.put(`/roles/toggle-status/${id}`);
+      const response = await api.put(`/roles/toggle-status/${id}`);
+      // Usar la respuesta del servidor para actualizar el estado
+      if (response.data) {
+        setRoles(prevRoles => 
+          prevRoles.map(role => 
+            role.id === id ? { ...role, ...response.data } : role
+          )
+        );
+      }
     } catch (error) {
       console.error('Error toggling role status:', error);
-      // Revertir el cambio si hay error
-      toggleRoleState(id);
+      // Revertir al estado original si hay error
+      setRoles(prevRoles => 
+        prevRoles.map(role => 
+          role.id === id ? { ...role, active: originalRole.active } : role
+        )
+      );
     }
   };
 
-  const filteredRoles = roles.filter(role =>
-    role.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    role.description.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredRoles = roles.filter(role => {
+    const matchesSearch = role.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      role.description.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesStatus = roleStatus === 'all' || 
+      (roleStatus === 'true' && role.active) ||
+      (roleStatus === 'false' && !role.active);
+    
+    return matchesSearch && matchesStatus;
+  });
+
+  const totalRoles = filteredRoles.length;
+  const totalPages = Math.ceil(totalRoles / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedRoles = filteredRoles.slice(startIndex, startIndex + itemsPerPage);
+
+  const handlePageChange = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  };
+
+  const handleItemsPerPageChange = (value: string) => {
+    setItemsPerPage(parseInt(value));
+    setCurrentPage(1);
+  };
 
   const openEditDialog = (role: Role) => {
     setEditingRole(role);
     
-    // Parsear permisos desde JSON string
     let parsedPermissions = {};
     if (role.permissions) {
       try {
@@ -292,11 +301,6 @@ const RolesModule: React.FC = () => {
     });
   };
 
-  const closeDialog = () => {
-    setIsCreateDialogOpen(false);
-    setEditingRole(null);
-    setFormData(initialFormData);
-  };
 
   const handlePermissionToggle = (module: string, action: string) => {
     const currentPermissions = { ...formData.permissions };
@@ -383,12 +387,55 @@ const RolesModule: React.FC = () => {
         </CardContent>
       </Card>
 
+      {/* Filtros */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-neutral-400" />
+            <span className="text-sm text-neutral-700 dark:text-neutral-300">Estado:</span>
+            <Select value={roleStatus} onValueChange={(value) => setRoleStatus(value as 'true' | 'false' | 'all')}>
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="true">Activos</SelectItem>
+                <SelectItem value="false">Inactivos</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-neutral-700 dark:text-neutral-300">Por página:</span>
+            <Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}>
+              <SelectTrigger className="w-20">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="5">5</SelectItem>
+                <SelectItem value="10">10</SelectItem>
+                <SelectItem value="20">20</SelectItem>
+                <SelectItem value="50">50</SelectItem>
+                <SelectItem value="100">100</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </div>
+
       {/* Roles Table */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Shield className="h-5 w-5 text-primary-500" />
-            Roles del Sistema
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Shield className="h-5 w-5 text-primary-500" />
+              Roles del Sistema
+            </div>
+            {!loading && (
+              <span className="text-sm font-normal text-neutral-500">
+                {totalRoles} rol{totalRoles !== 1 ? 'es' : ''} en total
+              </span>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -403,8 +450,8 @@ const RolesModule: React.FC = () => {
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Shield className="h-12 w-12 text-neutral-300 dark:text-neutral-600 mb-4" />
               <h3 className="yego-heading-4 mb-2">No se encontraron roles</h3>
-              <p className="yego-body-sm max-w-md">
-                No hay roles que coincidan con tu búsqueda. Intenta con otros términos o crea un nuevo rol.
+              <p className="yego-body-sm">
+                Intenta con otros términos o crea un nuevo rol.
               </p>
             </div>
           ) : (
@@ -423,7 +470,7 @@ const RolesModule: React.FC = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredRoles.map((role) => (
+                  {paginatedRoles.map((role) => (
                     <TableRow key={role.id} className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors">
                       <TableCell className="font-medium text-neutral-900 dark:text-neutral-100">{role.name}</TableCell>
                       <TableCell>{role.description}</TableCell>
@@ -509,7 +556,9 @@ const RolesModule: React.FC = () => {
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Users className="h-4 w-4 text-neutral-500" />
-                          <span className="font-medium">-</span>
+                          <span className="font-medium">
+                            {role.userCount !== undefined ? role.userCount : '-'}
+                          </span>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -533,7 +582,7 @@ const RolesModule: React.FC = () => {
                             variant="ghost"
                             size="sm"
                             onClick={() => openEditDialog(role)}
-                            className="text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300"
+                            className="text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:text-neutral-300 dark:hover:bg-neutral-800"
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
@@ -541,7 +590,7 @@ const RolesModule: React.FC = () => {
                             variant="ghost"
                             size="sm"
                             onClick={() => openDeleteDialog(role)}
-                            className="text-error-600 dark:text-error-400 hover:text-error-700 dark:hover:text-error-300"
+                            className="text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:text-neutral-300 dark:hover:bg-neutral-800"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -556,8 +605,90 @@ const RolesModule: React.FC = () => {
         </CardContent>
       </Card>
 
+      {/* Paginación */}
+      {!loading && paginatedRoles.length > 0 && totalPages > 1 && (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="text-sm text-neutral-600 dark:text-neutral-400">
+                Mostrando {startIndex + 1} a {Math.min(startIndex + itemsPerPage, totalRoles)} de {totalRoles} roles
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(1)}
+                  disabled={currentPage === 1}
+                  className="h-8 w-8 p-0"
+                >
+                  <ChevronsLeft className="h-4 w-4" />
+                </Button>
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="h-8 w-8 p-0"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+                    
+                    return (
+                      <Button
+                        key={pageNum}
+                        variant={currentPage === pageNum ? 'primary' : 'outline'}
+                        size="sm"
+                        onClick={() => handlePageChange(pageNum)}
+                        className="h-8 w-8 p-0"
+                      >
+                        {pageNum}
+                      </Button>
+                    );
+                  })}
+                </div>
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="h-8 w-8 p-0"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handlePageChange(totalPages)}
+                  disabled={currentPage === totalPages}
+                  className="h-8 w-8 p-0"
+                >
+                  <ChevronsRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Create/Edit Dialog */}
-      <Dialog open={isCreateDialogOpen || !!editingRole} onOpenChange={closeDialog}>
+      <Dialog open={isCreateDialogOpen || !!editingRole} onOpenChange={resetForm}>
         <DialogContent className="sm:max-w-[800px] max-h-[95vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -650,7 +781,7 @@ const RolesModule: React.FC = () => {
                                       htmlFor={`permission-${permission.id}`}
                                       className="text-xs text-neutral-700 dark:text-neutral-300 cursor-pointer flex-1 leading-tight"
                                     >
-                                      {permission.name}
+                                      {permission.description || permission.name}
                                     </label>
                                   </div>
                                 ))}
@@ -669,7 +800,7 @@ const RolesModule: React.FC = () => {
           <DialogFooter className="mt-6">
             <Button 
               variant="secondary" 
-              onClick={closeDialog}
+              onClick={resetForm}
               leftIcon={<X className="h-4 w-4" />}
             >
               Cancelar
