@@ -19,6 +19,7 @@ import {
   DialogDescription,
   DialogFooter
 } from '@/components/ui/dialog';
+import { Switch } from '@/components/ui/switch';
 import { 
   Plus, 
   Edit, 
@@ -28,9 +29,7 @@ import {
   Users,
   Calendar,
   Save,
-  X,
-  Power,
-  PowerOff
+  X
 } from 'lucide-react';
 import { useAuth } from "@/shared/hooks/useAuth";
 import { api } from '../../../services';
@@ -40,9 +39,8 @@ interface Role {
   id: number;
   name: string;
   description: string;
-  permissions: Record<string, any> | null;
-  user_count: number;
-  activo: boolean;
+  permissions: string | null; // JSON string from backend
+  active: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -58,6 +56,14 @@ interface CreateRoleData {
   name: string;
   description: string;
   permissions: Record<string, any>;
+  active?: boolean;
+}
+
+interface UpdateRoleData {
+  name?: string;
+  description?: string;
+  permissions?: Record<string, any>;
+  active?: boolean;
 }
 
 const RolesModule: React.FC = () => {
@@ -68,11 +74,17 @@ const RolesModule: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
-  const [formData, setFormData] = useState<CreateRoleData>({
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [roleToDelete, setRoleToDelete] = useState<Role | null>(null);
+  const [hoveredRole, setHoveredRole] = useState<number | null>(null);
+  const initialFormData: CreateRoleData = {
     name: '',
     description: '',
-    permissions: {}
-  });
+    permissions: {},
+    active: true
+  };
+
+  const [formData, setFormData] = useState<CreateRoleData>(initialFormData);
 
   // Agrupar permisos por módulo
   const groupedPermissions = permissions.reduce((acc, permission) => {
@@ -91,7 +103,7 @@ const RolesModule: React.FC = () => {
   const fetchRoles = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/roles');
+      const response = await api.get('/roles/find-all');
       setRoles(response.data);
     } catch (error) {
       console.error('Error fetching roles:', error);
@@ -102,22 +114,75 @@ const RolesModule: React.FC = () => {
 
   const fetchPermissions = async () => {
     try {
-      const response = await api.get('/permissions');
-      setPermissions(response.data);
+      // Definir permisos estáticos basados en la estructura que veo en la imagen
+      const staticPermissions = [
+        // Módulo Audit
+        { id: 1, name: 'Leer', module: 'audit', action: 'read' },
+        
+        // Módulo Users  
+        { id: 2, name: 'Leer', module: 'users', action: 'read' },
+        { id: 3, name: 'Crear', module: 'users', action: 'create' },
+        { id: 4, name: 'Actualizar', module: 'users', action: 'update' },
+        { id: 5, name: 'Eliminar', module: 'users', action: 'delete' },
+        
+        // Módulo Imports
+        { id: 6, name: 'Leer', module: 'imports', action: 'read' },
+        { id: 7, name: 'Crear', module: 'imports', action: 'create' },
+        { id: 8, name: 'Actualizar', module: 'imports', action: 'update' },
+        { id: 9, name: 'Eliminar', module: 'imports', action: 'delete' },
+        
+        // Módulo Configuration
+        { id: 10, name: 'Leer', module: 'configuration', action: 'read' },
+        { id: 11, name: 'Actualizar', module: 'configuration', action: 'update' },
+        
+        // Módulo Roles
+        { id: 12, name: 'Leer', module: 'roles', action: 'read' },
+        { id: 13, name: 'Crear', module: 'roles', action: 'create' },
+        { id: 14, name: 'Actualizar', module: 'roles', action: 'update' },
+        { id: 15, name: 'Eliminar', module: 'roles', action: 'delete' },
+        
+        // Módulo Modules
+        { id: 16, name: 'Leer', module: 'modules', action: 'read' },
+        { id: 17, name: 'Crear', module: 'modules', action: 'create' },
+        { id: 18, name: 'Actualizar', module: 'modules', action: 'update' },
+        { id: 19, name: 'Eliminar', module: 'modules', action: 'delete' },
+        
+        // Módulo Permissions
+        { id: 20, name: 'Leer', module: 'permissions', action: 'read' },
+        { id: 21, name: 'Crear', module: 'permissions', action: 'create' },
+        { id: 22, name: 'Actualizar', module: 'permissions', action: 'update' },
+        { id: 23, name: 'Eliminar', module: 'permissions', action: 'delete' }
+      ];
+      
+      setPermissions(staticPermissions);
     } catch (error) {
-      console.error('Error fetching permissions:', error);
+      console.error('Error setting permissions:', error);
     }
   };
 
   const handleCreateRole = async () => {
     try {
-      await api.post('/roles', formData);
+      // Limpiar permisos vacíos antes de enviar
+      const cleanPermissions: Record<string, any> = {};
+      for (const module of Object.keys(groupedPermissions)) {
+        const actions = formData.permissions[module];
+        if (Array.isArray(actions) && actions.length > 0) {
+          cleanPermissions[module] = actions;
+        }
+      }
+
+      const createData: CreateRoleData = {
+        name: formData.name,
+        description: formData.description,
+        permissions: cleanPermissions,
+        active: formData.active
+      };
+
+      console.log('📤 Creando rol:', JSON.stringify(createData, null, 2));
+      await api.post('/roles/create', createData);
+      
       setIsCreateDialogOpen(false);
-      setFormData({
-        name: '',
-        description: '',
-        permissions: {}
-      });
+      setFormData(initialFormData);
       fetchRoles();
     } catch (error) {
       console.error('Error creating role:', error);
@@ -128,7 +193,7 @@ const RolesModule: React.FC = () => {
     if (!editingRole) return;
 
     try {
-      // Recorre todos los módulos posibles y solo incluye los que tengan permisos marcados
+      // Limpiar permisos vacíos antes de enviar
       const cleanPermissions: Record<string, any> = {};
       for (const module of Object.keys(groupedPermissions)) {
         const actions = formData.permissions[module];
@@ -136,44 +201,67 @@ const RolesModule: React.FC = () => {
           cleanPermissions[module] = actions;
         }
       }
-      console.log('📤 Permisos enviados al backend:', JSON.stringify(cleanPermissions, null, 2));
-      await api.put(`/roles/${editingRole.id}`, {
-        ...formData,
-        permissions: cleanPermissions
-      });
+
+      const updateData: UpdateRoleData = {
+        name: formData.name,
+        description: formData.description,
+        permissions: cleanPermissions,
+        active: formData.active
+      };
+
+      console.log('📤 Actualizando rol:', JSON.stringify(updateData, null, 2));
+      await api.put(`/roles/update/${editingRole.id}`, updateData);
+      
       setEditingRole(null);
-      setFormData({
-        name: '',
-        description: '',
-        permissions: {}
-      });
+      setFormData(initialFormData);
       fetchRoles();
     } catch (error) {
       console.error('Error updating role:', error);
     }
   };
 
-  const handleDeleteRole = async (id: number) => {
-    if (window.confirm('¿Estás seguro de que quieres eliminar este rol?')) {
-      try {
-        await api.delete(`/roles/${id}`);
-        fetchRoles();
-      } catch (error) {
-        console.error('Error deleting role:', error);
-      }
+  const openDeleteDialog = (role: Role) => {
+    setRoleToDelete(role);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleDeleteRole = async () => {
+    if (!roleToDelete) return;
+
+    try {
+        await api.delete(`/roles/delete/${roleToDelete.id}`);
+      setIsDeleteDialogOpen(false);
+      setRoleToDelete(null);
+      fetchRoles();
+    } catch (error) {
+      console.error('Error deleting role:', error);
     }
   };
 
-  const handleToggleRoleStatus = async (id: number, currentStatus: boolean) => {
+  const closeDeleteDialog = () => {
+    setIsDeleteDialogOpen(false);
+    setRoleToDelete(null);
+  };
+
+  const toggleRoleState = (id: number) => {
+    setRoles(prevRoles => 
+      prevRoles.map(role => 
+        role.id === id ? { ...role, active: !role.active } : role
+      )
+    );
+  };
+
+  const handleToggleRoleStatus = async (id: number) => {
     try {
-      if (currentStatus) {
-        await api.patch(`/roles/${id}/deactivate`);
-      } else {
-        await api.patch(`/roles/${id}/activate`);
-      }
-      fetchRoles();
+      // Actualizar estado local inmediatamente
+      toggleRoleState(id);
+      
+      // Llamar al backend
+      await api.put(`/roles/toggle-status/${id}`);
     } catch (error) {
       console.error('Error toggling role status:', error);
+      // Revertir el cambio si hay error
+      toggleRoleState(id);
     }
   };
 
@@ -184,21 +272,30 @@ const RolesModule: React.FC = () => {
 
   const openEditDialog = (role: Role) => {
     setEditingRole(role);
+    
+    // Parsear permisos desde JSON string
+    let parsedPermissions = {};
+    if (role.permissions) {
+      try {
+        parsedPermissions = JSON.parse(role.permissions);
+      } catch (error) {
+        console.error('Error parsing permissions:', error);
+        parsedPermissions = {};
+      }
+    }
+    
     setFormData({
       name: role.name,
       description: role.description,
-      permissions: role.permissions || {}
+      permissions: parsedPermissions,
+      active: role.active
     });
   };
 
   const closeDialog = () => {
     setIsCreateDialogOpen(false);
     setEditingRole(null);
-    setFormData({
-      name: '',
-      description: '',
-      permissions: {}
-    });
+    setFormData(initialFormData);
   };
 
   const handlePermissionToggle = (module: string, action: string) => {
@@ -224,6 +321,27 @@ const RolesModule: React.FC = () => {
     
     setFormData({ ...formData, permissions: currentPermissions });
   };
+
+  const handleSelectAllModule = (module: string, allActions: string[]) => {
+    const currentPermissions = { ...formData.permissions };
+    const currentModuleActions = currentPermissions[module] || [];
+    
+    if (currentModuleActions.length === allActions.length) {
+      // Si ya están todos seleccionados, deseleccionar todos
+      delete currentPermissions[module];
+    } else {
+      // Seleccionar todos
+      currentPermissions[module] = [...allActions];
+    }
+    
+    setFormData({ ...formData, permissions: currentPermissions });
+  };
+
+  const isModuleFullySelected = (module: string, allActions: string[]) => {
+    const currentModuleActions = formData.permissions[module] || [];
+    return currentModuleActions.length === allActions.length;
+  };
+
 
   if (!authState || !authState.isAuthenticated) {
     return <AccessRestricted />;
@@ -300,6 +418,7 @@ const RolesModule: React.FC = () => {
                     <TableHead>Permisos</TableHead>
                     <TableHead>Usuarios</TableHead>
                     <TableHead>Creado</TableHead>
+                    <TableHead>Activo</TableHead>
                     <TableHead>Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -310,30 +429,87 @@ const RolesModule: React.FC = () => {
                       <TableCell>{role.description}</TableCell>
                       <TableCell>
                         <Badge 
-                          variant={role.activo ? "success" : "secondary"}
-                          className={`text-xs ${role.activo ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'}`}
+                          variant={role.active ? "success" : "secondary"}
+                          className={`text-xs ${role.active ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'}`}
                         >
-                          {role.activo ? 'Activo' : 'Inactivo'}
+                          {role.active ? 'Activo' : 'Inactivo'}
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <div className="flex flex-wrap gap-1">
-                          {role.permissions && Object.entries(role.permissions).slice(0, 3).map(([module, actions]) => (
-                            <Badge key={module} variant="outline" className="text-xs">
-                              {module}: {Array.isArray(actions) ? actions.join(', ') : actions}
-                            </Badge>
-                          ))}
-                          {role.permissions && Object.keys(role.permissions).length > 3 && (
-                            <Badge variant="secondary" className="text-xs">
-                              +{Object.keys(role.permissions).length - 3} más
-                            </Badge>
-                          )}
+                        <div className="flex flex-wrap gap-1 relative">
+                          {role.permissions && (() => {
+                            try {
+                              const parsedPermissions = JSON.parse(role.permissions);
+                              const allEntries = Object.entries(parsedPermissions);
+                              const visibleEntries = allEntries.slice(0, 3);
+                              const hiddenEntries = allEntries.slice(3);
+                              
+                              return (
+                                <>
+                                  {visibleEntries.map(([module, actions]) => (
+                                    <Badge key={module} variant="outline" className="text-xs">
+                                      {module}: {Array.isArray(actions) ? actions.join(', ') : String(actions)}
+                                    </Badge>
+                                  ))}
+                                  {hiddenEntries.length > 0 && (
+                                    <div className="relative">
+                                      <Badge 
+                                        variant="secondary" 
+                                        className="text-xs cursor-pointer hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors"
+                                        onClick={() => setHoveredRole(hoveredRole === role.id ? null : role.id)}
+                                      >
+                                        +{hiddenEntries.length} más
+                                      </Badge>
+                                      
+                                      {hoveredRole === role.id && (
+                                        <>
+                                          {/* Overlay */}
+                                          <div 
+                                            className="fixed inset-0 z-40 bg-black/20"
+                                            onClick={() => setHoveredRole(null)}
+                                          />
+                                          {/* Modal */}
+                                          <div className="fixed z-50 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-xl p-4 min-w-80 max-w-96"
+                                               style={{
+                                                 top: '50%',
+                                                 left: '50%',
+                                                 transform: 'translate(-50%, -50%)'
+                                               }}>
+                                            <div className="flex items-center justify-between mb-3">
+                                              <div className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">
+                                                Permisos adicionales
+                                              </div>
+                                              <button 
+                                                onClick={() => setHoveredRole(null)}
+                                                className="w-6 h-6 bg-neutral-100 dark:bg-neutral-700 rounded-full flex items-center justify-center hover:bg-neutral-200 dark:hover:bg-neutral-600 transition-colors"
+                                              >
+                                                <X className="h-3 w-3" />
+                                              </button>
+                                            </div>
+                                            <div className="flex flex-wrap gap-2">
+                                              {hiddenEntries.map(([module, actions]) => (
+                                                <Badge key={module} variant="outline" className="text-xs">
+                                                  {module}: {Array.isArray(actions) ? actions.join(', ') : String(actions)}
+                                                </Badge>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        </>
+                                      )}
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            } catch {
+                              return <Badge variant="secondary" className="text-xs">Sin permisos</Badge>;
+                            }
+                          })()}
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Users className="h-4 w-4 text-neutral-500" />
-                          <span className="font-medium">{role.user_count}</span>
+                          <span className="font-medium">-</span>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -343,16 +519,16 @@ const RolesModule: React.FC = () => {
                         </div>
                       </TableCell>
                       <TableCell>
+                        <div className="flex justify-center">
+                          <Switch
+                            checked={role.active}
+                            onCheckedChange={() => handleToggleRoleStatus(role.id)}
+                            className="data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-neutral-200"
+                          />
+                        </div>
+                      </TableCell>
+                      <TableCell>
                         <div className="flex gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleToggleRoleStatus(role.id, role.activo)}
-                            className={`${role.activo ? 'text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300' : 'text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300'}`}
-                            title={role.activo ? 'Desactivar rol' : 'Activar rol'}
-                          >
-                            {role.activo ? <PowerOff className="h-4 w-4" /> : <Power className="h-4 w-4" />}
-                          </Button>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -364,7 +540,7 @@ const RolesModule: React.FC = () => {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleDeleteRole(role.id)}
+                            onClick={() => openDeleteDialog(role)}
                             className="text-error-600 dark:text-error-400 hover:text-error-700 dark:hover:text-error-300"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -382,7 +558,7 @@ const RolesModule: React.FC = () => {
 
       {/* Create/Edit Dialog */}
       <Dialog open={isCreateDialogOpen || !!editingRole} onOpenChange={closeDialog}>
-        <DialogContent className="sm:max-w-[700px] max-h-[80vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[800px] max-h-[95vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Shield className="h-5 w-5 text-primary-500" />
@@ -416,32 +592,76 @@ const RolesModule: React.FC = () => {
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-3">Permisos</label>
-              <div className="space-y-4 max-h-60 overflow-y-auto pr-2">
-                {Object.entries(groupedPermissions).map(([module, modulePermissions]) => (
-                  <div key={module} className="border border-neutral-200 dark:border-neutral-700 rounded-lg p-4">
-                    <h4 className="font-medium text-sm mb-3 capitalize text-neutral-900 dark:text-neutral-100">{module}</h4>
-                    <div className="grid grid-cols-2 gap-3">
-                      {modulePermissions.map(permission => (
-                        <div key={permission.id} className="flex items-center space-x-2">
-                          <input
-                            type="checkbox"
-                            id={`permission-${permission.id}`}
-                            checked={formData.permissions[module]?.includes(permission.action) || false}
-                            onChange={() => handlePermissionToggle(module, permission.action)}
-                            className="rounded border-neutral-300 dark:border-neutral-700 text-primary-500 focus:ring-primary-500 dark:bg-neutral-700"
-                          />
-                          <label 
-                            htmlFor={`permission-${permission.id}`}
-                            className="text-sm text-neutral-700 dark:text-neutral-300"
-                          >
-                            {permission.name}
-                          </label>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
+              <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-4">
+                Permisos por Módulo
+              </label>
+              <div className="max-h-80 overflow-y-auto pr-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {Object.entries(groupedPermissions).map(([module, modulePermissions]) => {
+                    const allActions = modulePermissions.map(p => p.action);
+                    const isFullySelected = isModuleFullySelected(module, allActions);
+                    const selectedCount = formData.permissions[module]?.length || 0;
+                    
+                    return (
+                      <Card key={module} className="border hover:border-primary-200 dark:hover:border-primary-700 transition-all duration-200 h-64 flex flex-col bg-white dark:bg-neutral-900">
+                        <CardHeader className="pb-2 flex-shrink-0 bg-neutral-50 dark:bg-neutral-800 rounded-t-lg">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-2">
+                              <div className="w-6 h-6 bg-primary-500 rounded-md flex items-center justify-center">
+                                <Shield className="h-3 w-3 text-white" />
+                              </div>
+                              <CardTitle className="text-sm font-medium capitalize text-neutral-900 dark:text-neutral-100">
+                                {module}
+                              </CardTitle>
+                            </div>
+                            <Badge 
+                              variant={selectedCount > 0 ? "primary" : "secondary"} 
+                              className="text-xs"
+                            >
+                              {selectedCount}/{allActions.length}
+                            </Badge>
+                          </div>
+                        </CardHeader>
+                        
+                        <CardContent className="pt-2 pb-2 flex-1 flex flex-col overflow-hidden">
+                          <div className="space-y-2 flex-1 flex flex-col min-h-0">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleSelectAllModule(module, allActions)}
+                              className="w-full text-xs h-6 flex-shrink-0 flex items-center justify-center hover:bg-transparent hover:border-neutral-300 dark:hover:bg-transparent dark:hover:border-neutral-600"
+                            >
+                              {isFullySelected ? 'Deseleccionar' : 'Seleccionar todo'}
+                            </Button>
+                            
+                            <div className="flex-1 overflow-y-auto min-h-0 pr-1 mt-3 pt-3">
+                              <div className="grid grid-cols-2 gap-2">
+                                {modulePermissions.map(permission => (
+                                  <div key={permission.id} className="flex items-center space-x-2 p-1.5 rounded hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors">
+                                    <input
+                                      type="checkbox"
+                                      id={`permission-${permission.id}`}
+                                      checked={formData.permissions[module]?.includes(permission.action) || false}
+                                      onChange={() => handlePermissionToggle(module, permission.action)}
+                                      className="w-3.5 h-3.5 rounded border-neutral-300 dark:border-neutral-600 text-primary-500 focus:ring-1 focus:ring-primary-500 dark:bg-neutral-700"
+                                    />
+                                    <label 
+                                      htmlFor={`permission-${permission.id}`}
+                                      className="text-xs text-neutral-700 dark:text-neutral-300 cursor-pointer flex-1 leading-tight"
+                                    >
+                                      {permission.name}
+                                    </label>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>
@@ -460,6 +680,58 @@ const RolesModule: React.FC = () => {
               leftIcon={<Save className="h-4 w-4" />}
             >
               {editingRole ? 'Actualizar' : 'Crear'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={closeDeleteDialog}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-error-600 dark:text-error-400">
+              <Trash2 className="h-5 w-5" />
+              Eliminar Rol
+            </DialogTitle>
+            <DialogDescription>
+              Esta acción no se puede deshacer. El rol será eliminado permanentemente del sistema.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {roleToDelete && (
+            <div className="py-4">
+              <div className="bg-error-50 dark:bg-error-950/20 border border-error-200 dark:border-error-800 rounded-lg p-4">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-error-100 dark:bg-error-900/30 rounded-lg flex items-center justify-center">
+                    <Shield className="h-5 w-5 text-error-600 dark:text-error-400" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-error-900 dark:text-error-100">
+                      {roleToDelete.name}
+                    </h4>
+                    <p className="text-sm text-error-700 dark:text-error-300">
+                      {roleToDelete.description}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <DialogFooter>
+            <Button 
+              variant="secondary" 
+              onClick={closeDeleteDialog}
+              className="border border-neutral-300 dark:border-neutral-600"
+            >
+              Cancelar
+            </Button>
+            <Button 
+              variant="danger"
+              onClick={handleDeleteRole}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Eliminar Rol
             </Button>
           </DialogFooter>
         </DialogContent>

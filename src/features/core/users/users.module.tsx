@@ -230,31 +230,10 @@ const UsersModule: React.FC = () => {
 
   // 🔍 Consultar datos por DNI cuando cambie el valor
   useEffect(() => {
-    if (formData.dni && formData.dni.length === 8) {
-      // Verificar que solo contenga números
-      const esSoloNumeros = /^\d+$/.test(formData.dni);
-      
-      if (esSoloNumeros) {
-        consultarDatosDNI(formData.dni);
-      } else {
-        // Si contiene letras, no consultar API y limpiar campos
-        setFormData(prev => ({
-          ...prev,
-          name: '',
-          lastName: '',
-          username: '',
-          email: ''
-        }));
-      }
-    } else if (formData.dni && formData.dni.length !== 8) {
-      // Limpiar campos cuando el documento no tiene exactamente 8 dígitos
-      setFormData(prev => ({
-        ...prev,
-        name: '',
-        lastName: '',
-        username: '',
-        email: ''
-      }));
+    if (formData.dni && formData.dni.length >= 8 && /^\d+$/.test(formData.dni)) {
+      consultarDatosDNI(formData.dni);
+    } else if (formData.dni && formData.dni.length < 8) {
+      clearUserFields();
     }
   }, [formData.dni]);
 
@@ -302,11 +281,6 @@ const UsersModule: React.FC = () => {
     try {
       console.log('🔍 Consultando datos para DNI:', dni);
       
-      if (!dni || dni.length !== 8) {
-        console.log('⚠️ DNI inválido, debe tener 8 dígitos');
-        return;
-      }
-
       const response = await api.get(`/users/dni/${dni}`);
       const data = response.data;
       console.log('✅ Datos obtenidos:', data);
@@ -349,6 +323,7 @@ const UsersModule: React.FC = () => {
       }
     } catch (error: any) {
       console.error('❌ Error al consultar DNI:', error);
+      clearUserFields();
       setErrorModal({
         open: true,
         title: 'Error al Consultar DNI',
@@ -583,6 +558,16 @@ const UsersModule: React.FC = () => {
       role: user.role,
       active: user.active
     });
+  };
+
+  const clearUserFields = () => {
+    setFormData(prev => ({
+      ...prev,
+      name: '',
+      lastName: '',
+      username: '',
+      email: ''
+    }));
   };
 
   const resetForm = () => {
@@ -1002,6 +987,7 @@ const UsersModule: React.FC = () => {
                 value={formData.username}
                 onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                 placeholder="usuario123"
+                disabled={!formData.dni || formData.dni.length <= 8}
               />
             </div>
 
@@ -1021,6 +1007,7 @@ const UsersModule: React.FC = () => {
                     setFormData({ ...formData, name: formattedValue });
                   }}
                   placeholder="Juan Carlos"
+                  disabled={!formData.dni || formData.dni.length <= 8}
                 />
               </div>
               
@@ -1039,6 +1026,7 @@ const UsersModule: React.FC = () => {
                     setFormData({ ...formData, lastName: formattedValue });
                   }}
                   placeholder="Pérez Rodríguez"
+                  disabled={!formData.dni || formData.dni.length <= 8}
                 />
               </div>
             </div>
@@ -1050,6 +1038,7 @@ const UsersModule: React.FC = () => {
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 placeholder="juan.perez@empresa.com"
+                disabled={!formData.dni || formData.dni.length <= 8}
               />
             </div>
             
