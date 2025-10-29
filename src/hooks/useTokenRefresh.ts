@@ -1,5 +1,6 @@
 import { useEffect, useCallback } from 'react'
 import { authService } from '../services'
+import { useAuthStore } from '../store/auth-store'
 
 /**
  * Hook para manejar la renovación automática de tokens JWT
@@ -17,9 +18,11 @@ export const useTokenRefresh = (intervalMinutes: number = 30) => {
         console.log('🔄 [useTokenRefresh] Token inválido, renovando...')
         const refreshResponse = await authService.refreshToken()
         
-        // Actualizar localStorage
-        localStorage.setItem('token', refreshResponse.accessToken)
-        localStorage.setItem('user', JSON.stringify(refreshResponse.user))
+        // Actualizar store (Zustand persist guardará en auth-storage automáticamente)
+        useAuthStore.setState({ 
+          token: refreshResponse.accessToken,
+          user: refreshResponse.user 
+        })
         
         console.log('✅ [useTokenRefresh] Token renovado exitosamente')
       } else {

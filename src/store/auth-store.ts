@@ -75,19 +75,20 @@ export const useAuthStore = create<AuthState>()(
             loading: false,
             error: null
           })
-          localStorage.setItem("token", response.accessToken)
-          localStorage.setItem("user", JSON.stringify(response.user))
+          // Zustand persist ya guarda todo en auth-storage, no need de guardar por separado
           localStorage.removeItem("requiereCambioPassword")
           
           console.log('✅ [authStore] Estado guardado en localStorage')
           
-          // Cargar módulos inmediatamente después del login (sin await para no bloquear)
-          // El estado se actualizará reactivamente cuando lleguen los módulos
-          console.log('📦 [authStore] Cargando módulos después del login...');
-          get().fetchModules().catch((moduleError: any) => {
+          // Cargar módulos INMEDIATAMENTE después del login (con await para asegurar que se carguen)
+          console.log('📦 [authStore] Cargando módulos inmediatamente después del login...');
+          try {
+            await get().fetchModules();
+            console.log('✅ [authStore] Módulos cargados exitosamente');
+          } catch (moduleError: any) {
             console.warn('⚠️ [authStore] Error cargando módulos después del login:', moduleError);
-            // No fallar el login si hay error cargando módulos
-          });
+            // No fallar el login si hay error cargando módulos, pero continuar
+          }
           
           return response
         } catch (error: any) {
@@ -134,7 +135,7 @@ export const useAuthStore = create<AuthState>()(
           // Limpiar estado del store incluyendo módulos
           set({ user: null, token: null, modules: [], error: null })
           localStorage.removeItem("requiereCambioPassword")
-          localStorage.removeItem("user-modules")
+          // Zustand persist limpiará auth-storage automáticamente
           
           console.log('✅ [authStore] Logout completado exitosamente')
         } catch (error) {
@@ -142,7 +143,7 @@ export const useAuthStore = create<AuthState>()(
           // En caso de error, limpiar estado local incluyendo módulos
           set({ user: null, token: null, modules: [], error: null })
           localStorage.removeItem("requiereCambioPassword")
-          localStorage.removeItem("user-modules")
+          // Zustand persist limpiará auth-storage automáticamente
         }
       },
       fetchModules: async () => {
@@ -157,7 +158,7 @@ export const useAuthStore = create<AuthState>()(
           const modules = await authService.getMyModules();
           
           set({ modules });
-          localStorage.setItem("user-modules", JSON.stringify(modules));
+          // Zustand persist ya guarda modules en auth-storage, no need de guardar por separado
           
           console.log(`✅ [authStore] ${modules.length} módulos guardados exitosamente`);
         } catch (error: any) {
@@ -167,7 +168,8 @@ export const useAuthStore = create<AuthState>()(
           if (error.message?.includes('Token inválido') || error.response?.status === 401 || error.response?.status === 403) {
             console.log('🚨 [authStore] Token inválido al obtener módulos - limpiando sesión...');
             set({ user: null, token: null, modules: [], loading: false });
-            authService.clearLocalStorage();
+            // No llamar clearLocalStorage aquí, dejar que Zustand limpie auth-storage automáticamente
+            localStorage.removeItem('auth-storage');
             // Redirigir a login
             if (typeof window !== 'undefined') {
               window.location.href = '/login';
@@ -194,14 +196,14 @@ export const useAuthStore = create<AuthState>()(
               token: refreshResponse.accessToken,
               loading: false 
             })
-            localStorage.setItem("token", refreshResponse.accessToken)
-            localStorage.setItem("user", JSON.stringify(refreshResponse.user))
+            // Zustand persist ya guarda todo en auth-storage
             console.log('✅ [store] Token renovado exitosamente en fetchProfile')
             return
           } catch (refreshError) {
             console.log('❌ [store] Error renovando token - limpiando datos...');
-            authService.clearLocalStorage();
             set({ user: null, token: null, loading: false });
+            // No llamar clearLocalStorage, dejar que Zustand limpie auth-storage automáticamente
+            localStorage.removeItem('auth-storage');
             return;
           }
         }
@@ -211,7 +213,7 @@ export const useAuthStore = create<AuthState>()(
           const user = await authService.getProfile(token)
           console.log('🔄 Perfil actualizado desde API:', user);
           set({ user, loading: false })
-          localStorage.setItem("user", JSON.stringify(user))
+          // Zustand persist ya guarda todo en auth-storage
         } catch (error: any) {
           console.log('🔒 [store] Error en fetchProfile:', error);
           
@@ -227,14 +229,14 @@ export const useAuthStore = create<AuthState>()(
                 token: refreshResponse.accessToken,
                 loading: false 
               })
-              localStorage.setItem("token", refreshResponse.accessToken)
-              localStorage.setItem("user", JSON.stringify(refreshResponse.user))
+              // Zustand persist ya guarda todo en auth-storage
               console.log('✅ [store] Token renovado exitosamente en fetchProfile')
               return
             } catch (refreshError) {
               console.log('❌ [store] Error renovando token - limpiando datos...');
-              authService.clearLocalStorage();
               set({ user: null, token: null, loading: false });
+              // No llamar clearLocalStorage, dejar que Zustand limpie auth-storage automáticamente
+              localStorage.removeItem('auth-storage');
               return;
             }
           }
@@ -255,7 +257,7 @@ export const useAuthStore = create<AuthState>()(
       },
       updateUser: (user: User) => {
         set({ user })
-        localStorage.setItem("user", JSON.stringify(user))
+        // Zustand persist ya guarda todo en auth-storage
         localStorage.removeItem("requiereCambioPassword")
         
         console.log(`🔄 [authStore] Usuario actualizado: ${user.name}`);
@@ -283,19 +285,7 @@ export const useAuthStore = create<AuthState>()(
               modulesCount: state.modules?.length || 0
             });
             
-            // Intentar cargar módulos desde localStorage si existen
-            try {
-              const storedModules = localStorage.getItem('user-modules');
-              if (storedModules) {
-                const parsedModules = JSON.parse(storedModules);
-                if (Array.isArray(parsedModules) && parsedModules.length > 0) {
-                  state.modules = parsedModules;
-                  console.log(`📦 [authStore] ${parsedModules.length} módulos restaurados desde localStorage`);
-                }
-              }
-            } catch (error) {
-              console.warn('⚠️ [authStore] Error restaurando módulos desde localStorage:', error);
-            }
+            // Los módulos ya están en el estado persistido de Zustand (auth-storage), no necesitamos leerlos por separado
             
             // Si hay token pero no módulos, cargar módulos inmediatamente
             if (state?.token && (!state.modules || state.modules.length === 0)) {

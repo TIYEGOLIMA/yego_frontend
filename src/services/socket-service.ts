@@ -136,7 +136,18 @@ class SocketService {
    * @param sessionId ID de sesión para identificar al cliente
    */
   public connect(_sessionId: string) {
-    const token = localStorage.getItem('token');
+    // Leer token desde auth-storage (Zustand persist)
+    let token: string | null = null;
+    try {
+      const authStorage = localStorage.getItem('auth-storage');
+      if (authStorage) {
+        const parsed = JSON.parse(authStorage);
+        token = parsed?.state?.token || null;
+      }
+    } catch (err) {
+      // Fallback: intentar leer desde token directo (compatibilidad temporal)
+      token = localStorage.getItem('token');
+    }
     
     if (!token) {
       console.log('❌ [SocketService] No hay token - no se puede conectar');
@@ -371,7 +382,18 @@ class SocketService {
     }
 
     // Obtener el ID del usuario actual del token
-    const token = localStorage.getItem('token');
+    // Leer token desde auth-storage (Zustand persist)
+    let token: string | null = null;
+    try {
+      const authStorage = localStorage.getItem('auth-storage');
+      if (authStorage) {
+        const parsed = JSON.parse(authStorage);
+        token = parsed?.state?.token || null;
+      }
+    } catch (err) {
+      // Fallback: intentar leer desde token directo (compatibilidad temporal)
+      token = localStorage.getItem('token');
+    }
     if (!token) {
       console.log('⚠️ [SocketService] No hay token, no se puede suscribir a eventos de usuario');
       return;

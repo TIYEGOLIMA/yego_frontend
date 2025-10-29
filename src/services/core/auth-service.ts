@@ -188,7 +188,18 @@ export const authService = {
     console.log('🔄 [authService] Iniciando proceso de logout...');
     
     try {
-      const token = localStorage.getItem('token');
+      // Leer token desde auth-storage (Zustand persist)
+      let token: string | null = null;
+      try {
+        const authStorage = localStorage.getItem('auth-storage');
+        if (authStorage) {
+          const parsed = JSON.parse(authStorage);
+          token = parsed?.state?.token || null;
+        }
+      } catch (err) {
+        // Fallback: intentar leer desde token directo (compatibilidad temporal)
+        token = localStorage.getItem('token');
+      }
       
       if (token) {
         try {
@@ -243,7 +254,19 @@ export const authService = {
    * @returns true si el token es válido, false si está corrupto
    */
   isTokenValid(): boolean {
-    const token = localStorage.getItem('token');
+    // Leer token desde auth-storage (Zustand persist)
+    let token: string | null = null;
+    try {
+      const authStorage = localStorage.getItem('auth-storage');
+      if (authStorage) {
+        const parsed = JSON.parse(authStorage);
+        token = parsed?.state?.token || null;
+      }
+    } catch (err) {
+      // Fallback: intentar leer desde token directo (compatibilidad temporal)
+      token = localStorage.getItem('token');
+    }
+    
     if (!token) return false;
     
     try {
@@ -308,11 +331,25 @@ export const authService = {
   diagnoseToken(): void {
     console.log('🔍 [authService] === DIAGNÓSTICO DE TOKEN ===');
     
-    const token = localStorage.getItem('token');
-    const user = localStorage.getItem('user');
+    // Leer token desde auth-storage (Zustand persist)
+    let token: string | null = null;
+    let authStorageData: any = null;
+    try {
+      const authStorage = localStorage.getItem('auth-storage');
+      if (authStorage) {
+        authStorageData = JSON.parse(authStorage);
+        token = authStorageData?.state?.token || null;
+      }
+    } catch (err) {
+      // Fallback: intentar leer desde token directo (compatibilidad temporal)
+      token = localStorage.getItem('token');
+    }
+    
+    const user = authStorageData?.state?.user || null;
     
     console.log('🔑 Token presente:', !!token);
     console.log('👤 Usuario presente:', !!user);
+    console.log('📦 Auth-storage presente:', !!localStorage.getItem('auth-storage'));
     
     if (token) {
       console.log('🔑 Token (primeros 30 chars):', token.substring(0, 30) + '...');
@@ -374,9 +411,8 @@ export const authService = {
   clearLocalStorage(): void {
     console.log('🧹 [authService] Limpiando todos los datos locales...');
     
-    // Limpiar datos de autenticación del sistema principal
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    // Limpiar auth-storage (Zustand persist)
+    // Pero NO limpiar otros datos del microfrontend que puedan ser necesarios
     localStorage.removeItem('auth-storage');
     
     // Limpiar módulos seleccionados (para cualquier usuario)
@@ -403,8 +439,7 @@ export const authService = {
     localStorage.removeItem('agentpanel_lastActivity');
     localStorage.removeItem('agentpanel_moduleAssignment');
     
-    // Limpiar módulos del usuario
-    localStorage.removeItem('user-modules');
+    // Zustand persist limpiará auth-storage automáticamente, no necesitamos limpiar user-modules por separado
     
     // Limpiar headers de autenticación de la instancia de axios
     delete api.defaults.headers.common['Authorization'];

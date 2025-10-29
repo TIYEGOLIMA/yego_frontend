@@ -57,7 +57,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const navigate = useNavigate()
   const location = useLocation()
 
-  // Verificar autenticación y cargar módulos inmediatamente al cargar el componente
+  // Verificar autenticación
   useEffect(() => {
     // Si no hay token, redirigir a login
     if (!token) {
@@ -65,28 +65,29 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       return
     }
     
-    // Si hay token pero no hay usuario, esperar un momento y verificar
-    if (token && !user) {
-      // El usuario se carga en otro lugar, pero no bloqueamos aquí
+    // Los módulos ya se cargan en el login con await antes de redirigir
+    // Solo cargar si realmente faltan después de recargar la página (onRehydrateStorage)
+    if (token && (!modules || modules.length === 0)) {
+      // Esperar 2 segundos para dar tiempo al onRehydrateStorage de Zustand
+      const timeout = setTimeout(() => {
+        // Verificar de nuevo antes de cargar (puede que ya se hayan cargado)
+        const currentModules = useAuthStore.getState().modules;
+        if (!currentModules || currentModules.length === 0) {
+          console.log('📦 [MainLayout] Módulos faltantes después de recarga, cargando...');
+          fetchModules().catch((error: any) => {
+            console.warn('⚠️ [MainLayout] Error cargando módulos:', error);
+            // Si es error de autorización, redirigir a login
+            if (error.message?.includes('Token inválido') || error.response?.status === 401 || error.response?.status === 403) {
+              logout();
+              navigate('/login');
+            }
+          });
+        }
+      }, 2000); // Esperar 2 segundos para dar tiempo al rehydrate
+      
+      return () => clearTimeout(timeout);
     }
-
-    // Cargar módulos inmediatamente si hay token (no esperar a que haya módulos)
-    // Esto asegura que los módulos se carguen lo más rápido posible
-    if (token) {
-      // Solo cargar si no hay módulos cargados o si hay muy pocos (posible carga incompleta)
-      if (!modules || modules.length === 0) {
-        console.log('📦 [MainLayout] Cargando módulos inmediatamente...');
-        fetchModules().catch((error: any) => {
-          console.warn('⚠️ [MainLayout] Error cargando módulos:', error);
-          // Si es error de autorización, redirigir a login
-          if (error.message?.includes('Token inválido') || error.response?.status === 401 || error.response?.status === 403) {
-            logout();
-            navigate('/login');
-          }
-        });
-      }
-    }
-  }, [token]) // Solo depender de token para cargar inmediatamente
+  }, [token]) // Solo depender de token para evitar ejecuciones múltiples cuando modules cambia
 
   // Si no hay token, no renderizar nada
   if (!token) {

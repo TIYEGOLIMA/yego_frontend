@@ -3,6 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Badge } from '../../../components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../../components/ui/dialog';
 import { 
   Table, 
   TableBody, 
@@ -25,6 +27,8 @@ import {
   LogOut,
   Coffee,
   ArrowRight,
+  Download,
+  CheckCircle,
 } from 'lucide-react';
 import { api } from '../../../services/core/api';
 
@@ -64,6 +68,17 @@ export const AsistenciaListaModule: React.FC = () => {
   const [historialAsistencias, setHistorialAsistencias] = useState<MarcacionData[]>([]);
   const [fechaHistorial, setFechaHistorial] = useState<string>('');
   const [cargandoHistorial, setCargandoHistorial] = useState(false);
+  
+  // Filtros para exportación
+  const [fechaExportar, setFechaExportar] = useState<string>('');
+  const [rolFiltro, setRolFiltro] = useState<string>('');
+  const [modalExportarAbierto, setModalExportarAbierto] = useState(false);
+  const [exportando, setExportando] = useState(false);
+  const [exportacionExitosa, setExportacionExitosa] = useState(false);
+  const [nombreArchivoExportado, setNombreArchivoExportado] = useState<string>('');
+  
+  // Roles únicos para el filtro
+  const rolesUnicos = Array.from(new Set(usuarios.map(u => u.rol).filter(Boolean)));
 
 
   // Función para obtener el icono según el tipo (igual que en asistencia.module.tsx)
@@ -206,6 +221,74 @@ export const AsistenciaListaModule: React.FC = () => {
   }, []);
 
 
+  // Función para exportar a Excel
+  const exportarAExcel = async () => {
+    if (!fechaExportar) {
+      alert('Por favor, selecciona la fecha para exportar');
+      return;
+    }
+    
+    if (!rolFiltro) {
+      alert('Por favor, selecciona un rol para exportar');
+      return;
+    }
+
+    setExportando(true);
+    try {
+      // El backend maneja la exportación y devuelve el archivo Excel
+      const params = new URLSearchParams();
+      params.append('fecha', fechaExportar);
+      params.append('rol', rolFiltro);
+
+      // Realizar petición al backend para exportar
+      const response = await api.get(`/marcaciones/exportar?${params.toString()}`, {
+        responseType: 'blob' // Importante para recibir archivos binarios
+      });
+
+      // Crear URL del blob y descargar
+      const blob = new Blob([response.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      // Generar nombre del archivo
+      const fechaFormato = fechaExportar.split('-').reverse().join('');
+      const nombreArchivo = `Asistencia_${fechaFormato}_${rolFiltro}.xlsx`;
+      link.setAttribute('download', nombreArchivo);
+      
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      // Mostrar mensaje de éxito en el modal
+      setNombreArchivoExportado(nombreArchivo);
+      setExportacionExitosa(true);
+      
+      // Cerrar el modal automáticamente después de 2 segundos
+      setTimeout(() => {
+        setModalExportarAbierto(false);
+        setExportacionExitosa(false);
+        setNombreArchivoExportado('');
+        // Limpiar filtros después de exportar
+        setFechaExportar('');
+        setRolFiltro('');
+      }, 2000);
+    } catch (error: any) {
+      console.error('❌ Error al exportar a Excel:', error);
+      setExportando(false);
+      
+      // Mostrar error en el modal
+      if (error.response?.status === 404) {
+        alert('El endpoint de exportación no está disponible. Por favor, contacta al administrador del sistema.');
+      } else {
+        alert('Error al exportar los datos. Por favor, intenta nuevamente.');
+      }
+    }
+  };
+
   // Filtrar usuarios por término de búsqueda
   const usuariosFiltrados = usuarios.filter(usuario =>
     usuario.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -237,25 +320,35 @@ export const AsistenciaListaModule: React.FC = () => {
       {/* Lista de Usuarios */}
       <Card>
         <CardHeader>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5 text-primary-500" />
-                Lista de Usuarios
-              </CardTitle>
-              <div className="mt-2">
-                <Badge variant="secondary" className="text-xs">
-                  Mostrando usuarios según permisos
-                </Badge>
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5 text-primary-500" />
+                  Lista de Usuarios
+                </CardTitle>
+                <div className="mt-2">
+                  <Badge variant="secondary" className="text-xs">
+                    Mostrando usuarios según permisos
+                  </Badge>
+                </div>
               </div>
-            </div>
-            
-            <div className="flex items-center gap-4">
-              {!loading && (
-                <span className="text-sm font-normal text-neutral-500">
-                  {usuarios.length} usuario{usuarios.length !== 1 ? 's' : ''} en total
-                </span>
-              )}
+              
+              <div className="flex items-center gap-4">
+                {!loading && (
+                  <span className="text-sm font-normal text-neutral-500">
+                    {usuarios.length} usuario{usuarios.length !== 1 ? 's' : ''} en total
+                  </span>
+                )}
+                <Button
+                  onClick={() => setModalExportarAbierto(true)}
+                  variant="outline"
+                  className="flex items-center gap-2"
+                >
+                  <Download className="h-4 w-4" />
+                  Exportar a Excel
+                </Button>
+              </div>
             </div>
           </div>
         </CardHeader>
@@ -433,6 +526,136 @@ export const AsistenciaListaModule: React.FC = () => {
           </CardContent>
         </Card>
       )}
+
+      {/* Modal de Exportación a Excel */}
+      <Dialog open={modalExportarAbierto} onOpenChange={(open) => {
+        setModalExportarAbierto(open);
+        if (!open) {
+          // Limpiar estados al cerrar el modal
+          setExportacionExitosa(false);
+          setNombreArchivoExportado('');
+          setFechaExportar('');
+          setRolFiltro('');
+        }
+      }}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {exportacionExitosa ? (
+                <CheckCircle className="h-5 w-5 text-green-500" />
+              ) : (
+                <Download className="h-5 w-5 text-primary-500" />
+              )}
+              {exportacionExitosa ? 'Exportación Exitosa' : 'Exportar a Excel'}
+            </DialogTitle>
+            <DialogDescription>
+              {exportacionExitosa 
+                ? `El archivo ${nombreArchivoExportado} se ha descargado exitosamente.`
+                : 'Selecciona la fecha y el rol para exportar los registros de asistencia.'
+              }
+            </DialogDescription>
+          </DialogHeader>
+          
+          {exportacionExitosa ? (
+            <div className="py-4">
+              <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 text-center">
+                <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-3" />
+                <p className="text-green-800 dark:text-green-200 font-medium mb-1">
+                  ✅ Exportación completada
+                </p>
+                <p className="text-sm text-green-600 dark:text-green-300">
+                  {nombreArchivoExportado}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 py-4">
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
+                Fecha a Consultar *
+              </label>
+              <Input
+                type="date"
+                value={fechaExportar}
+                onChange={(e) => setFechaExportar(e.target.value)}
+                className="w-full"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
+                Rol *
+              </label>
+              <Select
+                value={rolFiltro || undefined}
+                onValueChange={setRolFiltro}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecciona un rol" />
+                </SelectTrigger>
+                <SelectContent>
+                  {rolesUnicos
+                    .filter((rol): rol is string => Boolean(rol && rol.trim() !== ''))
+                    .map((rol) => (
+                      <SelectItem key={rol} value={rol}>
+                        {rol}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          )}
+
+          <DialogFooter>
+            {exportacionExitosa ? (
+              <Button
+                onClick={() => {
+                  setModalExportarAbierto(false);
+                  setExportacionExitosa(false);
+                  setNombreArchivoExportado('');
+                  setFechaExportar('');
+                  setRolFiltro('');
+                }}
+                className="w-full"
+              >
+                Cerrar
+              </Button>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setFechaExportar('');
+                    setRolFiltro('');
+                    setModalExportarAbierto(false);
+                  }}
+                  disabled={exportando}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={exportarAExcel}
+                  disabled={exportando || !fechaExportar || !rolFiltro}
+                  className="flex items-center gap-2"
+                >
+                  {exportando ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Exportando...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="h-4 w-4" />
+                      Exportar
+                    </>
+                  )}
+                </Button>
+              </>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Modal de Historial de Asistencias */}
       {modalHistorial && (

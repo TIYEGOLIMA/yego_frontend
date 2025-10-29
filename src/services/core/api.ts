@@ -22,26 +22,24 @@ export const api = axios.create({
 // Interceptor para agregar el token de autenticación a todas las peticiones
 api.interceptors.request.use(
   (config) => {
-    // Intentar obtener el token desde localStorage
-    const token = localStorage.getItem('token')
+    // Intentar obtener el token desde auth-storage (Zustand persist)
+    let token: string | null = null
+    try {
+      const authStorage = localStorage.getItem('auth-storage')
+      if (authStorage) {
+        const parsed = JSON.parse(authStorage)
+        token = parsed?.state?.token || null
+      }
+    } catch (err) {
+      // Si no se puede leer auth-storage, intentar token directo (compatibilidad temporal)
+      token = localStorage.getItem('token')
+    }
+    
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     } else {
       // Si no hay token, remover el header de Authorization
       delete config.headers.Authorization
-    }
-    
-    // También intentar obtener desde el store persistido
-    const authStorage = localStorage.getItem('auth-storage')
-    if (!token && authStorage) {
-      try {
-        const authData = JSON.parse(authStorage)
-        if (authData.state?.token) {
-          config.headers.Authorization = `Bearer ${authData.state.token}`
-        }
-      } catch (error) {
-        console.error('Error al parsear auth-storage:', error)
-      }
     }
     
     return config
@@ -67,7 +65,19 @@ api.interceptors.response.use(
       
       // Intentar renovar el token antes de hacer logout
       try {
-        const currentToken = localStorage.getItem('token')
+        // Leer token desde auth-storage (Zustand persist)
+        let currentToken: string | null = null;
+        try {
+          const authStorage = localStorage.getItem('auth-storage');
+          if (authStorage) {
+            const parsed = JSON.parse(authStorage);
+            currentToken = parsed?.state?.token || null;
+          }
+        } catch (err) {
+          // Fallback: intentar leer desde token directo (compatibilidad temporal)
+          currentToken = localStorage.getItem('token');
+        }
+        
         if (currentToken) {
           console.log('🔄 [api] Intentando renovar token...')
           
@@ -80,9 +90,17 @@ api.interceptors.response.use(
             headers: { 'Authorization': `Bearer ${currentToken}` }
           })
           
-          // Actualizar token en localStorage
+          // Actualizar token en store (Zustand persist guardará en auth-storage automáticamente)
           const newToken = refreshResponse.data.accessToken
-          localStorage.setItem('token', newToken)
+          // Actualizar directamente en el store para que Zustand persist lo guarde en auth-storage
+          // Usamos import dinámico para evitar dependencia circular
+          try {
+            const { useAuthStore } = await import('../../store/auth-store')
+            useAuthStore.setState({ token: newToken })
+          } catch (err) {
+            console.warn('⚠️ [api] No se pudo actualizar store, usando localStorage temporalmente');
+            // Fallback: actualizar header aunque no se actualice el store
+          }
           
           // Actualizar header de autorización
           api.defaults.headers.common['Authorization'] = `Bearer ${newToken}`

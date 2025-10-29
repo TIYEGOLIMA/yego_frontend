@@ -44,7 +44,10 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
+      // El login carga los módulos inmediatamente con await antes de retornar
       const response = await login(credentials.username, credentials.password)
+      
+      console.log('✅ [Login] Módulos cargados, redirigiendo...');
       
       // 🎯 OPERADOR va a reportes, SAC va a tickets, PRINCIPAL a tablet-interface, otros a la vista de bienvenida
       if (response.user.role === 'OPERADOR') {

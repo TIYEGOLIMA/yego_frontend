@@ -1,5 +1,6 @@
 import { useEffect, useCallback } from 'react'
 import { ticketeraAuthService } from '../services'
+import { useAuthStore } from '../store/auth-store'
 
 /**
  * Hook específico para manejar la renovación automática de tokens JWT en ticketera
@@ -17,9 +18,11 @@ export const useTicketeraTokenRefresh = (intervalMinutes: number = 30) => {
         console.log('🔄 [useTicketeraTokenRefresh] Token inválido, renovando...')
         const refreshResponse = await ticketeraAuthService.refreshToken()
         
-        // Actualizar localStorage
-        localStorage.setItem('token', refreshResponse.accessToken)
-        localStorage.setItem('user', JSON.stringify(refreshResponse.user))
+        // Actualizar store (Zustand persist guardará en auth-storage automáticamente)
+        useAuthStore.setState({ 
+          token: refreshResponse.accessToken,
+          user: refreshResponse.user 
+        })
         
         console.log('✅ [useTicketeraTokenRefresh] Token de ticketera renovado exitosamente')
       } else {
@@ -30,10 +33,8 @@ export const useTicketeraTokenRefresh = (intervalMinutes: number = 30) => {
       
       // Si hay error, hacer logout
       try {
-        // Limpiar datos locales
-        localStorage.removeItem('token')
-        localStorage.removeItem('user')
-        localStorage.removeItem('auth-storage')
+        // Limpiar store (Zustand persist limpiará auth-storage automáticamente)
+        useAuthStore.setState({ user: null, token: null })
         
         // Redirigir a login
         window.location.href = '/login'

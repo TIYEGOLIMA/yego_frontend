@@ -83,6 +83,13 @@ interface CreateUserData {
 
 const UsersModule: React.FC = () => {
   const { user: currentUser } = useAuthStore();
+  
+  // Función para verificar si el usuario actual es SUPERADMIN o ADMIN
+  const isAdminOrSuperAdmin = () => {
+    if (!currentUser) return false;
+    const role = currentUser.role.toUpperCase();
+    return role === 'SUPERADMIN' || role === 'ADMIN';
+  };
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -963,7 +970,7 @@ const UsersModule: React.FC = () => {
                 value={formData.dni || ''}
                 onChange={(e) => setFormData({ ...formData, dni: e.target.value })}
                 placeholder="Ingresar DNI o CEE"
-                disabled={!!editingUser}
+                disabled={!isAdminOrSuperAdmin() && !!editingUser}
               />
             </div>
 
@@ -973,7 +980,7 @@ const UsersModule: React.FC = () => {
                 value={formData.username}
                 onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                 placeholder="usuario123"
-                disabled={!formData.dni || formData.dni.length <= 8}
+                disabled={!isAdminOrSuperAdmin() && (!formData.dni || formData.dni.length <= 8)}
               />
             </div>
 
@@ -993,7 +1000,7 @@ const UsersModule: React.FC = () => {
                     setFormData({ ...formData, name: formattedValue });
                   }}
                   placeholder="Juan Carlos"
-                  disabled={!formData.dni || formData.dni.length <= 8}
+                  disabled={!isAdminOrSuperAdmin() && (!formData.dni || formData.dni.length <= 8)}
                 />
               </div>
               
@@ -1012,7 +1019,7 @@ const UsersModule: React.FC = () => {
                     setFormData({ ...formData, lastName: formattedValue });
                   }}
                   placeholder="Pérez Rodríguez"
-                  disabled={!formData.dni || formData.dni.length <= 8}
+                  disabled={!isAdminOrSuperAdmin() && (!formData.dni || formData.dni.length <= 8)}
                 />
               </div>
             </div>
@@ -1024,7 +1031,7 @@ const UsersModule: React.FC = () => {
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 placeholder="juan.perez@empresa.com"
-                disabled={!formData.dni || formData.dni.length <= 8}
+                disabled={!isAdminOrSuperAdmin() && (!formData.dni || formData.dni.length <= 8)}
               />
             </div>
             
@@ -1091,7 +1098,7 @@ const UsersModule: React.FC = () => {
               <Select 
                 value={formData.roleId.toString()} 
                 onValueChange={(value) => setFormData({ ...formData, roleId: parseInt(value) })}
-                disabled={!!editingUser && currentUser && currentUser.role !== 'ADMIN' && currentUser.role !== 'SUPERADMIN'}
+                disabled={false}
               >
                 <SelectTrigger className="focus:ring-0 focus:ring-offset-0 hover:bg-transparent">
                   <SelectValue placeholder="Seleccionar rol" />
