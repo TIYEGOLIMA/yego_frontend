@@ -58,13 +58,21 @@ interface Role {
   userCount?: number; // Cantidad de usuarios con este rol
 }
 
-interface Permission {
-  id: number;
+interface ActionDto {
+  action: string;
   name: string;
   description: string;
   module: string;
-  action: string;
-  active: boolean;
+}
+
+interface ModuleWithActionsDto {
+  id: number;
+  nombre: string;
+  descripcion: string;
+  url: string;
+  estado: string;
+  activo: boolean;
+  actions: ActionDto[];
 }
 
 interface CreateRoleData {
@@ -84,7 +92,7 @@ interface UpdateRoleData {
 const RolesModule: React.FC = () => {
   const authState = useAuth();
   const [roles, setRoles] = useState<Role[]>([]);
-  const [permissions, setPermissions] = useState<Permission[]>([]);
+  const [modulesWithActions, setModulesWithActions] = useState<ModuleWithActionsDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleStatus, setRoleStatus] = useState<'true' | 'false' | 'all'>('all');
@@ -104,18 +112,22 @@ const RolesModule: React.FC = () => {
 
   const [formData, setFormData] = useState<CreateRoleData>(initialFormData);
 
-  // Agrupar permisos por módulo
-  const groupedPermissions = permissions.reduce((acc, permission) => {
-    if (!acc[permission.module]) {
-      acc[permission.module] = [];
-    }
-    acc[permission.module].push(permission);
-    return acc;
-  }, {} as Record<string, Permission[]>);
+  // Normalizar nombre del módulo para usarlo como clave
+  const normalizeModuleName = (nombre: string): string => {
+    return nombre.toLowerCase()
+      .trim()
+      .replace(/\s+/g, '')
+      .replace(/[áàäâ]/g, 'a')
+      .replace(/[éèëê]/g, 'e')
+      .replace(/[íìïî]/g, 'i')
+      .replace(/[óòöô]/g, 'o')
+      .replace(/[úùüû]/g, 'u')
+      .replace(/ñ/g, 'n');
+  };
 
   useEffect(() => {
     fetchRoles();
-    fetchPermissions();
+    fetchModulesWithActions();
   }, []);
 
   useEffect(() => {
@@ -134,22 +146,23 @@ const RolesModule: React.FC = () => {
     }
   };
 
-  const fetchPermissions = async () => {
+  const fetchModulesWithActions = async () => {
     try {
-      const response = await api.get('/permissions/find-all-active');
-      setPermissions(response.data || []);
+      const response = await api.get('/roles/modules-with-actions');
+      setModulesWithActions(response.data || []);
     } catch (error) {
-      console.error('Error fetching permissions:', error);
-      setPermissions([]);
+      console.error('Error fetching modules with actions:', error);
+      setModulesWithActions([]);
     }
   };
 
   const cleanPermissions = (): Record<string, any> => {
     const clean: Record<string, any> = {};
-    for (const module of Object.keys(groupedPermissions)) {
-      const actions = formData.permissions[module];
+    for (const moduleWithActions of modulesWithActions) {
+      const moduleKey = normalizeModuleName(moduleWithActions.nombre);
+      const actions = formData.permissions[moduleKey];
       if (Array.isArray(actions) && actions.length > 0) {
-        clean[module] = actions;
+        clean[moduleKey] = actions;
       }
     }
     return clean;
@@ -283,10 +296,24 @@ const RolesModule: React.FC = () => {
   const openEditDialog = (role: Role) => {
     setEditingRole(role);
     
-    let parsedPermissions = {};
+    let parsedPermissions: Record<string, any> = {};
     if (role.permissions) {
       try {
-        parsedPermissions = JSON.parse(role.permissions);
+        const originalPermissions = JSON.parse(role.permissions);
+        
+        // Normalizar las claves de módulos para que coincidan con los módulos actuales
+        for (const moduleWithActions of modulesWithActions) {
+          const moduleKey = normalizeModuleName(moduleWithActions.nombre);
+          
+          // Buscar en las claves originales si hay alguna coincidencia
+          for (const [originalKey, actions] of Object.entries(originalPermissions)) {
+            const normalizedOriginalKey = normalizeModuleName(originalKey);
+            if (normalizedOriginalKey === moduleKey) {
+              parsedPermissions[moduleKey] = actions;
+              break;
+            }
+          }
+        }
       } catch (error) {
         console.error('Error parsing permissions:', error);
         parsedPermissions = {};
@@ -299,6 +326,7 @@ const RolesModule: React.FC = () => {
       permissions: parsedPermissions,
       active: role.active
     });
+    setIsCreateDialogOpen(true);
   };
 
 
@@ -376,12 +404,12 @@ const RolesModule: React.FC = () => {
       <Card>
         <CardContent className="pt-6">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400 w-4 h-4" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-500 w-5 h-5 pointer-events-none z-10" />
             <Input
               placeholder="Buscar roles..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
+              className="pl-12"
             />
           </div>
         </CardContent>
@@ -728,21 +756,22 @@ const RolesModule: React.FC = () => {
               </label>
               <div className="max-h-80 overflow-y-auto pr-2">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {Object.entries(groupedPermissions).map(([module, modulePermissions]) => {
-                    const allActions = modulePermissions.map(p => p.action);
-                    const isFullySelected = isModuleFullySelected(module, allActions);
-                    const selectedCount = formData.permissions[module]?.length || 0;
+                  {modulesWithActions.map((moduleWithActions) => {
+                    const moduleKey = normalizeModuleName(moduleWithActions.nombre);
+                    const allActions = moduleWithActions.actions.map(a => a.action);
+                    const isFullySelected = isModuleFullySelected(moduleKey, allActions);
+                    const selectedCount = formData.permissions[moduleKey]?.length || 0;
                     
                     return (
-                      <Card key={module} className="border hover:border-primary-200 dark:hover:border-primary-700 transition-all duration-200 h-64 flex flex-col bg-white dark:bg-neutral-900">
+                      <Card key={moduleWithActions.id} className="border hover:border-primary-200 dark:hover:border-primary-700 transition-all duration-200 h-64 flex flex-col bg-white dark:bg-neutral-900">
                         <CardHeader className="pb-2 flex-shrink-0 bg-neutral-50 dark:bg-neutral-800 rounded-t-lg">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center space-x-2">
                               <div className="w-6 h-6 bg-primary-500 rounded-md flex items-center justify-center">
                                 <Shield className="h-3 w-3 text-white" />
                               </div>
-                              <CardTitle className="text-sm font-medium capitalize text-neutral-900 dark:text-neutral-100">
-                                {module}
+                              <CardTitle className="text-sm font-medium text-neutral-900 dark:text-neutral-100">
+                                {moduleWithActions.nombre}
                               </CardTitle>
                             </div>
                             <Badge 
@@ -752,6 +781,11 @@ const RolesModule: React.FC = () => {
                               {selectedCount}/{allActions.length}
                             </Badge>
                           </div>
+                          {moduleWithActions.descripcion && (
+                            <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+                              {moduleWithActions.descripcion}
+                            </p>
+                          )}
                         </CardHeader>
                         
                         <CardContent className="pt-2 pb-2 flex-1 flex flex-col overflow-hidden">
@@ -760,7 +794,7 @@ const RolesModule: React.FC = () => {
                               type="button"
                               variant="outline"
                               size="sm"
-                              onClick={() => handleSelectAllModule(module, allActions)}
+                              onClick={() => handleSelectAllModule(moduleKey, allActions)}
                               className="w-full text-xs h-6 flex-shrink-0 flex items-center justify-center hover:bg-transparent hover:border-neutral-300 dark:hover:bg-transparent dark:hover:border-neutral-600"
                             >
                               {isFullySelected ? 'Deseleccionar' : 'Seleccionar todo'}
@@ -768,23 +802,26 @@ const RolesModule: React.FC = () => {
                             
                             <div className="flex-1 overflow-y-auto min-h-0 pr-1 mt-3 pt-3">
                               <div className="grid grid-cols-2 gap-2">
-                                {modulePermissions.map(permission => (
-                                  <div key={permission.id} className="flex items-center space-x-2 p-1.5 rounded hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors">
-                                    <input
-                                      type="checkbox"
-                                      id={`permission-${permission.id}`}
-                                      checked={formData.permissions[module]?.includes(permission.action) || false}
-                                      onChange={() => handlePermissionToggle(module, permission.action)}
-                                      className="w-3.5 h-3.5 rounded border-neutral-300 dark:border-neutral-600 text-primary-500 focus:ring-1 focus:ring-primary-500 dark:bg-neutral-700"
-                                    />
-                                    <label 
-                                      htmlFor={`permission-${permission.id}`}
-                                      className="text-xs text-neutral-700 dark:text-neutral-300 cursor-pointer flex-1 leading-tight"
-                                    >
-                                      {permission.description || permission.name}
-                                    </label>
-                                  </div>
-                                ))}
+                                {moduleWithActions.actions.map((action) => {
+                                  const actionId = `${moduleWithActions.id}-${action.action}`;
+                                  return (
+                                    <div key={actionId} className="flex items-center space-x-2 p-1.5 rounded hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors">
+                                      <input
+                                        type="checkbox"
+                                        id={`permission-${actionId}`}
+                                        checked={formData.permissions[moduleKey]?.includes(action.action) || false}
+                                        onChange={() => handlePermissionToggle(moduleKey, action.action)}
+                                        className="w-3.5 h-3.5 rounded border-neutral-300 dark:border-neutral-600 text-primary-500 focus:ring-1 focus:ring-primary-500 dark:bg-neutral-700"
+                                      />
+                                      <label 
+                                        htmlFor={`permission-${actionId}`}
+                                        className="text-xs text-neutral-700 dark:text-neutral-300 cursor-pointer flex-1 leading-tight"
+                                      >
+                                        {action.description || action.name}
+                                      </label>
+                                    </div>
+                                  );
+                                })}
                               </div>
                             </div>
                           </div>

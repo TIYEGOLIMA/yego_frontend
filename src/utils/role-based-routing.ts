@@ -17,6 +17,8 @@ export const getRedirectPathForRole = (role: string): string => {
     case 'SUPERADMIN':
     case 'ADMIN':
       return '/dashboard'; // Dashboard principal para administradores
+    case 'SUPERVISOR':
+      return '/'; // Vista de bienvenida para supervisor
     case 'PRINCIPAL':
       return '/tablet-interface'; // TabletInterface maximizado
     case 'OPERADOR': 
@@ -30,8 +32,8 @@ export const getRedirectPathForRole = (role: string): string => {
     case 'TV':
       return '/tv-display'; // TV Display maximizado por defecto
     default:
-      console.warn(`⚠️ Rol '${role}' no tiene ruta configurada, redirigiendo al dashboard`);
-      return '/dashboard';
+      console.warn(`⚠️ Rol '${role}' no tiene ruta configurada, redirigiendo a vista de bienvenida`);
+      return '/'; // Vista de bienvenida por defecto en lugar de dashboard
   }
 };
 

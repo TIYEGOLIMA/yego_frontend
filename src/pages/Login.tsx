@@ -4,7 +4,7 @@ import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { ThemeToggle } from '../shared/components/ThemeToggle'
-import { LogIn, User, Lock, Eye, EyeOff, AlertCircle, Shield, Zap, BarChart3, Sparkles } from 'lucide-react'
+import { LogIn, User, Lock, Eye, EyeOff, AlertCircle, Shield, Zap, BarChart3 } from 'lucide-react'
 import { useAuthStore } from '../store/auth-store'
 
 export default function Login() {
@@ -16,7 +16,7 @@ export default function Login() {
   const [isDemoMode, setIsDemoMode] = useState(false)
   
   const navigate = useNavigate()
-  const { login, loading, error, clearError, token, user } = useAuthStore()
+  const { login, loading, error, clearError, token, user, modules } = useAuthStore()
 
   // Si ya está autenticado, redirigir según el rol
   useEffect(() => {
@@ -25,11 +25,14 @@ export default function Login() {
         navigate('/reports')
       } else if (user.role === 'SAC') {
         navigate('/tickets')
+      } else if (user.role === 'PRINCIPAL') {
+        navigate('/tablet-interface')
       } else {
-        navigate('/dashboard')
+        // Redirigir a la vista de bienvenida
+        navigate('/')
       }
     }
-  }, [token, user, navigate])
+  }, [token, user, modules, navigate])
 
   // Limpiar errores al cambiar credenciales
   useEffect(() => {
@@ -43,13 +46,16 @@ export default function Login() {
     try {
       const response = await login(credentials.username, credentials.password)
       
-      // 🎯 OPERADOR va a reportes, SAC va a tickets, otros van a dashboard
+      // 🎯 OPERADOR va a reportes, SAC va a tickets, PRINCIPAL a tablet-interface, otros a la vista de bienvenida
       if (response.user.role === 'OPERADOR') {
         navigate('/reports')
       } else if (response.user.role === 'SAC') {
         navigate('/tickets')
+      } else if (response.user.role === 'PRINCIPAL') {
+        navigate('/tablet-interface')
       } else {
-        navigate('/dashboard')
+        // Redirigir a la vista de bienvenida
+        navigate('/')
       }
     } catch (error) {
       // Error ya manejado en el store

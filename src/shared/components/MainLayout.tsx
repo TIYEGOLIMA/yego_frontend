@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
-import { useAuthStore } from '../../store/auth-store'
+import { useAuthStore, Module } from '../../store/auth-store'
 import { usePermissions } from '../hooks/usePermissions'
 import { useConnectionStatus } from '../hooks/useConnectionStatus'
 import { ThemeToggle } from './ThemeToggle'
@@ -49,7 +49,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [changePasswordOpen, setChangePasswordOpen] = useState(false)
   const [sistemasDropdownOpen, setSistemasDropdownOpen] = useState(false)
-  const { user, logout, token } = useAuthStore()
+  const { user, logout, token, modules, fetchModules } = useAuthStore()
   const { hasAnyPermission } = usePermissions()
   const { status } = useConnectionStatus()
   
@@ -57,17 +57,36 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const navigate = useNavigate()
   const location = useLocation()
 
-  // Verificar autenticación al cargar el componente
+  // Verificar autenticación y cargar módulos inmediatamente al cargar el componente
   useEffect(() => {
     // Si no hay token, redirigir a login
     if (!token) {
       navigate('/login')
+      return
     }
     
-    // Si hay token pero no hay usuario, intentar cargar el perfil
+    // Si hay token pero no hay usuario, esperar un momento y verificar
     if (token && !user) {
+      // El usuario se carga en otro lugar, pero no bloqueamos aquí
     }
-  }, [token, user, navigate])
+
+    // Cargar módulos inmediatamente si hay token (no esperar a que haya módulos)
+    // Esto asegura que los módulos se carguen lo más rápido posible
+    if (token) {
+      // Solo cargar si no hay módulos cargados o si hay muy pocos (posible carga incompleta)
+      if (!modules || modules.length === 0) {
+        console.log('📦 [MainLayout] Cargando módulos inmediatamente...');
+        fetchModules().catch((error: any) => {
+          console.warn('⚠️ [MainLayout] Error cargando módulos:', error);
+          // Si es error de autorización, redirigir a login
+          if (error.message?.includes('Token inválido') || error.response?.status === 401 || error.response?.status === 403) {
+            logout();
+            navigate('/login');
+          }
+        });
+      }
+    }
+  }, [token]) // Solo depender de token para cargar inmediatamente
 
   // Si no hay token, no renderizar nada
   if (!token) {
@@ -97,83 +116,176 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     }
   }
 
-  // Definición de elementos de navegación con nuevo diseño
-  const navItems: NavItem[] = [
-    { 
-      label: "Dashboard", 
-      to: "/dashboard", 
-      icon: <LayoutDashboard className="h-5 w-5" />, 
-      requiredPermission: null 
-    },
-    { 
-      label: "Sistemas", 
-      to: "dropdown", 
-      icon: <Server className="h-5 w-5" />, 
-      requiredPermission: "systems"
-    },
-    { 
-      label: "Tickets", 
-      to: "/tickets", 
-      icon: <Bell className="h-5 w-5" />, 
-      requiredPermission: "tickets"
-    },
-    { 
-      label: "Usuarios", 
-      to: "/users", 
-      icon: <UserRound className="h-5 w-5" />, 
-      requiredPermission: "users"
-    },
-    { 
-      label: "Roles", 
-      to: "/roles", 
-      icon: <ShieldCheck className="h-5 w-5" />, 
-      requiredPermission: "roles"
-    },
-    { 
-      label: "Permisos", 
-      to: "/permissions", 
-      icon: <KeyRound className="h-5 w-5" />, 
-      requiredPermission: "permissions"
-    },
-    { 
-      label: "Módulos", 
-      to: "/modules", 
-      icon: <AppWindow className="h-5 w-5" />, 
-      requiredPermission: "modules"
-    },
-    { 
-      label: "Importaciones", 
-      to: "/imports", 
-      icon: <Import className="h-5 w-5" />, 
-      requiredPermission: "imports"
-    },
-    { 
-      label: "Auditoría", 
-      to: "/audit", 
-      icon: <ScrollText className="h-5 w-5" />, 
-      requiredPermission: "audit"
-    },
-    { 
-      label: "Sesiones", 
-      to: "/sessions", 
-      icon: <MonitorSmartphone className="h-5 w-5" />, 
-      requiredPermission: "sessions"
-    },
-    { 
-      label: "Configuración", 
-      to: "/configuration", 
-      icon: <Settings2 className="h-5 w-5" />, 
-      requiredPermission: "configuration"
+  // Mapeo de nombres/URLs de módulos a iconos
+  const getModuleIcon = (module: { nombre: string; url: string }) => {
+    const name = module.nombre.toLowerCase();
+    const url = module.url?.toLowerCase() || '';
+    
+    // Mapeo basado en nombre del módulo
+    if (name.includes('dashboard') || url.includes('/dashboard')) {
+      return <LayoutDashboard className="h-5 w-5" />;
     }
-  ]
+    if (name.includes('usuario') || url.includes('/users')) {
+      return <UserRound className="h-5 w-5" />;
+    }
+    if (name.includes('rol') || url.includes('/roles')) {
+      return <ShieldCheck className="h-5 w-5" />;
+    }
+    if (name.includes('permiso') || url.includes('/permissions')) {
+      return <KeyRound className="h-5 w-5" />;
+    }
+    if (name.includes('módulo') || url.includes('/modules')) {
+      return <AppWindow className="h-5 w-5" />;
+    }
+    if (name.includes('import') || url.includes('/imports')) {
+      return <Import className="h-5 w-5" />;
+    }
+    if (name.includes('auditor') || url.includes('/audit')) {
+      return <ScrollText className="h-5 w-5" />;
+    }
+    if (name.includes('sesión') || url.includes('/sessions')) {
+      return <MonitorSmartphone className="h-5 w-5" />;
+    }
+    if (name.includes('configuración') || name.includes('configuracion') || url.includes('/configuration')) {
+      return <Settings2 className="h-5 w-5" />;
+    }
+    if (name.includes('ticket') || url.includes('/tickets')) {
+      return <Bell className="h-5 w-5" />;
+    }
+    if (name.includes('sistema') || url.includes('/sistemas')) {
+      return <Server className="h-5 w-5" />;
+    }
+    if (name.includes('reporte') || url.includes('/reports')) {
+      return <BarChart4 className="h-5 w-5" />;
+    }
+    if (name.includes('garantizado') || url.includes('/garantizado')) {
+      return <Shield className="h-5 w-5" />;
+    }
+    if (name.includes('asistencia') || url.includes('/asistencia')) {
+      return <Clock className="h-5 w-5" />;
+    }
+    
+    // Icono por defecto
+    return <AppWindow className="h-5 w-5" />;
+  };
 
-  // Filtrar elementos de navegación según permisos
+  // Determinar si un módulo debe ir al dropdown de Sistemas
+  const isSistemaModule = (module: { nombre: string; url: string }) => {
+    const name = module.nombre?.toLowerCase().trim() || '';
+    const url = module.url?.toLowerCase().trim() || '';
+    
+    // Normalizar URL: remover leading/trailing slashes para comparación
+    const normalizedUrl = url.startsWith('/') ? url.substring(1) : url;
+    const urlWithoutSlash = normalizedUrl.replace(/\/$/, '');
+    
+    // Módulos que van al dropdown de Sistemas
+    const sistemasPaths = ['garantizado', 'reports', 'reportes', 'asistencia'];
+    const sistemasNames = ['garantizado', 'reporte', 'reportes', 'asistencia'];
+    
+    // Verificar por URL (sin slashes iniciales/finales)
+    const matchesUrl = sistemasPaths.some(path => 
+      urlWithoutSlash === path || 
+      urlWithoutSlash.includes(path) ||
+      url.includes(`/${path}`) ||
+      url.includes(`${path}/`)
+    );
+    
+    // Verificar por nombre
+    const matchesName = sistemasNames.some(sistemaName => 
+      name === sistemaName || 
+      name.includes(sistemaName)
+    );
+    
+    return matchesUrl || matchesName;
+  };
+
+  // Convertir módulos del backend a NavItems
+  const buildNavItemsFromModules = (): NavItem[] => {
+    const navItems: NavItem[] = [];
+    const sistemaModules: Module[] = [];
+    const mainModules: Module[] = [];
+
+    // Si hay módulos del backend, organizarlos
+    if (modules && modules.length > 0) {
+      modules.forEach((module: Module) => {
+        if (module.activo) {
+          // Identificar si es Dashboard (buscar en URL y nombre)
+          const moduleUrl = module.url?.toLowerCase().replace(/^\/+|\/+$/g, '') || '';
+          const moduleNombre = module.nombre?.toLowerCase().trim() || '';
+          const isDashboard = moduleUrl === 'dashboard' || 
+                              moduleUrl.includes('dashboard') ||
+                              moduleNombre === 'dashboard' ||
+                              moduleNombre.includes('dashboard');
+          
+          if (isDashboard) {
+            // Agregar Dashboard primero al inicio si está en los módulos permitidos
+            const dashboardUrl = module.url?.startsWith('/') ? module.url : `/${module.url}`;
+            navItems.unshift({
+              label: module.nombre || "Dashboard",
+              to: dashboardUrl,
+              icon: <LayoutDashboard className="h-5 w-5" />,
+              requiredPermission: null
+            });
+            console.log('📊 [MainLayout] Dashboard agregado al menú:', {
+              nombre: module.nombre,
+              url: dashboardUrl,
+              activo: module.activo
+            });
+            return;
+          }
+          
+          if (isSistemaModule(module)) {
+            sistemaModules.push(module);
+          } else {
+            mainModules.push(module);
+          }
+        }
+      });
+
+      // Si hay módulos del sistema, crear dropdown de Sistemas
+      if (sistemaModules.length > 0) {
+        navItems.push({
+          label: "Sistemas",
+          to: "dropdown",
+          icon: <Server className="h-5 w-5" />,
+          requiredPermission: null,
+          children: sistemaModules.map(module => ({
+            label: module.nombre,
+            to: module.url.startsWith('/') ? module.url : `/${module.url}`,
+            icon: getModuleIcon(module),
+            requiredPermission: null
+          }))
+        });
+      }
+
+      // Agregar módulos principales directamente al menú
+      mainModules.forEach((module) => {
+        navItems.push({
+          label: module.nombre,
+          to: module.url.startsWith('/') ? module.url : `/${module.url}`,
+          icon: getModuleIcon(module),
+          requiredPermission: null // Los permisos ya están manejados por el backend
+        });
+      });
+    }
+    // Nota: No usar fallback estático aquí - los módulos se cargarán dinámicamente
+    // y el menú se actualizará reactivamente cuando lleguen
+    
+    return navItems;
+  };
+
+  // Obtener elementos de navegación (dinámicos o estáticos como fallback)
+  const navItems = buildNavItemsFromModules();
+
+  // Filtrar elementos de navegación según permisos (solo si tienen requiredPermission)
+  // Los módulos dinámicos del backend ya vienen filtrados, así que solo filtramos los estáticos
   const filteredNavItems = navItems.filter(item => {
-    // Dashboard siempre visible
+    // Si no tiene requiredPermission, siempre visible (Dashboard o módulos dinámicos)
     if (!item.requiredPermission) {
       return true;
     }
     
+    // Aplicar filtros solo para items estáticos (fallback)
     // OPERADOR ve Sistemas y Usuarios
     if (user?.role === 'OPERADOR') {
       return item.requiredPermission === 'users' || item.requiredPermission === 'systems';
@@ -209,6 +321,20 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
   // Obtener opciones disponibles del dropdown de Sistemas
   const getSistemasOptions = () => {
+    // Si hay módulos cargados, usar los módulos del sistema del backend
+    if (modules && modules.length > 0) {
+      const sistemaModules = modules
+        .filter(module => module.activo && isSistemaModule(module))
+        .map(module => ({
+          label: module.nombre,
+          to: module.url.startsWith('/') ? module.url : `/${module.url}`,
+          icon: getModuleIcon(module),
+          permission: module.url.replace('/', '').toLowerCase()
+        }));
+      return sistemaModules;
+    }
+
+    // Fallback a lista estática si no hay módulos cargados
     const options = [];
 
     // Solo ADMIN y SUPERADMIN pueden ver Reportes en el dropdown de Sistemas
@@ -452,7 +578,18 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         
         {/* Navegación */}
         <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
-          {filteredNavItems.map((item) => {
+          {filteredNavItems.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-center px-4">
+              <AppWindow className="h-8 w-8 text-neutral-400 dark:text-neutral-600 mb-3" />
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                No tienes módulos asignados en tu perfil.
+              </p>
+              <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1">
+                Contacta al administrador.
+              </p>
+            </div>
+          ) : (
+            filteredNavItems.map((item) => {
             const isActiveItem = isActive(item.to);
             
             // Manejar el menú expandible de Sistemas
@@ -545,7 +682,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                 )}
               </button>
             );
-          })}
+          })
+          )}
         </nav>
         
         {/* Botón para colapsar sidebar - Solo desktop */}

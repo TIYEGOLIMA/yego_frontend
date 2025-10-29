@@ -68,8 +68,6 @@ interface User {
 interface Role {
   id: number;
   name: string;
-  description?: string;
-  active: boolean;
 }
 
 interface CreateUserData {

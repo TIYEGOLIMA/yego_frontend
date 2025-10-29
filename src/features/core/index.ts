@@ -14,6 +14,7 @@ export { default as ImportsModule } from './imports/imports.module';
 export { default as ReportsModule } from './reports/reports.module';
 export { default as ModulesModule } from './modules/modules.module';
 export { AsistenciaModule } from './asistencia';
+export { WelcomeModule } from './welcome';
 
 // 🎯 CONFIGURACIÓN DE FEATURES CORE
 export const CORE_FEATURES_CONFIG = {

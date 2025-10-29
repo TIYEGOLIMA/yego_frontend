@@ -345,6 +345,30 @@ export const authService = {
   },
 
   /**
+   * Obtiene los módulos permitidos para el usuario autenticado
+   * @returns Array de módulos permitidos según el rol del usuario
+   */
+  async getMyModules(): Promise<any[]> {
+    try {
+      console.log('📦 [authService] Obteniendo módulos del usuario...');
+      const response = await api.get('/auth/my-modules');
+      const modules = Array.isArray(response.data) ? response.data : [];
+      console.log(`✅ [authService] ${modules.length} módulos obtenidos exitosamente`);
+      return modules;
+    } catch (error: any) {
+      console.error('❌ [authService] Error obteniendo módulos:', error.response?.data || error.message);
+      
+      // Si es error de autorización, el token puede estar expirado
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        console.warn('⚠️ [authService] Token inválido o expirado al obtener módulos');
+        throw new Error('Token inválido o expirado');
+      }
+      
+      throw error;
+    }
+  },
+
+  /**
    * Limpia todos los datos del localStorage
    */
   clearLocalStorage(): void {
@@ -378,6 +402,9 @@ export const authService = {
     // Limpiar otros datos del microfrontend
     localStorage.removeItem('agentpanel_lastActivity');
     localStorage.removeItem('agentpanel_moduleAssignment');
+    
+    // Limpiar módulos del usuario
+    localStorage.removeItem('user-modules');
     
     // Limpiar headers de autenticación de la instancia de axios
     delete api.defaults.headers.common['Authorization'];

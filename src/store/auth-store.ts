@@ -13,15 +13,29 @@ export interface User {
   lastLogin: string;
 }
 
+export interface Module {
+  id: number;
+  nombre: string;
+  descripcion?: string;
+  url: string;
+  estado: string;
+  ultimoCheck?: string;
+  activo: boolean;
+  fechaCreacion?: string;
+  fechaActualizacion?: string;
+}
+
 export interface AuthState {
   user: User | null;
   token: string | null;
+  modules: Module[];
   loading: boolean;
   error: string | null;
   refreshTrigger: number;
   login: (username: string, password: string) => Promise<any>;
   logout: () => void;
   fetchProfile: () => Promise<void>;
+  fetchModules: () => Promise<void>;
   clearError: () => void;
   updateUser: (user: User) => void;
   triggerRefresh: () => void;
@@ -32,6 +46,7 @@ export const useAuthStore = create<AuthState>()(
     (set, get) => ({
       user: null,
       token: null,
+      modules: [],
       loading: false,
       error: null,
       refreshTrigger: 0,
@@ -65,6 +80,14 @@ export const useAuthStore = create<AuthState>()(
           localStorage.removeItem("requiereCambioPassword")
           
           console.log('✅ [authStore] Estado guardado en localStorage')
+          
+          // Cargar módulos inmediatamente después del login (sin await para no bloquear)
+          // El estado se actualizará reactivamente cuando lleguen los módulos
+          console.log('📦 [authStore] Cargando módulos después del login...');
+          get().fetchModules().catch((moduleError: any) => {
+            console.warn('⚠️ [authStore] Error cargando módulos después del login:', moduleError);
+            // No fallar el login si hay error cargando módulos
+          });
           
           return response
         } catch (error: any) {
@@ -108,16 +131,51 @@ export const useAuthStore = create<AuthState>()(
           // Ejecutar logout del servicio
           await authService.logout()
           
-          // Limpiar estado del store
-          set({ user: null, token: null, error: null })
+          // Limpiar estado del store incluyendo módulos
+          set({ user: null, token: null, modules: [], error: null })
           localStorage.removeItem("requiereCambioPassword")
+          localStorage.removeItem("user-modules")
           
           console.log('✅ [authStore] Logout completado exitosamente')
         } catch (error) {
           console.error('❌ [authStore] Error en logout:', error)
-          // En caso de error, limpiar estado local
-          set({ user: null, token: null, error: null })
+          // En caso de error, limpiar estado local incluyendo módulos
+          set({ user: null, token: null, modules: [], error: null })
           localStorage.removeItem("requiereCambioPassword")
+          localStorage.removeItem("user-modules")
+        }
+      },
+      fetchModules: async () => {
+        const token = get().token
+        if (!token) {
+          console.warn('⚠️ [authStore] No hay token para obtener módulos')
+          return
+        }
+        
+        try {
+          console.log('📦 [authStore] Obteniendo módulos del usuario...');
+          const modules = await authService.getMyModules();
+          
+          set({ modules });
+          localStorage.setItem("user-modules", JSON.stringify(modules));
+          
+          console.log(`✅ [authStore] ${modules.length} módulos guardados exitosamente`);
+        } catch (error: any) {
+          console.error('❌ [authStore] Error obteniendo módulos:', error);
+          
+          // Si el error es de token inválido, limpiar sesión
+          if (error.message?.includes('Token inválido') || error.response?.status === 401 || error.response?.status === 403) {
+            console.log('🚨 [authStore] Token inválido al obtener módulos - limpiando sesión...');
+            set({ user: null, token: null, modules: [], loading: false });
+            authService.clearLocalStorage();
+            // Redirigir a login
+            if (typeof window !== 'undefined') {
+              window.location.href = '/login';
+            }
+          } else {
+            // Para otros errores, mantener módulos vacíos pero no limpiar sesión
+            set({ modules: [] });
+          }
         }
       },
       fetchProfile: async () => {
@@ -212,16 +270,43 @@ export const useAuthStore = create<AuthState>()(
       partialize: (state) => ({
         user: state.user,
         token: state.token,
+        modules: state.modules,
         refreshTrigger: state.refreshTrigger,
       }),
-      onRehydrateStorage: () => (state) => {
-        if (state?.user) {
-          console.log('🔄 [authStore] Estado restaurado:', {
-            user: state.user.name,
-            role: state.user.role,
-            moduleId: state.user.moduleId
-          });
-        }
+      onRehydrateStorage: () => {
+        return (state) => {
+          if (state?.user) {
+            console.log('🔄 [authStore] Estado restaurado:', {
+              user: state.user.name,
+              role: state.user.role,
+              moduleId: state.user.moduleId,
+              modulesCount: state.modules?.length || 0
+            });
+            
+            // Intentar cargar módulos desde localStorage si existen
+            try {
+              const storedModules = localStorage.getItem('user-modules');
+              if (storedModules) {
+                const parsedModules = JSON.parse(storedModules);
+                if (Array.isArray(parsedModules) && parsedModules.length > 0) {
+                  state.modules = parsedModules;
+                  console.log(`📦 [authStore] ${parsedModules.length} módulos restaurados desde localStorage`);
+                }
+              }
+            } catch (error) {
+              console.warn('⚠️ [authStore] Error restaurando módulos desde localStorage:', error);
+            }
+            
+            // Si hay token pero no módulos, cargar módulos inmediatamente
+            if (state?.token && (!state.modules || state.modules.length === 0)) {
+              console.log('📦 [authStore] Token presente pero sin módulos - cargando módulos inmediatamente...');
+              // Cargar módulos inmediatamente sin delay
+              state.fetchModules().catch((error: any) => {
+                console.warn('⚠️ [authStore] Error cargando módulos al restaurar:', error);
+              });
+            }
+          }
+        };
       },
     }
   )

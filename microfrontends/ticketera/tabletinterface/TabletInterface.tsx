@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '../shared/components/ui/Card'
 import { Button } from '../shared/components/ui/Button'
 import { BaseLoader } from '../../shared/components/ui'
 import { authService } from '../../../src/services/core/auth-service'
+import { useAuthStore } from '../../../src/store/auth-store'
 import { 
   ArrowLeft, 
   Phone, 
@@ -16,14 +16,7 @@ import {
   Maximize,
   Minimize
 } from 'lucide-react'
-// 📱 Validación de teléfono específica para TabletInterface
-const PHONE_VALIDATION = {
-  minLength: 9,
-  maxLength: 15,
-  pattern: /^[\d\s\-\+\(\)]+$/,
-  regex: /^(\+51|51)?[0-9]{9}$/
-}
-import { CreateTicketData, Option, Module } from './index' // Import from local index.ts
+// Import from local index.ts (types)
 import { ticketService, moduleService, driverService } from './services'
 
 // Definir tipos locales para evitar problemas de import
@@ -144,7 +137,7 @@ const useTabletInterface = () => {
 }
 
 export default function TabletInterface() {
-  const navigate = useNavigate()
+  const { logout } = useAuthStore()
   const { currentUser, error, loading, setLoading, optionsLoaded, setOptionsLoaded, setError } = useTabletInterface()
 
   // Estados del formulario
@@ -398,19 +391,27 @@ export default function TabletInterface() {
     try {
       console.log('🚪 [TabletInterface] Cerrando sesión...')
       
-      // Llamar al servicio de logout del sistema
-      await authService.logout()
+      // Llamar al logout del store para limpiar todo el estado
+      logout()
+      
+      // También llamar al servicio de logout para limpiar el backend
+      try {
+        await authService.logout()
+      } catch (serviceError) {
+        console.warn('⚠️ [TabletInterface] Error en authService.logout, continuando...', serviceError)
+      }
       
       console.log('✅ [TabletInterface] Sesión cerrada exitosamente')
       
-      // Navegar al login
-      navigate('/login')
+      // Navegar al login usando window.location para forzar recarga completa
+      window.location.href = '/login'
     } catch (error) {
       console.error('❌ [TabletInterface] Error en logout:', error)
-      // Incluso si hay error, navegar al login
-      navigate('/login')
+      // Incluso si hay error, limpiar y navegar al login
+      logout()
+      window.location.href = '/login'
     }
-  }, [navigate])
+  }, [logout])
 
   const retroceder = useCallback(() => {
     switch (currentStep) {

@@ -87,16 +87,6 @@ export const AsistenciaModule: React.FC = () => {
   const authStore = useAuthStore.getState();
   const user = authStore.user;
 
-  // Función para determinar qué pestañas puede ver el usuario
-  const canViewLista = () => {
-    if (!user) return false;
-    return ['SUPERADMIN', 'ADMIN', 'OPERADOR'].includes(user.role);
-  };
-
-  const canViewMarcar = () => {
-    if (!user) return false;
-    return ['SUPERADMIN', 'ADMIN', 'OPERADOR', 'SAC'].includes(user.role);
-  };
 
   // Función para cargar datos del empleado y estadísticas
   const cargarDatosEmpleado = async () => {
@@ -518,7 +508,7 @@ export const AsistenciaModule: React.FC = () => {
       </div>
 
       {/* Contenido de las Pestañas */}
-      {activeTab === 'marcar' && canViewMarcar() && (
+      {activeTab === 'marcar' && (
         <>
           {/* Alert Personalizado */}
           {alertData.isOpen && (
@@ -562,100 +552,100 @@ export const AsistenciaModule: React.FC = () => {
 
       {/* Sección de Marcaciones */}
       <div className="yego-card">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {/* Card de Entrada */}
-            <div className={`${getMarcacionConfig('entrada').claseCard} ${
-              estadisticas.puedeMarcarEntrada ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'
-            }`}>
-              <h3 className="text-white text-lg font-bold mb-4 uppercase tracking-wide">
-                {getMarcacionConfig('entrada').titulo}
-              </h3>
-              <div className="flex justify-center mb-6">
-                {getMarcacionConfig('entrada').icono}
-              </div>
-              <button
-                className={`w-full py-3 px-4 rounded-xl font-bold text-white transition-all duration-300 ${
-                  estadisticas.puedeMarcarEntrada 
-                    ? 'bg-white/20 hover:bg-white/30 border-2 border-white/30 hover:border-white/50' 
-                    : 'bg-white/10 border-2 border-white/20 cursor-not-allowed'
-                }`}
-                onClick={() => manejarMarcacion('entrada')}
-                disabled={!estadisticas.puedeMarcarEntrada || marcando}
-              >
-                {marcando ? 'MARCANDO...' : getMarcacionConfig('entrada').textoBoton}
-              </button>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {/* Card de Entrada */}
+          <div className={`${getMarcacionConfig('entrada').claseCard} ${
+            estadisticas.puedeMarcarEntrada ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'
+          }`}>
+            <h3 className="text-white text-lg font-bold mb-4 uppercase tracking-wide">
+              {getMarcacionConfig('entrada').titulo}
+            </h3>
+            <div className="flex justify-center mb-6">
+              {getMarcacionConfig('entrada').icono}
+            </div>
+            <button
+              className={`w-full py-3 px-4 rounded-xl font-bold text-white transition-all duration-300 ${
+                estadisticas.puedeMarcarEntrada 
+                  ? 'bg-white/20 hover:bg-white/30 border-2 border-white/30 hover:border-white/50' 
+                  : 'bg-white/10 border-2 border-white/20 cursor-not-allowed'
+              }`}
+              onClick={() => manejarMarcacion('entrada')}
+              disabled={!estadisticas.puedeMarcarEntrada || marcando}
+            >
+              {marcando ? 'MARCANDO...' : getMarcacionConfig('entrada').textoBoton}
+            </button>
+          </div>
+
+          {/* Card de Salida Refrigerio */}
+          <div className={`${getMarcacionConfig('salida_refrigerio').claseCard} ${
+            estadisticas.puedeMarcarSalidaRefrigerio ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'
+          }`}>
+            <h3 className="text-white text-lg font-bold mb-4 uppercase tracking-wide">
+              {getMarcacionConfig('salida_refrigerio').titulo}
+            </h3>
+            <div className="flex justify-center mb-6">
+              {getMarcacionConfig('salida_refrigerio').icono}
+            </div>
+            <button
+              className={`w-full py-3 px-4 rounded-xl font-bold text-white transition-all duration-300 ${
+                estadisticas.puedeMarcarSalidaRefrigerio 
+                  ? 'bg-white/20 hover:bg-white/30 border-2 border-white/30 hover:border-white/50' 
+                  : 'bg-white/10 border-2 border-white/20 cursor-not-allowed'
+              }`}
+              onClick={() => manejarMarcacion('salida_refrigerio')}
+              disabled={!estadisticas.puedeMarcarSalidaRefrigerio || marcando}
+            >
+              {marcando ? 'MARCANDO...' : getMarcacionConfig('salida_refrigerio').textoBoton}
+            </button>
+          </div>
+
+          {/* Card de Regreso Refrigerio */}
+          <div className={`${getMarcacionConfig('regreso_refrigerio').claseCard} ${
+            estadisticas.puedeMarcarRegresoRefrigerio ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'
+          }`}>
+            <h3 className="text-white text-lg font-bold mb-4 uppercase tracking-wide">
+              {getMarcacionConfig('regreso_refrigerio').titulo}
+            </h3>
+            <div className="flex justify-center mb-6">
+              {getMarcacionConfig('regreso_refrigerio').icono}
+            </div>
+            <button
+              className={`w-full py-3 px-4 rounded-xl font-bold text-white transition-all duration-300 ${
+                estadisticas.puedeMarcarRegresoRefrigerio 
+                  ? 'bg-white/20 hover:bg-white/30 border-2 border-white/30 hover:border-white/50' 
+                  : 'bg-white/10 border-2 border-white/20 cursor-not-allowed'
+              }`}
+              onClick={() => manejarMarcacion('regreso_refrigerio')}
+              disabled={!estadisticas.puedeMarcarRegresoRefrigerio || marcando}
+            >
+              {marcando ? 'MARCANDO...' : getMarcacionConfig('regreso_refrigerio').textoBoton}
+            </button>
+          </div>
+
+          {/* Card de Salida */}
+          <div className={`${getMarcacionConfig('salida').claseCard} ${
+            estadisticas.puedeMarcarSalida ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'
+          }`}>
+            <h3 className="text-white text-lg font-bold mb-4 uppercase tracking-wide">
+              {getMarcacionConfig('salida').titulo}
+            </h3>
+            <div className="flex justify-center mb-6">
+              {getMarcacionConfig('salida').icono}
+            </div>
+            <button
+              className={`w-full py-3 px-4 rounded-xl font-bold text-white transition-all duration-300 ${
+                estadisticas.puedeMarcarSalida 
+                  ? 'bg-white/20 hover:bg-white/30 border-2 border-white/30 hover:border-white/50' 
+                  : 'bg-white/10 border-2 border-white/20 cursor-not-allowed'
+              }`}
+              onClick={() => manejarMarcacion('salida')}
+              disabled={!estadisticas.puedeMarcarSalida || marcando}
+            >
+              {marcando ? 'MARCANDO...' : getMarcacionConfig('salida').textoBoton}
+            </button>
+          </div>
+        </div>
       </div>
-
-            {/* Card de Salida Refrigerio */}
-            <div className={`${getMarcacionConfig('salida_refrigerio').claseCard} ${
-              estadisticas.puedeMarcarSalidaRefrigerio ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'
-            }`}>
-              <h3 className="text-white text-lg font-bold mb-4 uppercase tracking-wide">
-                {getMarcacionConfig('salida_refrigerio').titulo}
-              </h3>
-              <div className="flex justify-center mb-6">
-                {getMarcacionConfig('salida_refrigerio').icono}
-              </div>
-              <button
-                className={`w-full py-3 px-4 rounded-xl font-bold text-white transition-all duration-300 ${
-                  estadisticas.puedeMarcarSalidaRefrigerio 
-                    ? 'bg-white/20 hover:bg-white/30 border-2 border-white/30 hover:border-white/50' 
-                    : 'bg-white/10 border-2 border-white/20 cursor-not-allowed'
-                }`}
-                onClick={() => manejarMarcacion('salida_refrigerio')}
-                disabled={!estadisticas.puedeMarcarSalidaRefrigerio || marcando}
-              >
-                {marcando ? 'MARCANDO...' : getMarcacionConfig('salida_refrigerio').textoBoton}
-              </button>
-            </div>
-
-            {/* Card de Regreso Refrigerio */}
-            <div className={`${getMarcacionConfig('regreso_refrigerio').claseCard} ${
-              estadisticas.puedeMarcarRegresoRefrigerio ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'
-            }`}>
-              <h3 className="text-white text-lg font-bold mb-4 uppercase tracking-wide">
-                {getMarcacionConfig('regreso_refrigerio').titulo}
-              </h3>
-              <div className="flex justify-center mb-6">
-                {getMarcacionConfig('regreso_refrigerio').icono}
-              </div>
-              <button
-                className={`w-full py-3 px-4 rounded-xl font-bold text-white transition-all duration-300 ${
-                  estadisticas.puedeMarcarRegresoRefrigerio 
-                    ? 'bg-white/20 hover:bg-white/30 border-2 border-white/30 hover:border-white/50' 
-                    : 'bg-white/10 border-2 border-white/20 cursor-not-allowed'
-                }`}
-                onClick={() => manejarMarcacion('regreso_refrigerio')}
-                disabled={!estadisticas.puedeMarcarRegresoRefrigerio || marcando}
-              >
-                {marcando ? 'MARCANDO...' : getMarcacionConfig('regreso_refrigerio').textoBoton}
-              </button>
-            </div>
-
-            {/* Card de Salida */}
-            <div className={`${getMarcacionConfig('salida').claseCard} ${
-              estadisticas.puedeMarcarSalida ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'
-            }`}>
-              <h3 className="text-white text-lg font-bold mb-4 uppercase tracking-wide">
-                {getMarcacionConfig('salida').titulo}
-              </h3>
-              <div className="flex justify-center mb-6">
-                {getMarcacionConfig('salida').icono}
-              </div>
-              <button
-                className={`w-full py-3 px-4 rounded-xl font-bold text-white transition-all duration-300 ${
-                  estadisticas.puedeMarcarSalida 
-                    ? 'bg-white/20 hover:bg-white/30 border-2 border-white/30 hover:border-white/50' 
-                    : 'bg-white/10 border-2 border-white/20 cursor-not-allowed'
-                }`}
-                onClick={() => manejarMarcacion('salida')}
-                disabled={!estadisticas.puedeMarcarSalida || marcando}
-              >
-                {marcando ? 'MARCANDO...' : getMarcacionConfig('salida').textoBoton}
-              </button>
-                </div>
-            </div>
-            </div>
 
       {/* Filtros de Registros */}
       <div className="yego-card">
@@ -802,7 +792,7 @@ export const AsistenciaModule: React.FC = () => {
       )}
 
       {/* Pestaña Lista de Asistencia */}
-      {activeTab === 'lista' && canViewLista() && (
+      {activeTab === 'lista' && (
         <AsistenciaListaModule />
       )}
     </div>
