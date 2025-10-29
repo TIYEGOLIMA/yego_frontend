@@ -12,10 +12,20 @@ const api = axios.create({
 })
 
 // 🔐 Interceptor para agregar token automáticamente
+// 🎯 ACTUALIZADO: Leer desde auth-storage (Zustand persist) en lugar de clave directa
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token')
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
+  try {
+    // Leer desde auth-storage
+    const authStorageData = localStorage.getItem('auth-storage')
+    if (authStorageData) {
+      const parsedData = JSON.parse(authStorageData)
+      const token = parsedData?.state?.token || null
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`
+      }
+    }
+  } catch (error) {
+    console.error('❌ [queueAgentService] Error obteniendo token:', error)
   }
   return config
 })
@@ -52,12 +62,18 @@ class QueueAgentService {
     try {
       console.log('🔍 [queueAgentService] ===== INICIANDO ASIGNACIÓN DE MÓDULO =====')
       
-      const userData = localStorage.getItem('user')
-      if (!userData) {
-        throw new Error('No hay datos de usuario')
+      // 🎯 LEER DESDE auth-storage (Zustand persist)
+      const authStorageData = localStorage.getItem('auth-storage')
+      if (!authStorageData) {
+        throw new Error('No hay datos de autenticación')
       }
 
-      const user = JSON.parse(userData)
+      const parsedData = JSON.parse(authStorageData)
+      const user = parsedData?.state?.user || null
+      if (!user?.id) {
+        throw new Error('Usuario no encontrado en auth-storage')
+      }
+
       const userId = user.id
       console.log('🔍 [queueAgentService] User ID:', userId, 'Module ID:', moduleId)
 
@@ -80,9 +96,16 @@ class QueueAgentService {
 
   async liberarModuloDelUsuario(): Promise<void> {
     try {
-      const userData = localStorage.getItem('user')
-      if (!userData) {
-        throw new Error('No hay datos de usuario')
+      // 🎯 LEER DESDE auth-storage
+      const authStorageData = localStorage.getItem('auth-storage')
+      if (!authStorageData) {
+        throw new Error('No hay datos de autenticación')
+      }
+      
+      const parsedData = JSON.parse(authStorageData)
+      const user = parsedData?.state?.user || null
+      if (!user?.id) {
+        throw new Error('Usuario no encontrado')
       }
 
       console.log('⚠️ Función de liberar módulo no implementada en el backend')
@@ -95,13 +118,20 @@ class QueueAgentService {
 
   async recuperarModuloAsignado(): Promise<number | null> {
     try {
-      const userData = localStorage.getItem('user')
-      if (!userData) {
-        console.log('❌ No hay datos de usuario en localStorage')
+      // 🎯 LEER DESDE auth-storage
+      const authStorageData = localStorage.getItem('auth-storage')
+      if (!authStorageData) {
+        console.log('❌ No hay datos de autenticación')
         return null
       }
 
-      const user = JSON.parse(userData)
+      const parsedData = JSON.parse(authStorageData)
+      const user = parsedData?.state?.user || null
+      if (!user?.id) {
+        console.log('❌ Usuario no encontrado en auth-storage')
+        return null
+      }
+
       const userId = user.id
       console.log('🔍 [queueAgentService] Recuperando módulo asignado para usuario:', userId)
 
@@ -141,12 +171,18 @@ class QueueAgentService {
 
   async verificarYUsarModuloExistente(): Promise<ModuleAssignmentResponse> {
     try {
-      const userData = localStorage.getItem('user')
-      if (!userData) {
-        return { success: false, message: 'No hay datos de usuario', existing: false }
+      // 🎯 LEER DESDE auth-storage
+      const authStorageData = localStorage.getItem('auth-storage')
+      if (!authStorageData) {
+        return { success: false, message: 'No hay datos de autenticación', existing: false }
       }
 
-      const user = JSON.parse(userData)
+      const parsedData = JSON.parse(authStorageData)
+      const user = parsedData?.state?.user || null
+      if (!user?.id) {
+        return { success: false, message: 'Usuario no encontrado', existing: false }
+      }
+
       const userId = user.id
       console.log('🔍 [queueAgentService] Verificando módulo existente para usuario:', userId)
 

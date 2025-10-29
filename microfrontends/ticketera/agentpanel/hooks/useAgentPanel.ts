@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { ticketService } from '../services/ticketService'
 import { queueAgentService } from '../services/queueAgentService'
 import { validationService } from '../services/validationService'
@@ -66,12 +66,88 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
   
   
   // 🎯 WebSocket para AgentPanel
-  const { client, isConnected, subscribe } = useSocket()
+  const { isConnected, subscribe } = useSocket()
+  
+  // 🎯 Usar useRef para evitar múltiples llamadas al endpoint de módulos
+  const hasLoadedModules = useRef(false)
+  const isLoadingModules = useRef(false)
+
+  // 🎯 HELPER: Obtener datos del usuario desde auth-storage
+  const getCurrentUser = useCallback(() => {
+    try {
+      const authStorageData = localStorage.getItem('auth-storage')
+      if (!authStorageData) return null
+      
+      const parsedData = JSON.parse(authStorageData)
+      const user = parsedData?.state?.user || null
+      
+      if (!user?.id) return null
+      return user
+    } catch (error) {
+      console.error('❌ [useAgentPanel] Error obteniendo usuario:', error)
+      return null
+    }
+  }, [])
+
+  // 🎯 FUNCIÓN ASÍNCRONA: Obtener nombre del conductor y actualizar estado
+  const obtenerNombreConductorAsync = useCallback(async (ticket: any) => {
+    if (!ticket.licenseNumber || (ticket.driverName && !ticket.driverName.includes('Conductor:'))) {
+      return Promise.resolve()
+    }
+
+    try {
+      // Verificar caché primero
+      const cache = JSON.parse(localStorage.getItem('driver_names_cache') || '{}')
+      if (cache[ticket.licenseNumber]?.name) {
+        console.log('📋 [AgentPanel] Nombre desde caché:', cache[ticket.licenseNumber].name, 'para', ticket.ticketNumber)
+        // Actualizar el estado inmediatamente con el nombre del caché
+        setTickets(prevTickets => 
+          prevTickets.map(t => 
+            t.id === ticket.id 
+              ? { ...t, driverName: cache[ticket.licenseNumber].name }
+              : t
+          )
+        )
+        return Promise.resolve()
+      }
+
+      // Si no está en caché, consultar API
+      console.log('🔍 [AgentPanel] Consultando nombre para:', ticket.ticketNumber, ticket.licenseNumber)
+      const { validationService } = await import('../services/validationService')
+      const driverData = await validationService.getDriverByPhonePublic(ticket.licenseNumber)
+      
+      if (driverData?.full_name) {
+        const normalizedName = normalizeDriverName(driverData.full_name)
+        
+        // Guardar en caché
+        const newCache = { ...cache }
+        newCache[ticket.licenseNumber] = { name: normalizedName, timestamp: Date.now() }
+        localStorage.setItem('driver_names_cache', JSON.stringify(newCache))
+        
+        // Actualizar el estado inmediatamente
+        setTickets(prevTickets => 
+          prevTickets.map(t => 
+            t.id === ticket.id 
+              ? { ...t, driverName: normalizedName }
+              : t
+          )
+        )
+        
+        console.log('✅ [AgentPanel] Nombre encontrado y actualizado:', normalizedName, 'para', ticket.ticketNumber)
+        return Promise.resolve()
+      } else {
+        console.log('❌ [AgentPanel] No se encontró nombre para:', ticket.ticketNumber, ticket.licenseNumber)
+        return Promise.resolve()
+      }
+    } catch (error) {
+      console.log('❌ [AgentPanel] Error obteniendo nombre para:', ticket.ticketNumber, error)
+      return Promise.reject(error)
+    }
+  }, [])
   
   // 🎯 SUSCRIPCIONES DE WEBSOCKET PARA ACTUALIZACIONES EN TIEMPO REAL
   useEffect(() => {
     if (!isConnected) {
-      // console.log('🔌 [AgentPanel] WebSocket no conectado - esperando conexión...')
       return
     }
     
@@ -275,9 +351,7 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
         }
       })
     }
-  }, [isConnected]) // ✅ Solo depende de la conexión, no del módulo seleccionado
-       
-  
+  }, [isConnected, selectedModule, obtenerNombreConductorAsync])
   // 🎯 ESTADO PARA TICKETS EN PROCESO (loading)
   const [ticketsEnProceso, setTicketsEnProceso] = useState<Set<number>>(new Set())
 
@@ -307,69 +381,27 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
     setTimeout(() => setShowError(false), 3000)
   }, [])
 
-  // 🎯 FUNCIÓN ASÍNCRONA: Obtener nombre del conductor y actualizar estado
-  const obtenerNombreConductorAsync = useCallback(async (ticket: any) => {
-    if (!ticket.licenseNumber || (ticket.driverName && !ticket.driverName.includes('Conductor:'))) {
-      return Promise.resolve()
-    }
-
-    try {
-      // Verificar caché primero
-      const cache = JSON.parse(localStorage.getItem('driver_names_cache') || '{}')
-      if (cache[ticket.licenseNumber]?.name) {
-        console.log('📋 [AgentPanel] Nombre desde caché:', cache[ticket.licenseNumber].name, 'para', ticket.ticketNumber)
-        // Actualizar el estado inmediatamente con el nombre del caché
-        setTickets(prevTickets => 
-          prevTickets.map(t => 
-            t.id === ticket.id 
-              ? { ...t, driverName: cache[ticket.licenseNumber].name }
-              : t
-          )
-        )
-        return Promise.resolve()
-      }
-
-      // Si no está en caché, consultar API
-      console.log('🔍 [AgentPanel] Consultando nombre para:', ticket.ticketNumber, ticket.licenseNumber)
-      const { validationService } = await import('../services/validationService')
-      const driverData = await validationService.getDriverByPhonePublic(ticket.licenseNumber)
-      
-      if (driverData?.full_name) {
-        const normalizedName = normalizeDriverName(driverData.full_name)
-        
-        // Guardar en caché
-        const newCache = { ...cache }
-        newCache[ticket.licenseNumber] = { name: normalizedName, timestamp: Date.now() }
-        localStorage.setItem('driver_names_cache', JSON.stringify(newCache))
-        
-        // Actualizar el estado inmediatamente
-        setTickets(prevTickets => 
-          prevTickets.map(t => 
-            t.id === ticket.id 
-              ? { ...t, driverName: normalizedName }
-              : t
-          )
-        )
-        
-        console.log('✅ [AgentPanel] Nombre encontrado y actualizado:', normalizedName, 'para', ticket.ticketNumber)
-        return Promise.resolve()
-      } else {
-        console.log('❌ [AgentPanel] No se encontró nombre para:', ticket.ticketNumber, ticket.licenseNumber)
-        return Promise.resolve()
-      }
-    } catch (error) {
-      console.log('❌ [AgentPanel] Error obteniendo nombre para:', ticket.ticketNumber, error)
-      return Promise.reject(error)
-    }
-  }, [])
-
   // 🎯 FUNCIÓN SIMPLE: Cargar módulos
   const cargarModulos = useCallback(async () => {
+    // 🎯 EVITAR LLAMADAS MÚLTIPLES: Si ya se están cargando o ya se cargaron, no hacer nada
+    if (isLoadingModules.current) {
+      console.log('⚠️ [useAgentPanel] Ya se están cargando módulos, evitando llamada duplicada')
+      return
+    }
+    
+    if (hasLoadedModules.current) {
+      console.log('⚠️ [useAgentPanel] Los módulos ya fueron cargados, evitando llamada duplicada')
+      return
+    }
+    
+    isLoadingModules.current = true
+    
     try {
       const { moduloAtencionService } = await import('../services/moduloAtencionService')
       const modulos = await moduloAtencionService.getFrontendModules()
       setModules(modulos)
-      console.log('✅ Módulos cargados del backend:', modulos.length)
+      hasLoadedModules.current = true // Marcar como cargado
+      console.log('✅ [useAgentPanel] Módulos cargados del backend:', modulos.length)
     } catch (error: any) {
       console.error('Error cargando módulos:', error)
       
@@ -388,8 +420,10 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       }
       
       mostrarError('Error al cargar módulos')
+    } finally {
+      isLoadingModules.current = false // Marcar como terminado
     }
-  }, [mostrarError])
+  }, [mostrarError]) // Sin modules.length para evitar recreaciones
 
   // 🎯 FUNCIÓN REAL: Cargar tickets del backend
   const cargarTickets = useCallback(async (esConsultaAutomatica = false) => {
@@ -415,16 +449,8 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       }
       
       // 🎯 OBTENER AGENT ID DEL USUARIO ACTUAL
-      let currentAgentId: number | null = null
-      const userData = localStorage.getItem('user')
-      if (userData) {
-        try {
-          const user = JSON.parse(userData)
-          currentAgentId = user.id
-        } catch (error) {
-          console.error('❌ [AgentPanel] Error parseando datos del usuario:', error)
-        }
-      }
+      const currentUser = getCurrentUser()
+      const currentAgentId = currentUser?.id || null
       
       // 🎯 FILTRAR TICKETS RELEVANTES PARA ESTE MÓDULO
       const ticketsRelevantes = todosLosTicketsBackend.filter(ticket => {
@@ -753,7 +779,7 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       
       mostrarError('Error al cargar tickets del backend')
     }
-  }, [selectedModule, mostrarError])
+  }, [selectedModule, mostrarError, getCurrentUser])
 
   // 🎯 FUNCIÓN SIMPLE: Llamar ticket
   const llamarTicket = useCallback(async (ticket: Ticket) => {
@@ -768,9 +794,13 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
     try {
       console.log('🎯 [AgentPanel] Llamando ticket:', ticket.id)
       
-      // 🎯 Obtener el userId del usuario logueado del localStorage
-      const user = JSON.parse(localStorage.getItem('user') || '{}')
-      const userId = user.id
+      // 🎯 Obtener el userId del usuario actual
+      const currentUser = getCurrentUser()
+      if (!currentUser?.id) {
+        mostrarError('No se pudo identificar el usuario')
+        return
+      }
+      const userId = currentUser.id
       
       // Llamar ticket vía API
       const updatedTicket = await ticketService.callTicket(ticket.id, userId, selectedModule)
@@ -806,7 +836,7 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       console.error('❌ [AgentPanel] Error llamando ticket:', error)
       mostrarError('Error al llamar el ticket')
     }
-  }, [selectedModule, mostrarError])
+  }, [selectedModule, mostrarError, getCurrentUser])
 
   // Función para atender un ticket
   const atenderTicket = useCallback(async (ticket: Ticket) => {
@@ -821,19 +851,9 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       
       console.log('⚡ Atendiendo ticket:', ticket.ticketNumber)
       
-      // 🎯 OBTENER AGENT ID DEL LOCALSTORAGE SI NO ESTÁ EN EL TICKET
-      let agentId = ticket.userId
-      if (!agentId) {
-        const userData = localStorage.getItem('user')
-        if (userData) {
-          try {
-            const user = JSON.parse(userData)
-            agentId = user.id
-          } catch (error) {
-            console.error('❌ [AgentPanel] Error parseando datos del usuario:', error)
-          }
-        }
-      }
+      // 🎯 OBTENER AGENT ID
+      const currentUser = getCurrentUser()
+      const agentId = ticket.userId || currentUser?.id
       
       if (!agentId) {
         mostrarError('No se pudo identificar el agente. Por favor, inicie sesión nuevamente.')
@@ -876,7 +896,7 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       // 🎯 NUEVO: Desmarcar ticket como en proceso
       desmarcarTicketEnProceso(ticket.id)
     }
-  }, [selectedModule, marcarTicketEnProceso, desmarcarTicketEnProceso, mostrarError])
+  }, [selectedModule, marcarTicketEnProceso, desmarcarTicketEnProceso, mostrarError, getCurrentUser])
 
   // 🎯 FUNCIÓN PARA COMPLETAR TICKET
   const completarTicket = useCallback(async (ticket: Ticket, notes?: string) => {
@@ -888,19 +908,9 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
     try {
       console.log('🎯 [AgentPanel] Completando ticket:', ticket.id)
       
-      // 🎯 Para tickets en espera, obtener el ID del agente del localStorage
-      let agentId = ticket.userId
-      if (!agentId) {
-        const userData = localStorage.getItem('user')
-        if (userData) {
-          try {
-            const user = JSON.parse(userData)
-            agentId = user.id
-          } catch (error) {
-            console.error('❌ [AgentPanel] Error parseando datos del usuario:', error)
-          }
-        }
-      }
+      // 🎯 OBTENER AGENT ID
+      const currentUser = getCurrentUser()
+      const agentId = ticket.userId || currentUser?.id
       
       if (!agentId) {
         mostrarError('No se pudo identificar el agente. Por favor, inicie sesión nuevamente.')
@@ -927,7 +937,7 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       console.error('❌ [AgentPanel] Error completando ticket:', error)
       mostrarError('Error al completar el ticket')
     }
-  }, [selectedModule, mostrarError])
+  }, [selectedModule, mostrarError, getCurrentUser])
 
   // 🎯 FUNCIÓN PARA CANCELAR TICKET
   const cancelarTicket = useCallback(async (ticket: Ticket) => {
@@ -939,19 +949,9 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
     try {
       console.log('🎯 [AgentPanel] Cancelando ticket:', ticket.id)
       
-      // 🎯 Para tickets en espera, obtener el ID del agente del localStorage
-      let agentId = ticket.userId
-      if (!agentId) {
-        const userData = localStorage.getItem('user')
-        if (userData) {
-          try {
-            const user = JSON.parse(userData)
-            agentId = user.id
-          } catch (error) {
-            console.error('❌ [AgentPanel] Error parseando datos del usuario:', error)
-          }
-        }
-      }
+      // 🎯 OBTENER AGENT ID
+      const currentUser = getCurrentUser()
+      const agentId = ticket.userId || currentUser?.id
       
       if (!agentId) {
         mostrarError('No se pudo identificar el agente. Por favor, inicie sesión nuevamente.')
@@ -1106,40 +1106,19 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
     const ticketsWaiting = tickets.filter(t => t.status === 'WAITING')
     const ticketsInProgress = tickets.filter(t => t.status === 'IN_PROGRESS')
     
-    // 🎯 ORDENAR POR FECHA DE CREACIÓN (FIFO - First In, First Out)
-    const ticketsOrdenados = ticketsWaiting.sort((a, b) => {
-      // Usar createdAt si está disponible, sino usar id como fallback
+    // Ordenar por fecha de creación (FIFO - First In, First Out)
+    const ticketsOrdenados = [...ticketsWaiting].sort((a, b) => {
       const fechaA = a.createdAt ? new Date(a.createdAt).getTime() : a.id
       const fechaB = b.createdAt ? new Date(b.createdAt).getTime() : b.id
-      return fechaA - fechaB // Orden ascendente (más antiguo primero)
+      return fechaA - fechaB
     })
-    
-    // 🎯 DEBUG: Verificar detalles de tickets en espera
-    if (ticketsOrdenados.length > 0) {
-      console.log('📋 [AgentPanel] DETALLES de tickets en espera:')
-      ticketsOrdenados.forEach((ticket, index) => {
-        console.log(`  Ticket ${index + 1} (${ticket.ticketNumber}):`, {
-          driverName: ticket.driverName,
-          licenseNumber: ticket.licenseNumber,
-          categoryName: ticket.categoryName,
-          subcategoryName: ticket.subcategoryName,
-          categoryDescription: ticket.categoryDescription,
-          subcategoryDescription: ticket.subcategoryDescription,
-          optionId: ticket.optionId,
-          priority: ticket.priority
-        })
-      })
-    }
     
     // Si hay tickets en proceso, solo mostrar 1 ticket en espera (el más antiguo)
     if (ticketsInProgress.length > 0) {
-      const result = ticketsOrdenados.slice(0, 1)
-      console.log('🔍 [AgentPanel] Hay tickets en proceso, mostrando solo el más antiguo:', result.length)
-      return result
+      return ticketsOrdenados.slice(0, 1)
     }
     
     // Si no hay tickets en proceso, mostrar todos los tickets en espera ordenados
-    console.log('🔍 [AgentPanel] No hay tickets en proceso, mostrando todos ordenados:', ticketsOrdenados.length)
     return ticketsOrdenados
   }, [tickets])
 

@@ -180,8 +180,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     const urlWithoutSlash = normalizedUrl.replace(/\/$/, '');
     
     // Módulos que van al dropdown de Sistemas
-    const sistemasPaths = ['garantizado', 'reports', 'reportes', 'asistencia'];
-    const sistemasNames = ['garantizado', 'reporte', 'reportes', 'asistencia'];
+    const sistemasPaths = ['garantizado', 'reports', 'reportes', 'asistencia', 'tickets', 'ticket'];
+    const sistemasNames = ['garantizado', 'reporte', 'reportes', 'asistencia', 'tickets', 'ticket'];
     
     // Verificar por URL (sin slashes iniciales/finales)
     const matchesUrl = sistemasPaths.some(path => 
@@ -200,78 +200,113 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     return matchesUrl || matchesName;
   };
 
+  // Helper: Normalizar URL
+  const normalizeUrl = (url?: string): string => {
+    if (!url) return '';
+    return url.startsWith('/') ? url : `/${url}`;
+  };
+
+  // Helper: Crear NavItem desde módulo
+  const createNavItemFromModule = (module: Module, icon?: React.ReactNode): NavItem => ({
+    label: module.nombre || '',
+    to: normalizeUrl(module.url),
+    icon: icon || getModuleIcon(module),
+    requiredPermission: null
+  });
+
+  // Función para obtener el orden de prioridad de un módulo
+  const getModuleOrder = (module: Module): number => {
+    const name = module.nombre?.toLowerCase().trim() || '';
+    const url = (module.url || '').toLowerCase().replace(/^\/+|\/+$/g, '');
+    
+    // Orden definido:
+    if (name === 'dashboard' || name.includes('dashboard') || 
+        url === 'dashboard' || url.includes('dashboard')) return 1;
+    if (isSistemaModule(module)) return 2;
+    if (name === 'usuarios' || name === 'usuario' || name.includes('usuario') ||
+        url === 'users' || url === 'user' || url.includes('users') || url.includes('user')) return 3;
+    if (name === 'modulos' || name === 'módulos' || name === 'modulo' || name === 'módulo' ||
+        name.includes('modulo') || name.includes('módulo') ||
+        url === 'modules' || url === 'module' || url.includes('modules') || url.includes('module')) return 4;
+    if (name === 'permisos' || name === 'permiso' || name.includes('permiso') ||
+        url === 'permissions' || url === 'permission' || url.includes('permissions') || url.includes('permission')) return 5;
+    if (name === 'roles' || name === 'rol' || 
+        (name.includes('rol') && !name.includes('control') && !name.includes('auditor')) ||
+        url === 'roles' || url === 'role' || url.includes('roles') || url.includes('role')) return 6;
+    if (name === 'configuraciones' || name === 'configuración' || name === 'configuracion' ||
+        name.includes('configuración') || name.includes('configuracion') ||
+        url === 'configuration' || url === 'configurations' || 
+        url.includes('configuration') || url.includes('configurations')) return 7;
+    return 999; // Otros módulos
+  };
+
   // Convertir módulos del backend a NavItems
   const buildNavItemsFromModules = (): NavItem[] => {
-    const navItems: NavItem[] = [];
-    const sistemaModules: Module[] = [];
-    const mainModules: Module[] = [];
+    if (!modules || modules.length === 0) return [];
 
-    // Si hay módulos del backend, organizarlos
-    if (modules && modules.length > 0) {
-      modules.forEach((module: Module) => {
-        if (module.activo) {
-          // Identificar si es Dashboard (buscar en URL y nombre)
-          const moduleUrl = module.url?.toLowerCase().replace(/^\/+|\/+$/g, '') || '';
-          const moduleNombre = module.nombre?.toLowerCase().trim() || '';
-          const isDashboard = moduleUrl === 'dashboard' || 
-                              moduleUrl.includes('dashboard') ||
-                              moduleNombre === 'dashboard' ||
-                              moduleNombre.includes('dashboard');
-          
-          if (isDashboard) {
-            // Agregar Dashboard primero al inicio si está en los módulos permitidos
-            const dashboardUrl = module.url?.startsWith('/') ? module.url : `/${module.url}`;
-            navItems.unshift({
-              label: module.nombre || "Dashboard",
-              to: dashboardUrl,
-              icon: <LayoutDashboard className="h-5 w-5" />,
-              requiredPermission: null
-            });
-            console.log('📊 [MainLayout] Dashboard agregado al menú:', {
-              nombre: module.nombre,
-              url: dashboardUrl,
-              activo: module.activo
-            });
-            return;
-          }
-          
-          if (isSistemaModule(module)) {
-            sistemaModules.push(module);
-          } else {
-            mainModules.push(module);
-          }
+    // Organizar módulos por orden en un mapa
+    const modulesByOrder = new Map<number, Module[]>();
+    
+    modules
+      .filter(module => module.activo)
+      .forEach(module => {
+        const order = getModuleOrder(module);
+        if (!modulesByOrder.has(order)) {
+          modulesByOrder.set(order, []);
+        }
+        modulesByOrder.get(order)!.push(module);
+        
+        if (order === 999) {
+          console.log(`🔍 [MainLayout] Módulo no categorizado: "${module.nombre}" (URL: "${module.url}")`);
         }
       });
 
-      // Si hay módulos del sistema, crear dropdown de Sistemas
-      if (sistemaModules.length > 0) {
-        navItems.push({
-          label: "Sistemas",
-          to: "dropdown",
-          icon: <Server className="h-5 w-5" />,
-          requiredPermission: null,
-          children: sistemaModules.map(module => ({
-            label: module.nombre,
-            to: module.url.startsWith('/') ? module.url : `/${module.url}`,
-            icon: getModuleIcon(module),
-            requiredPermission: null
-          }))
+    const navItems: NavItem[] = [];
+    
+    // Orden de renderizado: Dashboard(1) -> Sistemas(2) -> Usuarios(3) -> Módulos(4) -> Permisos(5) -> Roles(6) -> Configuraciones(7) -> Otros(999)
+    const renderOrder = [1, 2, 3, 4, 5, 6, 7, 999];
+    
+    renderOrder.forEach(order => {
+      const modulesInOrder = modulesByOrder.get(order) || [];
+      
+      if (order === 1) {
+        // Dashboard con icono especial
+        modulesInOrder.forEach(module => {
+          navItems.push({
+            ...createNavItemFromModule(module),
+            icon: <LayoutDashboard className="h-5 w-5" />
+          });
+        });
+      } else if (order === 2) {
+        // Sistemas (dropdown)
+        if (modulesInOrder.length > 0) {
+          navItems.push({
+            label: "Sistemas",
+            to: "dropdown",
+            icon: <Server className="h-5 w-5" />,
+            requiredPermission: null,
+            children: modulesInOrder.map(module => createNavItemFromModule(module))
+          });
+        }
+      } else {
+        // Resto de módulos individuales
+        modulesInOrder.forEach(module => {
+          navItems.push(createNavItemFromModule(module));
         });
       }
+    });
 
-      // Agregar módulos principales directamente al menú
-      mainModules.forEach((module) => {
-        navItems.push({
-          label: module.nombre,
-          to: module.url.startsWith('/') ? module.url : `/${module.url}`,
-          icon: getModuleIcon(module),
-          requiredPermission: null // Los permisos ya están manejados por el backend
-        });
-      });
-    }
-    // Nota: No usar fallback estático aquí - los módulos se cargarán dinámicamente
-    // y el menú se actualizará reactivamente cuando lleguen
-    
+    console.log(`📋 [MainLayout] Módulos organizados:`, {
+      dashboard: modulesByOrder.get(1)?.length || 0,
+      sistemas: modulesByOrder.get(2)?.length || 0,
+      usuarios: modulesByOrder.get(3)?.length || 0,
+      modulos: modulesByOrder.get(4)?.length || 0,
+      permisos: modulesByOrder.get(5)?.length || 0,
+      roles: modulesByOrder.get(6)?.length || 0,
+      configuraciones: modulesByOrder.get(7)?.length || 0,
+      otros: modulesByOrder.get(999)?.length || 0
+    });
+
     return navItems;
   };
 

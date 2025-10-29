@@ -15,17 +15,27 @@ export const useAuth = () => {
       // console.log('🔐 [AgentPanel] Cargando datos de usuario del sistema principal...')
       
       try {
-        const userData = localStorage.getItem('user')
-        const token = localStorage.getItem('token')
+        // 🎯 LEER DESDE auth-storage (Zustand persist) en lugar de claves directas
+        const authStorageData = localStorage.getItem('auth-storage')
         
-        if (!userData || !token) {
-          console.log('❌ [AgentPanel] No hay datos de autenticación - usuario no logueado')
+        if (!authStorageData) {
+          console.log('❌ [AgentPanel] No hay datos de autenticación (auth-storage no encontrado) - usuario no logueado')
           setCurrentUser(null)
           setLoading(false)
           return
         }
         
-        const user = JSON.parse(userData)
+        // Parsear el estado de Zustand persist
+        const parsedData = JSON.parse(authStorageData)
+        const user = parsedData?.state?.user || null
+        const token = parsedData?.state?.token || null
+        
+        if (!user || !token) {
+          console.log('❌ [AgentPanel] No hay usuario o token en auth-storage - usuario no logueado')
+          setCurrentUser(null)
+          setLoading(false)
+          return
+        }
         
         // Validar que el usuario tenga los campos necesarios
         if (!user.id || !user.username || !user.role) {
@@ -55,9 +65,10 @@ export const useAuth = () => {
     loadUserFromStorage()
 
     // Escuchar cambios en localStorage (para cuando el usuario haga login/logout desde otra pestaña)
+    // Ahora escuchamos cambios en 'auth-storage' que es donde Zustand guarda los datos
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'user' || e.key === 'token') {
-        console.log('🔄 [AgentPanel] Cambio detectado en localStorage, recargando usuario...')
+      if (e.key === 'auth-storage') {
+        console.log('🔄 [AgentPanel] Cambio detectado en auth-storage, recargando usuario...')
         loadUserFromStorage()
       }
     }

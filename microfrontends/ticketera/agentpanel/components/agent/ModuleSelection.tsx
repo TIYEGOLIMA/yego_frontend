@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card'
 import { Button } from '../ui/Button'
@@ -20,10 +20,26 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({ onModuleSelect
   
   const navigate = useNavigate()
 
-  // Obtener datos del usuario desde localStorage (compartido con el sistema principal)
+  // Obtener datos del usuario desde auth-storage (Zustand persist)
   const [user, setUser] = useState<any>(null)
+  
+  // 🎯 Usar useRef para evitar múltiples llamadas al endpoint
+  const hasLoadedModules = useRef(false)
+  const isLoadingModules = useRef(false)
 
   const loadModules = useCallback(async () => {
+    // 🎯 EVITAR LLAMADAS MÚLTIPLES: Si ya se están cargando o ya se cargaron, no hacer nada
+    if (isLoadingModules.current) {
+      console.log('⚠️ [ModuleSelection] Ya se están cargando módulos, evitando llamada duplicada')
+      return
+    }
+    
+    if (hasLoadedModules.current) {
+      console.log('⚠️ [ModuleSelection] Los módulos ya fueron cargados, evitando llamada duplicada')
+      return
+    }
+    
+    isLoadingModules.current = true
     try {
       setLoading(true)
       setError(null)
@@ -33,7 +49,19 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({ onModuleSelect
       const activeModules = await moduloAtencionService.getFrontendModules()
       
       console.log('✅ [ModuleSelection] Módulos cargados:', activeModules)
-      setModules(activeModules)
+      console.log('📊 [ModuleSelection] Cantidad de módulos:', activeModules?.length || 0)
+      console.log('📊 [ModuleSelection] Tipo de datos:', Array.isArray(activeModules))
+      
+      // Asegurar que activeModules es un array
+      if (Array.isArray(activeModules)) {
+        setModules(activeModules)
+        hasLoadedModules.current = true // Marcar como cargado
+        console.log('✅ [ModuleSelection] Módulos establecidos en el estado:', activeModules.length)
+      } else {
+        console.error('❌ [ModuleSelection] activeModules no es un array:', typeof activeModules)
+        setModules([])
+        setError('Error: Los datos recibidos no son válidos')
+      }
       
     } catch (error: any) {
       console.error('❌ [ModuleSelection] Error cargando módulos:', error)
@@ -61,22 +89,41 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({ onModuleSelect
       }
     } finally {
       setLoading(false)
+      isLoadingModules.current = false // Marcar como terminado
     }
-  }, [])
+  }, []) // Sin dependencias - solo se crea una vez
 
   useEffect(() => {
     const getUserData = () => {
       try {
-        const userData = localStorage.getItem('user')
-        const token = localStorage.getItem('token')
+        // 🎯 LEER DESDE auth-storage (Zustand persist) en lugar de claves directas
+        const authStorageData = localStorage.getItem('auth-storage')
         
-        if (!userData || !token) {
+        if (!authStorageData) {
+          console.log('❌ [ModuleSelection] No hay datos de autenticación (auth-storage no encontrado)')
           return null
         }
         
-        return JSON.parse(userData)
+        // Parsear el estado de Zustand persist
+        const parsedData = JSON.parse(authStorageData)
+        const user = parsedData?.state?.user || null
+        const token = parsedData?.state?.token || null
+        
+        if (!user || !token) {
+          console.log('❌ [ModuleSelection] No hay usuario o token en auth-storage')
+          return null
+        }
+        
+        // Validar que el usuario tenga los campos necesarios
+        if (!user.id || !user.username || !user.role) {
+          console.log('❌ [ModuleSelection] Datos de usuario inválidos:', user)
+          return null
+        }
+        
+        console.log('✅ [ModuleSelection] Usuario cargado desde auth-storage:', user.username)
+        return user
       } catch (error) {
-        console.error('Error obteniendo datos del usuario:', error)
+        console.error('❌ [ModuleSelection] Error obteniendo datos del usuario:', error)
         return null
       }
     }
@@ -95,8 +142,15 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({ onModuleSelect
       return
     }
     
+    // 🎯 Solo cargar módulos una vez cuando el usuario esté disponible
+    // Resetear la bandera cuando el usuario cambia
+    if (hasLoadedModules.current) {
+      console.log('⚠️ [ModuleSelection] Los módulos ya fueron cargados para este usuario')
+      return
+    }
+    
     loadModules()
-  }, [user, navigate, loadModules])
+  }, [user, navigate]) // Removido loadModules de las dependencias para evitar re-renders
 
   const handleModuleSelect = async (moduleId: number) => {
     if (!user) {
@@ -132,14 +186,28 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({ onModuleSelect
         console.log('🔄 [ModuleSelection] Asignación de módulo:', response.moduleAssignment)
         console.log('🔄 [ModuleSelection] ModuleId asignado:', response.moduleAssignment.moduleId)
         
-        // Actualizar el usuario en localStorage con el nuevo moduleId
+        // Actualizar el usuario en auth-storage con el nuevo moduleId
         if (user && response.moduleAssignment) {
-          const updatedUser = {
-            ...user,
-            moduleId: response.moduleAssignment.moduleId
-          };
-          console.log('🔄 [ModuleSelection] Usuario actualizado con moduleId:', updatedUser);
-          localStorage.setItem('user', JSON.stringify(updatedUser));
+          try {
+            const authStorageData = localStorage.getItem('auth-storage')
+            if (authStorageData) {
+              const parsedData = JSON.parse(authStorageData)
+              const updatedAuthStorage = {
+                ...parsedData,
+                state: {
+                  ...parsedData.state,
+                  user: {
+                    ...parsedData.state.user,
+                    moduleId: response.moduleAssignment.moduleId
+                  }
+                }
+              }
+              localStorage.setItem('auth-storage', JSON.stringify(updatedAuthStorage))
+              console.log('🔄 [ModuleSelection] Usuario actualizado en auth-storage con moduleId:', response.moduleAssignment.moduleId)
+            }
+          } catch (error) {
+            console.error('❌ [ModuleSelection] Error actualizando usuario en auth-storage:', error)
+          }
         }
         
         // Notificar al componente padre
@@ -150,7 +218,7 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({ onModuleSelect
         console.log('🔄 [ModuleSelection] Redirigiendo a /tickets...')
         setTimeout(() => {
           window.location.href = '/tickets'
-        }, 1000) // Esperar 1 segundo para que se actualice el localStorage
+        }, 1000) // Esperar 1 segundo para que se actualice auth-storage
         
       } else {
         console.log('❌ [ModuleSelection] Respuesta no exitosa:', response)
@@ -241,6 +309,31 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({ onModuleSelect
     )
   }
 
+  // Verificar si hay módulos para mostrar
+  if (modules.length === 0 && !loading && !error) {
+    console.log('⚠️ [ModuleSelection] No hay módulos para mostrar, pero no hay error ni loading')
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center max-w-md">
+          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-yellow-800 dark:text-yellow-200 mb-2">
+              No hay módulos disponibles
+            </h3>
+            <p className="text-yellow-600 dark:text-yellow-400 mb-4">
+              No se encontraron módulos de atención disponibles. Contacte al administrador.
+            </p>
+            <Button 
+              onClick={loadModules}
+              className="bg-yellow-600 hover:bg-yellow-700 text-white"
+            >
+              Reintentar
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
       <div className="max-w-6xl mx-auto">
@@ -259,6 +352,10 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({ onModuleSelect
             <p className="text-sm text-red-700 dark:text-red-300 font-medium">
                Es obligatorio seleccionar un módulo para continuar
             </p>
+          </div>
+          {/* Debug info */}
+          <div className="mt-2 text-xs text-gray-400">
+            Módulos disponibles: {modules.length}
           </div>
         </div>
         

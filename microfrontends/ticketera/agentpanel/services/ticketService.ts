@@ -15,10 +15,20 @@ const api = axios.create({
 })
 
 // 🔐 Interceptor para agregar token automáticamente
+// 🎯 ACTUALIZADO: Leer desde auth-storage (Zustand persist) en lugar de clave directa
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token')
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
+  try {
+    // Leer desde auth-storage
+    const authStorageData = localStorage.getItem('auth-storage')
+    if (authStorageData) {
+      const parsedData = JSON.parse(authStorageData)
+      const token = parsedData?.state?.token || null
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`
+      }
+    }
+  } catch (error) {
+    console.error('❌ [ticketService] Error obteniendo token:', error)
   }
   return config
 })
@@ -31,20 +41,36 @@ api.interceptors.response.use(
       try {
         console.log('🔄 [ticketService] Token expirado, intentando renovar...')
         
-        const currentToken = localStorage.getItem('token')
-        if (currentToken) {
-          // Usar el endpoint específico de ticketera
-          const refreshResponse = await api.post('/ticketera/auth/refresh', {}, {
-            headers: { 'Authorization': `Bearer ${currentToken}` }
-          })
+        // 🎯 LEER TOKEN DESDE auth-storage
+        const authStorageData = localStorage.getItem('auth-storage')
+        if (authStorageData) {
+          const parsedData = JSON.parse(authStorageData)
+          const currentToken = parsedData?.state?.token || null
           
-          // Actualizar token
-          const newToken = refreshResponse.data.accessToken
-          localStorage.setItem('token', newToken)
-          
-          // Reintentar request original
-          error.config.headers['Authorization'] = `Bearer ${newToken}`
-          return api.request(error.config)
+          if (currentToken) {
+            // Usar el endpoint específico de ticketera
+            const refreshResponse = await api.post('/ticketera/auth/refresh', {}, {
+              headers: { 'Authorization': `Bearer ${currentToken}` }
+            })
+            
+            // Actualizar token en auth-storage
+            const newToken = refreshResponse.data.accessToken
+            if (newToken) {
+              // Actualizar auth-storage con el nuevo token
+              const updatedAuthStorage = {
+                ...parsedData,
+                state: {
+                  ...parsedData.state,
+                  token: newToken
+                }
+              }
+              localStorage.setItem('auth-storage', JSON.stringify(updatedAuthStorage))
+            }
+            
+            // Reintentar request original
+            error.config.headers['Authorization'] = `Bearer ${newToken}`
+            return api.request(error.config)
+          }
         }
       } catch (refreshError) {
         console.warn('⚠️ [ticketService] Error renovando token:', refreshError)

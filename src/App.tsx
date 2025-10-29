@@ -284,19 +284,28 @@ const PermissionRoute = ({ children, module }: { children: React.ReactNode, modu
       
       // VERIFICACIÓN ADICIONAL: Si el módulo es parte del sistema core y el usuario es SUPERADMIN/ADMIN, permitir acceso
       // Esto es un fallback de seguridad para módulos que deberían estar disponibles pero no están en la lista del backend
-      const coreModules = ['users', 'usuarios', 'roles', 'permissions', 'permisos', 'modules', 'módulos', 'modules ', 'imports', 'audit', 'sessions', 'configuration', 'dashboard'];
+      const coreModules = ['users', 'usuarios', 'roles', 'permissions', 'permisos', 'modules', 'módulos', 'modules ', 'imports', 'audit', 'sessions', 'configuration', 'dashboard', 'tickets'];
       const isCoreModule = coreModules.includes(moduleName);
       const isPrivilegedUser = user.role === 'SUPERADMIN' || user.role === 'ADMIN' || user.role === 'supervisor';
       
-      // También verificar si hay algún módulo que contenga "dashboard" en su URL o nombre
+      // También verificar si hay algún módulo que contenga "dashboard" o "tickets" en su URL o nombre
       const hasDashboardModule = modules.some(m => {
         const url = (m.url || '').toLowerCase();
         const name = (m.nombre || '').toLowerCase();
         return (url.includes('dashboard') || name.includes('dashboard')) && m.activo;
       });
       
-      if ((isCoreModule && isPrivilegedUser) || (moduleName === 'dashboard' && hasDashboardModule)) {
-        console.warn(`⚠️ [PermissionRoute] PERO es módulo core/dashboard y usuario tiene acceso - PERMITIENDO ACCESO`);
+      const hasTicketsModule = modules.some(m => {
+        const url = (m.url || '').toLowerCase();
+        const name = (m.nombre || '').toLowerCase();
+        return (url.includes('tickets') || url.includes('ticket') || name.includes('ticket')) && m.activo;
+      });
+      
+      // Permitir acceso si es módulo core y usuario privilegiado, o si es tickets/dashboard y el módulo está en la lista
+      if ((isCoreModule && isPrivilegedUser) || 
+          (moduleName === 'dashboard' && hasDashboardModule) ||
+          (moduleName === 'tickets' && hasTicketsModule)) {
+        console.warn(`⚠️ [PermissionRoute] PERO es módulo core/dashboard/tickets y usuario tiene acceso - PERMITIENDO ACCESO`);
         hasPermission = true;
       }
     }
@@ -450,7 +459,7 @@ function App() {
           } />
           <Route path="/" element={
             <ProtectedRoute>
-              <RoleRestrictedRoute allowedRoles={['SUPERADMIN', 'ADMIN', 'OPERADOR', 'SAC', 'PRINCIPAL', 'SUPERVISOR', 'supervisor']}>
+              <RoleRestrictedRoute allowedRoles={['SUPERADMIN', 'ADMIN', 'OPERADOR', 'SAC', 'PRINCIPAL', 'SUPERVISOR']}>
                 <MainLayout />
               </RoleRestrictedRoute>
             </ProtectedRoute>

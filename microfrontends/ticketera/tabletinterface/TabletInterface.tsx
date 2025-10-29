@@ -31,16 +31,38 @@ interface UserType {
 }
 
 // 🔐 MICROFRONTEND: Solo helpers para leer datos (NO hacer logout completo)
+// 🎯 ACTUALIZADO: Leer desde auth-storage (Zustand persist) en lugar de claves directas
 const authHelpers = {
   isAuthenticated: (): boolean => {
-    return !!localStorage.getItem('token')
+    try {
+      const authStorageData = localStorage.getItem('auth-storage')
+      if (!authStorageData) return false
+      
+      const parsedData = JSON.parse(authStorageData)
+      const token = parsedData?.state?.token || null
+      return !!token
+    } catch {
+      return false
+    }
   },
   
   getUser: (): UserType | null => {
-    const userData = localStorage.getItem('user')
-    if (!userData) return null
     try {
-      return JSON.parse(userData)
+      // 🎯 LEER DESDE auth-storage (Zustand persist) en lugar de claves directas
+      const authStorageData = localStorage.getItem('auth-storage')
+      if (!authStorageData) return null
+      
+      const parsedData = JSON.parse(authStorageData)
+      const user = parsedData?.state?.user || null
+      
+      if (!user) return null
+      
+      // Validar que el usuario tenga los campos necesarios
+      if (!user.id || !user.username || !user.role) {
+        return null
+      }
+      
+      return user
     } catch {
       return null
     }

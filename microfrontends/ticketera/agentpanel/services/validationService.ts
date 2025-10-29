@@ -12,10 +12,20 @@ const api = axios.create({
 })
 
 // 🔐 Interceptor para agregar token automáticamente
+// 🎯 ACTUALIZADO: Leer desde auth-storage (Zustand persist) en lugar de clave directa
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token')
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
+  try {
+    // Leer desde auth-storage
+    const authStorageData = localStorage.getItem('auth-storage')
+    if (authStorageData) {
+      const parsedData = JSON.parse(authStorageData)
+      const token = parsedData?.state?.token || null
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`
+      }
+    }
+  } catch (error) {
+    console.error('❌ [validationService] Error obteniendo token:', error)
   }
   return config
 })

@@ -36,14 +36,19 @@ import {
   Globe,
   Save,
   X,
-  AlertTriangle
+  AlertTriangle,
+  Filter,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight
 } from 'lucide-react';
 import { useAuth } from "@/shared/hooks/useAuth";
 import { api } from '../../../services';
 import AccessRestricted from '@/shared/components/AccessRestricted';
 import SocketService from '../../../services/socket-service';
 
-// Interfaces para Sistemas Externos
+// Interfaces para Sistemas Internos
 interface SistemaExternoResponse {
   id: number;
   nombre: string;
@@ -91,7 +96,9 @@ const SistemasExternosModule: React.FC = () => {
   const [sistemas, setSistemas] = useState<SistemaExternoResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('TODOS');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'true' | 'false'>('all');
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [currentPage, setCurrentPage] = useState(1);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingSistema, setEditingSistema] = useState<SistemaExternoResponse | null>(null);
   const [notifications, setNotifications] = useState<Array<{id: string, message: string, type: 'success' | 'error' | 'warning'}>>([]);
@@ -104,12 +111,6 @@ const SistemasExternosModule: React.FC = () => {
     descripcion: '',
     url: ''
   });
-
-
-  const estadosSistema = [
-    { value: 'ACTIVO', label: 'Activo', color: 'green' },
-    { value: 'INACTIVO', label: 'Inactivo', color: 'gray' }
-  ];
 
   // Función para formatear timestamp
   const formatTimestamp = (timestamp: string) => {
@@ -129,7 +130,7 @@ const SistemasExternosModule: React.FC = () => {
     // Obtener estado actual
     setIsConnected(SocketService.getConnectionStatus() === 'connected');
 
-    // Suscribirse a eventos de sistemas externos
+    // Suscribirse a eventos de sistemas internos
     SocketService.on('sistemas-externos', handleSistemaEvent);
     SocketService.on('sistema-estado-cambiado', handleEstadoCambiado);
     SocketService.on('sistema-verificado', handleSistemaVerificado);
@@ -212,8 +213,8 @@ const SistemasExternosModule: React.FC = () => {
       const response = await api.get('/modules');
       setSistemas(response.data);
     } catch (error) {
-      console.error('Error fetching módulos externos:', error);
-      showNotification('Error al cargar módulos externos', 'error');
+      console.error('Error fetching módulos internos:', error);
+      showNotification('Error al cargar módulos internos', 'error');
     } finally {
       setLoading(false);
     }
@@ -235,8 +236,8 @@ const SistemasExternosModule: React.FC = () => {
       });
       fetchSistemas();
     } catch (error: any) {
-      console.error('Error creating sistema externo:', error);
-      showNotification(error.response?.data?.message || 'Error al crear sistema externo', 'error');
+      console.error('Error creating sistema interno:', error);
+      showNotification(error.response?.data?.message || 'Error al crear sistema interno', 'error');
     }
   };
 
@@ -256,8 +257,8 @@ const SistemasExternosModule: React.FC = () => {
       });
       fetchSistemas();
     } catch (error: any) {
-      console.error('Error updating sistema externo:', error);
-      showNotification(error.response?.data?.message || 'Error al actualizar sistema externo', 'error');
+      console.error('Error updating sistema interno:', error);
+      showNotification(error.response?.data?.message || 'Error al actualizar sistema interno', 'error');
     }
   };
 
@@ -272,8 +273,8 @@ const SistemasExternosModule: React.FC = () => {
         setDeleteModal({ open: false, sistema: null });
       fetchSistemas();
       } catch (error: any) {
-        console.error('Error deleting sistema externo:', error);
-        showNotification(error.response?.data?.message || 'Error al eliminar sistema externo', 'error');
+        console.error('Error deleting sistema interno:', error);
+        showNotification(error.response?.data?.message || 'Error al eliminar sistema interno', 'error');
       }
     }
   };
@@ -323,12 +324,28 @@ const SistemasExternosModule: React.FC = () => {
                          sistema.descripcion.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          sistema.url.toLowerCase().includes(searchTerm.toLowerCase());
     
-    const matchesStatus = statusFilter === 'TODOS' || 
-                         (statusFilter === 'ACTIVO' && sistema.activo) ||
-                         (statusFilter === 'INACTIVO' && !sistema.activo);
+    const matchesStatus = statusFilter === 'all' || 
+                         (statusFilter === 'true' && sistema.activo) ||
+                         (statusFilter === 'false' && !sistema.activo);
     
     return matchesSearch && matchesStatus;
   });
+
+  // Calcular paginación
+  const totalPages = Math.ceil(filteredSistemas.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedSistemas = filteredSistemas.slice(startIndex, endIndex);
+
+  // Handlers para paginación
+  const handleItemsPerPageChange = (value: string) => {
+    setItemsPerPage(Number(value));
+    setCurrentPage(1);
+  };
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
 
   const openEditDialog = (sistema: SistemaExternoResponse) => {
     setEditingSistema(sistema);
@@ -382,10 +399,10 @@ const SistemasExternosModule: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="yego-heading-1 mb-2">
-            Módulos Externos
+            Módulos Internos
           </h1>
           <p className="yego-body">
-            Gestión y monitoreo de módulos externos en tiempo real
+            Gestión y monitoreo de módulos internos de Yego Integral en tiempo real
           </p>
           <div className="flex items-center gap-2 mt-2">
             <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
@@ -404,42 +421,63 @@ const SistemasExternosModule: React.FC = () => {
       </div>
 
 
-      {/* Search and Filters */}
+      {/* Search */}
       <Card>
         <CardContent className="pt-6">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400 w-4 h-4" />
-              <Input
-                placeholder="Buscar módulos externos..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full sm:w-48">
-                <SelectValue placeholder="Filtrar por estado" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="TODOS">Todos los estados</SelectItem>
-                {estadosSistema.map(estado => (
-                  <SelectItem key={estado.value} value={estado.value}>
-                    {estado.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400 w-4 h-4" />
+            <Input
+              placeholder="Buscar módulos internos..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
           </div>
         </CardContent>
       </Card>
+
+      {/* Filtros */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-neutral-400" />
+            <span className="text-sm text-neutral-700 dark:text-neutral-300">Estado:</span>
+            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as 'all' | 'true' | 'false')}>
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="true">Activos</SelectItem>
+                <SelectItem value="false">Inactivos</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-neutral-700 dark:text-neutral-300">Por página:</span>
+            <Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}>
+              <SelectTrigger className="w-20">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="5">5</SelectItem>
+                <SelectItem value="10">10</SelectItem>
+                <SelectItem value="20">20</SelectItem>
+                <SelectItem value="50">50</SelectItem>
+                <SelectItem value="100">100</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </div>
 
       {/* Sistemas Table */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Globe className="h-5 w-5 text-primary-500" />
-            Módulos Externos ({filteredSistemas.length})
+            Módulos Internos ({filteredSistemas.length})
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -447,7 +485,7 @@ const SistemasExternosModule: React.FC = () => {
             <div className="flex items-center justify-center py-12">
               <div className="flex flex-col items-center gap-4">
                 <div className="w-10 h-10 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
-                <p className="yego-body-sm">Cargando módulos externos...</p>
+                <p className="yego-body-sm">Cargando módulos internos...</p>
               </div>
             </div>
           ) : filteredSistemas.length === 0 ? (
@@ -455,24 +493,25 @@ const SistemasExternosModule: React.FC = () => {
               <Globe className="h-12 w-12 text-neutral-300 dark:text-neutral-600 mb-4" />
               <h3 className="yego-heading-4 mb-2">No se encontraron módulos</h3>
               <p className="yego-body-sm max-w-md">
-                No hay módulos externos que coincidan con tu búsqueda. Intenta con otros términos o crea un nuevo módulo.
+                No hay módulos internos que coincidan con tu búsqueda. Intenta con otros términos o crea un nuevo módulo.
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nombre</TableHead>
-                    <TableHead>Descripción</TableHead>
-                    <TableHead>Path</TableHead>
-                    <TableHead>Último Check</TableHead>
-                    <TableHead>Activo</TableHead>
-                    <TableHead>Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredSistemas.map((sistema) => (
+            <>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nombre</TableHead>
+                      <TableHead>Descripción</TableHead>
+                      <TableHead>Path</TableHead>
+                      <TableHead>Último Check</TableHead>
+                      <TableHead>Activo</TableHead>
+                      <TableHead>Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedSistemas.map((sistema) => (
                     <TableRow key={sistema.id} className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors">
                       <TableCell className="font-medium text-neutral-900 dark:text-neutral-100">
                         {sistema.nombre}
@@ -528,9 +567,88 @@ const SistemasExternosModule: React.FC = () => {
                       </TableCell>
                     </TableRow>
                   ))}
-                </TableBody>
-              </Table>
-            </div>
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Paginación */}
+              {totalPages > 1 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4 pt-4 border-t border-neutral-200 dark:border-neutral-700">
+                  <div className="text-sm text-neutral-600 dark:text-neutral-400">
+                    Mostrando {startIndex + 1} a {Math.min(endIndex, filteredSistemas.length)} de {filteredSistemas.length} módulos
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChange(1)}
+                      disabled={currentPage === 1}
+                      className="h-8 w-8 p-0"
+                    >
+                      <ChevronsLeft className="h-4 w-4" />
+                    </Button>
+                    
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChange(currentPage - 1)}
+                      disabled={currentPage === 1}
+                      className="h-8 w-8 p-0"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        let pageNum;
+                        if (totalPages <= 5) {
+                          pageNum = i + 1;
+                        } else if (currentPage <= 3) {
+                          pageNum = i + 1;
+                        } else if (currentPage >= totalPages - 2) {
+                          pageNum = totalPages - 4 + i;
+                        } else {
+                          pageNum = currentPage - 2 + i;
+                        }
+                        
+                        return (
+                          <Button
+                            key={pageNum}
+                            variant={currentPage === pageNum ? 'primary' : 'outline'}
+                            size="sm"
+                            onClick={() => handlePageChange(pageNum)}
+                            className="h-8 w-8 p-0"
+                          >
+                            {pageNum}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                    
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChange(currentPage + 1)}
+                      disabled={currentPage === totalPages}
+                      className="h-8 w-8 p-0"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                    
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChange(totalPages)}
+                      disabled={currentPage === totalPages}
+                      className="h-8 w-8 p-0"
+                    >
+                      <ChevronsRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
@@ -541,12 +659,12 @@ const SistemasExternosModule: React.FC = () => {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Globe className="h-5 w-5 text-primary-500" />
-              {editingSistema ? 'Editar Módulo Externo' : 'Crear Nuevo Módulo Externo'}
+              {editingSistema ? 'Editar Módulo Interno' : 'Crear Nuevo Módulo Interno'}
             </DialogTitle>
             <DialogDescription>
               {editingSistema
-                ? 'Edita los datos del módulo externo seleccionado.'
-                : 'Completa el formulario para crear un nuevo módulo externo.'}
+                ? 'Edita los datos del módulo interno seleccionado.'
+                : 'Completa el formulario para crear un nuevo módulo interno de Yego Integral.'}
             </DialogDescription>
           </DialogHeader>
           
@@ -608,7 +726,7 @@ const SistemasExternosModule: React.FC = () => {
               Confirmar Eliminación
             </DialogTitle>
             <DialogDescription>
-              Esta acción no se puede deshacer. Se eliminará permanentemente el módulo externo y todos sus datos.
+              Esta acción no se puede deshacer. Se eliminará permanentemente el módulo interno y todos sus datos.
             </DialogDescription>
           </DialogHeader>
           {deleteModal.sistema && (
