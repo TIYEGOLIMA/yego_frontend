@@ -70,7 +70,8 @@ export const AsistenciaListaModule: React.FC = () => {
   const [cargandoHistorial, setCargandoHistorial] = useState(false);
   
   // Filtros para exportación
-  const [fechaExportar, setFechaExportar] = useState<string>('');
+  const [fechaInicio, setFechaInicio] = useState<string>('');
+  const [fechaFin, setFechaFin] = useState<string>('');
   const [rolFiltro, setRolFiltro] = useState<string>('');
   const [modalExportarAbierto, setModalExportarAbierto] = useState(false);
   const [exportando, setExportando] = useState(false);
@@ -223,8 +224,13 @@ export const AsistenciaListaModule: React.FC = () => {
 
   // Función para exportar a Excel
   const exportarAExcel = async () => {
-    if (!fechaExportar) {
-      alert('Por favor, selecciona la fecha para exportar');
+    if (!fechaInicio) {
+      alert('Por favor, selecciona la fecha de inicio para exportar');
+      return;
+    }
+    
+    if (!fechaFin) {
+      alert('Por favor, selecciona la fecha de fin para exportar');
       return;
     }
     
@@ -233,11 +239,18 @@ export const AsistenciaListaModule: React.FC = () => {
       return;
     }
 
+    // Validar que la fecha de inicio no sea mayor que la fecha de fin
+    if (new Date(fechaInicio) > new Date(fechaFin)) {
+      alert('La fecha de inicio no puede ser mayor que la fecha de fin');
+      return;
+    }
+
     setExportando(true);
     try {
       // El backend maneja la exportación y devuelve el archivo Excel
       const params = new URLSearchParams();
-      params.append('fecha', fechaExportar);
+      params.append('fechaInicio', fechaInicio);
+      params.append('fechaFin', fechaFin);
       params.append('rol', rolFiltro);
 
       // Realizar petición al backend para exportar
@@ -254,8 +267,9 @@ export const AsistenciaListaModule: React.FC = () => {
       link.href = url;
       
       // Generar nombre del archivo
-      const fechaFormato = fechaExportar.split('-').reverse().join('');
-      const nombreArchivo = `Asistencia_${fechaFormato}_${rolFiltro}.xlsx`;
+      const fechaInicioFormato = fechaInicio.split('-').reverse().join('');
+      const fechaFinFormato = fechaFin.split('-').reverse().join('');
+      const nombreArchivo = `Asistencia_${fechaInicioFormato}_${fechaFinFormato}_${rolFiltro}.xlsx`;
       link.setAttribute('download', nombreArchivo);
       
       document.body.appendChild(link);
@@ -272,8 +286,10 @@ export const AsistenciaListaModule: React.FC = () => {
         setModalExportarAbierto(false);
         setExportacionExitosa(false);
         setNombreArchivoExportado('');
+        setExportando(false); // Resetear estado de exportación
         // Limpiar filtros después de exportar
-        setFechaExportar('');
+        setFechaInicio('');
+        setFechaFin('');
         setRolFiltro('');
       }, 2000);
     } catch (error: any) {
@@ -534,8 +550,10 @@ export const AsistenciaListaModule: React.FC = () => {
           // Limpiar estados al cerrar el modal
           setExportacionExitosa(false);
           setNombreArchivoExportado('');
-          setFechaExportar('');
+          setFechaInicio('');
+          setFechaFin('');
           setRolFiltro('');
+          setExportando(false); // Resetear estado de exportación
         }
       }}>
         <DialogContent className="sm:max-w-[500px]">
@@ -551,7 +569,7 @@ export const AsistenciaListaModule: React.FC = () => {
             <DialogDescription>
               {exportacionExitosa 
                 ? `El archivo ${nombreArchivoExportado} se ha descargado exitosamente.`
-                : 'Selecciona la fecha y el rol para exportar los registros de asistencia.'
+                : 'Selecciona el rango de fechas y el rol para exportar los registros de asistencia.'
               }
             </DialogDescription>
           </DialogHeader>
@@ -570,17 +588,31 @@ export const AsistenciaListaModule: React.FC = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 py-4">
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
-                Fecha a Consultar *
-              </label>
-              <Input
-                type="date"
-                value={fechaExportar}
-                onChange={(e) => setFechaExportar(e.target.value)}
-                className="w-full"
-                required
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
+                  Fecha de Inicio *
+                </label>
+                <Input
+                  type="date"
+                  value={fechaInicio}
+                  onChange={(e) => setFechaInicio(e.target.value)}
+                  className="w-full"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
+                  Fecha de Fin *
+                </label>
+                <Input
+                  type="date"
+                  value={fechaFin}
+                  onChange={(e) => setFechaFin(e.target.value)}
+                  className="w-full"
+                  required
+                />
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
@@ -614,7 +646,9 @@ export const AsistenciaListaModule: React.FC = () => {
                   setModalExportarAbierto(false);
                   setExportacionExitosa(false);
                   setNombreArchivoExportado('');
-                  setFechaExportar('');
+                  setExportando(false); // Resetear estado de exportación
+                  setFechaInicio('');
+                  setFechaFin('');
                   setRolFiltro('');
                 }}
                 className="w-full"
@@ -626,8 +660,10 @@ export const AsistenciaListaModule: React.FC = () => {
                 <Button
                   variant="outline"
                   onClick={() => {
-                    setFechaExportar('');
+                    setFechaInicio('');
+                    setFechaFin('');
                     setRolFiltro('');
+                    setExportando(false); // Resetear estado de exportación
                     setModalExportarAbierto(false);
                   }}
                   disabled={exportando}
@@ -636,7 +672,7 @@ export const AsistenciaListaModule: React.FC = () => {
                 </Button>
                 <Button
                   onClick={exportarAExcel}
-                  disabled={exportando || !fechaExportar || !rolFiltro}
+                  disabled={exportando || !fechaInicio || !fechaFin || !rolFiltro}
                   className="flex items-center gap-2"
                 >
                   {exportando ? (
