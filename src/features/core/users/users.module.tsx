@@ -229,14 +229,51 @@ const UsersModule: React.FC = () => {
     setupWebSocket();
   }, []);
 
-  // 🔍 Consultar datos por DNI cuando cambie el valor
+  // 🔍 Consultar datos por DNI cuando cambie el valor (con delay para evitar consultas innecesarias)
   useEffect(() => {
-    if (formData.dni && formData.dni.length >= 8 && /^\d+$/.test(formData.dni)) {
-      consultarDatosDNI(formData.dni);
-    } else if (formData.dni && formData.dni.length < 8) {
-      clearUserFields();
+    const delayTimer = setTimeout(() => {
+      // Al crear usuario nuevo: consultar DNI automáticamente
+      if (!editingUser && formData.dni && formData.dni.length >= 8 && /^\d+$/.test(formData.dni)) {
+        consultarDatosDNI(formData.dni);
+      } else if (!editingUser && formData.dni && formData.dni.length < 8) {
+        clearUserFields();
+      }
+      // Al editar usuario: consultar DNI solo si cambió y cumple criterios
+      else if (editingUser && formData.dni && formData.dni.length >= 8 && /^\d+$/.test(formData.dni) && formData.dni !== editingUser.dni) {
+        consultarDatosDNI(formData.dni);
+      }
+    }, 1000); // Delay de 1 segundo para que el usuario termine de escribir
+
+    return () => clearTimeout(delayTimer);
+  }, [formData.dni, editingUser]);
+
+  // 🔍 Generar username y email automáticamente cuando se completen nombre y apellidos
+  useEffect(() => {
+    // Solo generar si no estamos editando o si el usuario es admin
+    if ((!editingUser || isAdminOrSuperAdmin()) && formData.name && formData.lastName) {
+      const firstName = formData.name.split(' ')[0];
+      const firstLastName = formData.lastName.split(' ')[0];
+      
+      if (firstName && firstLastName) {
+        // Generar username: primera inicial del nombre + apellido paterno
+        const inicialNombre = firstName.charAt(0).toLowerCase();
+        const apellidoPaterno = firstLastName.toLowerCase();
+        const username = `${inicialNombre}${apellidoPaterno}`;
+        
+        // Generar email: username + dominio yego
+        const email = `${username}@yego.com`;
+        
+        // Solo actualizar si los campos están vacíos o si el usuario es admin
+        if (!formData.username || isAdminOrSuperAdmin()) {
+          setFormData(prev => ({
+            ...prev,
+            username: username,
+            email: email
+          }));
+        }
+      }
     }
-  }, [formData.dni]);
+  }, [formData.name, formData.lastName, editingUser]);
 
   const fetchUsers = async () => {
     try {
@@ -974,16 +1011,6 @@ const UsersModule: React.FC = () => {
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-1">Username</label>
-              <Input
-                value={formData.username}
-                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                placeholder="usuario123"
-                disabled={!isAdminOrSuperAdmin() && (!formData.dni || formData.dni.length <= 8)}
-              />
-            </div>
-
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Nombre</label>
@@ -1023,6 +1050,22 @@ const UsersModule: React.FC = () => {
                 />
               </div>
             </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Username</label>
+              <Input
+                value={formData.username}
+                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                placeholder="usuario123"
+                disabled={!isAdminOrSuperAdmin()}
+                className="bg-gray-50 dark:bg-gray-800"
+              />
+              {!isAdminOrSuperAdmin() && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Se genera automáticamente basado en el nombre y apellidos
+                </p>
+              )}
+            </div>
             
             <div>
               <label className="block text-sm font-medium mb-1">Email</label>
@@ -1031,8 +1074,14 @@ const UsersModule: React.FC = () => {
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 placeholder="juan.perez@empresa.com"
-                disabled={!isAdminOrSuperAdmin() && (!formData.dni || formData.dni.length <= 8)}
+                disabled={!isAdminOrSuperAdmin()}
+                className="bg-gray-50 dark:bg-gray-800"
               />
+              {!isAdminOrSuperAdmin() && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Se genera automáticamente basado en el username
+                </p>
+              )}
             </div>
             
             <div>

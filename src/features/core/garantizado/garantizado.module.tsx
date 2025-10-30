@@ -108,6 +108,103 @@ export const GarantizadoModule: React.FC = () => {
     conductorNombre: string;
   } | null>(null);
 
+  // Estados para el modal de procesamiento
+  const [showProcessModal, setShowProcessModal] = useState(false);
+  const [activeCountry, setActiveCountry] = useState<'Perú' | 'Colombia'>('Perú');
+  const [activeTab, setActiveTab] = useState<'Lima' | 'Arequipa' | 'Trujillo' | 'Bogotá' | 'Bucaramanga'>('Lima');
+  const [processConfig, setProcessConfig] = useState({
+    ubicacion: 'peru', // Compatibilidad con backend actual
+    ciudadesPeru: {
+      Lima: {
+        sinBrandeo: [
+          { viajes: '', bono: '', garantizamos: '' },
+          { viajes: '', bono: '', garantizamos: '' }
+        ],
+        conBrandeo: [
+          { viajes: '', bono: '', garantizamos: '' },
+          { viajes: '', bono: '', garantizamos: '' }
+        ]
+      },
+      Arequipa: {
+        sinBrandeo: [
+          { viajes: '', bono: '', garantizamos: '' },
+          { viajes: '', bono: '', garantizamos: '' }
+        ],
+        conBrandeo: [
+          { viajes: '', bono: '', garantizamos: '' },
+          { viajes: '', bono: '', garantizamos: '' }
+        ]
+      },
+      Trujillo: {
+        sinBrandeo: [
+          { viajes: '', bono: '', garantizamos: '' },
+          { viajes: '', bono: '', garantizamos: '' }
+        ],
+        conBrandeo: [
+          { viajes: '', bono: '', garantizamos: '' },
+          { viajes: '', bono: '', garantizamos: '' }
+        ]
+      }
+    },
+    ciudadesColombia: {
+      'Bogotá': {
+        sinBrandeo: [
+          { viajes: '', bono: '', garantizamos: '' },
+          { viajes: '', bono: '', garantizamos: '' }
+        ],
+        conBrandeo: [
+          { viajes: '', bono: '', garantizamos: '' },
+          { viajes: '', bono: '', garantizamos: '' }
+        ]
+      },
+      'Bucaramanga': {
+        sinBrandeo: [
+          { viajes: '', bono: '', garantizamos: '' },
+          { viajes: '', bono: '', garantizamos: '' }
+        ],
+        conBrandeo: [
+          { viajes: '', bono: '', garantizamos: '' },
+          { viajes: '', bono: '', garantizamos: '' }
+        ]
+      }
+    }
+  });
+
+  const addTierRow = (ciudad: string, tipo: 'sinBrandeo' | 'conBrandeo') => {
+    setProcessConfig(prev => {
+      const key = activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia';
+      const ciudades = (prev as any)[key];
+      return {
+        ...prev,
+        [key]: {
+          ...ciudades,
+          [ciudad]: {
+            ...ciudades[ciudad],
+            [tipo]: [...ciudades[ciudad][tipo], { viajes: '', bono: '', garantizamos: '' }]
+          }
+        }
+      } as any;
+    })
+  }
+  
+  const removeLastTierRow = (ciudad: string, tipo: 'sinBrandeo' | 'conBrandeo') => {
+    setProcessConfig(prev => {
+      const key = activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia';
+      const ciudades = (prev as any)[key];
+      const arr = ciudades[ciudad][tipo];
+      return {
+        ...prev,
+        [key]: {
+          ...ciudades,
+          [ciudad]: {
+            ...ciudades[ciudad],
+            [tipo]: arr.length > 1 ? arr.slice(0, -1) : arr
+          }
+        }
+      } as any;
+    })
+  }
+
   // El backend ya calcula todo automáticamente, no necesitamos calcular nada en el frontend
 
 
@@ -466,6 +563,161 @@ export const GarantizadoModule: React.FC = () => {
     setShowExportModal(true);
   };
 
+  // Función para abrir modal de procesamiento
+  const handleOpenProcessModal = () => {
+    setProcessConfig(prev => ({
+      ...prev,
+      ubicacion: 'peru',
+      ciudadesPeru: {
+        Lima: {
+          sinBrandeo: [
+            { viajes: '', bono: '', garantizamos: '' },
+            { viajes: '', bono: '', garantizamos: '' }
+          ],
+          conBrandeo: [
+            { viajes: '', bono: '', garantizamos: '' },
+            { viajes: '', bono: '', garantizamos: '' }
+          ]
+        },
+        Arequipa: {
+          sinBrandeo: [
+            { viajes: '', bono: '', garantizamos: '' },
+            { viajes: '', bono: '', garantizamos: '' }
+          ],
+          conBrandeo: [
+            { viajes: '', bono: '', garantizamos: '' },
+            { viajes: '', bono: '', garantizamos: '' }
+          ]
+        },
+        Trujillo: {
+          sinBrandeo: [
+            { viajes: '', bono: '', garantizamos: '' },
+            { viajes: '', bono: '', garantizamos: '' }
+          ],
+          conBrandeo: [
+            { viajes: '', bono: '', garantizamos: '' },
+            { viajes: '', bono: '', garantizamos: '' }
+          ]
+        }
+      },
+      ciudadesColombia: {
+        'Bogotá': {
+          sinBrandeo: [
+            { viajes: '', bono: '', garantizamos: '' },
+            { viajes: '', bono: '', garantizamos: '' }
+          ],
+          conBrandeo: [
+            { viajes: '', bono: '', garantizamos: '' },
+            { viajes: '', bono: '', garantizamos: '' }
+          ]
+        },
+        'Bucaramanga': {
+          sinBrandeo: [
+            { viajes: '', bono: '', garantizamos: '' },
+            { viajes: '', bono: '', garantizamos: '' }
+          ],
+          conBrandeo: [
+            { viajes: '', bono: '', garantizamos: '' },
+            { viajes: '', bono: '', garantizamos: '' }
+          ]
+        }
+      }
+    }));
+    setActiveCountry('Perú');
+    setActiveTab('Lima');
+    setShowProcessModal(true);
+  };
+
+  // Función para procesar garantizado
+  const handleProcesarGarantizado = async () => {
+    try {
+      setLoadingTable(true);
+      console.log('🔄 [GarantizadoModule] Iniciando procesamiento de garantizado...');
+      console.log('📊 [GarantizadoModule] Configuración:', processConfig);
+      
+      // Llamar al endpoint de procesamiento con la configuración
+      const ciudadesSeleccionadas = (activeCountry === 'Perú' ? processConfig.ciudadesPeru : processConfig.ciudadesColombia) as any;
+      const response = await api.post('/garantizado/procesar', {
+        ubicacion: activeCountry === 'Perú' ? 'peru' : 'colombia',
+        semana: semanaAnterior || semanaActual,
+        ciudades: Object.entries(ciudadesSeleccionadas).map(([ciudad, data]: any) => ({
+          ciudad,
+          sinBrandeo: data.sinBrandeo.map((t: any) => ({
+            viajes: Number(t.viajes) || 0,
+            bono: Number(t.bono) || 0,
+            garantizamos: Number(t.garantizamos) || 0
+          })),
+          conBrandeo: data.conBrandeo.map((t: any) => ({
+            viajes: Number(t.viajes) || 0,
+            bono: Number(t.bono) || 0,
+            garantizamos: Number(t.garantizamos) || 0
+          }))
+        })),
+        // Extra opcional: enviar ambos países para futura compatibilidad
+        paises: [
+          {
+            pais: 'peru',
+            ciudades: Object.entries(processConfig.ciudadesPeru as any).map(([ciudad, data]: any) => ({
+              ciudad,
+              sinBrandeo: data.sinBrandeo.map((t: any) => ({
+                viajes: Number(t.viajes) || 0,
+                bono: Number(t.bono) || 0,
+                garantizamos: Number(t.garantizamos) || 0
+              })),
+              conBrandeo: data.conBrandeo.map((t: any) => ({
+                viajes: Number(t.viajes) || 0,
+                bono: Number(t.bono) || 0,
+                garantizamos: Number(t.garantizamos) || 0
+              }))
+            }))
+          },
+          {
+            pais: 'colombia',
+            ciudades: Object.entries(processConfig.ciudadesColombia as any).map(([ciudad, data]: any) => ({
+              ciudad,
+              sinBrandeo: data.sinBrandeo.map((t: any) => ({
+                viajes: Number(t.viajes) || 0,
+                bono: Number(t.bono) || 0,
+                garantizamos: Number(t.garantizamos) || 0
+              })),
+              conBrandeo: data.conBrandeo.map((t: any) => ({
+                viajes: Number(t.viajes) || 0,
+                bono: Number(t.bono) || 0,
+                garantizamos: Number(t.garantizamos) || 0
+              }))
+            }))
+          }
+        ]
+      });
+      
+      console.log('✅ [GarantizadoModule] Procesamiento completado:', response.data);
+      
+      // Cerrar modal y mostrar notificación de éxito
+      setShowProcessModal(false);
+      alert('✅ Procesamiento de garantizado completado exitosamente');
+      
+      // Recargar los datos después del procesamiento
+      await cargarConductores(false);
+      
+    } catch (error: any) {
+      console.error('❌ [GarantizadoModule] Error al procesar garantizado:', error);
+      
+      let errorMessage = 'Error al procesar garantizado';
+      
+      if (error.response?.status === 400) {
+        errorMessage = error.response.data?.message || 'Error en los datos enviados';
+      } else if (error.response?.status === 500) {
+        errorMessage = 'Error interno del servidor durante el procesamiento';
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      }
+      
+      alert(`❌ Error: ${errorMessage}`);
+    } finally {
+      setLoadingTable(false);
+    }
+  };
+
   // Función para exportar datos a Excel
   const handleExportExcel = async () => {
     try {
@@ -729,16 +981,37 @@ export const GarantizadoModule: React.FC = () => {
         </div>
         <div className="flex gap-2">
           {!showRegistros && (
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="px-6 py-2"
-              onClick={handleOpenExportModal}
-              disabled={filteredData.length === 0}
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Exportar Excel
-            </Button>
+            <>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="px-6 py-2"
+                onClick={handleOpenExportModal}
+                disabled={filteredData.length === 0}
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Exportar Excel
+              </Button>
+              <Button 
+                variant="primary" 
+                size="sm" 
+                className="px-6 py-2 bg-red-600 text-white"
+                onClick={handleOpenProcessModal}
+                disabled={loadingTable || filteredData.length === 0}
+              >
+                {loadingTable ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Procesando...
+                  </>
+                ) : (
+                  <>
+                    <Shield className="h-4 w-4 mr-2" />
+                    Procesar
+                  </>
+                )}
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -1416,6 +1689,322 @@ export const GarantizadoModule: React.FC = () => {
                 className="px-4 py-2 text-white bg-red-600 hover:bg-red-700"
               >
                 Confirmar Cambio
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Procesamiento de Garantizado */}
+      {showProcessModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 w-full max-w-4xl mx-auto shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
+                  <Shield className="h-6 w-6 text-red-600 dark:text-red-400" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
+                    Configurar Procesamiento
+                  </h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Semana: <span className="font-bold text-red-600">{(semanaAnterior || semanaActual) || 'SEMANA'}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowProcessModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            {/* Pestañas de país */}
+            <div className="flex space-x-1 mb-3 bg-gray-100 dark:bg-gray-700 p-1 rounded-lg">
+              {['Perú', 'Colombia'].map((pais) => (
+                <button
+                  key={pais}
+                  onClick={() => {
+                    setActiveCountry(pais as 'Perú' | 'Colombia');
+                    const firstCity = Object.keys((processConfig as any)[pais === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'])[0] as any;
+                    if (firstCity) setActiveTab(firstCity);
+                  }}
+                  className={`flex-1 py-2 px-2 sm:px-4 rounded-md text-xs sm:text-sm font-medium transition-all ${
+                    activeCountry === pais
+                      ? 'bg-white dark:bg-gray-800 text-red-600 dark:text-red-400 shadow-sm'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+                  }`}
+                >
+                  {pais}
+                </button>
+              ))}
+            </div>
+
+            {/* Pestañas de ciudades (según país) */}
+            <div className="flex space-x-1 mb-4 sm:mb-6 bg-gray-100 dark:bg-gray-700 p-1 rounded-lg">
+              {Object.keys((processConfig as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia']).map((ciudad) => (
+                <button
+                  key={ciudad}
+                  onClick={() => setActiveTab(ciudad as any)}
+                  className={`flex-1 py-2 px-2 sm:px-4 rounded-md text-xs sm:text-sm font-medium transition-all ${
+                    activeTab === ciudad
+                      ? 'bg-white dark:bg-gray-800 text-red-600 dark:text-red-400 shadow-sm'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+                  }`}
+                >
+                  {ciudad}
+                </button>
+              ))}
+            </div>
+
+            <div className="space-y-4 sm:space-y-6">
+              {/* Tablas para la ciudad activa */}
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                {/* Tabla Sin Brandeo */}
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 sm:p-4 border border-gray-200 dark:border-gray-700">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-3 sm:mb-4 gap-2">
+                    <h4 className="text-base sm:text-lg font-bold text-gray-800 dark:text-gray-200">
+                      SIN BRANDEO {activeTab.toUpperCase()}
+                    </h4>
+                    <div className="flex gap-1 sm:gap-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => addTierRow(activeTab, 'sinBrandeo')} 
+                        className="px-2 py-1 text-xs"
+                      >
+                        + Fila
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => removeLastTierRow(activeTab, 'sinBrandeo')} 
+                        className="px-2 py-1 text-xs"
+                      >
+                        - Fila
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-3 gap-1 sm:gap-2 text-xs font-semibold text-gray-600 dark:text-gray-300 mb-2 sm:mb-3">
+                    <div>VIAJES</div>
+                    <div>BONO</div>
+                    <div>GARANTIZAMOS</div>
+                  </div>
+                  
+                  <div className="space-y-1 sm:space-y-2">
+                    {(processConfig as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'][activeTab].sinBrandeo.map((row: any, idx: number) => (
+                      <div key={idx} className="grid grid-cols-3 gap-1 sm:gap-2">
+                        <Input
+                          type="number"
+                          value={row.viajes}
+                          onChange={(e) => {
+                            const value = e.target.value
+                            setProcessConfig(prev => ({
+                              ...prev,
+                              [activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia']: {
+                                ...(prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'],
+                                [activeTab]: {
+                                  ...(prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'][activeTab],
+                                  sinBrandeo: (prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'][activeTab].sinBrandeo.map((item: any, i: number) => 
+                                    i === idx ? { ...item, viajes: value } : item
+                                  )
+                                }
+                              }
+                            }))
+                          }}
+                          placeholder="140"
+                          className="text-sm"
+                        />
+                        <Input
+                          type="number"
+                          value={row.bono}
+                          onChange={(e) => {
+                            const value = e.target.value
+                            setProcessConfig(prev => ({
+                              ...prev,
+                              [activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia']: {
+                                ...(prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'],
+                                [activeTab]: {
+                                  ...(prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'][activeTab],
+                                  sinBrandeo: (prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'][activeTab].sinBrandeo.map((item: any, i: number) => 
+                                    i === idx ? { ...item, bono: value } : item
+                                  )
+                                }
+                              }
+                            }))
+                          }}
+                          placeholder="520"
+                          className="text-sm"
+                        />
+                        <Input
+                          type="number"
+                          value={row.garantizamos}
+                          onChange={(e) => {
+                            const value = e.target.value
+                            setProcessConfig(prev => ({
+                              ...prev,
+                              [activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia']: {
+                                ...(prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'],
+                                [activeTab]: {
+                                  ...(prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'][activeTab],
+                                  sinBrandeo: (prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'][activeTab].sinBrandeo.map((item: any, i: number) => 
+                                    i === idx ? { ...item, garantizamos: value } : item
+                                  )
+                                }
+                              }
+                            }))
+                          }}
+                          placeholder="1450"
+                          className="text-sm"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Tabla Con Brandeo */}
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 sm:p-4 border border-gray-200 dark:border-gray-700">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-3 sm:mb-4 gap-2">
+                    <h4 className="text-base sm:text-lg font-bold text-gray-800 dark:text-gray-200">
+                      CON BRANDEO {activeTab.toUpperCase()}
+                    </h4>
+                    <div className="flex gap-1 sm:gap-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => addTierRow(activeTab, 'conBrandeo')} 
+                        className="px-2 py-1 text-xs"
+                      >
+                        + Fila
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => removeLastTierRow(activeTab, 'conBrandeo')} 
+                        className="px-2 py-1 text-xs"
+                      >
+                        - Fila
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-3 gap-1 sm:gap-2 text-xs font-semibold text-gray-600 dark:text-gray-300 mb-2 sm:mb-3">
+                    <div>VIAJES</div>
+                    <div>BONO</div>
+                    <div>GARANTIZAMOS</div>
+                  </div>
+                  
+                  <div className="space-y-1 sm:space-y-2">
+                    {(processConfig as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'][activeTab].conBrandeo.map((row: any, idx: number) => (
+                      <div key={idx} className="grid grid-cols-3 gap-1 sm:gap-2">
+                        <Input
+                          type="number"
+                          value={row.viajes}
+                          onChange={(e) => {
+                            const value = e.target.value
+                            setProcessConfig(prev => ({
+                              ...prev,
+                              [activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia']: {
+                                ...(prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'],
+                                [activeTab]: {
+                                  ...(prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'][activeTab],
+                                  conBrandeo: (prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'][activeTab].conBrandeo.map((item: any, i: number) => 
+                                    i === idx ? { ...item, viajes: value } : item
+                                  )
+                                }
+                              }
+                            }))
+                          }}
+                          placeholder="175"
+                          className="text-sm"
+                        />
+                        <Input
+                          type="number"
+                          value={row.bono}
+                          onChange={(e) => {
+                            const value = e.target.value
+                            setProcessConfig(prev => ({
+                              ...prev,
+                              [activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia']: {
+                                ...(prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'],
+                                [activeTab]: {
+                                  ...(prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'][activeTab],
+                                  conBrandeo: (prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'][activeTab].conBrandeo.map((item: any, i: number) => 
+                                    i === idx ? { ...item, bono: value } : item
+                                  )
+                                }
+                              }
+                            }))
+                          }}
+                          placeholder="700"
+                          className="text-sm"
+                        />
+                        <Input
+                          type="number"
+                          value={row.garantizamos}
+                          onChange={(e) => {
+                            const value = e.target.value
+                            setProcessConfig(prev => ({
+                              ...prev,
+                              [activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia']: {
+                                ...(prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'],
+                                [activeTab]: {
+                                  ...(prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'][activeTab],
+                                  conBrandeo: (prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'][activeTab].conBrandeo.map((item: any, i: number) => 
+                                    i === idx ? { ...item, garantizamos: value } : item
+                                  )
+                                }
+                              }
+                            }))
+                          }}
+                          placeholder="1900"
+                          className="text-sm"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            <div className="flex flex-col sm:flex-row justify-end gap-3 mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-gray-200 dark:border-gray-700">
+              <Button
+                variant="outline"
+                onClick={() => setShowProcessModal(false)}
+                disabled={loadingTable}
+                className="px-6 py-2"
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleProcesarGarantizado}
+                disabled={
+                  loadingTable ||
+                  !(
+                    Object.values(processConfig.ciudadesPeru as any).some((ciudad: any) =>
+                      ciudad.sinBrandeo.some((t: any) => t.viajes && t.bono && t.garantizamos) ||
+                      ciudad.conBrandeo.some((t: any) => t.viajes && t.bono && t.garantizamos)
+                    ) ||
+                    Object.values(processConfig.ciudadesColombia as any).some((ciudad: any) =>
+                      ciudad.sinBrandeo.some((t: any) => t.viajes && t.bono && t.garantizamos) ||
+                      ciudad.conBrandeo.some((t: any) => t.viajes && t.bono && t.garantizamos)
+                    )
+                  )
+                }
+                className="px-6 py-2 text-white bg-red-600 hover:bg-red-700"
+              >
+                {loadingTable ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Procesando...
+                  </>
+                 ) : (
+                   'Procesar Garantizado'
+                 )}
               </Button>
             </div>
           </div>
