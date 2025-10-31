@@ -22,9 +22,13 @@ import {
   ChevronsRight,
   Shield,
   ShieldOff,
-  X
+  X,
+  Globe,
+  MapPin,
+  Plus
 } from 'lucide-react';
 import { api } from '../../../services/core/api';
+import { useToastNotifications } from '../../../hooks/useToastNotifications';
 import socketService from '../../../services/socket-service';
 
 interface GarantizadoData {
@@ -52,6 +56,7 @@ interface GarantizadoData {
   fechaCreacion: string;
   fechaActualizacion: string;
   activo: boolean;
+  brandeo: boolean;
 }
 
 interface RegistroData {
@@ -69,8 +74,32 @@ interface FlotaResponse {
   specifications: string[];
 }
 
+interface PaisData {
+  id: number;
+  nombre: string;
+}
+
+interface CiudadEstructuraData {
+  id: number;
+  nombre: string;
+  pais_id: number;
+}
+
+interface PaisEstructuraData {
+  id: number;
+  nombre: string;
+  moneda: string;
+  simbolo_moneda: string;
+  ciudades: CiudadEstructuraData[];
+}
+
+interface EstructuraUbicacionesResponse {
+  paises: PaisEstructuraData[];
+}
+
 
 export const GarantizadoModule: React.FC = () => {
+  const { showSuccess, showError } = useToastNotifications();
   
   const [data, setData] = useState<GarantizadoData[]>([]);
   const [filteredData, setFilteredData] = useState<GarantizadoData[]>([]);
@@ -110,91 +139,110 @@ export const GarantizadoModule: React.FC = () => {
 
   // Estados para el modal de procesamiento
   const [showProcessModal, setShowProcessModal] = useState(false);
-  const [activeCountry, setActiveCountry] = useState<'Perú' | 'Colombia'>('Perú');
-  const [activeTab, setActiveTab] = useState<'Lima' | 'Arequipa' | 'Trujillo' | 'Bogotá' | 'Bucaramanga'>('Lima');
-  const [processConfig, setProcessConfig] = useState({
-    ubicacion: 'peru', // Compatibilidad con backend actual
-    ciudadesPeru: {
-      Lima: {
+  const [estructuraUbicaciones, setEstructuraUbicaciones] = useState<EstructuraUbicacionesResponse>({ paises: [] });
+  const [loadingEstructura, setLoadingEstructura] = useState(false);
+  const [activeCountry, setActiveCountry] = useState<string>('');
+  const [activeTab, setActiveTab] = useState<string>('');
+  
+  // Estados para registro de ubicaciones
+  const [modalViewMode, setModalViewMode] = useState<'procesamiento' | 'registro'>('procesamiento');
+  const [paises, setPaises] = useState<PaisData[]>([]);
+  const [loadingUbicaciones, setLoadingUbicaciones] = useState(false);
+  const [nuevoPais, setNuevoPais] = useState({
+    nombre: '',
+    moneda: '',
+    simbolo_moneda: ''
+  });
+  const [nuevaCiudad, setNuevaCiudad] = useState({
+    pais_id: 0,
+    nombre: ''
+  });
+  const [guardandoPais, setGuardandoPais] = useState(false);
+  const [guardandoCiudad, setGuardandoCiudad] = useState(false);
+
+  // Helper: Crear configuración inicial de ciudades vacía
+  const createEmptyCiudadConfig = () => ({
         sinBrandeo: [
-          { viajes: '', bono: '', garantizamos: '' },
-          { viajes: '', bono: '', garantizamos: '' }
+      { viajes: '', bono: '', garantizado: '', horas: '' },
+      { viajes: '', bono: '', garantizado: '', horas: '' }
         ],
         conBrandeo: [
-          { viajes: '', bono: '', garantizamos: '' },
-          { viajes: '', bono: '', garantizamos: '' }
-        ]
-      },
-      Arequipa: {
-        sinBrandeo: [
-          { viajes: '', bono: '', garantizamos: '' },
-          { viajes: '', bono: '', garantizamos: '' }
-        ],
-        conBrandeo: [
-          { viajes: '', bono: '', garantizamos: '' },
-          { viajes: '', bono: '', garantizamos: '' }
-        ]
-      },
-      Trujillo: {
-        sinBrandeo: [
-          { viajes: '', bono: '', garantizamos: '' },
-          { viajes: '', bono: '', garantizamos: '' }
-        ],
-        conBrandeo: [
-          { viajes: '', bono: '', garantizamos: '' },
-          { viajes: '', bono: '', garantizamos: '' }
-        ]
-      }
-    },
-    ciudadesColombia: {
-      'Bogotá': {
-        sinBrandeo: [
-          { viajes: '', bono: '', garantizamos: '' },
-          { viajes: '', bono: '', garantizamos: '' }
-        ],
-        conBrandeo: [
-          { viajes: '', bono: '', garantizamos: '' },
-          { viajes: '', bono: '', garantizamos: '' }
-        ]
-      },
-      'Bucaramanga': {
-        sinBrandeo: [
-          { viajes: '', bono: '', garantizamos: '' },
-          { viajes: '', bono: '', garantizamos: '' }
-        ],
-        conBrandeo: [
-          { viajes: '', bono: '', garantizamos: '' },
-          { viajes: '', bono: '', garantizamos: '' }
-        ]
-      }
-    }
+      { viajes: '', bono: '', garantizado: '', horas: '' },
+      { viajes: '', bono: '', garantizado: '', horas: '' }
+    ]
   });
 
-  const addTierRow = (ciudad: string, tipo: 'sinBrandeo' | 'conBrandeo') => {
-    setProcessConfig(prev => {
-      const key = activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia';
-      const ciudades = (prev as any)[key];
+  // Helper: Crear configuración inicial completa desde estructura dinámica
+  const createInitialProcessConfig = (estructura: EstructuraUbicacionesResponse) => {
+    const config: any = {};
+    
+    estructura.paises.forEach((pais) => {
+      const ciudadesObj: any = {};
+      pais.ciudades.forEach((ciudad) => {
+        ciudadesObj[ciudad.nombre] = createEmptyCiudadConfig();
+      });
+      config[pais.nombre] = ciudadesObj;
+    });
+    
+    return config;
+  };
+  
+  const [processConfig, setProcessConfig] = useState<any>({});
+
+  // Helper: Obtener ciudades según país
+  const getCiudadesByCountry = (countryName: string) => {
+    const pais = estructuraUbicaciones.paises.find(p => p.nombre === countryName);
+    return pais ? pais.ciudades.map(c => c.nombre) : [];
+  };
+
+  // Helper: Actualizar processConfig para un campo específico
+  const updateProcessConfigField = (
+    ciudad: string,
+    tipo: 'sinBrandeo' | 'conBrandeo',
+    field: 'viajes' | 'bono' | 'garantizado' | 'horas',
+    rowIndex: number,
+    value: string
+  ) => {
+    setProcessConfig((prev: any) => {
+      const ciudades = prev[activeCountry];
       return {
         ...prev,
-        [key]: {
+        [activeCountry]: {
           ...ciudades,
           [ciudad]: {
             ...ciudades[ciudad],
-            [tipo]: [...ciudades[ciudad][tipo], { viajes: '', bono: '', garantizamos: '' }]
+            [tipo]: ciudades[ciudad][tipo].map((item: any, i: number) => 
+              i === rowIndex ? { ...item, [field]: value } : item
+            )
           }
         }
-      } as any;
-    })
-  }
+      };
+    });
+  };
+
+  const addTierRow = (ciudad: string, tipo: 'sinBrandeo' | 'conBrandeo') => {
+    setProcessConfig((prev: any) => {
+      const ciudades = prev[activeCountry];
+      return {
+        ...prev,
+        [activeCountry]: {
+          ...ciudades,
+          [ciudad]: {
+            ...ciudades[ciudad],
+            [tipo]: [...ciudades[ciudad][tipo], { viajes: '', bono: '', garantizado: '', horas: '' }]
+          }
+        }
+      };
+    });
+  };
   
   const removeLastTierRow = (ciudad: string, tipo: 'sinBrandeo' | 'conBrandeo') => {
-    setProcessConfig(prev => {
-      const key = activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia';
-      const ciudades = (prev as any)[key];
+    setProcessConfig((prev: any) => {
+      const ciudades = prev[activeCountry];
       const arr = ciudades[ciudad][tipo];
       return {
         ...prev,
-        [key]: {
+        [activeCountry]: {
           ...ciudades,
           [ciudad]: {
             ...ciudades[ciudad],
@@ -202,24 +250,62 @@ export const GarantizadoModule: React.FC = () => {
           }
         }
       } as any;
-    })
-  }
+    });
+  };
 
-  // El backend ya calcula todo automáticamente, no necesitamos calcular nada en el frontend
+  // Helper: Función de ordenamiento reutilizable
+  const sortByGarantizado = <T extends { garantizadoValor: string }>(data: T[]): T[] => {
+    return [...data].sort((a, b) => {
+      if (a.garantizadoValor === 'Garantizado' && b.garantizadoValor !== 'Garantizado') return -1;
+      if (a.garantizadoValor !== 'Garantizado' && b.garantizadoValor === 'Garantizado') return 1;
+      return 0;
+    });
+  };
+
+  // Helper: Procesar ciudades para el endpoint
+  const processCiudadesForEndpoint = (ciudades: any) => {
+    return Object.entries(ciudades).map(([ciudad, data]: any) => ({
+      ciudad,
+      sinBrandeo: data.sinBrandeo.map((t: any) => ({
+        viajes: Number(t.viajes) || 0,
+        bono: Number(t.bono) || 0,
+        garantizado: Number(t.garantizado) || 0,
+        horas: Number(t.horas) || 0
+      })),
+      conBrandeo: data.conBrandeo.map((t: any) => ({
+        viajes: Number(t.viajes) || 0,
+        bono: Number(t.bono) || 0,
+        garantizado: Number(t.garantizado) || 0,
+        horas: Number(t.horas) || 0
+      }))
+    }));
+  };
+
+  // Helper: Actualizar estado de conductor en múltiples arrays
+  const updateConductorState = (
+    conductorId: number,
+    updater: (conductor: GarantizadoData) => GarantizadoData
+  ) => {
+    const updatedData = sortByGarantizado(
+      data.map(c => c.id === conductorId ? updater(c) : c)
+    ) as GarantizadoData[];
+    
+    const updatedFilteredData = sortByGarantizado(
+      filteredData.map(c => c.id === conductorId ? updater(c) : c)
+    ) as GarantizadoData[];
+    
+    setData(updatedData);
+    setFilteredData(updatedFilteredData);
+  };
 
 
   // Función para cargar flotas desde la API
   const cargarFlotas = async () => {
     try {
       setLoadingFlotas(true);
-      console.log('🔍 [GarantizadoModule] Cargando flotas...');
-      
       const response = await api.get('/flota/todas');
-      console.log('✅ [GarantizadoModule] Flotas cargadas:', response.data);
-      
       setFlotas(response.data);
     } catch (error: any) {
-      console.error('❌ [GarantizadoModule] Error al cargar flotas:', error);
       setFlotas([]);
     } finally {
       setLoadingFlotas(false);
@@ -230,18 +316,14 @@ export const GarantizadoModule: React.FC = () => {
   const cargarRegistrosSemanaActual = async (flotaId?: string) => {
     try {
       setLoadingRegistros(true);
-      console.log('🔍 [GarantizadoModule] Cargando registros de la semana actual...');
       
-      // Construir endpoint con filtro de flota si se proporciona
       let endpoint = '/garantizado/registros/semana-actual';
       if (flotaId && flotaId !== '') {
         endpoint = `/garantizado/registros/semana-actual?flotaId=${flotaId}`;
       }
       
       const response = await api.get(endpoint);
-      console.log('✅ [GarantizadoModule] Registros cargados:', response.data);
       
-      // Manejar el response del backend con la nueva estructura
       let registrosData: RegistroData[] = [];
       
       if (response.data && Array.isArray(response.data)) {
@@ -249,14 +331,12 @@ export const GarantizadoModule: React.FC = () => {
       } else if (response.data && response.data.registros && Array.isArray(response.data.registros)) {
         registrosData = response.data.registros;
       } else {
-        console.warn('⚠️ [GarantizadoModule] Response no tiene formato esperado:', response.data);
         registrosData = [];
       }
       
       setRegistrosData(registrosData);
       
     } catch (error: any) {
-      console.error('❌ [GarantizadoModule] Error al cargar registros:', error);
       setRegistrosData([]);
     } finally {
       setLoadingRegistros(false);
@@ -270,7 +350,6 @@ export const GarantizadoModule: React.FC = () => {
   const cargarConductores = async (isInitialLoad = false) => {
     // Protección contra llamadas múltiples en carga inicial
     if (isInitialLoad && hasLoadedRef.current) {
-      console.log('⚠️ [GarantizadoModule] Ya se cargó una vez, evitando llamada duplicada');
       return;
     }
 
@@ -281,19 +360,15 @@ export const GarantizadoModule: React.FC = () => {
       } else {
         setLoadingTable(true);
       }
-      console.log('🔍 [GarantizadoModule] Cargando conductores...');
       
-      let endpoint = '/garantizado/procesar-semana-anterior'; // Por defecto semana anterior
+      let endpoint = '/garantizado/listar-semana-anterior';
       
       // Si hay una flota seleccionada, usar el endpoint específico de flota
       if (flotaFilter && flotaFilter !== '') {
         endpoint = `/garantizado/flota/${flotaFilter}`;
       }
       
-      console.log('📡 [GarantizadoModule] Llamando endpoint:', endpoint);
-      
       const response = await api.get(endpoint);
-      console.log('✅ [GarantizadoModule] Conductores cargados:', response.data);
       
       // Manejar el response del backend que viene con este formato:
       // { "semanaAnterior": "SEMANA41", "semanaActual": "SEMANA42", "conductores": [...] }
@@ -319,9 +394,7 @@ export const GarantizadoModule: React.FC = () => {
         semanaActualFromResponse = response.data.semanaActual || '';
         semanaAnteriorFromResponse = response.data.semanaAnterior || '';
       } else {
-        // Fallback: asegurar que siempre sea un array
         conductoresData = [];
-        console.warn('⚠️ [GarantizadoModule] Response no tiene formato esperado:', response.data);
       }
       
       // Establecer la semana actual (para el texto del período)
@@ -338,11 +411,7 @@ export const GarantizadoModule: React.FC = () => {
       const safeConductoresData = Array.isArray(conductoresData) ? conductoresData : [];
       
       // Ordenar: Garantizados primero, luego No Garantizados
-      const sortedData = safeConductoresData.sort((a, b) => {
-        if (a.garantizadoValor === 'Garantizado' && b.garantizadoValor !== 'Garantizado') return -1;
-        if (a.garantizadoValor !== 'Garantizado' && b.garantizadoValor === 'Garantizado') return 1;
-        return 0;
-      });
+      const sortedData = sortByGarantizado(safeConductoresData);
       
       setData(sortedData);
       setFilteredData(sortedData);
@@ -359,7 +428,6 @@ export const GarantizadoModule: React.FC = () => {
       }
       
     } catch (error: any) {
-      console.error('❌ [GarantizadoModule] Error al cargar conductores:', error);
       setData([]);
       setFilteredData([]);
       setTotalConductores(0);
@@ -374,8 +442,6 @@ export const GarantizadoModule: React.FC = () => {
   };
 
   useEffect(() => {
-    console.log('🚀 [GarantizadoModule] Montando componente - Iniciando carga...');
-    
     // Cargar flotas al inicializar el componente
     cargarFlotas();
     
@@ -392,43 +458,24 @@ export const GarantizadoModule: React.FC = () => {
 
     // Configurar WebSocket para actualizaciones automáticas
     const handleGarantizadoUpdate = (event: any) => {
-      console.log('📊 [GarantizadoModule] Evento de garantizado recibido:', event);
-      
-      if (event.type === 'GARANTIZADO_TABLE_UPDATE') {
-        console.log('🔄 [GarantizadoModule] Actualizando tabla con datos del WebSocket');
+      if (event.type === 'GARANTIZADO_PROCESS_SUCCESS') {
+        showSuccess(event.message || 'Proceso completado exitosamente');
         
-        // Actualizar datos con los recibidos del WebSocket
-        const conductoresData = event.conductores || [];
-        const semanaActualFromEvent = event.semanaActual || '';
-        const semanaAnteriorFromEvent = event.semanaAnterior || '';
-        
-        // Ordenar: Garantizados primero, luego No Garantizados
-        const sortedData = conductoresData.sort((a: any, b: any) => {
-          if (a.garantizadoValor === 'Garantizado' && b.garantizadoValor !== 'Garantizado') return -1;
-          if (a.garantizadoValor !== 'Garantizado' && b.garantizadoValor === 'Garantizado') return 1;
-          return 0;
-        });
-        
-        setData(sortedData);
-        setFilteredData(sortedData);
-        setTotalConductores(sortedData.length);
-        
-        if (semanaActualFromEvent) {
-          setSemanaActual(semanaActualFromEvent);
+        // Actualizar semana si viene en el evento
+        if (event.semana) {
+          setSemanaAnterior(event.semana);
         }
         
-        if (semanaAnteriorFromEvent) {
-          setSemanaAnterior(semanaAnteriorFromEvent);
-        }
-        
-        // Mostrar notificación de actualización
-        console.log(`✅ [GarantizadoModule] Tabla actualizada: ${conductoresData.length} conductores`);
-        
+        // Recargar la lista de conductores si autoReload es true
+        if (event.autoReload !== false) {
+          cargarConductores(false).then(() => {
         // Mostrar notificación visual
         setShowUpdateNotification(true);
     setTimeout(() => {
           setShowUpdateNotification(false);
-        }, 5000); // Ocultar después de 5 segundos
+            }, 5000);
+          });
+        }
       }
     };
 
@@ -512,11 +559,7 @@ export const GarantizadoModule: React.FC = () => {
       }
 
       // Ordenar: Garantizados primero, luego No Garantizados
-      filtered = filtered.sort((a, b) => {
-        if (a.garantizadoValor === 'Garantizado' && b.garantizadoValor !== 'Garantizado') return -1;
-        if (a.garantizadoValor !== 'Garantizado' && b.garantizadoValor === 'Garantizado') return 1;
-        return 0;
-      });
+      filtered = sortByGarantizado(filtered);
 
       setFilteredData(filtered);
       setTotalConductores(filtered.length);
@@ -544,17 +587,8 @@ export const GarantizadoModule: React.FC = () => {
   const safeFilteredData = Array.isArray(filteredData) ? filteredData : [];
   const paginatedData = safeFilteredData.slice(startIndex, endIndex);
 
-  // El backend ya calcula el estado automáticamente
-
   // Función para abrir modal de exportación
   const handleOpenExportModal = () => {
-    console.log('🔍 [GarantizadoModule] Abriendo modal de exportación...');
-    console.log('📊 [GarantizadoModule] Flotas disponibles:', flotas);
-    console.log('📊 [GarantizadoModule] Flota actual:', flotaFilter);
-    console.log('📊 [GarantizadoModule] Estado actual:', statusFilter);
-    console.log('📊 [GarantizadoModule] Semana actual:', semanaActual);
-    console.log('📊 [GarantizadoModule] Semana anterior:', semanaAnterior);
-    
     setExportFilters({
       flotaId: flotaFilter || '',
       estado: statusFilter || '',
@@ -563,145 +597,228 @@ export const GarantizadoModule: React.FC = () => {
     setShowExportModal(true);
   };
 
-  // Función para abrir modal de procesamiento
-  const handleOpenProcessModal = () => {
-    setProcessConfig(prev => ({
-      ...prev,
-      ubicacion: 'peru',
-      ciudadesPeru: {
-        Lima: {
-          sinBrandeo: [
-            { viajes: '', bono: '', garantizamos: '' },
-            { viajes: '', bono: '', garantizamos: '' }
-          ],
-          conBrandeo: [
-            { viajes: '', bono: '', garantizamos: '' },
-            { viajes: '', bono: '', garantizamos: '' }
-          ]
-        },
-        Arequipa: {
-          sinBrandeo: [
-            { viajes: '', bono: '', garantizamos: '' },
-            { viajes: '', bono: '', garantizamos: '' }
-          ],
-          conBrandeo: [
-            { viajes: '', bono: '', garantizamos: '' },
-            { viajes: '', bono: '', garantizamos: '' }
-          ]
-        },
-        Trujillo: {
-          sinBrandeo: [
-            { viajes: '', bono: '', garantizamos: '' },
-            { viajes: '', bono: '', garantizamos: '' }
-          ],
-          conBrandeo: [
-            { viajes: '', bono: '', garantizamos: '' },
-            { viajes: '', bono: '', garantizamos: '' }
-          ]
-        }
-      },
-      ciudadesColombia: {
-        'Bogotá': {
-          sinBrandeo: [
-            { viajes: '', bono: '', garantizamos: '' },
-            { viajes: '', bono: '', garantizamos: '' }
-          ],
-          conBrandeo: [
-            { viajes: '', bono: '', garantizamos: '' },
-            { viajes: '', bono: '', garantizamos: '' }
-          ]
-        },
-        'Bucaramanga': {
-          sinBrandeo: [
-            { viajes: '', bono: '', garantizamos: '' },
-            { viajes: '', bono: '', garantizamos: '' }
-          ],
-          conBrandeo: [
-            { viajes: '', bono: '', garantizamos: '' },
-            { viajes: '', bono: '', garantizamos: '' }
-          ]
+  // Función para cargar estructura completa de países y ciudades
+  const cargarEstructuraUbicaciones = async () => {
+    try {
+      setLoadingEstructura(true);
+      const response = await api.get<EstructuraUbicacionesResponse>('/garantizado/ubicaciones/find-all');
+      
+      // Manejar tipos Long del backend convirtiéndolos a number
+      const estructuraMapeada: EstructuraUbicacionesResponse = {
+        paises: response.data.paises.map(pais => ({
+          ...pais,
+          id: typeof pais.id === 'string' ? parseInt(pais.id) : Number(pais.id),
+          ciudades: pais.ciudades.map(ciudad => ({
+            ...ciudad,
+            id: typeof ciudad.id === 'string' ? parseInt(ciudad.id) : Number(ciudad.id),
+            pais_id: typeof ciudad.pais_id === 'string' ? parseInt(ciudad.pais_id) : Number(ciudad.pais_id)
+          }))
+        }))
+      };
+      
+      setEstructuraUbicaciones(estructuraMapeada);
+      
+      // Inicializar processConfig con la estructura cargada
+      const config = createInitialProcessConfig(estructuraMapeada);
+      setProcessConfig(config);
+      
+      // Establecer país y ciudad activos (primer país y primera ciudad)
+      if (estructuraMapeada.paises.length > 0) {
+        const primerPais = estructuraMapeada.paises[0];
+        setActiveCountry(primerPais.nombre);
+        if (primerPais.ciudades.length > 0) {
+          setActiveTab(primerPais.ciudades[0].nombre);
         }
       }
-    }));
-    setActiveCountry('Perú');
-    setActiveTab('Lima');
+      
+      return estructuraMapeada;
+    } catch (error) {
+      setEstructuraUbicaciones({ paises: [] });
+      return { paises: [] };
+    } finally {
+      setLoadingEstructura(false);
+    }
+  };
+
+  // Función para abrir modal de procesamiento
+  const handleOpenProcessModal = async () => {
+    setModalViewMode('procesamiento');
     setShowProcessModal(true);
+    
+    // Cargar estructura completa si no está cargada o si está vacía
+    if (estructuraUbicaciones.paises.length === 0) {
+      await cargarEstructuraUbicaciones();
+    } else {
+      // Reinicializar processConfig con la estructura existente
+      const config = createInitialProcessConfig(estructuraUbicaciones);
+      setProcessConfig(config);
+      
+      // Establecer país y ciudad activos
+      if (estructuraUbicaciones.paises.length > 0) {
+        const primerPais = estructuraUbicaciones.paises[0];
+        setActiveCountry(primerPais.nombre);
+        if (primerPais.ciudades.length > 0) {
+          setActiveTab(primerPais.ciudades[0].nombre);
+        }
+      }
+    }
+    
+    // Cargar solo países si no están cargados (para el combobox de registro)
+    if (paises.length === 0) {
+      cargarPaises();
+    }
+  };
+
+  // Función para cargar solo la lista ligera de países (para el combobox)
+  const cargarPaises = async () => {
+    try {
+      setLoadingUbicaciones(true);
+      const response = await api.get('/garantizado/ubicaciones/paises');
+      const paisesList: Array<{ id: number | string; nombre: string }> = response.data;
+      // Mapear solo id y nombre (Long de Java se convierte a number en JS)
+      const paisesMapeados: PaisData[] = paisesList.map(pais => ({
+        id: typeof pais.id === 'string' ? parseInt(pais.id) : Number(pais.id),
+        nombre: pais.nombre
+      }));
+      setPaises(paisesMapeados);
+      return paisesMapeados;
+    } catch (error) {
+      setPaises([]);
+      return [];
+    } finally {
+      setLoadingUbicaciones(false);
+    }
+  };
+
+  // Helper: Capitalizar primera letra de cada palabra
+  const capitalizeFirstLetter = (str: string): string => {
+    if (!str) return str;
+    return str
+      .toLowerCase()
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
+  // Helper: Validar y mostrar mensaje de error
+  const validateAndAlert = (condition: boolean, message: string): boolean => {
+    if (condition) {
+      showError(message);
+      return true;
+    }
+    return false;
+  };
+
+  // Función para crear nuevo país
+  const handleCrearPais = async () => {
+    if (validateAndAlert(!nuevoPais.nombre.trim(), 'Por favor, ingresa el nombre del país')) return;
+    if (validateAndAlert(!nuevoPais.moneda.trim(), 'Por favor, ingresa el código de moneda (ej: PEN, USD)')) return;
+    if (validateAndAlert(!nuevoPais.simbolo_moneda.trim(), 'Por favor, ingresa el símbolo de moneda (ej: S/., $)')) return;
+
+    try {
+      setGuardandoPais(true);
+      const response = await api.post('/garantizado/ubicaciones/paises', {
+        nombre: nuevoPais.nombre.trim(),
+        moneda: nuevoPais.moneda.trim().toUpperCase(),
+        simbolo_moneda: nuevoPais.simbolo_moneda.trim()
+      });
+      
+      // Recargar estructura completa para actualizar la vista de procesamiento
+      await cargarEstructuraUbicaciones();
+      
+      // Recargar solo la lista ligera de países para actualizar el combobox
+      const paisesActualizados = await cargarPaises();
+      
+      // Buscar el país recién creado para seleccionarlo automáticamente
+      const paisCreado = response.data?.id || paisesActualizados.find(p => p.nombre === nuevoPais.nombre.trim())?.id;
+      
+      if (paisCreado) {
+        // Seleccionar automáticamente el país recién creado en el formulario de ciudad
+        setNuevaCiudad(prev => ({
+          ...prev,
+          pais_id: typeof paisCreado === 'number' ? paisCreado : Number(paisCreado)
+        }));
+      }
+      
+      // Limpiar formulario
+      setNuevoPais({
+        nombre: '',
+        moneda: '',
+        simbolo_moneda: ''
+      });
+      
+      showSuccess(paisCreado ? 'País creado exitosamente. Ya está seleccionado para crear ciudades.' : 'País creado exitosamente');
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || 'Error al crear el país';
+      showError(errorMessage);
+    } finally {
+      setGuardandoPais(false);
+    }
+  };
+
+  // Función para crear nueva ciudad
+  const handleCrearCiudad = async () => {
+    if (validateAndAlert(!nuevaCiudad.pais_id, 'Por favor, selecciona un país')) return;
+    if (validateAndAlert(!nuevaCiudad.nombre.trim(), 'Por favor, ingresa el nombre de la ciudad')) return;
+
+    try {
+      setGuardandoCiudad(true);
+      await api.post('/garantizado/ubicaciones/ciudades', {
+        pais_id: nuevaCiudad.pais_id,
+        nombre: nuevaCiudad.nombre.trim()
+      });
+      
+      // Recargar estructura completa para actualizar la vista de procesamiento
+      await cargarEstructuraUbicaciones();
+      
+      // Recargar solo países (para el combobox)
+      await cargarPaises();
+      
+      // Limpiar formulario
+      setNuevaCiudad({
+        pais_id: 0,
+        nombre: ''
+      });
+      
+      showSuccess('Ciudad creada exitosamente');
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || 'Error al crear la ciudad';
+      showError(errorMessage);
+    } finally {
+      setGuardandoCiudad(false);
+    }
   };
 
   // Función para procesar garantizado
   const handleProcesarGarantizado = async () => {
     try {
       setLoadingTable(true);
-      console.log('🔄 [GarantizadoModule] Iniciando procesamiento de garantizado...');
-      console.log('📊 [GarantizadoModule] Configuración:', processConfig);
       
-      // Llamar al endpoint de procesamiento con la configuración
-      const ciudadesSeleccionadas = (activeCountry === 'Perú' ? processConfig.ciudadesPeru : processConfig.ciudadesColombia) as any;
-      const response = await api.post('/garantizado/procesar', {
-        ubicacion: activeCountry === 'Perú' ? 'peru' : 'colombia',
-        semana: semanaAnterior || semanaActual,
-        ciudades: Object.entries(ciudadesSeleccionadas).map(([ciudad, data]: any) => ({
-          ciudad,
-          sinBrandeo: data.sinBrandeo.map((t: any) => ({
-            viajes: Number(t.viajes) || 0,
-            bono: Number(t.bono) || 0,
-            garantizamos: Number(t.garantizamos) || 0
-          })),
-          conBrandeo: data.conBrandeo.map((t: any) => ({
-            viajes: Number(t.viajes) || 0,
-            bono: Number(t.bono) || 0,
-            garantizamos: Number(t.garantizamos) || 0
-          }))
-        })),
-        // Extra opcional: enviar ambos países para futura compatibilidad
-        paises: [
-          {
-            pais: 'peru',
-            ciudades: Object.entries(processConfig.ciudadesPeru as any).map(([ciudad, data]: any) => ({
-              ciudad,
-              sinBrandeo: data.sinBrandeo.map((t: any) => ({
-                viajes: Number(t.viajes) || 0,
-                bono: Number(t.bono) || 0,
-                garantizamos: Number(t.garantizamos) || 0
-              })),
-              conBrandeo: data.conBrandeo.map((t: any) => ({
-                viajes: Number(t.viajes) || 0,
-                bono: Number(t.bono) || 0,
-                garantizamos: Number(t.garantizamos) || 0
-              }))
-            }))
-          },
-          {
-            pais: 'colombia',
-            ciudades: Object.entries(processConfig.ciudadesColombia as any).map(([ciudad, data]: any) => ({
-              ciudad,
-              sinBrandeo: data.sinBrandeo.map((t: any) => ({
-                viajes: Number(t.viajes) || 0,
-                bono: Number(t.bono) || 0,
-                garantizamos: Number(t.garantizamos) || 0
-              })),
-              conBrandeo: data.conBrandeo.map((t: any) => ({
-                viajes: Number(t.viajes) || 0,
-                bono: Number(t.bono) || 0,
-                garantizamos: Number(t.garantizamos) || 0
-              }))
-            }))
-          }
-        ]
+      // Procesar todos los países con sus ciudades y valores de brandeo
+      const paisesPayload = estructuraUbicaciones.paises.map(pais => ({
+        pais: pais.nombre.toLowerCase().replace(/á/g, 'a').replace(/é/g, 'e').replace(/í/g, 'i').replace(/ó/g, 'o').replace(/ú/g, 'u'),
+        ciudades: processConfig[pais.nombre] ? processCiudadesForEndpoint(processConfig[pais.nombre]) : []
+      }));
+      
+      // Guardar la configuración
+      await api.post('/garantizado/configuraciones/guardar', {
+        paises: paisesPayload
       });
       
-      console.log('✅ [GarantizadoModule] Procesamiento completado:', response.data);
+      // Procesar los garantizados por cada conductor
+      await api.post('/garantizado/configuraciones/procesar', {
+        paises: paisesPayload
+      });
+      
+      // Procesar la semana anterior con las nuevas configuraciones
+      await api.post('/garantizado/procesar-semana-anterior');
       
       // Cerrar modal y mostrar notificación de éxito
+      // El WebSocket recargará automáticamente la lista cuando el procesamiento termine
       setShowProcessModal(false);
-      alert('✅ Procesamiento de garantizado completado exitosamente');
-      
-      // Recargar los datos después del procesamiento
-      await cargarConductores(false);
+      showSuccess('Configuración guardada y garantizados procesados exitosamente');
       
     } catch (error: any) {
-      console.error('❌ [GarantizadoModule] Error al procesar garantizado:', error);
-      
       let errorMessage = 'Error al procesar garantizado';
       
       if (error.response?.status === 400) {
@@ -712,7 +829,7 @@ export const GarantizadoModule: React.FC = () => {
         errorMessage = error.response.data.message;
       }
       
-      alert(`❌ Error: ${errorMessage}`);
+      showError(errorMessage);
     } finally {
       setLoadingTable(false);
     }
@@ -722,9 +839,7 @@ export const GarantizadoModule: React.FC = () => {
   const handleExportExcel = async () => {
     try {
       setExporting(true);
-      console.log('📊 [GarantizadoModule] Iniciando exportación a Excel...');
       
-      // Usar filtros del modal
       let endpoint = '/garantizado/export/excel';
       const params: any = {};
       
@@ -739,8 +854,6 @@ export const GarantizadoModule: React.FC = () => {
       if (exportFilters.semana && exportFilters.semana !== '') {
         params.semana = exportFilters.semana;
       }
-      
-      console.log('📡 [GarantizadoModule] Llamando endpoint:', endpoint, 'con params:', params);
       
       const response = await api.get(endpoint, {
         params,
@@ -768,14 +881,10 @@ export const GarantizadoModule: React.FC = () => {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
       
-      console.log('✅ [GarantizadoModule] Archivo Excel descargado exitosamente');
-      
       // Cerrar modal después de exportar exitosamente
       setShowExportModal(false);
       
     } catch (error: any) {
-      console.error('❌ [GarantizadoModule] Error al exportar Excel:', error);
-      
       let errorMessage = 'Error al exportar datos';
       
       if (error.response?.status === 404) {
@@ -786,7 +895,7 @@ export const GarantizadoModule: React.FC = () => {
         errorMessage = error.response.data.message;
       }
       
-      alert(`Error: ${errorMessage}`);
+      showError(errorMessage);
     } finally {
       setExporting(false);
     }
@@ -822,7 +931,6 @@ export const GarantizadoModule: React.FC = () => {
     // Buscar el conductor para obtener su nombre
     const conductor = data.find(c => c.id === conductorId);
     if (!conductor) {
-      console.error('❌ [GarantizadoModule] Conductor no encontrado');
       return;
     }
 
@@ -842,74 +950,20 @@ export const GarantizadoModule: React.FC = () => {
     const { conductorId, nuevoEstado } = pendingPaymentChange;
     
     try {
-      console.log('💳 [GarantizadoModule] Confirmando cambio de estado de pago conductor ID:', conductorId, 'a:', nuevoEstado);
-      
       // Si es "Pagado", usar el endpoint específico
       if (nuevoEstado === 'Pagado') {
-        const response = await api.put(`/garantizado/marcar-pagado/${conductorId}`);
-        
-        console.log('📡 [GarantizadoModule] Respuesta del servidor:', response.data);
-        
-        // Si la respuesta es exitosa (status 200), considerar como éxito
-        if (response.status === 200) {
-          console.log('✅ [GarantizadoModule] Conductor marcado como pagado exitosamente');
-          
-          // Actualizar el estado del conductor en la lista local
-          setData(prevData => 
-            prevData.map(conductor => 
-              conductor.id === conductorId 
-                ? { ...conductor, estadoPago: 'Pagado' as const }
-                : conductor
-            )
-          );
-          
-          setFilteredData(prevData => 
-            prevData.map(conductor => 
-              conductor.id === conductorId 
-                ? { ...conductor, estadoPago: 'Pagado' as const }
-                : conductor
-            )
-          );
-          
-          // Cerrar modal inmediatamente
-          setShowConfirmModal(false);
-          setPendingPaymentChange(null);
-        } else {
-          throw new Error('Error inesperado del servidor');
-        }
+        await api.put(`/garantizado/marcar-pagado/${conductorId}`);
+        updateConductorState(conductorId, (c) => ({ ...c, estadoPago: 'Pagado' as const }));
       } else {
         // Para otros estados, actualizar directamente en la UI
-        setData(prevData => 
-          prevData.map(conductor => 
-            conductor.id === conductorId 
-              ? { ...conductor, estadoPago: nuevoEstado }
-              : conductor
-          )
-        );
-        
-        setFilteredData(prevData => 
-          prevData.map(conductor => 
-            conductor.id === conductorId 
-              ? { ...conductor, estadoPago: nuevoEstado }
-              : conductor
-          )
-        );
-        
-        console.log(`✅ [GarantizadoModule] Estado cambiado a: ${nuevoEstado}`);
+        updateConductorState(conductorId, (c) => ({ ...c, estadoPago: nuevoEstado }));
+      }
         
         // Cerrar modal
         setShowConfirmModal(false);
         setPendingPaymentChange(null);
-      }
       
     } catch (error: any) {
-      console.error('❌ [GarantizadoModule] Error al cambiar estado de pago:', error);
-      console.error('❌ [GarantizadoModule] Error details:', {
-        message: error.message,
-        status: error.response?.status,
-        data: error.response?.data
-      });
-      
       let errorMessage = 'Error al cambiar estado de pago';
       
       if (error.response?.status === 400) {
@@ -924,8 +978,7 @@ export const GarantizadoModule: React.FC = () => {
         errorMessage = error.message;
       }
       
-      // Solo mostrar error en consola, no alert
-      console.error(`❌ Error al cambiar estado: ${errorMessage}`);
+      showError(errorMessage);
       
       // Cerrar modal
       setShowConfirmModal(false);
@@ -997,7 +1050,7 @@ export const GarantizadoModule: React.FC = () => {
                 size="sm" 
                 className="px-6 py-2 bg-red-600 text-white"
                 onClick={handleOpenProcessModal}
-                disabled={loadingTable || filteredData.length === 0}
+                disabled={loadingTable}
               >
                 {loadingTable ? (
                   <>
@@ -1277,8 +1330,15 @@ export const GarantizadoModule: React.FC = () => {
                               <User className="h-5 w-5 text-red-600" />
                             </div>
                             <div className="min-w-0 flex-1">
-                              <div className="font-medium text-gray-900 dark:text-white text-base">
-                                {item.nombreCompleto}
+                              <div className="flex items-center gap-2">
+                                <div className="font-medium text-gray-900 dark:text-white text-base">
+                                  {item.nombreCompleto}
+                                </div>
+                                {item.brandeo && (
+                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+                                    Brandeo
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -1701,53 +1761,113 @@ export const GarantizadoModule: React.FC = () => {
           <div className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-6 w-full max-w-4xl mx-auto shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                    modalViewMode === 'procesamiento' 
+                      ? 'bg-red-100 dark:bg-red-900/30' 
+                      : 'bg-red-100 dark:bg-red-900/30'
+                  }`}>
+                    {modalViewMode === 'procesamiento' ? (
                   <Shield className="h-6 w-6 text-red-600 dark:text-red-400" />
+                    ) : (
+                      <Globe className="h-6 w-6 text-red-600 dark:text-red-400" />
+                    )}
                 </div>
                 <div>
                   <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
-                    Configurar Procesamiento
+                      {modalViewMode === 'procesamiento' ? 'Configurar Procesamiento' : 'Registrar Ubicaciones'}
                   </h3>
                   <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Semana: <span className="font-bold text-red-600">{(semanaAnterior || semanaActual) || 'SEMANA'}</span>
+                      {modalViewMode === 'procesamiento' ? (
+                        <>Semana: <span className="font-bold text-red-600">{(semanaAnterior || semanaActual) || 'SEMANA'}</span></>
+                      ) : (
+                        <>Gestiona países y ciudades para el módulo garantizado</>
+                      )}
                   </p>
                 </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  {/* Switch para cambiar entre vistas */}
+                  <div className="flex items-center gap-3 bg-gray-100 dark:bg-gray-700 rounded-lg px-3 py-2">
+                    <span className={`text-xs font-medium transition-colors ${
+                      modalViewMode === 'procesamiento' 
+                        ? 'text-gray-600 dark:text-gray-300' 
+                        : 'text-gray-400 dark:text-gray-500'
+                    }`}>
+                      Procesamiento
+                    </span>
+                    <Switch
+                      checked={modalViewMode === 'registro'}
+                      onCheckedChange={(checked) => {
+                        setModalViewMode(checked ? 'registro' : 'procesamiento');
+                        if (checked && paises.length === 0) {
+                          cargarPaises();
+                        }
+                      }}
+                      className="data-[state=checked]:bg-red-600"
+                    />
+                    <span className={`text-xs font-medium transition-colors ${
+                      modalViewMode === 'registro' 
+                        ? 'text-red-600 dark:text-red-400' 
+                        : 'text-gray-400 dark:text-gray-500'
+                    }`}>
+                      Registro
+                    </span>
               </div>
               <button
-                onClick={() => setShowProcessModal(false)}
+                    onClick={() => {
+                      setShowProcessModal(false);
+                      setModalViewMode('procesamiento');
+                    }}
                 className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
               >
                 <X className="h-6 w-6" />
               </button>
+                </div>
             </div>
 
+            {/* Contenido condicional según el modo */}
+            {modalViewMode === 'procesamiento' ? (
+              <>
             {/* Pestañas de país */}
+                {loadingEstructura ? (
+                  <div className="flex justify-center items-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
+                  </div>
+                ) : estructuraUbicaciones.paises.length > 0 ? (
             <div className="flex space-x-1 mb-3 bg-gray-100 dark:bg-gray-700 p-1 rounded-lg">
-              {['Perú', 'Colombia'].map((pais) => (
+                    {estructuraUbicaciones.paises.map((pais) => (
                 <button
-                  key={pais}
+                        key={pais.id}
                   onClick={() => {
-                    setActiveCountry(pais as 'Perú' | 'Colombia');
-                    const firstCity = Object.keys((processConfig as any)[pais === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'])[0] as any;
-                    if (firstCity) setActiveTab(firstCity);
+                          setActiveCountry(pais.nombre);
+                          const ciudadesDelPais = getCiudadesByCountry(pais.nombre);
+                          if (ciudadesDelPais.length > 0) {
+                            setActiveTab(ciudadesDelPais[0]);
+                          }
                   }}
                   className={`flex-1 py-2 px-2 sm:px-4 rounded-md text-xs sm:text-sm font-medium transition-all ${
-                    activeCountry === pais
+                          activeCountry === pais.nombre
                       ? 'bg-white dark:bg-gray-800 text-red-600 dark:text-red-400 shadow-sm'
                       : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
                   }`}
                 >
-                  {pais}
+                        {pais.nombre}
                 </button>
               ))}
             </div>
+                ) : (
+                  <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">
+                    No hay países disponibles
+                  </div>
+                )}
 
             {/* Pestañas de ciudades (según país) */}
+                {activeCountry && processConfig[activeCountry] && Object.keys(processConfig[activeCountry]).length > 0 && (
             <div className="flex space-x-1 mb-4 sm:mb-6 bg-gray-100 dark:bg-gray-700 p-1 rounded-lg">
-              {Object.keys((processConfig as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia']).map((ciudad) => (
+                    {Object.keys(processConfig[activeCountry]).map((ciudad) => (
                 <button
                   key={ciudad}
-                  onClick={() => setActiveTab(ciudad as any)}
+                        onClick={() => setActiveTab(ciudad)}
                   className={`flex-1 py-2 px-2 sm:px-4 rounded-md text-xs sm:text-sm font-medium transition-all ${
                     activeTab === ciudad
                       ? 'bg-white dark:bg-gray-800 text-red-600 dark:text-red-400 shadow-sm'
@@ -1758,7 +1878,24 @@ export const GarantizadoModule: React.FC = () => {
                 </button>
               ))}
             </div>
+                )}
 
+            {/* Mensaje si el país no tiene ciudades */}
+            {activeCountry && estructuraUbicaciones.paises.length > 0 && (
+              (() => {
+                const paisActual = estructuraUbicaciones.paises.find(p => p.nombre === activeCountry);
+                const tieneCiudades = paisActual && paisActual.ciudades && paisActual.ciudades.length > 0;
+                return !tieneCiudades ? (
+                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                    <MapPin className="h-12 w-12 mx-auto mb-3 text-gray-400" />
+                    <p className="text-base font-medium">Este país no tiene ciudades registradas</p>
+                    <p className="text-sm mt-1">Registra ciudades desde la vista de "Registrar Ubicaciones"</p>
+                  </div>
+                ) : null;
+              })()
+            )}
+
+            {estructuraUbicaciones.paises.length > 0 && activeCountry && processConfig[activeCountry] && Object.keys(processConfig[activeCountry]).length > 0 ? (
             <div className="space-y-4 sm:space-y-6">
               {/* Tablas para la ciudad activa */}
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -1788,76 +1925,42 @@ export const GarantizadoModule: React.FC = () => {
                     </div>
                   </div>
                   
-                  <div className="grid grid-cols-3 gap-1 sm:gap-2 text-xs font-semibold text-gray-600 dark:text-gray-300 mb-2 sm:mb-3">
+                  <div className="grid grid-cols-4 gap-1 sm:gap-2 text-xs font-semibold text-gray-600 dark:text-gray-300 mb-2 sm:mb-3">
                     <div>VIAJES</div>
                     <div>BONO</div>
-                    <div>GARANTIZAMOS</div>
+                    <div>GARANTIZADO</div>
+                    <div>HORAS</div>
                   </div>
                   
                   <div className="space-y-1 sm:space-y-2">
-                    {(processConfig as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'][activeTab].sinBrandeo.map((row: any, idx: number) => (
-                      <div key={idx} className="grid grid-cols-3 gap-1 sm:gap-2">
+                    {processConfig[activeCountry]?.[activeTab]?.sinBrandeo?.map((row: any, idx: number) => (
+                      <div key={idx} className="grid grid-cols-4 gap-1 sm:gap-2">
                         <Input
                           type="number"
                           value={row.viajes}
-                          onChange={(e) => {
-                            const value = e.target.value
-                            setProcessConfig(prev => ({
-                              ...prev,
-                              [activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia']: {
-                                ...(prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'],
-                                [activeTab]: {
-                                  ...(prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'][activeTab],
-                                  sinBrandeo: (prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'][activeTab].sinBrandeo.map((item: any, i: number) => 
-                                    i === idx ? { ...item, viajes: value } : item
-                                  )
-                                }
-                              }
-                            }))
-                          }}
-                          placeholder="140"
+                          onChange={(e) => updateProcessConfigField(activeTab, 'sinBrandeo', 'viajes', idx, e.target.value)}
+                          placeholder="0.0"
                           className="text-sm"
                         />
                         <Input
                           type="number"
                           value={row.bono}
-                          onChange={(e) => {
-                            const value = e.target.value
-                            setProcessConfig(prev => ({
-                              ...prev,
-                              [activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia']: {
-                                ...(prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'],
-                                [activeTab]: {
-                                  ...(prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'][activeTab],
-                                  sinBrandeo: (prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'][activeTab].sinBrandeo.map((item: any, i: number) => 
-                                    i === idx ? { ...item, bono: value } : item
-                                  )
-                                }
-                              }
-                            }))
-                          }}
-                          placeholder="520"
+                          onChange={(e) => updateProcessConfigField(activeTab, 'sinBrandeo', 'bono', idx, e.target.value)}
+                          placeholder="0.0"
                           className="text-sm"
                         />
                         <Input
                           type="number"
-                          value={row.garantizamos}
-                          onChange={(e) => {
-                            const value = e.target.value
-                            setProcessConfig(prev => ({
-                              ...prev,
-                              [activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia']: {
-                                ...(prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'],
-                                [activeTab]: {
-                                  ...(prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'][activeTab],
-                                  sinBrandeo: (prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'][activeTab].sinBrandeo.map((item: any, i: number) => 
-                                    i === idx ? { ...item, garantizamos: value } : item
-                                  )
-                                }
-                              }
-                            }))
-                          }}
-                          placeholder="1450"
+                          value={row.garantizado}
+                          onChange={(e) => updateProcessConfigField(activeTab, 'sinBrandeo', 'garantizado', idx, e.target.value)}
+                          placeholder="0.0"
+                          className="text-sm"
+                        />
+                        <Input
+                          type="number"
+                          value={row.horas}
+                          onChange={(e) => updateProcessConfigField(activeTab, 'sinBrandeo', 'horas', idx, e.target.value)}
+                          placeholder="0.0"
                           className="text-sm"
                         />
                       </div>
@@ -1891,76 +1994,42 @@ export const GarantizadoModule: React.FC = () => {
                     </div>
                   </div>
                   
-                  <div className="grid grid-cols-3 gap-1 sm:gap-2 text-xs font-semibold text-gray-600 dark:text-gray-300 mb-2 sm:mb-3">
+                  <div className="grid grid-cols-4 gap-1 sm:gap-2 text-xs font-semibold text-gray-600 dark:text-gray-300 mb-2 sm:mb-3">
                     <div>VIAJES</div>
                     <div>BONO</div>
-                    <div>GARANTIZAMOS</div>
+                    <div>GARANTIZADO</div>
+                    <div>HORAS</div>
                   </div>
                   
                   <div className="space-y-1 sm:space-y-2">
-                    {(processConfig as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'][activeTab].conBrandeo.map((row: any, idx: number) => (
-                      <div key={idx} className="grid grid-cols-3 gap-1 sm:gap-2">
+                    {processConfig[activeCountry]?.[activeTab]?.conBrandeo?.map((row: any, idx: number) => (
+                      <div key={idx} className="grid grid-cols-4 gap-1 sm:gap-2">
                         <Input
                           type="number"
                           value={row.viajes}
-                          onChange={(e) => {
-                            const value = e.target.value
-                            setProcessConfig(prev => ({
-                              ...prev,
-                              [activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia']: {
-                                ...(prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'],
-                                [activeTab]: {
-                                  ...(prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'][activeTab],
-                                  conBrandeo: (prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'][activeTab].conBrandeo.map((item: any, i: number) => 
-                                    i === idx ? { ...item, viajes: value } : item
-                                  )
-                                }
-                              }
-                            }))
-                          }}
-                          placeholder="175"
+                          onChange={(e) => updateProcessConfigField(activeTab, 'conBrandeo', 'viajes', idx, e.target.value)}
+                          placeholder="0.0"
                           className="text-sm"
                         />
                         <Input
                           type="number"
                           value={row.bono}
-                          onChange={(e) => {
-                            const value = e.target.value
-                            setProcessConfig(prev => ({
-                              ...prev,
-                              [activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia']: {
-                                ...(prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'],
-                                [activeTab]: {
-                                  ...(prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'][activeTab],
-                                  conBrandeo: (prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'][activeTab].conBrandeo.map((item: any, i: number) => 
-                                    i === idx ? { ...item, bono: value } : item
-                                  )
-                                }
-                              }
-                            }))
-                          }}
-                          placeholder="700"
+                          onChange={(e) => updateProcessConfigField(activeTab, 'conBrandeo', 'bono', idx, e.target.value)}
+                          placeholder="0.0"
                           className="text-sm"
                         />
                         <Input
                           type="number"
-                          value={row.garantizamos}
-                          onChange={(e) => {
-                            const value = e.target.value
-                            setProcessConfig(prev => ({
-                              ...prev,
-                              [activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia']: {
-                                ...(prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'],
-                                [activeTab]: {
-                                  ...(prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'][activeTab],
-                                  conBrandeo: (prev as any)[activeCountry === 'Perú' ? 'ciudadesPeru' : 'ciudadesColombia'][activeTab].conBrandeo.map((item: any, i: number) => 
-                                    i === idx ? { ...item, garantizamos: value } : item
-                                  )
-                                }
-                              }
-                            }))
-                          }}
-                          placeholder="1900"
+                          value={row.garantizado}
+                          onChange={(e) => updateProcessConfigField(activeTab, 'conBrandeo', 'garantizado', idx, e.target.value)}
+                          placeholder="0.0"
+                          className="text-sm"
+                        />
+                        <Input
+                          type="number"
+                          value={row.horas}
+                          onChange={(e) => updateProcessConfigField(activeTab, 'conBrandeo', 'horas', idx, e.target.value)}
+                          placeholder="0.0"
                           className="text-sm"
                         />
                       </div>
@@ -1970,30 +2039,211 @@ export const GarantizadoModule: React.FC = () => {
               </div>
 
             </div>
+              ) : null}
+              </>
+            ) : (
+              /* Vista de Registro de Ubicaciones */
+              <div className="space-y-4">
+                {/* Formulario para crear nuevo país */}
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                  <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                    <Globe className="h-4 w-4 text-red-600" />
+                    Registrar Nuevo País
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <div className="md:col-span-1">
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        País *
+                      </label>
+                      <Input
+                        type="text"
+                        value={nuevoPais.nombre}
+                        onChange={(e) => setNuevoPais({ ...nuevoPais, nombre: capitalizeFirstLetter(e.target.value) })}
+                        placeholder="Ecuador, México"
+                        className="h-9 text-sm"
+                        disabled={guardandoPais || guardandoCiudad}
+                      />
+                    </div>
+                    <div className="md:col-span-1">
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Moneda *
+                      </label>
+                      <Input
+                        type="text"
+                        value={nuevoPais.moneda}
+                        onChange={(e) => setNuevoPais({ ...nuevoPais, moneda: e.target.value.toUpperCase() })}
+                        placeholder="PEN, USD"
+                        className="h-9 text-sm"
+                        maxLength={3}
+                        disabled={guardandoPais || guardandoCiudad}
+                      />
+                    </div>
+                    <div className="md:col-span-1">
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Símbolo *
+                      </label>
+                      <Input
+                        type="text"
+                        value={nuevoPais.simbolo_moneda}
+                        onChange={(e) => setNuevoPais({ ...nuevoPais, simbolo_moneda: e.target.value })}
+                        placeholder="S/., $"
+                        className="h-9 text-sm"
+                        maxLength={5}
+                        disabled={guardandoPais || guardandoCiudad}
+                      />
+                    </div>
+                    <div className="md:col-span-1 flex items-end">
+                      <Button
+                        onClick={handleCrearPais}
+                        disabled={guardandoPais || guardandoCiudad || !nuevoPais.nombre || !nuevoPais.moneda || !nuevoPais.simbolo_moneda}
+                        className="w-full h-9 bg-red-600 hover:bg-red-700 text-white text-sm"
+                        size="sm"
+                      >
+                        {guardandoPais ? (
+                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                        ) : (
+                          <>
+                            <Plus className="h-3 w-3 mr-1" />
+                            Crear
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+            </div>
 
+                {/* Formulario para crear nueva ciudad */}
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                  <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-red-600" />
+                    Registrar Nueva Ciudad
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="md:col-span-1">
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        País *
+                      </label>
+                      <Select
+                        value={nuevaCiudad.pais_id.toString()}
+                        onValueChange={(value) => setNuevaCiudad({ ...nuevaCiudad, pais_id: parseInt(value) })}
+                        disabled={guardandoPais || guardandoCiudad || loadingUbicaciones || paises.length === 0}
+                      >
+                        <SelectTrigger className="h-9 text-sm">
+                          <SelectValue placeholder={loadingUbicaciones ? "Cargando..." : paises.length === 0 ? "Sin países" : "Selecciona"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {paises.map((pais) => (
+                            <SelectItem key={pais.id} value={pais.id.toString()}>
+                              {pais.nombre}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="md:col-span-1">
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Ciudad *
+                      </label>
+                      <Input
+                        type="text"
+                        value={nuevaCiudad.nombre}
+                        onChange={(e) => setNuevaCiudad({ ...nuevaCiudad, nombre: capitalizeFirstLetter(e.target.value) })}
+                        placeholder="Quito, Guayaquil"
+                        className="h-9 text-sm"
+                        disabled={guardandoPais || guardandoCiudad}
+                      />
+                    </div>
+                    <div className="md:col-span-1 flex items-end">
+                      <Button
+                        onClick={handleCrearCiudad}
+                        disabled={guardandoPais || guardandoCiudad || !nuevaCiudad.pais_id || !nuevaCiudad.nombre}
+                        className="w-full h-9 bg-red-600 hover:bg-red-700 text-white text-sm"
+                        size="sm"
+                      >
+                        {guardandoCiudad ? (
+                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                        ) : (
+                          <>
+                            <Plus className="h-3 w-3 mr-1" />
+                            Crear
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Footer del Modal */}
             <div className="flex flex-col sm:flex-row justify-end gap-3 mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-gray-200 dark:border-gray-700">
               <Button
                 variant="outline"
-                onClick={() => setShowProcessModal(false)}
-                disabled={loadingTable}
+                onClick={() => {
+                  setShowProcessModal(false);
+                  setModalViewMode('procesamiento');
+                }}
+                disabled={loadingTable || guardandoPais || guardandoCiudad}
                 className="px-6 py-2"
               >
                 Cancelar
               </Button>
+              {modalViewMode === 'procesamiento' ? (
               <Button
                 onClick={handleProcesarGarantizado}
                 disabled={
                   loadingTable ||
-                  !(
-                    Object.values(processConfig.ciudadesPeru as any).some((ciudad: any) =>
-                      ciudad.sinBrandeo.some((t: any) => t.viajes && t.bono && t.garantizamos) ||
-                      ciudad.conBrandeo.some((t: any) => t.viajes && t.bono && t.garantizamos)
-                    ) ||
-                    Object.values(processConfig.ciudadesColombia as any).some((ciudad: any) =>
-                      ciudad.sinBrandeo.some((t: any) => t.viajes && t.bono && t.garantizamos) ||
-                      ciudad.conBrandeo.some((t: any) => t.viajes && t.bono && t.garantizamos)
-                    )
-                  )
+                  !processConfig ||
+                  estructuraUbicaciones.paises.length === 0 ||
+                  estructuraUbicaciones.paises.some(pais => {
+                    const ciudades = processConfig[pais.nombre];
+                    // Si el país no tiene configuración, está incompleto
+                    if (!ciudades || Object.keys(ciudades).length === 0) return true;
+                    
+                    // Verificar que todas las ciudades del país estén en la configuración
+                    const ciudadesDelPais = pais.ciudades.map(c => c.nombre);
+                    if (ciudadesDelPais.some(ciudad => !ciudades[ciudad])) return true;
+                    
+                    // Verificar que cada ciudad tenga todos los campos completos
+                    return Object.values(ciudades).some((ciudad: any) => {
+                      if (!ciudad || !ciudad.sinBrandeo || !ciudad.conBrandeo) return true;
+                      
+                      // Verificar que todos los tiers de sinBrandeo estén completos
+                      const sinBrandeoIncompleto = ciudad.sinBrandeo.some((t: any) => {
+                        const viajes = t.viajes;
+                        const bono = t.bono;
+                        const garantizado = t.garantizado;
+                        const horas = t.horas;
+                        return viajes === '' || viajes === null || viajes === undefined || 
+                               isNaN(Number(viajes)) || Number(viajes) < 0 ||
+                               bono === '' || bono === null || bono === undefined || 
+                               isNaN(Number(bono)) || Number(bono) < 0 ||
+                               garantizado === '' || garantizado === null || garantizado === undefined || 
+                               isNaN(Number(garantizado)) || Number(garantizado) < 0 ||
+                               horas === '' || horas === null || horas === undefined || 
+                               isNaN(Number(horas)) || Number(horas) < 0;
+                      });
+                      
+                      // Verificar que todos los tiers de conBrandeo estén completos
+                      const conBrandeoIncompleto = ciudad.conBrandeo.some((t: any) => {
+                        const viajes = t.viajes;
+                        const bono = t.bono;
+                        const garantizado = t.garantizado;
+                        const horas = t.horas;
+                        return viajes === '' || viajes === null || viajes === undefined || 
+                               isNaN(Number(viajes)) || Number(viajes) < 0 ||
+                               bono === '' || bono === null || bono === undefined || 
+                               isNaN(Number(bono)) || Number(bono) < 0 ||
+                               garantizado === '' || garantizado === null || garantizado === undefined || 
+                               isNaN(Number(garantizado)) || Number(garantizado) < 0 ||
+                               horas === '' || horas === null || horas === undefined || 
+                               isNaN(Number(horas)) || Number(horas) < 0;
+                      });
+                      
+                      // Si alguna está incompleta, el país está incompleto
+                      return sinBrandeoIncompleto || conBrandeoIncompleto;
+                    });
+                  })
                 }
                 className="px-6 py-2 text-white bg-red-600 hover:bg-red-700"
               >
@@ -2006,6 +2256,7 @@ export const GarantizadoModule: React.FC = () => {
                    'Procesar Garantizado'
                  )}
               </Button>
+              ) : null}
             </div>
           </div>
         </div>
