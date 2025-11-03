@@ -468,10 +468,26 @@ class SocketService {
           return;
         }
         
-        // Si es un evento de garantizado, emitirlo
-        if (event.type === 'GARANTIZADO_TABLE_UPDATE') {
-          console.log('📊 [SocketService] Actualización de tabla de garantizado recibida');
+        // Si es un evento de garantizado, emitirlo con la estructura correcta
+        if (event.type === 'GARANTIZADO_TABLE_UPDATE' || event.event === 'GARANTIZADO_PROCESS_SUCCESS') {
+          console.log('📊 [SocketService] Actualización de garantizado recibida desde /topic/system');
+          // Si viene con estructura {event, data}, normalizar a {type, ...}
+          if (event.event && event.data) {
+            const normalizedEvent = {
+              type: event.event,
+              ...event.data,
+              timestamp: event.timestamp
+            };
+            this.emit('garantizado', normalizedEvent);
+            this.emit('system', normalizedEvent);
+          } else {
+            this.emit('garantizado', event);
+            this.emit('system', event);
+          }
+        } else if (event.type && event.type.startsWith('GARANTIZADO_')) {
+          // Cualquier otro evento de garantizado
           this.emit('garantizado', event);
+          this.emit('system', event);
         }
       } catch (error) {
         console.error('❌ [SocketService] Error procesando evento del sistema:', error);

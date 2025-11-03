@@ -159,6 +159,42 @@ export const GarantizadoModule: React.FC = () => {
   });
   const [guardandoPais, setGuardandoPais] = useState(false);
   const [guardandoCiudad, setGuardandoCiudad] = useState(false);
+  const [botonBloqueado, setBotonBloqueado] = useState(false);
+  const [mensajeBloqueo, setMensajeBloqueo] = useState('');
+  const [procesandoGarantizado, setProcesandoGarantizado] = useState(false);
+  const [tiempoProcesamiento, setTiempoProcesamiento] = useState(0);
+  const [showProcesoModal, setShowProcesoModal] = useState(false);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const intervaloRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Helper: Limpiar todos los timeouts e intervalos
+  const limpiarTimers = () => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    if (intervaloRef.current) {
+      clearInterval(intervaloRef.current);
+      intervaloRef.current = null;
+    }
+  };
+
+  // Helper: Formatear tiempo transcurrido (texto completo)
+  const formatearTiempo = (segundos: number): string => {
+    const minutos = Math.floor(segundos / 60);
+    const segs = segundos % 60;
+    if (minutos > 0) {
+      return `${minutos} minuto${minutos > 1 ? 's' : ''} y ${segs} segundo${segs !== 1 ? 's' : ''}`;
+    }
+    return `${segs} segundo${segs !== 1 ? 's' : ''}`;
+  };
+
+  // Helper: Formatear tiempo en formato MM:SS
+  const formatearTiempoMMSS = (segundos: number): string => {
+    const minutos = Math.floor(segundos / 60);
+    const segs = segundos % 60;
+    return `${minutos}:${segs.toString().padStart(2, '0')}`;
+  };
 
   // Helper: Crear configuración inicial de ciudades vacía
   const createEmptyCiudadConfig = () => ({
@@ -195,6 +231,15 @@ export const GarantizadoModule: React.FC = () => {
     return pais ? pais.ciudades.map(c => c.nombre) : [];
   };
 
+  // Helper: Validar que el valor no sea negativo
+  const validarValorNoNegativo = (value: string): boolean => {
+    if (value === '') return true; // Permitir campo vacío
+    // Rechazar directamente si contiene signo negativo
+    if (value.includes('-')) return false;
+    const numValue = Number(value);
+    return !isNaN(numValue) && numValue >= 0;
+  };
+
   // Helper: Actualizar processConfig para un campo específico
   const updateProcessConfigField = (
     ciudad: string,
@@ -203,6 +248,11 @@ export const GarantizadoModule: React.FC = () => {
     rowIndex: number,
     value: string
   ) => {
+    // Validar que no sea negativo
+    if (!validarValorNoNegativo(value)) {
+      return; // No permitir números negativos
+    }
+    
     setProcessConfig((prev: any) => {
       const ciudades = prev[activeCountry];
       return {
@@ -344,8 +394,6 @@ export const GarantizadoModule: React.FC = () => {
   };
 
 
-  // El backend ya calcula el garantizado automáticamente basado en los rangos configurados
-
   // Función para cargar conductores desde la API
   const cargarConductores = async (isInitialLoad = false) => {
     // Protección contra llamadas múltiples en carga inicial
@@ -441,7 +489,23 @@ export const GarantizadoModule: React.FC = () => {
     }
   };
 
+  // Función para cargar el estado del botón desde el backend
+  const cargarEstadoProceso = async () => {
+    try {
+      const response = await api.get('/garantizado/estado-proceso');
+      setBotonBloqueado(response.data.bloqueado || false);
+      setMensajeBloqueo(response.data.mensaje || '');
+    } catch (error) {
+      console.error('Error al cargar estado del proceso:', error);
+      setBotonBloqueado(false);
+      setMensajeBloqueo('');
+    }
+  };
+
   useEffect(() => {
+    // Cargar estado del botón desde el backend
+    cargarEstadoProceso();
+    
     // Cargar flotas al inicializar el componente
     cargarFlotas();
     
@@ -458,7 +522,68 @@ export const GarantizadoModule: React.FC = () => {
 
     // Configurar WebSocket para actualizaciones automáticas
     const handleGarantizadoUpdate = (event: any) => {
-      if (event.type === 'GARANTIZADO_PROCESS_SUCCESS') {
+      // Manejar eventos que vienen desde /topic/system con estructura {event: '...', data: {...}}
+      if (event.event === 'GARANTIZADO_PROCESS_SUCCESS') {
+        const eventData = event.data || {};
+        showSuccess(eventData.message || 'Proceso completado exitosamente');
+        
+        // Actualizar semana si viene en el evento
+        if (eventData.semana) {
+          setSemanaAnterior(eventData.semana);
+        }
+        
+        // Bloquear el botón después del procesamiento
+        setBotonBloqueado(true);
+        setMensajeBloqueo('El botón estará bloqueado hasta el próximo lunes');
+        
+        // Cerrar modal de progreso si está abierto
+        setShowProcesoModal(false);
+        setProcesandoGarantizado(false);
+        limpiarTimers();
+        
+        // Recargar la lista de conductores si autoReload es true
+        if (eventData.autoReload !== false) {
+          cargarConductores(false).then(() => {
+            // Mostrar notificación visual
+            setShowUpdateNotification(true);
+            setTimeout(() => {
+              setShowUpdateNotification(false);
+            }, 5000);
+          });
+        }
+      } else if (event.type === 'GARANTIZADO_TABLE_UPDATE') {
+        // Actualizar tabla directamente con los datos recibidos
+        console.log('📊 [GarantizadoModule] Actualizando tabla con datos del WebSocket');
+        
+        if (event.conductores && Array.isArray(event.conductores)) {
+          // Ordenar: Garantizados primero, luego No Garantizados
+          const sortedData = sortByGarantizado(event.conductores as GarantizadoData[]);
+          
+          setData(sortedData);
+          setFilteredData(sortedData);
+          setTotalConductores(sortedData.length);
+          
+          // Actualizar semana si viene en el evento
+          if (event.semanaActual) {
+            setSemanaActual(event.semanaActual);
+          }
+          if (event.semanaAnterior) {
+            setSemanaAnterior(event.semanaAnterior);
+          }
+          
+          // Actualizar total de diferencia garantizados
+          if (typeof event.totalDiferenciaGarantizados === 'number') {
+            setTotalDiferenciaGarantizados(event.totalDiferenciaGarantizados);
+          }
+          
+          // Mostrar notificación visual
+          setShowUpdateNotification(true);
+          setTimeout(() => {
+            setShowUpdateNotification(false);
+          }, 5000);
+        }
+      } else if (event.type === 'GARANTIZADO_PROCESS_SUCCESS') {
+        // Manejar evento directo (sin estructura {event, data})
         showSuccess(event.message || 'Proceso completado exitosamente');
         
         // Actualizar semana si viene en el evento
@@ -466,25 +591,50 @@ export const GarantizadoModule: React.FC = () => {
           setSemanaAnterior(event.semana);
         }
         
+        // Bloquear el botón después del procesamiento
+        setBotonBloqueado(true);
+        setMensajeBloqueo('El botón estará bloqueado hasta el próximo lunes');
+        
+        // Cerrar modal de progreso si está abierto
+        setShowProcesoModal(false);
+        setProcesandoGarantizado(false);
+        limpiarTimers();
+        
         // Recargar la lista de conductores si autoReload es true
         if (event.autoReload !== false) {
           cargarConductores(false).then(() => {
-        // Mostrar notificación visual
-        setShowUpdateNotification(true);
-    setTimeout(() => {
-          setShowUpdateNotification(false);
+            // Mostrar notificación visual
+            setShowUpdateNotification(true);
+            setTimeout(() => {
+              setShowUpdateNotification(false);
             }, 5000);
           });
         }
+      } else if (event.type === 'GARANTIZADO_BUTTON_BLOCKED') {
+        // Botón bloqueado
+        setBotonBloqueado(true);
+        setMensajeBloqueo(event.mensaje || 'El botón está bloqueado hasta el próximo lunes');
+      } else if (event.type === 'GARANTIZADO_BUTTON_UNBLOCKED') {
+        // Botón desbloqueado
+        setBotonBloqueado(false);
+        setMensajeBloqueo('');
+        showSuccess(event.mensaje || 'El botón está disponible para procesar');
+        // Recargar el estado para obtener la información más actualizada
+        cargarEstadoProceso();
       }
     };
 
     // Suscribirse a eventos de garantizado
     socketService.on('garantizado', handleGarantizadoUpdate);
+    
+    // También suscribirse a eventos del sistema
+    socketService.on('system', handleGarantizadoUpdate);
 
     // Cleanup: desuscribirse cuando el componente se desmonte
     return () => {
       socketService.off('garantizado', handleGarantizadoUpdate);
+      socketService.off('system', handleGarantizadoUpdate);
+      limpiarTimers();
     };
   }, []); // Array vacío para que solo se ejecute una vez
 
@@ -791,8 +941,34 @@ export const GarantizadoModule: React.FC = () => {
 
   // Función para procesar garantizado
   const handleProcesarGarantizado = async () => {
+    const TIMEOUT_TOLERANCIA = 10 * 60 * 1000; // 10 minutos en milisegundos
+    
+    // Limpiar timeouts anteriores si existen
+    limpiarTimers();
+    
     try {
       setLoadingTable(true);
+      setProcesandoGarantizado(true);
+      setTiempoProcesamiento(0);
+      
+      // Cerrar modal de configuración y abrir modal de progreso
+      setShowProcessModal(false);
+      setShowProcesoModal(true);
+      
+      // Iniciar contador de tiempo
+      intervaloRef.current = setInterval(() => {
+        setTiempoProcesamiento((prev) => prev + 1);
+      }, 1000);
+      
+      // Configurar timeout de tolerancia
+      timeoutRef.current = setTimeout(() => {
+        showError('El procesamiento está tomando más tiempo del esperado. Por favor, verifica el estado del servidor o intenta nuevamente.');
+        setProcesandoGarantizado(false);
+        setTiempoProcesamiento(0);
+        setShowProcesoModal(false);
+        setLoadingTable(false);
+        limpiarTimers();
+      }, TIMEOUT_TOLERANCIA);
       
       // Procesar todos los países con sus ciudades y valores de brandeo
       const paisesPayload = estructuraUbicaciones.paises.map(pais => ({
@@ -803,30 +979,56 @@ export const GarantizadoModule: React.FC = () => {
       // Guardar la configuración
       await api.post('/garantizado/configuraciones/guardar', {
         paises: paisesPayload
+      }, {
+        timeout: TIMEOUT_TOLERANCIA // Timeout para la petición HTTP
       });
       
       // Procesar los garantizados por cada conductor
       await api.post('/garantizado/configuraciones/procesar', {
         paises: paisesPayload
+      }, {
+        timeout: TIMEOUT_TOLERANCIA // Timeout para la petición HTTP
       });
       
       // Procesar la semana anterior con las nuevas configuraciones
-      await api.post('/garantizado/procesar-semana-anterior');
+      await api.post('/garantizado/procesar-semana-anterior', {}, {
+        timeout: TIMEOUT_TOLERANCIA // Timeout para la petición HTTP
+      });
       
-      // Cerrar modal y mostrar notificación de éxito
+      // Limpiar timeouts si todo fue exitoso
+      limpiarTimers();
+      
+      // Calcular tiempo final y mostrar notificación
+      const tiempoTexto = formatearTiempo(tiempoProcesamiento);
+      
+      // Cerrar modal de progreso y mostrar notificación de éxito
       // El WebSocket recargará automáticamente la lista cuando el procesamiento termine
-      setShowProcessModal(false);
-      showSuccess('Configuración guardada y garantizados procesados exitosamente');
+      setShowProcesoModal(false);
+      setProcesandoGarantizado(false);
+      setTiempoProcesamiento(0);
+      
+      showSuccess(`Configuración guardada y garantizados procesados exitosamente (${tiempoTexto})`);
       
     } catch (error: any) {
+      // Limpiar timeouts en caso de error
+      limpiarTimers();
+      
+      setProcesandoGarantizado(false);
+      setTiempoProcesamiento(0);
+      setShowProcesoModal(false);
+      
+      // Manejar diferentes tipos de errores
       let errorMessage = 'Error al procesar garantizado';
       
-      if (error.response?.status === 400) {
-        errorMessage = error.response.data?.message || 'Error en los datos enviados';
-      } else if (error.response?.status === 500) {
-        errorMessage = 'Error interno del servidor durante el procesamiento';
-      } else if (error.response?.data?.message) {
-        errorMessage = error.response.data.message;
+      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        errorMessage = 'El procesamiento está tomando más tiempo del esperado. Por favor, verifica el estado del servidor o contacta al administrador.';
+      } else if (error.response) {
+        const status = error.response.status;
+        errorMessage = status === 400 
+          ? error.response.data?.message || 'Error en los datos enviados'
+          : status === 500 
+            ? 'Error interno del servidor durante el procesamiento'
+            : error.response.data?.message || errorMessage;
       }
       
       showError(errorMessage);
@@ -1045,25 +1247,38 @@ export const GarantizadoModule: React.FC = () => {
                 <Download className="h-4 w-4 mr-2" />
                 Exportar Excel
               </Button>
-              <Button 
-                variant="primary" 
-                size="sm" 
-                className="px-6 py-2 bg-red-600 text-white"
-                onClick={handleOpenProcessModal}
-                disabled={loadingTable}
-              >
-                {loadingTable ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Procesando...
-                  </>
-                ) : (
-                  <>
-                    <Shield className="h-4 w-4 mr-2" />
-                    Procesar
-                  </>
+              <div className="relative group">
+                <Button 
+                  variant="primary" 
+                  size="sm" 
+                  className="px-6 py-2 bg-red-600 text-white"
+                  onClick={handleOpenProcessModal}
+                  disabled={loadingTable || botonBloqueado}
+                >
+                  {loadingTable ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Procesando...
+                    </>
+                  ) : botonBloqueado ? (
+                    <>
+                      <Shield className="h-4 w-4 mr-2" />
+                      Procesar (Bloqueado)
+                    </>
+                  ) : (
+                    <>
+                      <Shield className="h-4 w-4 mr-2" />
+                      Procesar
+                    </>
+                  )}
+                </Button>
+                {botonBloqueado && mensajeBloqueo && (
+                  <div className="absolute top-full left-0 mt-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg shadow-lg z-50 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                    {mensajeBloqueo}
+                    <div className="absolute bottom-full left-4 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-gray-900"></div>
+                  </div>
                 )}
-              </Button>
+              </div>
             </>
           )}
         </div>
@@ -1937,30 +2152,78 @@ export const GarantizadoModule: React.FC = () => {
                       <div key={idx} className="grid grid-cols-4 gap-1 sm:gap-2">
                         <Input
                           type="number"
+                          min="0"
+                          step="0.01"
                           value={row.viajes}
-                          onChange={(e) => updateProcessConfigField(activeTab, 'sinBrandeo', 'viajes', idx, e.target.value)}
-                          placeholder="0.0"
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (validarValorNoNegativo(value)) {
+                              updateProcessConfigField(activeTab, 'sinBrandeo', 'viajes', idx, value);
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === '-' || e.key === '+' || e.key === 'e' || e.key === 'E') {
+                              e.preventDefault();
+                            }
+                          }}
+                          placeholder="0"
                           className="text-sm"
                         />
                         <Input
                           type="number"
+                          min="0"
+                          step="0.01"
                           value={row.bono}
-                          onChange={(e) => updateProcessConfigField(activeTab, 'sinBrandeo', 'bono', idx, e.target.value)}
-                          placeholder="0.0"
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (validarValorNoNegativo(value)) {
+                              updateProcessConfigField(activeTab, 'sinBrandeo', 'bono', idx, value);
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === '-' || e.key === '+' || e.key === 'e' || e.key === 'E') {
+                              e.preventDefault();
+                            }
+                          }}
+                          placeholder="0"
                           className="text-sm"
                         />
                         <Input
                           type="number"
+                          min="0"
+                          step="0.01"
                           value={row.garantizado}
-                          onChange={(e) => updateProcessConfigField(activeTab, 'sinBrandeo', 'garantizado', idx, e.target.value)}
-                          placeholder="0.0"
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (validarValorNoNegativo(value)) {
+                              updateProcessConfigField(activeTab, 'sinBrandeo', 'garantizado', idx, value);
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === '-' || e.key === '+' || e.key === 'e' || e.key === 'E') {
+                              e.preventDefault();
+                            }
+                          }}
+                          placeholder="0"
                           className="text-sm"
                         />
                         <Input
                           type="number"
+                          min="0"
+                          step="0.01"
                           value={row.horas}
-                          onChange={(e) => updateProcessConfigField(activeTab, 'sinBrandeo', 'horas', idx, e.target.value)}
-                          placeholder="0.0"
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (validarValorNoNegativo(value)) {
+                              updateProcessConfigField(activeTab, 'sinBrandeo', 'horas', idx, value);
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === '-' || e.key === '+' || e.key === 'e' || e.key === 'E') {
+                              e.preventDefault();
+                            }
+                          }}
+                          placeholder="0"
                           className="text-sm"
                         />
                       </div>
@@ -2006,30 +2269,78 @@ export const GarantizadoModule: React.FC = () => {
                       <div key={idx} className="grid grid-cols-4 gap-1 sm:gap-2">
                         <Input
                           type="number"
+                          min="0"
+                          step="0.01"
                           value={row.viajes}
-                          onChange={(e) => updateProcessConfigField(activeTab, 'conBrandeo', 'viajes', idx, e.target.value)}
-                          placeholder="0.0"
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (validarValorNoNegativo(value)) {
+                              updateProcessConfigField(activeTab, 'conBrandeo', 'viajes', idx, value);
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === '-' || e.key === '+' || e.key === 'e' || e.key === 'E') {
+                              e.preventDefault();
+                            }
+                          }}
+                          placeholder="0"
                           className="text-sm"
                         />
                         <Input
                           type="number"
+                          min="0"
+                          step="0.01"
                           value={row.bono}
-                          onChange={(e) => updateProcessConfigField(activeTab, 'conBrandeo', 'bono', idx, e.target.value)}
-                          placeholder="0.0"
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (validarValorNoNegativo(value)) {
+                              updateProcessConfigField(activeTab, 'conBrandeo', 'bono', idx, value);
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === '-' || e.key === '+' || e.key === 'e' || e.key === 'E') {
+                              e.preventDefault();
+                            }
+                          }}
+                          placeholder="0"
                           className="text-sm"
                         />
                         <Input
                           type="number"
+                          min="0"
+                          step="0.01"
                           value={row.garantizado}
-                          onChange={(e) => updateProcessConfigField(activeTab, 'conBrandeo', 'garantizado', idx, e.target.value)}
-                          placeholder="0.0"
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (validarValorNoNegativo(value)) {
+                              updateProcessConfigField(activeTab, 'conBrandeo', 'garantizado', idx, value);
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === '-' || e.key === '+' || e.key === 'e' || e.key === 'E') {
+                              e.preventDefault();
+                            }
+                          }}
+                          placeholder="0"
                           className="text-sm"
                         />
                         <Input
                           type="number"
+                          min="0"
+                          step="0.01"
                           value={row.horas}
-                          onChange={(e) => updateProcessConfigField(activeTab, 'conBrandeo', 'horas', idx, e.target.value)}
-                          placeholder="0.0"
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (validarValorNoNegativo(value)) {
+                              updateProcessConfigField(activeTab, 'conBrandeo', 'horas', idx, value);
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === '-' || e.key === '+' || e.key === 'e' || e.key === 'E') {
+                              e.preventDefault();
+                            }
+                          }}
+                          placeholder="0"
                           className="text-sm"
                         />
                       </div>
@@ -2189,74 +2500,183 @@ export const GarantizadoModule: React.FC = () => {
                 Cancelar
               </Button>
               {modalViewMode === 'procesamiento' ? (
-              <Button
-                onClick={handleProcesarGarantizado}
-                disabled={
-                  loadingTable ||
-                  !processConfig ||
-                  estructuraUbicaciones.paises.length === 0 ||
-                  estructuraUbicaciones.paises.some(pais => {
-                    const ciudades = processConfig[pais.nombre];
-                    // Si el país no tiene configuración, está incompleto
-                    if (!ciudades || Object.keys(ciudades).length === 0) return true;
-                    
-                    // Verificar que todas las ciudades del país estén en la configuración
-                    const ciudadesDelPais = pais.ciudades.map(c => c.nombre);
-                    if (ciudadesDelPais.some(ciudad => !ciudades[ciudad])) return true;
-                    
-                    // Verificar que cada ciudad tenga todos los campos completos
-                    return Object.values(ciudades).some((ciudad: any) => {
-                      if (!ciudad || !ciudad.sinBrandeo || !ciudad.conBrandeo) return true;
+                <Button
+                  onClick={handleProcesarGarantizado}
+                  disabled={
+                    loadingTable ||
+                    procesandoGarantizado ||
+                    !processConfig ||
+                    estructuraUbicaciones.paises.length === 0 ||
+                    estructuraUbicaciones.paises.some(pais => {
+                      const ciudades = processConfig[pais.nombre];
+                      // Si el país no tiene configuración, está incompleto
+                      if (!ciudades || Object.keys(ciudades).length === 0) return true;
                       
-                      // Verificar que todos los tiers de sinBrandeo estén completos
-                      const sinBrandeoIncompleto = ciudad.sinBrandeo.some((t: any) => {
-                        const viajes = t.viajes;
-                        const bono = t.bono;
-                        const garantizado = t.garantizado;
-                        const horas = t.horas;
-                        return viajes === '' || viajes === null || viajes === undefined || 
-                               isNaN(Number(viajes)) || Number(viajes) < 0 ||
-                               bono === '' || bono === null || bono === undefined || 
-                               isNaN(Number(bono)) || Number(bono) < 0 ||
-                               garantizado === '' || garantizado === null || garantizado === undefined || 
-                               isNaN(Number(garantizado)) || Number(garantizado) < 0 ||
-                               horas === '' || horas === null || horas === undefined || 
-                               isNaN(Number(horas)) || Number(horas) < 0;
+                      // Verificar que todas las ciudades del país estén en la configuración
+                      const ciudadesDelPais = pais.ciudades.map(c => c.nombre);
+                      if (ciudadesDelPais.some(ciudad => !ciudades[ciudad])) return true;
+                      
+                      // Verificar que cada ciudad tenga todos los campos completos
+                      return Object.values(ciudades).some((ciudad: any) => {
+                        if (!ciudad || !ciudad.sinBrandeo || !ciudad.conBrandeo) return true;
+                        
+                        // Verificar que todos los tiers de sinBrandeo estén completos
+                        const sinBrandeoIncompleto = ciudad.sinBrandeo.some((t: any) => {
+                          const viajes = t.viajes;
+                          const bono = t.bono;
+                          const garantizado = t.garantizado;
+                          const horas = t.horas;
+                          return viajes === '' || viajes === null || viajes === undefined || 
+                                 isNaN(Number(viajes)) || Number(viajes) < 0 ||
+                                 bono === '' || bono === null || bono === undefined || 
+                                 isNaN(Number(bono)) || Number(bono) < 0 ||
+                                 garantizado === '' || garantizado === null || garantizado === undefined || 
+                                 isNaN(Number(garantizado)) || Number(garantizado) < 0 ||
+                                 horas === '' || horas === null || horas === undefined || 
+                                 isNaN(Number(horas)) || Number(horas) < 0;
+                        });
+                        
+                        // Verificar que todos los tiers de conBrandeo estén completos
+                        const conBrandeoIncompleto = ciudad.conBrandeo.some((t: any) => {
+                          const viajes = t.viajes;
+                          const bono = t.bono;
+                          const garantizado = t.garantizado;
+                          const horas = t.horas;
+                          return viajes === '' || viajes === null || viajes === undefined || 
+                                 isNaN(Number(viajes)) || Number(viajes) < 0 ||
+                                 bono === '' || bono === null || bono === undefined || 
+                                 isNaN(Number(bono)) || Number(bono) < 0 ||
+                                 garantizado === '' || garantizado === null || garantizado === undefined || 
+                                 isNaN(Number(garantizado)) || Number(garantizado) < 0 ||
+                                 horas === '' || horas === null || horas === undefined || 
+                                 isNaN(Number(horas)) || Number(horas) < 0;
+                        });
+                        
+                        // Si alguna está incompleta, el país está incompleto
+                        return sinBrandeoIncompleto || conBrandeoIncompleto;
                       });
-                      
-                      // Verificar que todos los tiers de conBrandeo estén completos
-                      const conBrandeoIncompleto = ciudad.conBrandeo.some((t: any) => {
-                        const viajes = t.viajes;
-                        const bono = t.bono;
-                        const garantizado = t.garantizado;
-                        const horas = t.horas;
-                        return viajes === '' || viajes === null || viajes === undefined || 
-                               isNaN(Number(viajes)) || Number(viajes) < 0 ||
-                               bono === '' || bono === null || bono === undefined || 
-                               isNaN(Number(bono)) || Number(bono) < 0 ||
-                               garantizado === '' || garantizado === null || garantizado === undefined || 
-                               isNaN(Number(garantizado)) || Number(garantizado) < 0 ||
-                               horas === '' || horas === null || horas === undefined || 
-                               isNaN(Number(horas)) || Number(horas) < 0;
-                      });
-                      
-                      // Si alguna está incompleta, el país está incompleto
-                      return sinBrandeoIncompleto || conBrandeoIncompleto;
-                    });
-                  })
-                }
-                className="px-6 py-2 text-white bg-red-600 hover:bg-red-700"
-              >
-                {loadingTable ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Procesando...
-                  </>
-                 ) : (
-                   'Procesar Garantizado'
-                 )}
-              </Button>
+                    })
+                  }
+                  className="px-6 py-2 text-white bg-red-600 hover:bg-red-700"
+                >
+                  {loadingTable ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Procesando...
+                    </>
+                  ) : (
+                    'Procesar Garantizado'
+                  )}
+                </Button>
               ) : null}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Progreso del Procesamiento */}
+      {showProcesoModal && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={(e) => {
+            // Permitir cerrar el modal haciendo click fuera
+            if (e.target === e.currentTarget) {
+              setShowProcesoModal(false);
+            }
+          }}
+        >
+          <div 
+            className="bg-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-lg mx-auto shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full flex items-center justify-center bg-red-100 dark:bg-red-900/30">
+                  <Shield className="h-6 w-6 text-red-600 dark:text-red-400" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">
+                    Procesando Garantizado
+                  </h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    {procesandoGarantizado 
+                      ? 'El proceso continúa en segundo plano'
+                      : 'Proceso completado'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowProcesoModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
+                title={procesandoGarantizado ? "Minimizar (el proceso continuará)" : "Cerrar"}
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Indicador de progreso */}
+              <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-red-600"></div>
+                    <div>
+                      <p className="text-sm font-medium text-red-900 dark:text-red-100">
+                        {procesandoGarantizado ? 'Procesando en segundo plano...' : 'Proceso completado'}
+                      </p>
+                      <p className="text-xs text-red-600 dark:text-red-400">
+                        {procesandoGarantizado 
+                          ? 'Puedes continuar trabajando en otras partes del sistema'
+                          : 'El procesamiento ha finalizado exitosamente'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-red-600 dark:text-red-400">
+                      {formatearTiempoMMSS(tiempoProcesamiento)}
+                    </p>
+                    <p className="text-xs text-red-500 dark:text-red-500">
+                      Tiempo transcurrido
+                    </p>
+                  </div>
+                </div>
+                
+                {/* Barra de progreso */}
+                <div className="w-full bg-red-200 dark:bg-red-800 rounded-full h-3">
+                  <div 
+                    className="bg-red-600 dark:bg-red-400 h-3 rounded-full transition-all duration-1000"
+                    style={{ 
+                      width: procesandoGarantizado 
+                        ? `${Math.min((tiempoProcesamiento / 600) * 100, 95)}%` 
+                        : '100%'
+                    }}
+                  ></div>
+                </div>
+              </div>
+
+              {/* Información adicional */}
+              <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                <p className="text-xs text-gray-600 dark:text-gray-400">
+                  <strong>Nota:</strong> Este proceso puede tardar varios minutos dependiendo de la cantidad de conductores a procesar. 
+                  Puedes cerrar este modal y continuar trabajando; recibirás una notificación cuando el proceso termine.
+                  {procesandoGarantizado && (
+                    <span className="block mt-1 text-red-600 dark:text-red-400">
+                      ⚡ El proceso continuará ejecutándose en segundo plano.
+                    </span>
+                  )}
+                </p>
+              </div>
+
+              {/* Botón para cerrar */}
+              <div className="flex justify-end">
+                <Button
+                  onClick={() => setShowProcesoModal(false)}
+                  className={procesandoGarantizado ? "px-6 py-2" : "px-6 py-2 bg-red-600 hover:bg-red-700 text-white"}
+                  variant={procesandoGarantizado ? "outline" : "primary"}
+                >
+                  {procesandoGarantizado ? "Minimizar (proceso continuará)" : "Cerrar"}
+                </Button>
+              </div>
             </div>
           </div>
         </div>
