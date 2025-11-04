@@ -78,8 +78,13 @@ export const AsistenciaListaModule: React.FC = () => {
   const [exportacionExitosa, setExportacionExitosa] = useState(false);
   const [nombreArchivoExportado, setNombreArchivoExportado] = useState<string>('');
   
-  // Roles únicos para el filtro
-  const rolesUnicos = Array.from(new Set(usuarios.map(u => u.rol).filter(Boolean)));
+  // Roles únicos para el filtro (excluyendo TABLET1, TABLET2, PRINCIPAL, TV)
+  const rolesExcluidos = ['TABLET1', 'TABLET2', 'PRINCIPAL', 'TV'];
+  const rolesUnicos = Array.from(
+    new Set(usuarios.map(u => u.rol).filter(Boolean))
+  ).filter((rol): rol is string => 
+    Boolean(rol && rol.trim() !== '' && !rolesExcluidos.includes(rol.toUpperCase()))
+  );
 
 
   // Función para obtener el icono según el tipo (igual que en asistencia.module.tsx)
@@ -251,7 +256,8 @@ export const AsistenciaListaModule: React.FC = () => {
       const params = new URLSearchParams();
       params.append('fechaInicio', fechaInicio);
       params.append('fechaFin', fechaFin);
-      params.append('rol', rolFiltro);
+      // Si es "TODOS", enviar "TODOS" al backend para que maneje todos los roles
+      params.append('rol', rolFiltro === 'TODOS' ? 'TODOS' : rolFiltro);
 
       // Realizar petición al backend para exportar
       const response = await api.get(`/marcaciones/exportar?${params.toString()}`, {
@@ -269,7 +275,8 @@ export const AsistenciaListaModule: React.FC = () => {
       // Generar nombre del archivo
       const fechaInicioFormato = fechaInicio.split('-').reverse().join('');
       const fechaFinFormato = fechaFin.split('-').reverse().join('');
-      const nombreArchivo = `Asistencia_${fechaInicioFormato}_${fechaFinFormato}_${rolFiltro}.xlsx`;
+      const rolNombreArchivo = rolFiltro === 'TODOS' ? 'TODOS_LOS_ROLES' : rolFiltro;
+      const nombreArchivo = `Asistencia_${fechaInicioFormato}_${fechaFinFormato}_${rolNombreArchivo}.xlsx`;
       link.setAttribute('download', nombreArchivo);
       
       document.body.appendChild(link);
@@ -626,6 +633,9 @@ export const AsistenciaListaModule: React.FC = () => {
                   <SelectValue placeholder="Selecciona un rol" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="TODOS" className="font-semibold">
+                    Todos los roles
+                  </SelectItem>
                   {rolesUnicos
                     .filter((rol): rol is string => Boolean(rol && rol.trim() !== ''))
                     .map((rol) => (
