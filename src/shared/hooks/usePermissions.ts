@@ -89,7 +89,6 @@ export const usePermissions = () => {
         users: ['read', 'write', 'delete'],
         roles: ['read', 'write'],
         modules: ['read', 'write'],
-        imports: ['read', 'write'],
         audit: ['read'],
         configuration: ['read', 'write'],
         reports: ['read']
@@ -111,7 +110,6 @@ export const usePermissions = () => {
       users: ['read', 'write', 'delete'],
       roles: ['read', 'write'],
       modules: ['read', 'write'],
-      imports: ['read', 'write'],
       audit: ['read'],
       configuration: ['read', 'write'],
       tickets: ['read', 'write'],

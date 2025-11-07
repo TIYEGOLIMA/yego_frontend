@@ -27,6 +27,14 @@ export {
   type ChangePasswordData
 } from './core';
 
+// 📊 SERVICIOS ESPECÍFICOS
+export {
+  yegoPremiunService,
+  type DriverMonthlyStat,
+  type DriverMonthlyStatsResponse,
+  type FetchDriverMonthlyStatsParams
+} from './yego-premiun-service';
+
 // 🎫 SERVICIOS TICKETERA
 export {
   ticketeraAuthService,

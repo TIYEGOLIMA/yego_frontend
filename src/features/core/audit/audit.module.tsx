@@ -74,7 +74,7 @@ const AuditModule: React.FC = () => {
   ];
 
   const resources = [
-    'all', 'users', 'roles', 'permissions', 'modules', 'imports', 'audit', 'configuration'
+    'all', 'users', 'roles', 'permissions', 'modules', 'audit', 'configuration'
   ];
 
   useEffect(() => {
@@ -132,7 +132,6 @@ const AuditModule: React.FC = () => {
       'roles': 'Roles',
       'permissions': 'Permisos',
       'modules': 'Módulos',
-      'imports': 'Importaciones',
       'audit': 'Auditoría',
       'configuration': 'Configuración'
     };

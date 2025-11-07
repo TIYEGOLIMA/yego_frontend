@@ -10,10 +10,10 @@ export { default as RolesModule } from './roles/roles.module';
 export { default as SessionsModule } from './sessions/sessions.module';
 
 // Módulos de funcionalidades
-export { default as ImportsModule } from './imports/imports.module';
 export { default as ReportsModule } from './reports/reports.module';
 export { default as ModulesModule } from './modules/modules.module';
 export { AsistenciaModule } from './asistencia';
+export { default as YegoPremiunModule } from './yego-premiun/yego-premiun.module';
 export { WelcomeModule } from './welcome';
 
 // 🎯 CONFIGURACIÓN DE FEATURES CORE
@@ -23,6 +23,6 @@ export const CORE_FEATURES_CONFIG = {
   version: '1.0.0',
   features: [
     'audit', 'configuration', 'users', 'permissions', 'roles', 
-    'sessions', 'imports', 'reports', 'modules', 'asistencia'
+    'sessions', 'reports', 'modules', 'asistencia', 'yego-premiun'
   ]
 } as const;

@@ -16,7 +16,6 @@ import {
   ShieldCheck, 
   KeyRound, 
   AppWindow, 
-  Import, 
   ScrollText, 
   MonitorSmartphone, 
   BarChart4, 
@@ -28,7 +27,8 @@ import {
   ChevronDown,
   Server,
   Shield,
-  Clock
+  Clock,
+  Sparkles
 } from 'lucide-react'
 
 interface NavItem {
@@ -138,9 +138,6 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     if (name.includes('módulo') || url.includes('/modules')) {
       return <AppWindow className="h-5 w-5" />;
     }
-    if (name.includes('import') || url.includes('/imports')) {
-      return <Import className="h-5 w-5" />;
-    }
     if (name.includes('auditor') || url.includes('/audit')) {
       return <ScrollText className="h-5 w-5" />;
     }
@@ -155,6 +152,9 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     }
     if (name.includes('sistema') || url.includes('/sistemas')) {
       return <Server className="h-5 w-5" />;
+    }
+    if (name.includes('premiun') || name.includes('premium') || url.includes('yego-premiun')) {
+      return <Sparkles className="h-5 w-5" />;
     }
     if (name.includes('reporte') || url.includes('/reports')) {
       return <BarChart4 className="h-5 w-5" />;
@@ -180,8 +180,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     const urlWithoutSlash = normalizedUrl.replace(/\/$/, '');
     
     // Módulos que van al dropdown de Sistemas
-    const sistemasPaths = ['garantizado', 'reports', 'reportes', 'asistencia', 'tickets', 'ticket'];
-    const sistemasNames = ['garantizado', 'reporte', 'reportes', 'asistencia', 'tickets', 'ticket'];
+    const sistemasPaths = ['garantizado', 'reports', 'reportes', 'asistencia', 'tickets', 'ticket', 'yego-premiun'];
+    const sistemasNames = ['garantizado', 'reporte', 'reportes', 'asistencia', 'tickets', 'ticket', 'yego-premiun'];
     
     // Verificar por URL (sin slashes iniciales/finales)
     const matchesUrl = sistemasPaths.some(path => 
@@ -248,7 +248,16 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     const modulesByOrder = new Map<number, Module[]>();
     
     modules
-      .filter(module => module.activo)
+      .filter(module => {
+        if (!module.activo) return false;
+        
+        // Excluir módulo de importaciones
+        const moduleName = (module.nombre || '').toLowerCase();
+        const moduleUrl = (module.url || '').toLowerCase();
+        const isImportModule = moduleName.includes('import') || moduleUrl.includes('import');
+        
+        return !isImportModule;
+      })
       .forEach(module => {
         const order = getModuleOrder(module);
         if (!modulesByOrder.has(order)) {
@@ -310,41 +319,11 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     return navItems;
   };
 
-  // Obtener elementos de navegación (dinámicos o estáticos como fallback)
+  // Obtener elementos de navegación desde módulos del backend
   const navItems = buildNavItemsFromModules();
 
-  // Filtrar elementos de navegación según permisos (solo si tienen requiredPermission)
-  // Los módulos dinámicos del backend ya vienen filtrados, así que solo filtramos los estáticos
-  const filteredNavItems = navItems.filter(item => {
-    // Si no tiene requiredPermission, siempre visible (Dashboard o módulos dinámicos)
-    if (!item.requiredPermission) {
-      return true;
-    }
-    
-    // Aplicar filtros solo para items estáticos (fallback)
-    // OPERADOR ve Sistemas y Usuarios
-    if (user?.role === 'OPERADOR') {
-      return item.requiredPermission === 'users' || item.requiredPermission === 'systems';
-    }
-    
-    // SAC solo ve Tickets
-    if (user?.role === 'SAC') {
-      return item.requiredPermission === 'tickets';
-    }
-    
-    // SUPERADMIN ve todo EXCEPTO tickets
-    if (user?.role === 'SUPERADMIN') {
-      return item.requiredPermission !== 'tickets';
-    }
-    
-    // ADMIN ve usuarios, roles, módulos y sistemas
-    if (user?.role === 'ADMIN') {
-      const allowedModules = ['users', 'roles', 'modules', 'systems'];
-      return allowedModules.includes(item.requiredPermission);
-    }
-    
-    return hasAnyPermission(item.requiredPermission);
-  });
+  // Los módulos dinámicos del backend ya vienen filtrados según permisos del usuario
+  const filteredNavItems = navItems;
 
   // Verificar si una ruta está activa
   const isActive = (path: string) => {
@@ -356,52 +335,20 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   }
 
   // Obtener opciones disponibles del dropdown de Sistemas
+  // El backend ya devuelve los módulos filtrados según permisos del usuario
   const getSistemasOptions = () => {
-    // Si hay módulos cargados, usar los módulos del sistema del backend
-    if (modules && modules.length > 0) {
-      const sistemaModules = modules
-        .filter(module => module.activo && isSistemaModule(module))
-        .map(module => ({
-          label: module.nombre,
-          to: module.url.startsWith('/') ? module.url : `/${module.url}`,
-          icon: getModuleIcon(module),
-          permission: module.url.replace('/', '').toLowerCase()
-        }));
-      return sistemaModules;
-    }
+    const opcionesBase = !modules || modules.length === 0
+      ? []
+      : modules
+          .filter(module => module.activo && isSistemaModule(module))
+          .map(module => ({
+            label: module.nombre,
+            to: module.url.startsWith('/') ? module.url : `/${module.url}`,
+            icon: getModuleIcon(module),
+            permission: module.url.replace('/', '').toLowerCase()
+          }));
 
-    // Fallback a lista estática si no hay módulos cargados
-    const options = [];
-
-    // Solo ADMIN y SUPERADMIN pueden ver Reportes en el dropdown de Sistemas
-    if (user?.role === 'ADMIN' || user?.role === 'SUPERADMIN') {
-      options.push({
-        label: "Reportes", 
-        to: "/reports", 
-        icon: <BarChart4 className="h-4 w-4" />, 
-        permission: "reports"
-      });
-    }
-
-    // Solo ADMIN y SUPERADMIN pueden ver Garantizado
-    if (user?.role === 'ADMIN' || user?.role === 'SUPERADMIN') {
-      options.push({
-        label: "Garantizado", 
-        to: "/garantizado", 
-        icon: <Shield className="h-4 w-4" />, 
-        permission: "garantizado"
-      });
-    }
-
-    // Todos los usuarios pueden ver Asistencia
-    options.push({
-      label: "Asistencia", 
-      to: "/asistencia", 
-      icon: <Clock className="h-4 w-4" />, 
-      permission: "asistencia"
-    });
-
-    return options;
+    return opcionesBase;
   }
 
   // Obtener el título de la página actual

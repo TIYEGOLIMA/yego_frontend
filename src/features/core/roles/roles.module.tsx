@@ -96,6 +96,7 @@ const RolesModule: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleStatus, setRoleStatus] = useState<'true' | 'false' | 'all'>('all');
+  const [selectedRoleFilter, setSelectedRoleFilter] = useState<string>('all');
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -132,7 +133,7 @@ const RolesModule: React.FC = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, roleStatus]);
+  }, [searchTerm, roleStatus, selectedRoleFilter]);
 
   const fetchRoles = async () => {
     try {
@@ -274,7 +275,10 @@ const RolesModule: React.FC = () => {
       (roleStatus === 'true' && role.active) ||
       (roleStatus === 'false' && !role.active);
     
-    return matchesSearch && matchesStatus;
+    const matchesRoleFilter = selectedRoleFilter === 'all' || 
+      role.id.toString() === selectedRoleFilter;
+    
+    return matchesSearch && matchesStatus && matchesRoleFilter;
   });
 
   const totalRoles = filteredRoles.length;
@@ -420,6 +424,23 @@ const RolesModule: React.FC = () => {
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
             <Filter className="w-4 h-4 text-neutral-400" />
+            <span className="text-sm text-neutral-700 dark:text-neutral-300">Rol:</span>
+            <Select value={selectedRoleFilter} onValueChange={setSelectedRoleFilter}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Seleccionar rol" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los roles</SelectItem>
+                {roles.map((role) => (
+                  <SelectItem key={role.id} value={role.id.toString()}>
+                    {role.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex items-center gap-2">
             <span className="text-sm text-neutral-700 dark:text-neutral-300">Estado:</span>
             <Select value={roleStatus} onValueChange={(value) => setRoleStatus(value as 'true' | 'false' | 'all')}>
               <SelectTrigger className="w-32">
@@ -489,7 +510,6 @@ const RolesModule: React.FC = () => {
                   <TableRow>
                     <TableHead>Nombre</TableHead>
                     <TableHead>Descripción</TableHead>
-                    <TableHead>Estado</TableHead>
                     <TableHead>Permisos</TableHead>
                     <TableHead>Usuarios</TableHead>
                     <TableHead>Creado</TableHead>
@@ -502,14 +522,6 @@ const RolesModule: React.FC = () => {
                     <TableRow key={role.id} className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors">
                       <TableCell className="font-medium text-neutral-900 dark:text-neutral-100">{role.name}</TableCell>
                       <TableCell>{role.description}</TableCell>
-                      <TableCell>
-                        <Badge 
-                          variant={role.active ? "success" : "secondary"}
-                          className={`text-xs ${role.active ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'}`}
-                        >
-                          {role.active ? 'Activo' : 'Inactivo'}
-                        </Badge>
-                      </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1 relative">
                           {role.permissions && (() => {

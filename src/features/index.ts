@@ -9,10 +9,10 @@ export {
   PermissionsModule,
   RolesModule,
   SessionsModule,
-  ImportsModule,
   ReportsModule,
   ModulesModule,
   AsistenciaModule,
+  YegoPremiunModule,
   CORE_FEATURES_CONFIG
 } from './core';
 
@@ -35,7 +35,7 @@ export const FEATURES_REGISTRY = {
   core: {
     name: 'Sistema Principal',
     path: '/features/core',
-    features: ['audit', 'configuration', 'users', 'permissions', 'roles', 'sessions', 'imports', 'reports', 'modules', 'asistencia']
+    features: ['audit', 'configuration', 'users', 'permissions', 'roles', 'sessions', 'reports', 'modules', 'asistencia', 'yego-premiun']
   },
   ticketera: {
     name: 'Ticketera',

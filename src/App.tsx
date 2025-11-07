@@ -53,12 +53,12 @@ import UsersModule from './features/core/users/users.module'
 import RolesModule from './features/core/roles/roles.module'
 import PermissionsModule from './features/core/permissions/permissions.module'
 import ModulesModule from './features/core/modules/modules.module'
-import ImportsModule from './features/core/imports/imports.module'
 import AuditModule from './features/core/audit/audit.module'
 import SessionsModule from './features/core/sessions/sessions.module'
 import ConfigurationModule from './features/core/configuration/configuration.module'
 import { AsistenciaModule } from './features/core/asistencia'
 import { WelcomeModule } from './features/core/welcome'
+import YegoPremiunModule from './features/core/yego-premiun/yego-premiun.module'
 
 // Importar módulos de features - TICKETERA
 import TicketsModule from './features/ticketera/tickets/tickets.module'
@@ -284,7 +284,7 @@ const PermissionRoute = ({ children, module }: { children: React.ReactNode, modu
       
       // VERIFICACIÓN ADICIONAL: Si el módulo es parte del sistema core y el usuario es SUPERADMIN/ADMIN, permitir acceso
       // Esto es un fallback de seguridad para módulos que deberían estar disponibles pero no están en la lista del backend
-      const coreModules = ['users', 'usuarios', 'roles', 'permissions', 'permisos', 'modules', 'módulos', 'modules ', 'imports', 'audit', 'sessions', 'configuration', 'dashboard', 'tickets'];
+      const coreModules = ['users', 'usuarios', 'roles', 'permissions', 'permisos', 'modules', 'módulos', 'modules ', 'audit', 'sessions', 'configuration', 'dashboard', 'tickets', 'yego-premiun'];
       const isCoreModule = coreModules.includes(moduleName);
       const isPrivilegedUser = user.role === 'SUPERADMIN' || user.role === 'ADMIN' || user.role === 'supervisor';
       
@@ -312,8 +312,8 @@ const PermissionRoute = ({ children, module }: { children: React.ReactNode, modu
   } else {
     // Fallback a lista hardcodeada solo si no hay módulos del backend
     const allowedModules: Record<string, string[]> = {
-      'SUPERADMIN': ['users', 'roles', 'permissions', 'modules', 'imports', 'audit', 'sessions', 'configuration', 'reports', 'garantizado', 'asistencia'],
-      'ADMIN': ['users', 'roles', 'modules', 'dashboard', 'reports', 'garantizado', 'asistencia'],
+      'SUPERADMIN': ['users', 'roles', 'permissions', 'modules', 'audit', 'sessions', 'configuration', 'reports', 'garantizado', 'asistencia', 'yego-premiun'],
+      'ADMIN': ['users', 'roles', 'modules', 'dashboard', 'reports', 'garantizado', 'asistencia', 'yego-premiun'],
       'OPERADOR': ['reports', 'users', 'asistencia'],
       'SAC': ['tickets', 'asistencia']
     }
@@ -490,11 +490,6 @@ function App() {
                 <ModulesModule />
               </PermissionRoute>
             } />
-            <Route path="imports" element={
-              <PermissionRoute module="imports">
-                <ImportsModule />
-              </PermissionRoute>
-            } />
             <Route path="audit" element={
               <PermissionRoute module="audit">
                 <AuditModule />
@@ -528,6 +523,11 @@ function App() {
            <Route path="asistencia" element={
              <PermissionRoute module="asistencia">
                <AsistenciaModule />
+             </PermissionRoute>
+           } />
+           <Route path="yego-premiun" element={
+             <PermissionRoute module="yego-premiun">
+               <YegoPremiunModule />
              </PermissionRoute>
            } />
           </Route>
