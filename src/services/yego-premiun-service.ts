@@ -58,6 +58,10 @@ export interface DriverMonthlyStat {
   trips_per_hour: number | null
   created_at: string
   createdAt?: string
+  categorySynced?: boolean
+  categorySyncedAt?: string
+  categoryDetail?: string | null
+  hireDate?: string | null
 }
 
 export interface DriverMonthlyStatsResponse {
@@ -69,7 +73,7 @@ const fetchDriverMonthlyStats = async (
   params: { signal?: AbortSignal } = {}
 ): Promise<DriverMonthlyStatsResponse> => {
   const { signal } = params
-  const response = await api.get('/yego-premiun/list', {
+  const response = await api.get('/yego-premiun/driver-active/list', {
     signal,
   })
 
@@ -86,9 +90,10 @@ const fetchDriverMonthlyStats = async (
     ? (responseData.data as DriverMonthlyStat[])
     : []
 
-  const total = typeof responseData?.total === 'number'
-    ? responseData.total
-    : data.length
+  const total =
+    typeof responseData?.total === 'number'
+      ? responseData.total
+      : data.length
 
   return {
     data,
@@ -96,10 +101,22 @@ const fetchDriverMonthlyStats = async (
   }
 }
 
+const processDriverActiveStats = async () => {
+  const response = await api.post('/yego-premiun/driver-active/process')
+  const responseData = response.data
+
+  if (Array.isArray(responseData)) {
+    return responseData as DriverMonthlyStat[]
+  }
+
+  return Array.isArray(responseData?.data)
+    ? (responseData.data as DriverMonthlyStat[])
+    : []
+}
+
 export const yegoPremiunService = {
   fetchDriverMonthlyStats,
+  processDriverActiveStats,
 }
 
 export default yegoPremiunService
-
-

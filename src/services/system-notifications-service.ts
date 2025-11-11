@@ -1,6 +1,6 @@
 import { Client } from '@stomp/stompjs'
 import SockJS from 'sockjs-client'
-import { SystemEvent, ForcedLogoutEvent, AccountBlockedEvent, UserTableUpdateEvent } from '../types/system-notifications'
+import { SystemEvent, ForcedLogoutEvent, AccountBlockedEvent, UserTableUpdateEvent, PremiumProcessAvailableEvent } from '../types/system-notifications'
 
 class SystemNotificationsService {
   private client: Client | null = null
@@ -15,6 +15,7 @@ class SystemNotificationsService {
   private onForcedLogout: ((event: ForcedLogoutEvent) => void) | null = null
   private onAccountBlocked: ((event: AccountBlockedEvent) => void) | null = null
   private onUserTableUpdate: ((event: UserTableUpdateEvent) => void) | null = null
+  private onPremiumProcessAvailable: ((event: PremiumProcessAvailableEvent) => void) | null = null
 
   constructor() {
     this.connect()
@@ -38,6 +39,7 @@ class SystemNotificationsService {
           this.isConnected = true
           this.reconnectAttempts = 0
           this.subscribe()
+          this.subscribePremiumTopics()
         },
         onStompError: (frame) => {
           console.error('❌ [SystemNotifications] Error STOMP:', frame)
@@ -88,7 +90,7 @@ class SystemNotificationsService {
           console.log('🔔 [SystemNotifications] Evento del sistema recibido:', event)
 
           // Filtrar eventos por usuario - solo procesar si el evento es para el usuario actual
-          if (event.userId && currentUserId && event.userId !== currentUserId) {
+          if ('userId' in event && event.userId && currentUserId && event.userId !== currentUserId) {
             console.log(`🚫 [SystemNotifications] Evento ignorado - destinado para userId ${event.userId}, usuario actual ${currentUserId}`)
             return
           }
@@ -115,6 +117,10 @@ class SystemNotificationsService {
             case 'USER_TABLE_UPDATE':
               console.log('👥 [SystemNotifications] Procesando USER_TABLE_UPDATE')
               this.onUserTableUpdate?.(event)
+              break
+            case 'PREMIUN_PROCESS_AVAILABLE':
+              console.log('🚦 [SystemNotifications] Procesando PREMIIUN_PROCESS_AVAILABLE (topic system)')
+              this.onPremiumProcessAvailable?.(event)
               break
           }
         } catch (error) {
@@ -168,6 +174,25 @@ class SystemNotificationsService {
     }
   }
 
+  private subscribePremiumTopics() {
+    if (!this.client || !this.isConnected) return
+
+    const handleEvent = (message: { body: string }) => {
+      try {
+        const event: PremiumProcessAvailableEvent = JSON.parse(message.body)
+        if (event.type === 'PREMIUN_PROCESS_AVAILABLE') {
+          console.log('🚦 [SystemNotifications] Evento PREMIIUN_PROCESS_AVAILABLE recibido:', event)
+          this.onPremiumProcessAvailable?.(event)
+        }
+      } catch (error) {
+        console.error('❌ [SystemNotifications] Error al procesar evento PREMIIUN_PROCESS_AVAILABLE:', error)
+      }
+    }
+
+    this.client.subscribe('/topic/yego-premiun', handleEvent)
+    this.client.subscribe('/topic/premium-driver', handleEvent)
+  }
+
   private handleReconnect() {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) return
 
@@ -189,6 +214,10 @@ class SystemNotificationsService {
 
   public setOnUserTableUpdate(callback: ((event: UserTableUpdateEvent) => void) | null) {
     this.onUserTableUpdate = callback
+  }
+
+  public setOnPremiumProcessAvailable(callback: ((event: PremiumProcessAvailableEvent) => void) | null) {
+    this.onPremiumProcessAvailable = callback
   }
 
   public reconnect() {

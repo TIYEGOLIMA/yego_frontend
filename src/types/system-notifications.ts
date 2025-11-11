@@ -24,4 +24,16 @@ export interface UserTableUpdateEvent {
   timestamp: string
 }
 
-export type SystemEvent = ForcedLogoutEvent | AccountBlockedEvent | UserTableUpdateEvent
+export interface PremiumProcessAvailableEvent {
+  type: 'PREMIUN_PROCESS_AVAILABLE'
+  message: string
+  month: number
+  year: number
+  timestamp: string
+}
+
+export type SystemEvent =
+  | ForcedLogoutEvent
+  | AccountBlockedEvent
+  | UserTableUpdateEvent
+  | PremiumProcessAvailableEvent
