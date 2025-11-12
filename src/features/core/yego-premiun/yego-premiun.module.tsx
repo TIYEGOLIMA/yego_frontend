@@ -106,6 +106,17 @@ const formatDuration = (seconds: number | null | undefined) => {
   return parts.join(' ')
 }
 
+const formatProcessingTime = (seconds: number) => {
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  const secs = seconds % 60
+
+  if (hours > 0) {
+    return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+  }
+  return `${minutes}:${secs.toString().padStart(2, '0')}`
+}
+
 const formatDateTime = (value: string | null | undefined) => {
   if (!value) return '—'
   const date = new Date(value)
@@ -202,6 +213,8 @@ const YegoPremiunModule: React.FC = () => {
   const [processAvailable, setProcessAvailable] = useState(false)
   const [selectedFleet, setSelectedFleet] = useState<string>('all')
   const [currentPeriodKey, setCurrentPeriodKey] = useState<string | null>(null)
+  const [showProgressModal, setShowProgressModal] = useState(false)
+  const [processingTime, setProcessingTime] = useState(0)
 
   const getValue = <T,>(stat: DriverMonthlyStat, ...keys: (keyof DriverMonthlyStat)[]): T | null => {
     for (const key of keys) {
@@ -395,23 +408,44 @@ const YegoPremiunModule: React.FC = () => {
        setProcessing(true)
        setError(null)
        setLoading(true)
- 
-       const processed = await yegoPremiunService.processDriverActiveStats()
-       setStats(processed)
-       setPage(1)
-       setProcessAvailable(false)
+       setShowProgressModal(true)
+       setProcessingTime(0)
 
-      const latest = getLatestPeriodStat(processed)
-      if (latest && latest.year && latest.month) {
-        const key = `${latest.year}-${latest.month}`
-        setCurrentPeriodKey(key)
-        localStorage.setItem('yego-premiun-last-processed', key)
-      } else if (currentPeriodKey) {
-        localStorage.setItem('yego-premiun-last-processed', currentPeriodKey)
-      }
+       // Iniciar contador de tiempo
+       const startTime = Date.now()
+       const timeInterval = setInterval(() => {
+         const elapsed = Math.floor((Date.now() - startTime) / 1000)
+         setProcessingTime(elapsed)
+       }, 1000)
+
+       try {
+         const processed = await yegoPremiunService.processDriverActiveStats()
+         clearInterval(timeInterval)
+         
+         setStats(processed)
+         setPage(1)
+         setProcessAvailable(false)
+
+         const latest = getLatestPeriodStat(processed)
+         if (latest && latest.year && latest.month) {
+           const key = `${latest.year}-${latest.month}`
+           setCurrentPeriodKey(key)
+           localStorage.setItem('yego-premiun-last-processed', key)
+         } else if (currentPeriodKey) {
+           localStorage.setItem('yego-premiun-last-processed', currentPeriodKey)
+         }
+       } catch (processError) {
+         clearInterval(timeInterval)
+         throw processError
+       } finally {
+         setShowProgressModal(false)
+         setProcessingTime(0)
+       }
      } catch (err: any) {
        console.error('❌ [YegoPremiun] Error al procesar conductores activos:', err)
        setError('No se pudo procesar la información. Intenta nuevamente.')
+       setShowProgressModal(false)
+       setProcessingTime(0)
      } finally {
        setProcessing(false)
        setLoading(false)
@@ -918,6 +952,45 @@ const YegoPremiunModule: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog
+        open={showProgressModal}
+        onOpenChange={(open) => {
+          // No permitir cerrar el modal mientras se procesa
+          if (!open && processing) {
+            return
+          }
+          setShowProgressModal(open)
+        }}
+      >
+        <DialogContent 
+          className="sm:max-w-md [&>button]:hidden" 
+          onInteractOutside={(e) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>Procesando conductores activos</DialogTitle>
+            <DialogDescription>
+              Por favor espera mientras se procesa la información. Este proceso puede tardar varios minutos.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="flex items-center justify-center">
+              <Loader2 className="h-12 w-12 animate-spin text-primary-600" />
+            </div>
+            <div className="space-y-2 text-center">
+              <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                Tiempo transcurrido: {formatProcessingTime(processingTime)}
+              </p>
+              <div className="w-full bg-neutral-200 dark:bg-neutral-700 rounded-full h-2 overflow-hidden">
+                <div className="h-full bg-primary-600 animate-pulse" style={{ width: '100%' }} />
+              </div>
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                Por favor no cierres esta ventana. El proceso continuará hasta completarse.
+              </p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={isDetailOpen}
