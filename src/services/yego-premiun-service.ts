@@ -31,18 +31,6 @@ export interface DriverMonthlyStat {
   countOrdersCancelledByDriver?: number | null
   count_orders_platform?: number | null
   countOrdersPlatform?: number | null
-  count_active_drivers?: number | null
-  countActiveDrivers?: number | null
-  count_drivers?: number | null
-  countDrivers?: number | null
-  acceptance_rate?: number | null
-  acceptanceRate?: number | null
-  completion_rate?: number | null
-  completionRate?: number | null
-  sum_distance?: number | null
-  sumDistance?: number | null
-  sum_orders_completed?: number | null
-  sumOrdersCompleted?: number | null
   sum_price_cash?: number | null
   sumPriceCash?: number | null
   sum_price_cashless?: number | null
@@ -55,7 +43,6 @@ export interface DriverMonthlyStat {
   sumPricePlatformCommission?: number | null
   sum_work_time_seconds?: number | null
   sumWorkTimeSeconds?: number | null
-  trips_per_hour: number | null
   created_at: string
   createdAt?: string
   categorySynced?: boolean

@@ -34,6 +34,7 @@ import {
   Filter,
   Loader2,
   RefreshCcw,
+  Award,
 } from 'lucide-react'
 import { yegoPremiunService, type DriverMonthlyStat } from '../../../services'
 import {
@@ -79,13 +80,6 @@ const formatInteger = (value: number | null | undefined) => {
   const numericValue = Number(value)
   if (Number.isNaN(numericValue)) return '—'
   return new Intl.NumberFormat('es-PE', { maximumFractionDigits: 0 }).format(numericValue)
-}
-
-const formatPercentage = (value: number | null | undefined) => {
-  if (value === null || value === undefined) return '—'
-  const numericValue = Number(value)
-  if (Number.isNaN(numericValue)) return '—'
-  return `${(numericValue * 100).toFixed(2)}%`
 }
 
 const formatDuration = (seconds: number | null | undefined) => {
@@ -181,13 +175,12 @@ const getCategoryTheme = (category: string | null | undefined) => {
   }
 }
 
-const getProgressStyle = (percentage: number | null | undefined) => {
-  if (percentage === null || percentage === undefined) return { width: '0%' }
-  return { width: `${percentage}%` }
-}
-
 const YegoPremiunModule: React.FC = () => {
   const currentYear = new Date().getFullYear()
+  const currentMonth = new Date().getMonth() + 1 // getMonth() devuelve 0-11, necesitamos 1-12
+  // Calcular mes anterior
+  const previousMonth = currentMonth === 1 ? 12 : currentMonth - 1
+  const previousYear = currentMonth === 1 ? currentYear - 1 : currentYear
   const yearOptions = useMemo(
     () => [
       { value: 'all', label: 'Todos los años' },
@@ -203,8 +196,8 @@ const YegoPremiunModule: React.FC = () => {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [driverQuery, setDriverQuery] = useState('')
-  const [selectedMonth, setSelectedMonth] = useState(MONTH_OPTIONS[0].value)
-  const [selectedYear, setSelectedYear] = useState(yearOptions[0].value)
+  const [selectedMonth, setSelectedMonth] = useState(String(previousMonth))
+  const [selectedYear, setSelectedYear] = useState(String(previousYear))
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(parseInt(LIMIT_OPTIONS[0], 10))
   const [selectedStat, setSelectedStat] = useState<DriverMonthlyStat | null>(null)
@@ -396,8 +389,8 @@ const YegoPremiunModule: React.FC = () => {
 
   const handleResetFilters = () => {
     setDriverQuery('')
-    setSelectedMonth(MONTH_OPTIONS[0].value)
-    setSelectedYear(yearOptions[0].value)
+    setSelectedMonth(String(previousMonth))
+    setSelectedYear(String(previousYear))
     setSelectedFleet('all')
     setLimit(parseInt(LIMIT_OPTIONS[0], 10))
     setPage(1)
@@ -580,13 +573,6 @@ const YegoPremiunModule: React.FC = () => {
     const categoryDetail = getCategoryDetail(selectedStat) || 'Sin detalle disponible'
     const hireDate = formatShortDate(getHireDate(selectedStat))
 
-    const acceptanceRate = getValue<number>(selectedStat, 'acceptance_rate', 'acceptanceRate')
-    const completionRate = getValue<number>(selectedStat, 'completion_rate', 'completionRate')
-    const acceptanceRatePercent =
-      acceptanceRate !== null && acceptanceRate !== undefined ? acceptanceRate * 100 : null
-    const completionRatePercent =
-      completionRate !== null && completionRate !== undefined ? completionRate * 100 : null
-
     const countMetrics = [
       {
         label: 'Órdenes completadas',
@@ -615,17 +601,6 @@ const YegoPremiunModule: React.FC = () => {
       {
         label: 'Órdenes plataforma',
         value: formatInteger(getValue<number>(selectedStat, 'count_orders_platform', 'countOrdersPlatform')),
-      },
-    ]
-
-    const driverMetrics = [
-      {
-        label: 'Conductores activos',
-        value: formatInteger(getValue<number>(selectedStat, 'count_active_drivers', 'countActiveDrivers')),
-      },
-      {
-        label: 'Conductores totales',
-        value: formatInteger(getValue<number>(selectedStat, 'count_drivers', 'countDrivers')),
       },
     ]
 
@@ -660,14 +635,6 @@ const YegoPremiunModule: React.FC = () => {
 
     const timelineMetrics = [
       {
-        label: 'Distancia total (km)',
-        value: formatNumber(getValue<number>(selectedStat, 'sum_distance', 'sumDistance'), 2),
-      },
-      {
-        label: 'Órdenes (suma)',
-        value: formatInteger(getValue<number>(selectedStat, 'sum_orders_completed', 'sumOrdersCompleted')),
-      },
-      {
         label: 'Tiempo trabajado',
         value: formatDuration(getValue<number>(selectedStat, 'sum_work_time_seconds', 'sumWorkTimeSeconds')),
       },
@@ -689,12 +656,7 @@ const YegoPremiunModule: React.FC = () => {
       categoryTheme: getCategoryTheme(selectedStat.category),
       monthLabel: formatMonthLabel(selectedStat.month),
       yearLabel: selectedStat.year || '—',
-      acceptanceRate,
-      acceptanceRatePercent,
-      completionRate,
-      completionRatePercent,
       countMetrics,
-      driverMetrics,
       financialMetrics,
       timelineMetrics,
     }
@@ -728,6 +690,49 @@ const YegoPremiunModule: React.FC = () => {
            </Button>
          </div>
 
+      </div>
+
+      {/* Cards de Estadísticas */}
+      <div className="flex flex-wrap gap-3">
+        {/* Premiun Oro */}
+        <Card className="border-0 bg-amber-50 dark:bg-amber-950/20 w-fit min-w-[200px]">
+          <CardContent className="p-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-amber-600 dark:text-amber-400">Premiun Oro</p>
+                <p className="text-2xl font-bold text-amber-900 dark:text-amber-100">
+                  {filteredStats.filter(stat => {
+                    const category = (stat.category || '').toLowerCase()
+                    return category.includes('oro')
+                  }).length}
+                </p>
+              </div>
+              <div className="w-10 h-10 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center">
+                <Award className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Premiun Plata */}
+        <Card className="border-0 bg-slate-50 dark:bg-slate-950/20 w-fit min-w-[200px]">
+          <CardContent className="p-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-slate-600 dark:text-slate-400">Premiun Plata</p>
+                <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                  {filteredStats.filter(stat => {
+                    const category = (stat.category || '').toLowerCase()
+                    return category.includes('plata')
+                  }).length}
+                </p>
+              </div>
+              <div className="w-10 h-10 bg-slate-100 dark:bg-slate-900/30 rounded-full flex items-center justify-center">
+                <Award className="h-5 w-5 text-slate-600 dark:text-slate-400" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <Card>
@@ -1091,67 +1096,12 @@ const YegoPremiunModule: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="rounded-xl border border-neutral-200 bg-white/60 p-4 shadow-sm backdrop-blur dark:border-neutral-800 dark:bg-neutral-900/60">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-neutral-800 dark:text-neutral-100">
-                        Tasa de aceptación
-                      </p>
-                      <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                        Porcentaje de órdenes aceptadas
-                      </p>
-                    </div>
-                    <span className="text-sm font-bold text-red-600 dark:text-red-400">
-                      {formatPercentage(detailData.acceptanceRate)}
-                    </span>
-                  </div>
-                  <div className="mt-3 h-2 w-full rounded-full bg-neutral-200 dark:bg-neutral-800">
-                    <div
-                      className="h-2 rounded-full bg-gradient-to-r from-red-500 to-orange-400 transition-all"
-                      style={getProgressStyle(detailData.acceptanceRatePercent)}
-                    />
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-neutral-200 bg-white/60 p-4 shadow-sm backdrop-blur dark:border-neutral-800 dark:bg-neutral-900/60">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-neutral-800 dark:text-neutral-100">
-                        Tasa de finalización
-                      </p>
-                      <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                        Órdenes completadas sobre aceptadas
-                      </p>
-                    </div>
-                    <span className="text-sm font-bold text-red-600 dark:text-red-400">
-                      {formatPercentage(detailData.completionRate)}
-                    </span>
-                  </div>
-                  <div className="mt-3 h-2 w-full rounded-full bg-neutral-200 dark:bg-neutral-800">
-                    <div
-                      className="h-2 rounded-full bg-gradient-to-r from-red-500 to-orange-400 transition-all"
-                      style={getProgressStyle(detailData.completionRatePercent)}
-                    />
-                  </div>
-                </div>
-              </div>
-
               <div>
                 <p className="mb-3 text-sm font-semibold text-neutral-800 dark:text-neutral-100">
                   Rendimiento operativo
                 </p>
                 <div className="grid gap-3 sm:grid-cols-3">
                   {detailData.countMetrics.map((metric) => (
-                    <MetricCard key={metric.label} label={metric.label} value={metric.value} />
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <p className="mb-3 text-sm font-semibold text-neutral-800 dark:text-neutral-100">Conductores</p>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {detailData.driverMetrics.map((metric) => (
                     <MetricCard key={metric.label} label={metric.label} value={metric.value} />
                   ))}
                 </div>
