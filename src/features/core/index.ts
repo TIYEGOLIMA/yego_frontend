@@ -15,6 +15,7 @@ export { default as ModulesModule } from './modules/modules.module';
 export { AsistenciaModule } from './asistencia';
 export { default as YegoPremiunModule } from './yego-premiun/yego-premiun.module';
 export { WelcomeModule } from './welcome';
+export { MarketingMensajesModule } from './marketing-mensajes';
 
 // 🎯 CONFIGURACIÓN DE FEATURES CORE
 export const CORE_FEATURES_CONFIG = {

@@ -23,6 +23,7 @@ export interface Module {
   activo: boolean;
   fechaCreacion?: string;
   fechaActualizacion?: string;
+  grupo?: string; // Nombre del grupo al que pertenece el módulo
 }
 
 export interface AuthState {

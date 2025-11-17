@@ -47,6 +47,7 @@ import { useAuth } from "@/shared/hooks/useAuth";
 import { api } from '../../../services';
 import AccessRestricted from '@/shared/components/AccessRestricted';
 import SocketService from '../../../services/socket-service';
+import { useAuthStore } from '@/store/auth-store';
 
 // Interfaces para Sistemas Internos
 interface SistemaExternoResponse {
@@ -66,6 +67,7 @@ interface CreateSistemaExternoData {
   nombre: string;
   descripcion: string;
   url: string;
+  grupo?: string; // Nombre del grupo al que pertenece el módulo
 }
 
 interface SistemaEstadoCambiadoEvent {
@@ -93,6 +95,7 @@ interface SistemaVerificadoEvent {
 
 const SistemasExternosModule: React.FC = () => {
   const authState = useAuth();
+  const { fetchModules } = useAuthStore();
   const [sistemas, setSistemas] = useState<SistemaExternoResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -109,8 +112,11 @@ const SistemasExternosModule: React.FC = () => {
   const [formData, setFormData] = useState<CreateSistemaExternoData>({
     nombre: '',
     descripcion: '',
-    url: ''
+    url: '',
+    grupo: undefined
   });
+  const [grupoOption, setGrupoOption] = useState<'sistemas' | 'nuevo'>('sistemas');
+  const [nuevoGrupoNombre, setNuevoGrupoNombre] = useState('');
 
   // Función para formatear timestamp
   const formatTimestamp = (timestamp: string) => {
@@ -222,8 +228,12 @@ const SistemasExternosModule: React.FC = () => {
 
   const handleCreateSistema = async () => {
     try {
+      // Determinar el grupo final
+      const grupoFinal = grupoOption === 'sistemas' ? 'Sistemas' : nuevoGrupoNombre.trim();
+      
       const dataToSend = {
         ...formData,
+        grupo: grupoFinal || undefined,
         tipo: 'GARANTIZADO',
         activo: true
       };
@@ -232,9 +242,19 @@ const SistemasExternosModule: React.FC = () => {
       setFormData({
         nombre: '',
         descripcion: '',
-        url: ''
+        url: '',
+        grupo: undefined
       });
-      fetchSistemas();
+      setGrupoOption('sistemas');
+      setNuevoGrupoNombre('');
+      
+      // Actualizar la lista local
+      await fetchSistemas();
+      
+      // Actualizar el store global para que aparezca inmediatamente en el sidebar
+      await fetchModules();
+      
+      showNotification('Módulo creado exitosamente', 'success');
     } catch (error: any) {
       console.error('Error creating sistema interno:', error);
       showNotification(error.response?.data?.message || 'Error al crear sistema interno', 'error');
@@ -253,9 +273,17 @@ const SistemasExternosModule: React.FC = () => {
       setFormData({
         nombre: '',
         descripcion: '',
-        url: ''
+        url: '',
+        grupo: undefined
       });
-      fetchSistemas();
+      
+      // Actualizar la lista local
+      await fetchSistemas();
+      
+      // Actualizar el store global para que se refleje en el sidebar
+      await fetchModules();
+      
+      showNotification('Módulo actualizado exitosamente', 'success');
     } catch (error: any) {
       console.error('Error updating sistema interno:', error);
       showNotification(error.response?.data?.message || 'Error al actualizar sistema interno', 'error');
@@ -271,7 +299,14 @@ const SistemasExternosModule: React.FC = () => {
       try {
         await api.delete(`/modules/${deleteModal.sistema.id}`);
         setDeleteModal({ open: false, sistema: null });
-      fetchSistemas();
+        
+        // Actualizar la lista local
+        await fetchSistemas();
+        
+        // Actualizar el store global para que se refleje en el sidebar
+        await fetchModules();
+        
+        showNotification('Módulo eliminado exitosamente', 'success');
       } catch (error: any) {
         console.error('Error deleting sistema interno:', error);
         showNotification(error.response?.data?.message || 'Error al eliminar sistema interno', 'error');
@@ -300,6 +335,9 @@ const SistemasExternosModule: React.FC = () => {
       await api.put(`/modules/${sistema.id}/toggle-active`, {
         activo: nuevoEstado
       });
+      
+      // Actualizar el store global para que se refleje en el sidebar
+      await fetchModules();
       
       // Cambio realizado exitosamente
       
@@ -362,8 +400,11 @@ const SistemasExternosModule: React.FC = () => {
     setFormData({
       nombre: '',
       descripcion: '',
-      url: ''
+      url: '',
+      grupo: undefined
     });
+    setGrupoOption('sistemas');
+    setNuevoGrupoNombre('');
   };
 
   if (!authState || !authState.isAuthenticated) {
@@ -695,6 +736,49 @@ const SistemasExternosModule: React.FC = () => {
                 placeholder="http://localhost:8081/api/pagos"
               />
             </div>
+
+            {!editingSistema && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                    Agrupar en
+                  </label>
+                  <Select 
+                    value={grupoOption} 
+                    onValueChange={(value) => {
+                      setGrupoOption(value as 'sistemas' | 'nuevo');
+                      if (value === 'sistemas') {
+                        setNuevoGrupoNombre('');
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="sistemas">Sistemas (grupo existente)</SelectItem>
+                      <SelectItem value="nuevo">Crear nuevo grupo</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {grupoOption === 'nuevo' && (
+                  <div>
+                    <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                      Nombre del nuevo grupo
+                    </label>
+                    <Input
+                      value={nuevoGrupoNombre}
+                      onChange={(e) => setNuevoGrupoNombre(e.target.value)}
+                      placeholder="Ej: Finanzas, Recursos Humanos, etc."
+                    />
+                    <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+                      Los módulos de este grupo aparecerán juntos en el menú lateral
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
             
           </div>
           

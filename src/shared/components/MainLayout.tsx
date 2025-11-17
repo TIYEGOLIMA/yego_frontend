@@ -48,7 +48,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [changePasswordOpen, setChangePasswordOpen] = useState(false)
-  const [sistemasDropdownOpen, setSistemasDropdownOpen] = useState(false)
+  const [openDropdowns, setOpenDropdowns] = useState<Set<string>>(new Set())
   const { user, logout, token, modules, fetchModules } = useAuthStore()
   const { hasAnyPermission } = usePermissions()
   const { status } = useConnectionStatus()
@@ -180,8 +180,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     const urlWithoutSlash = normalizedUrl.replace(/\/$/, '');
     
     // Módulos que van al dropdown de Sistemas
-    const sistemasPaths = ['garantizado', 'reports', 'reportes', 'asistencia', 'tickets', 'ticket', 'yego-premiun'];
-    const sistemasNames = ['garantizado', 'reporte', 'reportes', 'asistencia', 'tickets', 'ticket', 'yego-premiun'];
+    const sistemasPaths = ['garantizado', 'reports', 'reportes', 'asistencia', 'tickets', 'ticket', 'yego-premiun', 'mensajes', 'marketni'];
+    const sistemasNames = ['garantizado', 'reporte', 'reportes', 'asistencia', 'tickets', 'ticket', 'yego-premiun', 'mensajes', 'marketni'];
     
     // Verificar por URL (sin slashes iniciales/finales)
     const matchesUrl = sistemasPaths.some(path => 
@@ -244,76 +244,100 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const buildNavItemsFromModules = (): NavItem[] => {
     if (!modules || modules.length === 0) return [];
 
-    // Organizar módulos por orden en un mapa
-    const modulesByOrder = new Map<number, Module[]>();
-    
-    modules
-      .filter(module => {
-        if (!module.activo) return false;
-        
-        // Excluir módulo de importaciones
-        const moduleName = (module.nombre || '').toLowerCase();
-        const moduleUrl = (module.url || '').toLowerCase();
-        const isImportModule = moduleName.includes('import') || moduleUrl.includes('import');
-        
-        return !isImportModule;
-      })
-      .forEach(module => {
-        const order = getModuleOrder(module);
-        if (!modulesByOrder.has(order)) {
-          modulesByOrder.set(order, []);
+    // Filtrar módulos activos y excluir importaciones
+    const activeModules = modules.filter(module => {
+      if (!module.activo) return false;
+      
+      const moduleName = (module.nombre || '').toLowerCase();
+      const moduleUrl = (module.url || '').toLowerCase();
+      const isImportModule = moduleName.includes('import') || moduleUrl.includes('import');
+      
+      return !isImportModule;
+    });
+
+    // Separar módulos con grupo y sin grupo
+    const modulesWithGroup = new Map<string, Module[]>();
+    const dashboardModules: Module[] = [];
+    const otherOrderedModules = new Map<number, Module[]>();
+
+    activeModules.forEach(module => {
+      const order = getModuleOrder(module);
+      
+      // Dashboard siempre va primero
+      if (order === 1) {
+        dashboardModules.push(module);
+        return;
+      }
+
+      // Si el módulo es un sistema (según lógica de detección), siempre agregarlo a "Sistemas"
+      // Esto prevalece sobre el grupo asignado si es un módulo de sistema
+      if (isSistemaModule(module)) {
+        if (!modulesWithGroup.has('Sistemas')) {
+          modulesWithGroup.set('Sistemas', []);
         }
-        modulesByOrder.get(order)!.push(module);
-        
-        if (order === 999) {
-          console.log(`🔍 [MainLayout] Módulo no categorizado: "${module.nombre}" (URL: "${module.url}")`);
+        modulesWithGroup.get('Sistemas')!.push(module);
+      } else if (module.grupo && module.grupo.trim()) {
+        // Si tiene grupo definido y no es un sistema, usar su grupo
+        const grupoName = module.grupo.trim();
+        if (!modulesWithGroup.has(grupoName)) {
+          modulesWithGroup.set(grupoName, []);
         }
-      });
+        modulesWithGroup.get(grupoName)!.push(module);
+      } else {
+        // Módulos sin grupo que no son sistemas
+        if (!otherOrderedModules.has(order)) {
+          otherOrderedModules.set(order, []);
+        }
+        otherOrderedModules.get(order)!.push(module);
+      }
+    });
 
     const navItems: NavItem[] = [];
     
-    // Orden de renderizado: Dashboard(1) -> Sistemas(2) -> Usuarios(3) -> Módulos(4) -> Permisos(5) -> Roles(6) -> Configuraciones(7) -> Otros(999)
-    const renderOrder = [1, 2, 3, 4, 5, 6, 7, 999];
-    
-    renderOrder.forEach(order => {
-      const modulesInOrder = modulesByOrder.get(order) || [];
-      
-      if (order === 1) {
-        // Dashboard con icono especial
-        modulesInOrder.forEach(module => {
-          navItems.push({
-            ...createNavItemFromModule(module),
-            icon: <LayoutDashboard className="h-5 w-5" />
-          });
-        });
-      } else if (order === 2) {
-        // Sistemas (dropdown)
-        if (modulesInOrder.length > 0) {
-          navItems.push({
-            label: "Sistemas",
-            to: "dropdown",
-            icon: <Server className="h-5 w-5" />,
-            requiredPermission: null,
-            children: modulesInOrder.map(module => createNavItemFromModule(module))
-          });
-        }
-      } else {
-        // Resto de módulos individuales
-        modulesInOrder.forEach(module => {
-          navItems.push(createNavItemFromModule(module));
+    // 1. Dashboard primero
+    dashboardModules.forEach(module => {
+      navItems.push({
+        ...createNavItemFromModule(module),
+        icon: <LayoutDashboard className="h-5 w-5" />
+      });
+    });
+
+    // 2. Grupos (incluyendo "Sistemas" y grupos personalizados)
+    // Ordenar grupos: "Sistemas" primero, luego alfabéticamente
+    const sortedGroups = Array.from(modulesWithGroup.entries()).sort((a, b) => {
+      if (a[0] === 'Sistemas') return -1;
+      if (b[0] === 'Sistemas') return 1;
+      return a[0].localeCompare(b[0]);
+    });
+
+    sortedGroups.forEach(([grupoName, grupoModules]) => {
+      if (grupoModules.length > 0) {
+        navItems.push({
+          label: grupoName,
+          to: `dropdown-${grupoName.toLowerCase().replace(/\s+/g, '-')}`,
+          icon: grupoName === 'Sistemas' ? <Server className="h-5 w-5" /> : <AppWindow className="h-5 w-5" />,
+          requiredPermission: null,
+          children: grupoModules.map(module => createNavItemFromModule(module))
         });
       }
     });
 
+    // 3. Módulos individuales ordenados (Usuarios, Módulos, Permisos, Roles, Configuraciones, Otros)
+    const renderOrder = [3, 4, 5, 6, 7, 999];
+    renderOrder.forEach(order => {
+      const modulesInOrder = otherOrderedModules.get(order) || [];
+      modulesInOrder.forEach(module => {
+        navItems.push(createNavItemFromModule(module));
+      });
+    });
+
     console.log(`📋 [MainLayout] Módulos organizados:`, {
-      dashboard: modulesByOrder.get(1)?.length || 0,
-      sistemas: modulesByOrder.get(2)?.length || 0,
-      usuarios: modulesByOrder.get(3)?.length || 0,
-      modulos: modulesByOrder.get(4)?.length || 0,
-      permisos: modulesByOrder.get(5)?.length || 0,
-      roles: modulesByOrder.get(6)?.length || 0,
-      configuraciones: modulesByOrder.get(7)?.length || 0,
-      otros: modulesByOrder.get(999)?.length || 0
+      dashboard: dashboardModules.length,
+      grupos: Array.from(modulesWithGroup.entries()).map(([name, mods]) => ({ nombre: name, cantidad: mods.length })),
+      individuales: Array.from(otherOrderedModules.entries()).reduce((acc, [order, mods]) => {
+        acc[order] = mods.length;
+        return acc;
+      }, {} as Record<number, number>)
     });
 
     return navItems;
@@ -334,22 +358,6 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     return location.pathname === path || location.pathname.startsWith(path + '/')
   }
 
-  // Obtener opciones disponibles del dropdown de Sistemas
-  // El backend ya devuelve los módulos filtrados según permisos del usuario
-  const getSistemasOptions = () => {
-    const opcionesBase = !modules || modules.length === 0
-      ? []
-      : modules
-          .filter(module => module.activo && isSistemaModule(module))
-          .map(module => ({
-            label: module.nombre,
-            to: module.url.startsWith('/') ? module.url : `/${module.url}`,
-            icon: getModuleIcon(module),
-            permission: module.url.replace('/', '').toLowerCase()
-          }));
-
-    return opcionesBase;
-  }
 
   // Obtener el título de la página actual
   const getCurrentPageTitle = () => {
@@ -382,32 +390,33 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     }
   }, [location.pathname])
 
-  // Expandir automáticamente el menú de Sistemas cuando una opción está activa
+  // Expandir automáticamente los dropdowns cuando una opción está activa
   useEffect(() => {
-    const sistemasOptions = getSistemasOptions();
-    const hasActiveOption = sistemasOptions.some(option => isActive(option.to));
-    
-    // Solo auto-expandir si hay una opción activa, no forzar cierre
-    if (hasActiveOption && !sistemasDropdownOpen) {
-      setSistemasDropdownOpen(true);
-    }
-  }, [location.pathname])
+    filteredNavItems.forEach(item => {
+      if (item.to.startsWith('dropdown-') && item.children) {
+        const hasActiveOption = item.children.some(child => isActive(child.to));
+        if (hasActiveOption && !openDropdowns.has(item.to)) {
+          setOpenDropdowns(prev => new Set(prev).add(item.to));
+        }
+      }
+    });
+  }, [location.pathname, filteredNavItems])
 
-  // Cerrar menú de Sistemas al hacer clic fuera
+  // Cerrar dropdowns al hacer clic fuera
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (sistemasDropdownOpen && !(event.target as Element).closest('.sistemas-menu-container')) {
-        setSistemasDropdownOpen(false);
+      if (openDropdowns.size > 0 && !(event.target as Element).closest('.dropdown-menu-container')) {
+        setOpenDropdowns(new Set());
       }
     }
     
-    if (sistemasDropdownOpen) {
+    if (openDropdowns.size > 0) {
       document.addEventListener('mousedown', handleClickOutside);
       return () => {
         document.removeEventListener('mousedown', handleClickOutside);
       };
     }
-  }, [sistemasDropdownOpen])
+  }, [openDropdowns])
 
   return (
     <div className="min-h-screen bg-background-secondary dark:bg-background-dark">
@@ -519,7 +528,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                       onClick={() => {
                         setUserMenuOpen(false);
                         navigate('/configuration');
-                        setSistemasDropdownOpen(false);
+                        setOpenDropdowns(new Set());
                       }}
                     >
                       <Settings2 className="h-4 w-4" />
@@ -575,16 +584,27 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             filteredNavItems.map((item) => {
             const isActiveItem = isActive(item.to);
             
-            // Manejar el menú expandible de Sistemas
-            if (item.to === 'dropdown') {
-              const sistemasOptions = getSistemasOptions();
-              const hasActiveOption = sistemasOptions.some(option => isActive(option.to));
+            // Manejar menús expandibles (dropdowns)
+            if (item.to.startsWith('dropdown-') && item.children) {
+              const dropdownId = item.to;
+              const isDropdownOpen = openDropdowns.has(dropdownId);
+              const hasActiveOption = item.children.some(child => isActive(child.to));
               
               return (
-                <div key={item.label} className="sistemas-menu-container">
-                  {/* Botón principal de Sistemas */}
+                <div key={item.label} className="dropdown-menu-container">
+                  {/* Botón principal del dropdown */}
                   <button
-                    onClick={() => setSistemasDropdownOpen(!sistemasDropdownOpen)}
+                    onClick={() => {
+                      setOpenDropdowns(prev => {
+                        const newSet = new Set(prev);
+                        if (isDropdownOpen) {
+                          newSet.delete(dropdownId);
+                        } else {
+                          newSet.add(dropdownId);
+                        }
+                        return newSet;
+                      });
+                    }}
                     className={`w-full flex items-center relative transition-colors ${
                       hasActiveOption 
                         ? 'yego-nav-item-active' 
@@ -598,35 +618,39 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                     {!sidebarCollapsed && (
                       <>
                         <span className="ml-3 flex-1 text-left font-medium text-sm truncate">{item.label}</span>
-                        <ChevronDown className={`h-4 w-4 ml-2 transition-transform ${sistemasDropdownOpen ? 'rotate-180' : ''}`} />
+                        <ChevronDown className={`h-4 w-4 ml-2 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
                       </>
                     )}
-                    {(hasActiveOption || sistemasDropdownOpen) && !sidebarCollapsed && (
+                    {(hasActiveOption || isDropdownOpen) && !sidebarCollapsed && (
                       <span className="yego-nav-indicator" />
                     )}
-                    {(hasActiveOption || sistemasDropdownOpen) && sidebarCollapsed && (
+                    {(hasActiveOption || isDropdownOpen) && sidebarCollapsed && (
                       <span className="yego-nav-indicator" />
                     )}
                   </button>
                   
                   {/* Submenú expandible dentro del sidebar */}
-                  {sistemasDropdownOpen && !sidebarCollapsed && (
-                    <div className="ml-4 mt-2 space-y-1 border-l-2 border-gray-200 pl-3">
-                      {sistemasOptions.map((option) => {
-                        const isOptionActive = isActive(option.to);
+                  {isDropdownOpen && !sidebarCollapsed && (
+                    <div className="ml-4 mt-2 space-y-1 border-l-2 border-gray-200 dark:border-gray-700 pl-3">
+                      {item.children.map((child) => {
+                        const isOptionActive = isActive(child.to);
                         return (
                           <button
-                            key={option.to}
+                            key={child.to}
                             onClick={() => {
-                              navigate(option.to);
-                              setSistemasDropdownOpen(false);
+                              navigate(child.to);
+                              setOpenDropdowns(prev => {
+                                const newSet = new Set(prev);
+                                newSet.delete(dropdownId);
+                                return newSet;
+                              });
                             }}
                             className={`${isOptionActive ? 'bg-transparent border-2 border-red-500 rounded-lg text-gray-800 dark:text-white p-' : 'yego-nav-item-inactive'} w-full flex items-center relative text-sm pl-3 py-3`}
                           >
                             <div className="flex items-center justify-center">
-                              {option.icon}
+                              {child.icon}
                             </div>
-                            <span className="ml-3 flex-1 text-left font-medium text-sm truncate">{option.label}</span>
+                            <span className="ml-3 flex-1 text-left font-medium text-sm truncate">{child.label}</span>
                             {isOptionActive && (
                               <span className="yego-nav-indicator" />
                             )}
@@ -645,8 +669,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                 key={item.to}
                 onClick={() => {
                   navigate(item.to);
-                  // Cerrar menú de Sistemas al navegar a otra sección
-                  setSistemasDropdownOpen(false);
+                  // Cerrar todos los dropdowns al navegar a otra sección
+                  setOpenDropdowns(new Set());
                 }}
                 className={`${isActiveItem ? 'yego-nav-item-active' : 'yego-nav-item-inactive'} w-full flex items-center relative`}
                 title={sidebarCollapsed ? item.label : undefined}

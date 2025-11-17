@@ -59,6 +59,7 @@ import ConfigurationModule from './features/core/configuration/configuration.mod
 import { AsistenciaModule } from './features/core/asistencia'
 import { WelcomeModule } from './features/core/welcome'
 import YegoPremiunModule from './features/core/yego-premiun/yego-premiun.module'
+import { MarketingMensajesModule } from './features/core/marketing-mensajes'
 
 // Importar módulos de features - TICKETERA
 import TicketsModule from './features/ticketera/tickets/tickets.module'
@@ -528,6 +529,11 @@ function App() {
            <Route path="yego-premiun" element={
              <PermissionRoute module="yego-premiun">
                <YegoPremiunModule />
+             </PermissionRoute>
+           } />
+           <Route path="mensajes-marketing" element={
+             <PermissionRoute module="mensajes-marketing">
+               <MarketingMensajesModule />
              </PermissionRoute>
            } />
           </Route>
