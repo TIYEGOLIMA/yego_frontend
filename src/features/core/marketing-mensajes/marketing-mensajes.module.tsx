@@ -82,6 +82,7 @@ interface MensajeCalendario {
 interface Grupo {
   id: string;
   subject: string;
+  pictureUrl?: string;
 }
 
 interface Flota {
@@ -553,13 +554,15 @@ interface DestinatarioCheckboxProps {
   sublabel?: string;
   checked: boolean;
   onChange: () => void;
+  imageUrl?: string;
 }
 
 const DestinatarioCheckbox: React.FC<DestinatarioCheckboxProps> = ({
   label,
   sublabel,
   checked,
-  onChange
+  onChange,
+  imageUrl
 }) => (
   <label
     className="flex items-center gap-2 cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800 p-2 rounded transition-colors"
@@ -570,6 +573,13 @@ const DestinatarioCheckbox: React.FC<DestinatarioCheckboxProps> = ({
       onChange={onChange}
       className="w-4 h-4"
     />
+    {imageUrl && (
+      <img
+        src={imageUrl}
+        alt={label}
+        className="w-8 h-8 rounded-full object-cover"
+      />
+    )}
     {sublabel ? (
       <div>
         <div className="text-sm font-medium">{label}</div>
@@ -663,6 +673,8 @@ const MarketingMensajesModule: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filtroModo, setFiltroModo] = useState<string>('all');
   const [filtroTipo, setFiltroTipo] = useState<string>('all');
+  const [searchGrupos, setSearchGrupos] = useState('');
+  const [searchFlotas, setSearchFlotas] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [mensajesFiltrados, setMensajesFiltrados] = useState<MensajeMarketing[]>([]);
@@ -900,7 +912,8 @@ const MarketingMensajesModule: React.FC = () => {
 
   const mapGrupoResponse = (grupo: any): Grupo => ({
     id: grupo.id || '',
-    subject: grupo.subject || ''
+    subject: grupo.subject || '',
+    pictureUrl: grupo.pictureUrl
   });
 
   // Función para mapear respuesta del backend a la interfaz del frontend
@@ -967,6 +980,7 @@ const MarketingMensajesModule: React.FC = () => {
       
       // Obtener grupos desde la API
       try {
+
         const gruposRes = await api.get('/marketing-mensajes/grupos', { timeout: 0 });
         const gruposMapeados: Grupo[] = (gruposRes.data || []).map(mapGrupoResponse);
         setGrupos(gruposMapeados);
@@ -1148,6 +1162,8 @@ const MarketingMensajesModule: React.FC = () => {
     setIsViewModalCreating(false);
     setMensajeToView(null);
     setEditingMensaje(null);
+    setSearchGrupos('');
+    setSearchFlotas('');
     resetForm();
   };
 
@@ -2046,23 +2062,45 @@ const MarketingMensajesModule: React.FC = () => {
         );
 
       case 'destinatarios':
+        // Filtrar grupos y flotas según búsqueda
+        const gruposFiltrados = grupos.filter(grupo => 
+          grupo.subject.toLowerCase().includes(searchGrupos.toLowerCase())
+        );
+        const flotasFiltradas = flotas.filter(flota => 
+          flota.nombre.toLowerCase().includes(searchFlotas.toLowerCase()) ||
+          flota.ubicacion.toLowerCase().includes(searchFlotas.toLowerCase())
+        );
+
         return (
           <div className="space-y-4 ">
             <div className="grid grid-cols-2 gap-4">
               {/* Grupos */}
               <div>
                 <label className={CSS_CLASSES.labelFormMb2}>Grupos y Comunidad</label>
+                <div className="mb-2 relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-neutral-400" />
+                  <Input
+                    type="text"
+                    placeholder="Buscar grupo..."
+                    value={searchGrupos}
+                    onChange={(e) => setSearchGrupos(e.target.value)}
+                    className="w-full pl-9"
+                  />
+                </div>
                 <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg p-3 max-h-96 overflow-y-auto">
                   {grupos.length === 0 ? (
                     <p className="text-xs text-neutral-500">No hay grupos disponibles</p>
+                  ) : gruposFiltrados.length === 0 ? (
+                    <p className="text-xs text-neutral-500">No se encontraron grupos</p>
                   ) : (
                     <div className="space-y-2">
-                      {grupos.map(grupo => (
+                      {gruposFiltrados.map(grupo => (
                         <DestinatarioCheckbox
                           key={grupo.id}
                           label={grupo.subject}
                           checked={formData.grupos?.includes(grupo.id) || false}
                           onChange={() => toggleGrupo(grupo.id)}
+                          imageUrl={grupo.pictureUrl}
                         />
                       ))}
                     </div>
@@ -2073,12 +2111,24 @@ const MarketingMensajesModule: React.FC = () => {
               {/* Flotas */}
               <div>
                 <label className={CSS_CLASSES.labelFormMb2}>Fleet Yego</label>
+                <div className="mb-2 relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-neutral-400" />
+                  <Input
+                    type="text"
+                    placeholder="Buscar flota..."
+                    value={searchFlotas}
+                    onChange={(e) => setSearchFlotas(e.target.value)}
+                    className="w-full pl-9"
+                  />
+                </div>
                 <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg p-3 max-h-96 overflow-y-auto">
                   {flotas.length === 0 ? (
                     <p className="text-xs text-neutral-500">No hay flotas disponibles</p>
+                  ) : flotasFiltradas.length === 0 ? (
+                    <p className="text-xs text-neutral-500">No se encontraron flotas</p>
                   ) : (
                     <div className="space-y-2">
-                      {flotas.map(flota => (
+                      {flotasFiltradas.map(flota => (
                         <DestinatarioCheckbox
                           key={flota.id}
                           label={flota.nombre}
@@ -2303,13 +2353,22 @@ const MarketingMensajesModule: React.FC = () => {
                 </label>
                 <div className="mt-1">
                   {mensajeToView.grupos && mensajeToView.grupos.length > 0 ? (
-                    <div className="space-y-1">
+                    <div className="space-y-2">
                       {mensajeToView.grupos.map(grupoId => {
                         const grupo = grupos.find(g => g.id === grupoId);
                         return (
-                          <span key={grupoId} className="block text-xs text-neutral-600 dark:text-neutral-400">
-                            {grupo ? grupo.subject : grupoId}
-                          </span>
+                          <div key={grupoId} className="flex items-center gap-2">
+                            {grupo?.pictureUrl && (
+                              <img
+                                src={grupo.pictureUrl}
+                                alt={grupo.subject}
+                                className="w-6 h-6 rounded-full object-cover"
+                              />
+                            )}
+                            <span className="text-xs text-neutral-600 dark:text-neutral-400">
+                              {grupo ? grupo.subject : grupoId}
+                            </span>
+                          </div>
                         );
                       })}
                     </div>
