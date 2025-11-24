@@ -45,6 +45,11 @@ import { api } from '@/services/core/api';
 import { useToastNotifications } from '@/hooks/useToastNotifications';
 import { NotificationContainer } from '@/components/NotificationToast';
 
+// Funciones auxiliares globales
+const truncateText = (text: string, maxLength: number): string => {
+  return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+};
+
 // Interfaces
 interface MensajeMarketing {
   id: number;
@@ -249,11 +254,6 @@ const LoadingModal: React.FC = () => (
         <p className="text-sm text-neutral-600 dark:text-neutral-400 text-center max-w-sm">
           Estamos configurando todo para que funcione correctamente. Esto tomará solo unos segundos...
         </p>
-        <div className="mt-6 w-full max-w-xs">
-          <div className="h-1 bg-neutral-200 dark:bg-neutral-700 rounded-full overflow-hidden">
-            <div className="h-full bg-primary-500 rounded-full animate-pulse" style={{ width: '60%' }}></div>
-          </div>
-        </div>
       </div>
     </DialogContent>
   </Dialog>
@@ -479,8 +479,8 @@ const FilePreview: React.FC<FilePreviewProps> = ({
           <FileText className={`${iconSize} text-primary-500`} />
           {size === 'md' && (
             <span className="text-xs text-neutral-600 dark:text-neutral-400 truncate max-w-[120px]">
-              {typeof archivo === 'string' && archivo.length > 20 
-                ? archivo.substring(0, 20) + '...' 
+              {typeof archivo === 'string' 
+                ? truncateText(archivo, 20)
                 : selectedFile?.name || archivo}
             </span>
           )}
@@ -698,25 +698,44 @@ const MarketingMensajesModule: React.FC = () => {
     return convertirEstructuraAntigua(parsed);
   };
 
+  // Funciones auxiliares para validaciones comunes
+  const trimString = (value: string | undefined | null): string => {
+    return value?.trim() || '';
+  };
+
+  const capitalizeFirst = (text: string): string => {
+    return text.charAt(0).toUpperCase() + text.slice(1);
+  };
+
+  const isEmpty = (value: any): boolean => {
+    if (value === null || value === undefined) return true;
+    if (typeof value === 'string') return value.trim().length === 0;
+    if (Array.isArray(value)) return value.length === 0;
+    if (typeof value === 'object') return Object.keys(value).length === 0;
+    return false;
+  };
+
+  const hasValue = (value: any): boolean => !isEmpty(value);
+
   // Función auxiliar para agregar arrays a FormData
   const appendArrayToFormData = (formData: FormData, fieldName: string, array: string[] | undefined) => {
-    if (array && array.length > 0) {
-      array.forEach(item => formData.append(fieldName, item));
+    if (hasValue(array)) {
+      array!.forEach(item => formData.append(fieldName, item));
     }
   };
 
   // Función auxiliar para validar campos del formulario
   const validateFormData = (): string | null => {
-    if (!formData.titulo?.trim()) {
+    if (isEmpty(formData.titulo)) {
       return 'El título es requerido';
     }
-    if (!formData.mensaje?.trim()) {
+    if (isEmpty(formData.mensaje)) {
       return 'El mensaje es requerido';
     }
-    if (!formData.horasEspecificas || Object.keys(formData.horasEspecificas).length === 0) {
+    if (isEmpty(formData.horasEspecificas)) {
       return 'Debes seleccionar al menos un horario';
     }
-    if (!formData.diasActivos || formData.diasActivos.length === 0) {
+    if (isEmpty(formData.diasActivos)) {
       return 'Debes seleccionar al menos un día';
     }
     return null;
@@ -801,7 +820,7 @@ const MarketingMensajesModule: React.FC = () => {
   // Función para inicializar horarios desde formData
   const inicializarHorarios = (): {[hora: string]: string[]} => {
     // Si hay horas específicas guardadas, convertir a nueva estructura si es necesario
-    if (formData.horasEspecificas && Object.keys(formData.horasEspecificas).length > 0) {
+    if (hasValue(formData.horasEspecificas)) {
       return convertirEstructuraAntigua(formData.horasEspecificas);
     }
     
@@ -829,26 +848,20 @@ const MarketingMensajesModule: React.FC = () => {
     
     mensajesCalendario.forEach(m => {
       // Verificar que el día esté en diasActivos
-      const tieneDia = m.diasActivos && m.diasActivos.includes(dia);
-      
-      if (!tieneDia) return;
+      if (!m.diasActivos?.includes(dia)) return;
       
       // Si hay horas específicas definidas, buscar por hora base
       if (m.horasEspecificas && Object.keys(m.horasEspecificas).length > 0) {
-        // Buscar todas las horas que empiecen con la misma hora base y tengan el día
-        if (m.horasEspecificas) {
-          Object.keys(m.horasEspecificas).forEach(h => {
-            const horaH = getHoraBase(h);
-            if (horaH === horaBase && m.horasEspecificas && m.horasEspecificas[h]?.includes(dia)) {
-              const minuto = getMinuto(h);
-              // Crear un elemento separado para cada minuto
-              resultados.push({
-                mensaje: m,
-                minuto: minuto
-              });
-            }
-          });
-        }
+        Object.keys(m.horasEspecificas).forEach(h => {
+          const horaH = getHoraBase(h);
+          if (horaH === horaBase && m.horasEspecificas![h]?.includes(dia)) {
+            const minuto = getMinuto(h);
+            resultados.push({
+              mensaje: m,
+              minuto: minuto
+            });
+          }
+        });
       }
     });
     
@@ -877,6 +890,18 @@ const MarketingMensajesModule: React.FC = () => {
   };
 
 
+
+  // Funciones auxiliares para mapear respuestas
+  const mapFlotaResponse = (flota: any): Flota => ({
+    id: flota.id || '',
+    nombre: flota.name || '',
+    ubicacion: flota.city || ''
+  });
+
+  const mapGrupoResponse = (grupo: any): Grupo => ({
+    id: grupo.id || '',
+    subject: grupo.subject || ''
+  });
 
   // Función para mapear respuesta del backend a la interfaz del frontend
   const mapMensajeResponse = (response: any): MensajeMarketing => {
@@ -934,11 +959,7 @@ const MarketingMensajesModule: React.FC = () => {
       // Obtener flotas desde la API
       try {
         const flotasRes = await api.get('/marketing-mensajes/flotas');
-        const flotasMapeadas: Flota[] = (flotasRes.data || []).map((flota: any) => ({
-          id: flota.id || '',
-          nombre: flota.name || '',
-          ubicacion: flota.city || ''
-        }));
+        const flotasMapeadas: Flota[] = (flotasRes.data || []).map(mapFlotaResponse);
         setFlotas(flotasMapeadas);
       } catch (error: any) {
         handleFetchError(error, 'Error al cargar las flotas', () => setFlotas([]));
@@ -947,10 +968,7 @@ const MarketingMensajesModule: React.FC = () => {
       // Obtener grupos desde la API
       try {
         const gruposRes = await api.get('/marketing-mensajes/grupos', { timeout: 0 });
-        const gruposMapeados: Grupo[] = (gruposRes.data || []).map((grupo: any) => ({
-          id: grupo.id || '',
-          subject: grupo.subject || ''
-        }));
+        const gruposMapeados: Grupo[] = (gruposRes.data || []).map(mapGrupoResponse);
         setGrupos(gruposMapeados);
       } catch (error: any) {
         handleFetchError(error, 'Error al cargar los grupos', () => setGrupos([]));
@@ -966,8 +984,8 @@ const MarketingMensajesModule: React.FC = () => {
   const buildFormData = (): FormData => {
     const formDataToSend = new FormData();
     
-    formDataToSend.append('titulo', formData.titulo?.trim() || '');
-    formDataToSend.append('mensaje', formData.mensaje?.trim() || '');
+    formDataToSend.append('titulo', trimString(formData.titulo));
+    formDataToSend.append('mensaje', trimString(formData.mensaje));
     if (formData.modo) formDataToSend.append('modo', formData.modo);
     formDataToSend.append('tipo', formData.tipo || 'ninguna');
     formDataToSend.append('whatsapp', String(formData.whatsapp || false));
@@ -1266,7 +1284,7 @@ const MarketingMensajesModule: React.FC = () => {
     let filtered = [...mensajes];
 
     // Filtro por búsqueda
-    if (searchTerm.trim()) {
+    if (hasValue(searchTerm)) {
       const searchLower = searchTerm.toLowerCase();
       filtered = filtered.filter(m => 
         m.titulo.toLowerCase().includes(searchLower) ||
@@ -1407,7 +1425,7 @@ const MarketingMensajesModule: React.FC = () => {
                                     title={`${m.titulo} - ${horaBase}:${mMinuto}`}
                                   >
                                     <span className="line-clamp-2 leading-tight break-words text-[9px] text-center w-full">
-                                      {m.titulo.length > 10 ? m.titulo.substring(0, 10) + '...' : m.titulo}
+                                      {truncateText(m.titulo, 10)}
                                     </span>
                                   </div>
                                 ))}
@@ -1490,7 +1508,7 @@ const MarketingMensajesModule: React.FC = () => {
               <SelectContent>
                 <SelectItem value="all">Todos</SelectItem>
                 {OPCIONES_MODO.map(modo => (
-                  <SelectItem key={modo} value={modo}>{modo.charAt(0).toUpperCase() + modo.slice(1)}</SelectItem>
+                  <SelectItem key={modo} value={modo}>{capitalizeFirst(modo)}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -1505,7 +1523,7 @@ const MarketingMensajesModule: React.FC = () => {
               <SelectContent>
                 <SelectItem value="all">Todos</SelectItem>
                 {OPCIONES_TIPO.map(tipo => (
-                  <SelectItem key={tipo} value={tipo}>{tipo.charAt(0).toUpperCase() + tipo.slice(1)}</SelectItem>
+                  <SelectItem key={tipo} value={tipo}>{capitalizeFirst(tipo)}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
