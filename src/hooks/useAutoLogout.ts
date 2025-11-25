@@ -20,20 +20,6 @@ export const useAutoLogout = () => {
 
     console.log('🔄 [useAutoLogout] Configurando logout automático para rol:', user.role)
 
-    // 🎯 Función para ejecutar logout
-    const performLogout = async () => {
-      try {
-        console.log('🚪 [useAutoLogout] Ejecutando logout automático...')
-        await logout()
-        console.log('✅ [useAutoLogout] Logout automático completado')
-      } catch (error) {
-        console.error('❌ [useAutoLogout] Error en logout automático:', error)
-        // Forzar limpieza local en caso de error
-        localStorage.clear()
-        window.location.href = '/login'
-      }
-    }
-
     // 🚫 NO configurar ningún evento de auto-logout
     // El usuario debe hacer logout manualmente
     console.log('✅ [useAutoLogout] Auto-logout configurado pero sin eventos activos')
