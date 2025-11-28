@@ -138,9 +138,18 @@ api.interceptors.response.use(
       }
     }
     
-    // Manejar errores de conexión
+    // Manejar errores de conexión (ignorar errores cancelados)
     if (!error.response) {
-      console.error('Error de conexión con el servidor:', error.message)
+      const esCancelado = error.code === 'ECONNABORTED' || 
+                         error.code === 'ERR_CANCELED' || 
+                         error.name === 'AbortError' || 
+                         error.name === 'CanceledError' ||
+                         error.message === 'canceled' ||
+                         error.message === 'Request aborted';
+      
+      if (!esCancelado) {
+        console.error('Error de conexión con el servidor:', error.message);
+      }
     }
     
     return Promise.reject(error)

@@ -171,7 +171,7 @@ const UsersModule: React.FC = () => {
 
   // Resetear página al cambiar búsqueda
   useEffect(() => {
-    setCurrentPage(1);
+      setCurrentPage(1);
   }, [searchTerm]);
 
   // 🔔 WebSocket listener para actualizaciones en tiempo real
@@ -1177,10 +1177,10 @@ const UsersModule: React.FC = () => {
                       );
                     })
                     .map(role => (
-                      <SelectItem key={role.id} value={role.id.toString()}>
-                        {role.name}
-                      </SelectItem>
-                    ))}
+                    <SelectItem key={role.id} value={role.id.toString()}>
+                      {role.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

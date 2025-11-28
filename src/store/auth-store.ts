@@ -205,7 +205,7 @@ export const useAuthStore = create<AuthState>()(
       }),
       onRehydrateStorage: () => {
         return (state) => {
-          if (state?.token && (!state.modules || state.modules.length === 0)) {
+            if (state?.token && (!state.modules || state.modules.length === 0)) {
             state.fetchModules().catch(() => {});
           }
         };

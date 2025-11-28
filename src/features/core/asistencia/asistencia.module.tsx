@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Button } from '../../../components/ui/button';
 import { 
   Clock,
@@ -14,11 +14,14 @@ import { api } from '../../../services/core/api';
 import { useAuthStore } from '../../../store/auth-store';
 import { AsistenciaListaModule } from './asistencia-lista.module';
 
+// Tipos
+type TipoMarcacion = 'entrada' | 'salida_refrigerio' | 'regreso_refrigerio' | 'salida';
+
 interface MarcacionData {
   id: number;
   empleadoId: number;
   nombreCompleto: string;
-  tipo: 'entrada' | 'salida_refrigerio' | 'regreso_refrigerio' | 'salida';
+  tipo: TipoMarcacion;
   fecha: string;
   hora: string;
   ip: string;
@@ -50,22 +53,186 @@ interface EstadisticasAsistencia {
   yaCompletoJornada: boolean;
 }
 
+// Constantes
+const TIPOS_MARCACION: Record<TipoMarcacion, { titulo: string; icono: React.ReactNode; color: string; texto: string }> = {
+  entrada: {
+    titulo: 'Entrada',
+    icono: <LogIn size={32} />,
+    color: 'from-green-500 via-green-600 to-green-700',
+    texto: 'ENTRADA'
+  },
+  salida_refrigerio: {
+    titulo: 'Salir a Refrigerio',
+    icono: <Coffee size={32} />,
+    color: 'from-amber-500 via-amber-600 to-amber-700',
+    texto: 'SALIDA REFRIGERIO'
+  },
+  regreso_refrigerio: {
+    titulo: 'Volver del Refrigerio',
+    icono: <ArrowRight size={32} />,
+    color: 'from-blue-500 via-blue-600 to-blue-700',
+    texto: 'REGRESO REFRIGERIO'
+  },
+  salida: {
+    titulo: 'Salida',
+    icono: <LogOut size={32} />,
+    color: 'from-red-500 via-red-600 to-red-700',
+    texto: 'SALIDA'
+  }
+};
 
+const ESTADISTICAS_INICIALES: EstadisticasAsistencia = {
+  totalMarcaciones: 0,
+  tiempoTrabajado: 0,
+  ultimaMarcacion: null,
+  registrosHoy: [],
+  puedeMarcarEntrada: true,
+  puedeMarcarSalidaRefrigerio: false,
+  puedeMarcarRegresoRefrigerio: false,
+  puedeMarcarSalida: false,
+  yaCompletoJornada: false
+};
+
+// Helper para verificar si un error es de cancelación (no debe mostrarse como error)
+const esErrorCancelado = (error: any): boolean => {
+  return (
+    error.code === 'ECONNABORTED' ||
+    error.code === 'ERR_CANCELED' ||
+    error.name === 'AbortError' ||
+    error.name === 'CanceledError' ||
+    error.message === 'Request aborted' ||
+    error.message === 'canceled'
+  );
+};
+
+
+
+// Componentes auxiliares
+const AlertModal: React.FC<{
+  isOpen: boolean;
+  tipo: string;
+  hora: string;
+  mensajeMotivacional: string;
+  icono: string;
+  onClose: () => void;
+}> = ({ isOpen, tipo, hora, mensajeMotivacional, icono, onClose }) => {
+  if (!isOpen) return null;
+  
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md mx-4 text-center">
+        <div className="text-4xl mb-4">{icono}</div>
+        <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+          {tipo === 'error' ? 'Error' : 'Marcación Registrada'}
+        </h3>
+        <p className="text-gray-600 dark:text-gray-400 mb-4">{mensajeMotivacional}</p>
+        {hora && (
+          <p className="text-lg font-mono text-red-600 dark:text-red-400 mb-4">{hora}</p>
+        )}
+        <Button onClick={onClose} className="bg-red-600 hover:bg-red-700 text-white">
+          Cerrar
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+const MarcacionCard: React.FC<{
+  tipo: TipoMarcacion;
+  puedeMarcar: boolean;
+  marcando: boolean;
+  onMarcar: (tipo: TipoMarcacion) => void;
+}> = ({ tipo, puedeMarcar, marcando, onMarcar }) => {
+  const config = TIPOS_MARCACION[tipo];
+  
+  return (
+    <div className={`bg-gradient-to-br ${config.color} text-white rounded-2xl p-6 text-center transition-all duration-300 hover:scale-105 hover:shadow-2xl ${
+      puedeMarcar ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'
+    }`}>
+      <h3 className="text-white text-lg font-bold mb-4 uppercase tracking-wide">{config.titulo}</h3>
+      <div className="flex justify-center mb-6">{config.icono}</div>
+      <button
+        className={`w-full py-3 px-4 rounded-xl font-bold text-white transition-all duration-300 ${
+          puedeMarcar 
+            ? 'bg-white/20 hover:bg-white/30 border-2 border-white/30 hover:border-white/50' 
+            : 'bg-white/10 border-2 border-white/20 cursor-not-allowed'
+        }`}
+        onClick={() => onMarcar(tipo)}
+        disabled={!puedeMarcar || marcando}
+      >
+        {marcando ? 'MARCANDO...' : 'MARCAR'}
+      </button>
+    </div>
+  );
+};
+
+const COLORES_TIPO: Record<TipoMarcacion, string> = {
+  entrada: '#10b981',
+  salida_refrigerio: '#f59e0b',
+  regreso_refrigerio: '#3b82f6',
+  salida: '#ef4444'
+};
+
+const getIconoPequeño = (tipo: TipoMarcacion) => {
+  switch (tipo) {
+    case 'entrada':
+      return <LogIn size={16} />;
+    case 'salida_refrigerio':
+      return <Coffee size={16} />;
+    case 'regreso_refrigerio':
+      return <ArrowRight size={16} />;
+    case 'salida':
+      return <LogOut size={16} />;
+    default:
+      return <Clock size={16} />;
+  }
+};
+
+const RegistroItem: React.FC<{ registro: MarcacionData }> = ({ registro }) => {
+  const config = TIPOS_MARCACION[registro.tipo];
+  const color = COLORES_TIPO[registro.tipo];
+  
+  const formatTime = (time: string) => {
+    if (!time) return 'N/A';
+    return new Date(`2000-01-01T${time}`).toLocaleTimeString('es-PE', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+  
+  const formatFecha = (fecha: string) => fecha.split('-').reverse().join('/');
+  
+  return (
+    <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
+      <div className="flex items-center gap-3">
+        <div style={{ color }}>
+          {getIconoPequeño(registro.tipo)}
+        </div>
+        <div 
+          className="px-3 py-1 rounded-full text-xs font-bold text-white"
+          style={{ backgroundColor: color }}
+        >
+          {config.texto}
+        </div>
+      </div>
+      <div className="text-right">
+        <div className="text-lg font-mono text-gray-900 dark:text-white">
+          {formatTime(registro.hora)}
+        </div>
+        <div className="text-xs text-gray-500 dark:text-gray-400">
+          {formatFecha(registro.fecha)}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export const AsistenciaModule: React.FC = () => {
+  const user = useAuthStore((state) => state.user);
+  const isSAC = user?.role?.toUpperCase() === 'SAC';
   
   const [empleado, setEmpleado] = useState<EmpleadoData | null>(null);
-  const [estadisticas, setEstadisticas] = useState<EstadisticasAsistencia>({
-    totalMarcaciones: 0,
-    tiempoTrabajado: 0,
-    ultimaMarcacion: null,
-    registrosHoy: [],
-    puedeMarcarEntrada: true,
-    puedeMarcarSalidaRefrigerio: false,
-    puedeMarcarRegresoRefrigerio: false,
-    puedeMarcarSalida: false,
-    yaCompletoJornada: false
-  });
+  const [estadisticas, setEstadisticas] = useState<EstadisticasAsistencia>(ESTADISTICAS_INICIALES);
   const [loading, setLoading] = useState(true);
   const [marcando, setMarcando] = useState(false);
   const [alertData, setAlertData] = useState({
@@ -76,31 +243,86 @@ export const AsistenciaModule: React.FC = () => {
     icono: ''
   });
   const [registrosFiltrados, setRegistrosFiltrados] = useState<MarcacionData[]>([]);
-  const [filtroFecha, setFiltroFecha] = useState<string>('hoy');
+  const [filtroFecha, setFiltroFecha] = useState<'hoy' | 'rango'>('hoy');
   const [fechaInicio, setFechaInicio] = useState<string>('');
   const [fechaFin, setFechaFin] = useState<string>('');
   const [showFiltros, setShowFiltros] = useState(false);
   const [cargandoFiltros, setCargandoFiltros] = useState(false);
   const [activeTab, setActiveTab] = useState<'marcar' | 'lista'>('marcar');
+  
+  useEffect(() => {
+    if (isSAC && activeTab === 'lista') {
+      setActiveTab('marcar');
+    }
+  }, [isSAC, activeTab]);
 
-  // Obtener datos del usuario autenticado
-  const authStore = useAuthStore.getState();
-  const user = authStore.user;
 
+  const cargarMarcacionesHoy = useCallback(async (signal?: AbortSignal) => {
+    try {
+      const response = await api.get('/marcaciones/hoy', { signal });
+      const data = response.data;
+      
+      if (data.success) {
+        const marcaciones = data.marcaciones || [];
+        const ultimaMarcacion = marcaciones.length > 0 ? marcaciones[marcaciones.length - 1] : null;
+        
+        const statsBasicas: EstadisticasAsistencia = {
+          totalMarcaciones: marcaciones.length,
+          tiempoTrabajado: 0,
+          ultimaMarcacion,
+          registrosHoy: marcaciones,
+          puedeMarcarEntrada: marcaciones.length === 0 || ultimaMarcacion?.tipo === 'salida',
+          puedeMarcarSalidaRefrigerio: ultimaMarcacion?.tipo === 'entrada' || false,
+          puedeMarcarRegresoRefrigerio: ultimaMarcacion?.tipo === 'salida_refrigerio' || false,
+          puedeMarcarSalida: ultimaMarcacion?.tipo === 'regreso_refrigerio' || false,
+          yaCompletoJornada: marcaciones.length >= 4 && ultimaMarcacion?.tipo === 'salida'
+        };
+        
+        setEstadisticas(statsBasicas);
+        setRegistrosFiltrados(marcaciones);
+      }
+    } catch (error: any) {
+      // Ignorar errores de solicitud cancelada/abortada
+      if (esErrorCancelado(error)) {
+        return;
+      }
+      console.error('Error al cargar marcaciones del día:', error);
+    }
+  }, []);
 
-  // Función para cargar datos del empleado y estadísticas
-  const cargarDatosEmpleado = async () => {
+  const cargarEstadisticas = useCallback(async (signal?: AbortSignal) => {
+    try {
+      const response = await api.get('/empleado/estadisticas', { signal });
+      const data = response.data;
+      
+      if (data.success) {
+        const statsMapeados = {
+          ...data.estadisticas,
+          registrosHoy: data.estadisticas.marcacionesHoy || data.estadisticas.registrosHoy || []
+        };
+        setEstadisticas(statsMapeados);
+        setRegistrosFiltrados(statsMapeados.registrosHoy || []);
+      } else {
+        throw new Error(data.message || 'Error al cargar estadísticas');
+      }
+    } catch (error: any) {
+      // Ignorar errores de solicitud cancelada/abortada
+      if (esErrorCancelado(error)) {
+        return;
+      }
+      console.error('Error al cargar estadísticas:', error);
+      await cargarMarcacionesHoy(signal);
+    }
+  }, [cargarMarcacionesHoy]);
+
+  const cargarDatosEmpleado = useCallback(async (signal?: AbortSignal) => {
     try {
       setLoading(true);
-      console.log('🔍 [AsistenciaModule] Cargando datos del empleado...');
-      
-      // Obtener datos del usuario autenticado desde el store
       
       if (!user) {
         throw new Error('Usuario no autenticado');
       }
       
-      // Crear objeto empleado con datos del usuario autenticado
       const empleadoData: EmpleadoData = {
         id: user.id,
         nombre: user.name || user.username || 'Usuario',
@@ -113,134 +335,69 @@ export const AsistenciaModule: React.FC = () => {
       };
       
       setEmpleado(empleadoData);
-      
-      // Cargar estadísticas
-      await cargarEstadisticas();
-      
+      await cargarEstadisticas(signal);
     } catch (error: any) {
-      console.error('❌ [AsistenciaModule] Error al cargar datos del empleado:', error);
+      // Ignorar errores de solicitud cancelada/abortada
+      if (esErrorCancelado(error)) {
+        return;
+      }
+      console.error('Error al cargar datos del empleado:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, cargarEstadisticas]);
 
-  // Función para cargar estadísticas
-  const cargarEstadisticas = async () => {
-    try {
-      console.log('🔍 [AsistenciaModule] Cargando estadísticas...');
-      
-      // Obtener estadísticas del backend
-      const response = await api.get('/empleado/estadisticas');
-      const data = response.data;
-      
-      if (data.success) {
-        const stats = data.estadisticas;
-        console.log('🔍 [AsistenciaModule] Estadísticas del backend:', {
-          totalMarcaciones: stats.totalMarcaciones,
-          marcacionesHoy: stats.marcacionesHoy?.length || 0,
-          registrosHoy: stats.registrosHoy?.length || 0
-        });
-        
-        // Mapear campos del backend al formato esperado por el frontend
-        const statsMapeados = {
-          ...stats,
-          registrosHoy: stats.marcacionesHoy || stats.registrosHoy || []
-        };
-        
-        console.log('🔍 [AsistenciaModule] Estadísticas mapeadas:', {
-          registrosHoy: statsMapeados.registrosHoy.length
-        });
-        
-        setEstadisticas(statsMapeados);
-        setRegistrosFiltrados(statsMapeados.registrosHoy || []);
-      } else {
-        throw new Error(data.message || 'Error al cargar estadísticas');
-      }
-      
-    } catch (error: any) {
-      console.error('❌ [AsistenciaModule] Error al cargar estadísticas:', error);
-      await cargarMarcacionesHoy();
-    }
-  };
-     
-  // Función para cargar marcaciones del día como fallback
-  const cargarMarcacionesHoy = async () => {
-    try {
-      console.log('🔍 [AsistenciaModule] Cargando marcaciones del día...');
-      
-      const response = await api.get('/marcaciones/hoy');
-      const data = response.data;
-      
-      if (data.success) {
-        const marcaciones = data.marcaciones || [];
-        setRegistrosFiltrados(marcaciones);
-        
-        // Crear estadísticas básicas con las marcaciones
-        const statsBasicas: EstadisticasAsistencia = {
-          totalMarcaciones: marcaciones.length,
-          tiempoTrabajado: 0,
-          ultimaMarcacion: marcaciones.length > 0 ? marcaciones[marcaciones.length - 1] : null,
-          registrosHoy: marcaciones,
-          puedeMarcarEntrada: marcaciones.length === 0 || (marcaciones.length > 0 && marcaciones[marcaciones.length - 1].tipo === 'salida'),
-          puedeMarcarSalidaRefrigerio: marcaciones.length > 0 && marcaciones[marcaciones.length - 1].tipo === 'entrada',
-          puedeMarcarRegresoRefrigerio: marcaciones.length > 0 && marcaciones[marcaciones.length - 1].tipo === 'salida_refrigerio',
-          puedeMarcarSalida: marcaciones.length > 0 && marcaciones[marcaciones.length - 1].tipo === 'regreso_refrigerio',
-          yaCompletoJornada: marcaciones.length >= 4 && marcaciones[marcaciones.length - 1].tipo === 'salida'
-        };
-        
-        setEstadisticas(statsBasicas);
-      }
-      
-    } catch (error: any) {
-      console.error('❌ [AsistenciaModule] Error al cargar marcaciones del día:', error);
-    }
-  };
-
-  // Función para manejar marcación
-  const manejarMarcacion = async (tipo: string) => {
+  const manejarMarcacion = useCallback(async (tipo: TipoMarcacion) => {
     if (marcando) return;
     
     try {
       setMarcando(true);
-      console.log(`🔍 [AsistenciaModule] Registrando marcación: ${tipo}`);
       
-      // Enviar marcación al backend
       const response = await api.post('/marcacion', { tipo });
       const data = response.data;
       
       if (data.success) {
-        // Recargar estadísticas después de marcar exitosamente
-        await cargarEstadisticas();
+        const horaMarcacion = data.marcacion?.hora || new Date().toLocaleTimeString('es-PE', {
+          hour: '2-digit',
+          minute: '2-digit'
+        });
         
-        // Obtener mensaje motivacional del backend
-        let mensajeMotivacional = "¡Excelente trabajo en Yego!";
-        try {
-          const mensajeResponse = await api.get(`/mensaje-motivacional?tipo=${tipo}`);
-          if (mensajeResponse.data.success) {
-            mensajeMotivacional = mensajeResponse.data.mensaje;
-          }
-        } catch (error) {
-          console.log('No se pudo obtener mensaje motivacional, usando mensaje por defecto');
-        }
-        
-        // Mostrar alert personalizado
         setAlertData({
           isOpen: true,
           tipo: tipo,
-          hora: data.marcacion?.hora || new Date().toLocaleTimeString('es-PE', {
-            hour: '2-digit',
-            minute: '2-digit'
-          }),
-          mensajeMotivacional: mensajeMotivacional,
+          hora: horaMarcacion,
+          mensajeMotivacional: data.mensaje || "¡Excelente trabajo en Yego!",
           icono: '💪'
         });
         
+        setMarcando(false);
+        
+        Promise.all([
+          cargarEstadisticas(),
+          api.get(`/mensaje-motivacional?tipo=${tipo}`).then(res => {
+            if (res.data.success) {
+              setAlertData(prev => ({
+                ...prev,
+                mensajeMotivacional: res.data.mensaje
+              }));
+            }
+          }).catch((error: any) => {
+            // Ignorar errores de solicitud cancelada/abortada
+            if (!esErrorCancelado(error)) {
+              // Silencioso - ya tenemos un mensaje por defecto
+            }
+          })
+        ]).catch((error: any) => {
+          // Ignorar errores de solicitud cancelada/abortada
+          if (!esErrorCancelado(error)) {
+            console.error('Error al actualizar datos después de marcar:', error);
+          }
+        });
       } else {
         throw new Error(data.message || 'Error al registrar la marcación');
       }
-      
     } catch (error: any) {
-      console.error('❌ [AsistenciaModule] Error al registrar marcación:', error);
+      console.error('Error al registrar marcación:', error);
       setAlertData({
         isOpen: true,
         tipo: 'error',
@@ -248,82 +405,68 @@ export const AsistenciaModule: React.FC = () => {
         mensajeMotivacional: error.response?.data?.message || 'Error al registrar la marcación',
         icono: '❌'
       });
-    } finally {
       setMarcando(false);
     }
-  };
+  }, [marcando, cargarEstadisticas]);
 
   useEffect(() => {
-    console.log('🚀 [AsistenciaModule] Montando componente - Iniciando carga...');
+    const abortController = new AbortController();
     
-    // Cargar datos del empleado al inicializar
-    cargarDatosEmpleado();
+    cargarDatosEmpleado(abortController.signal);
 
-    // Configurar WebSocket para actualizaciones automáticas
     const handleAsistenciaUpdate = (event: any) => {
-      console.log('📊 [AsistenciaModule] Evento de asistencia recibido:', event);
-      
       if (event.type === 'TODAY_RECORDS_UPDATE') {
-        console.log('🔄 [AsistenciaModule] Actualizando registros de hoy desde WebSocket');
-        
-        // Actualizar registros de hoy directamente
         const nuevosRegistros = event.registrosHoy || [];
         setRegistrosFiltrados(nuevosRegistros);
-        
-        // Actualizar estadísticas con el total
         setEstadisticas(prevStats => ({
           ...prevStats,
           totalMarcaciones: event.total || nuevosRegistros.length,
           registrosHoy: nuevosRegistros
         }));
-        
-        console.log('✅ [AsistenciaModule] Registros actualizados:', {
-          total: event.total,
-          registros: nuevosRegistros.length
-        });
       } else if (event.type === 'ASISTENCIA_UPDATE') {
-        console.log('🔄 [AsistenciaModule] Actualizando estadísticas con información del WebSocket');
-        
-        setEstadisticas(event.estadisticas || estadisticas);
+        setEstadisticas(prevStats => ({
+          ...prevStats,
+          ...event.estadisticas
+        }));
         setRegistrosFiltrados(event.registrosHoy || []);
       }
     };
 
-    // Suscribirse a eventos de asistencia
     socketService.on('asistencia', handleAsistenciaUpdate);
-
-    // Cleanup: desuscribirse cuando el componente se desmonte
+    
     return () => {
+      abortController.abort();
       socketService.off('asistencia', handleAsistenciaUpdate);
     };
-  }, []); // Array vacío para que solo se ejecute una vez
+  }, [cargarDatosEmpleado]);
 
-  // Aplicar filtros cuando cambie el filtro de fecha
   useEffect(() => {
+    const abortController = new AbortController();
+    
     const aplicarFiltros = async () => {
       if (filtroFecha === 'hoy') {
-        // Mostrar solo registros de hoy
         setCargandoFiltros(false);
         setRegistrosFiltrados(estadisticas.registrosHoy || []);
       } else if (filtroFecha === 'rango' && fechaInicio && fechaFin) {
-        // Validar que la fecha fin no sea menor a la fecha inicio
         if (fechaFin < fechaInicio) {
-          console.warn('⚠️ [AsistenciaModule] Fecha fin menor a fecha inicio, no se cargarán registros');
           setCargandoFiltros(false);
           setRegistrosFiltrados([]);
           return;
         }
         
-        // Mostrar loading mientras se cargan los registros
         setCargandoFiltros(true);
-        
-        // Cargar registros por rango de fechas
         try {
-          const response = await api.get(`/marcaciones/rango?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}`);
+          const response = await api.get(`/marcaciones/rango?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}`, {
+            signal: abortController.signal
+          });
           if (response.data.success) {
             setRegistrosFiltrados(response.data.marcaciones || []);
           }
-        } catch (error) {
+        } catch (error: any) {
+          // Ignorar errores de solicitud cancelada/abortada
+          if (esErrorCancelado(error)) {
+            return;
+          }
           console.error('Error al cargar registros por rango:', error);
           setRegistrosFiltrados([]);
         } finally {
@@ -333,109 +476,26 @@ export const AsistenciaModule: React.FC = () => {
     };
 
     aplicarFiltros();
+    
+    return () => {
+      abortController.abort();
+    };
   }, [filtroFecha, fechaInicio, fechaFin, estadisticas.registrosHoy]);
 
-  // Función para obtener configuración de marcación
-  const getMarcacionConfig = (tipo: string) => {
-    switch (tipo) {
-      case 'entrada':
-        return {
-          titulo: 'Entrada',
-          icono: <LogIn size={32} />,
-          textoBoton: 'MARCAR',
-          claseCard: 'bg-gradient-to-br from-green-500 via-green-600 to-green-700 text-white rounded-2xl p-6 text-center transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-green-500/40',
-          deshabilitado: !estadisticas.puedeMarcarEntrada
-        };
-      case 'salida_refrigerio':
-        return {
-          titulo: 'Salir a Refrigerio',
-          icono: <Coffee size={32} />,
-          textoBoton: 'MARCAR',
-          claseCard: 'bg-gradient-to-br from-amber-500 via-amber-600 to-amber-700 text-white rounded-2xl p-6 text-center transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-amber-500/40',
-          deshabilitado: !estadisticas.puedeMarcarSalidaRefrigerio
-        };
-      case 'regreso_refrigerio':
-        return {
-          titulo: 'Volver del Refrigerio',
-          icono: <ArrowRight size={32} />,
-          textoBoton: 'MARCAR',
-          claseCard: 'bg-gradient-to-br from-blue-500 via-blue-600 to-blue-700 text-white rounded-2xl p-6 text-center transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-blue-500/40',
-          deshabilitado: !estadisticas.puedeMarcarRegresoRefrigerio
-        };
-      case 'salida':
-        return {
-          titulo: 'Salida',
-          icono: <LogOut size={32} />,
-          textoBoton: 'MARCAR',
-          claseCard: 'bg-gradient-to-br from-red-500 via-red-600 to-red-700 text-white rounded-2xl p-6 text-center transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-red-500/40',
-          deshabilitado: !estadisticas.puedeMarcarSalida
-        };
-      default:
-        return {
-          titulo: 'Marcar',
-          icono: <Clock size={24} />,
-          textoBoton: 'MARCAR',
-          claseCard: 'bg-gray-500 text-white rounded-2xl p-6 text-center',
-          deshabilitado: true
-        };
-    }
-  };
-
-  // Función para obtener icono de tipo de marcación
-  const getTipoIcon = (tipo: string) => {
-    switch (tipo) {
-      case 'entrada':
-        return <LogIn size={16} />;
-      case 'salida_refrigerio':
-        return <Coffee size={16} />;
-      case 'regreso_refrigerio':
-        return <ArrowRight size={16} />;
-      case 'salida':
-        return <LogOut size={16} />;
-      default:
-        return <Clock size={16} />;
-    }
-  };
-
-  // Función para obtener color de tipo de marcación
-  const getTipoColor = (tipo: string) => {
-    switch (tipo) {
-      case 'entrada':
-        return '#10b981';
-      case 'salida_refrigerio':
-        return '#f59e0b';
-      case 'regreso_refrigerio':
-        return '#3b82f6';
-      case 'salida':
-        return '#ef4444';
-      default:
-        return '#64748b';
-    }
-  };
-
-  // Función para obtener texto de tipo de marcación
-  const getTipoTexto = (tipo: string) => {
-    switch (tipo) {
-      case 'entrada':
-        return 'ENTRADA';
-      case 'salida_refrigerio':
-        return 'SALIDA REFRIGERIO';
-      case 'regreso_refrigerio':
-        return 'REGRESO REFRIGERIO';
-      case 'salida':
-        return 'SALIDA';
-      default:
-        return tipo.toUpperCase();
-    }
-  };
-
-  const formatTime = (time: string) => {
-    if (!time) return 'N/A';
-    return new Date(`2000-01-01T${time}`).toLocaleTimeString('es-PE', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
+  const tiposMarcacion: TipoMarcacion[] = ['entrada', 'salida_refrigerio', 'regreso_refrigerio', 'salida'];
+  
+  const puedeMarcar = useMemo(() => ({
+    entrada: estadisticas.puedeMarcarEntrada,
+    salida_refrigerio: estadisticas.puedeMarcarSalidaRefrigerio,
+    regreso_refrigerio: estadisticas.puedeMarcarRegresoRefrigerio,
+    salida: estadisticas.puedeMarcarSalida
+  }), [estadisticas]);
+  
+  const limpiarFiltros = useCallback(() => {
+    setFiltroFecha('hoy');
+    setFechaInicio('');
+    setFechaFin('');
+  }, []);
 
   if (loading) {
       return (
@@ -479,62 +539,47 @@ export const AsistenciaModule: React.FC = () => {
                 </p>
               </div>
               
-              {/* Switch de Navegación responsive */}
-              <div className="bg-gray-100 dark:bg-gray-700 rounded-lg p-1 flex w-full lg:w-auto">
-                <button
-                  onClick={() => setActiveTab('marcar')}
-                  className={`flex-1 lg:flex-none px-3 lg:px-6 py-2 rounded-md text-xs lg:text-sm font-medium transition-all duration-200 ${
-                    activeTab === 'marcar'
-                      ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                  }`}
-                >
-                  <span className="hidden sm:inline">Marcar Asistencia</span>
-                  <span className="sm:hidden">Marcar</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab('lista')}
-                  className={`flex-1 lg:flex-none px-3 lg:px-6 py-2 rounded-md text-xs lg:text-sm font-medium transition-all duration-200 ${
-                    activeTab === 'lista'
-                      ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
-                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                  }`}
-                >
-                  <span className="hidden sm:inline">Lista de Asistencia</span>
-                  <span className="sm:hidden">Lista</span>
-                </button>
-              </div>
+              {/* Switch de Navegación responsive - Ocultar "Lista" para rol SAC */}
+              {!isSAC && (
+                <div className="bg-gray-100 dark:bg-gray-700 rounded-lg p-1 flex w-full lg:w-auto">
+                  <button
+                    onClick={() => setActiveTab('marcar')}
+                    className={`flex-1 lg:flex-none px-3 lg:px-6 py-2 rounded-md text-xs lg:text-sm font-medium transition-all duration-200 ${
+                      activeTab === 'marcar'
+                        ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                    }`}
+                  >
+                    <span className="hidden sm:inline">Marcar Asistencia</span>
+                    <span className="sm:hidden">Marcar</span>
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('lista')}
+                    className={`flex-1 lg:flex-none px-3 lg:px-6 py-2 rounded-md text-xs lg:text-sm font-medium transition-all duration-200 ${
+                      activeTab === 'lista'
+                        ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                    }`}
+                  >
+                    <span className="hidden sm:inline">Lista de Asistencia</span>
+                    <span className="sm:hidden">Lista</span>
+                  </button>
+                </div>
+              )}
               </div>
       </div>
 
       {/* Contenido de las Pestañas */}
       {activeTab === 'marcar' && (
         <>
-          {/* Alert Personalizado */}
-          {alertData.isOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md mx-4 text-center">
-            <div className="text-4xl mb-4">{alertData.icono}</div>
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-              {alertData.tipo === 'error' ? 'Error' : 'Marcación Registrada'}
-            </h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-4">
-              {alertData.mensajeMotivacional}
-            </p>
-            {alertData.hora && (
-              <p className="text-lg font-mono text-red-600 dark:text-red-400 mb-4">
-                {alertData.hora}
-              </p>
-            )}
-          <Button 
-              onClick={() => setAlertData({ ...alertData, isOpen: false })}
-              className="bg-red-600 hover:bg-red-700 text-white"
-            >
-              Cerrar
-          </Button>
-        </div>
-      </div>
-      )}
+          <AlertModal
+        isOpen={alertData.isOpen}
+        tipo={alertData.tipo}
+        hora={alertData.hora}
+        mensajeMotivacional={alertData.mensajeMotivacional}
+        icono={alertData.icono}
+        onClose={() => setAlertData({ ...alertData, isOpen: false })}
+      />
 
       {/* Mensaje de Jornada Completada */}
       {estadisticas.yaCompletoJornada && (
@@ -553,97 +598,15 @@ export const AsistenciaModule: React.FC = () => {
       {/* Sección de Marcaciones */}
       <div className="yego-card">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {/* Card de Entrada */}
-          <div className={`${getMarcacionConfig('entrada').claseCard} ${
-            estadisticas.puedeMarcarEntrada ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'
-          }`}>
-            <h3 className="text-white text-lg font-bold mb-4 uppercase tracking-wide">
-              {getMarcacionConfig('entrada').titulo}
-            </h3>
-            <div className="flex justify-center mb-6">
-              {getMarcacionConfig('entrada').icono}
-            </div>
-            <button
-              className={`w-full py-3 px-4 rounded-xl font-bold text-white transition-all duration-300 ${
-                estadisticas.puedeMarcarEntrada 
-                  ? 'bg-white/20 hover:bg-white/30 border-2 border-white/30 hover:border-white/50' 
-                  : 'bg-white/10 border-2 border-white/20 cursor-not-allowed'
-              }`}
-              onClick={() => manejarMarcacion('entrada')}
-              disabled={!estadisticas.puedeMarcarEntrada || marcando}
-            >
-              {marcando ? 'MARCANDO...' : getMarcacionConfig('entrada').textoBoton}
-            </button>
-          </div>
-
-          {/* Card de Salida Refrigerio */}
-          <div className={`${getMarcacionConfig('salida_refrigerio').claseCard} ${
-            estadisticas.puedeMarcarSalidaRefrigerio ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'
-          }`}>
-            <h3 className="text-white text-lg font-bold mb-4 uppercase tracking-wide">
-              {getMarcacionConfig('salida_refrigerio').titulo}
-            </h3>
-            <div className="flex justify-center mb-6">
-              {getMarcacionConfig('salida_refrigerio').icono}
-            </div>
-            <button
-              className={`w-full py-3 px-4 rounded-xl font-bold text-white transition-all duration-300 ${
-                estadisticas.puedeMarcarSalidaRefrigerio 
-                  ? 'bg-white/20 hover:bg-white/30 border-2 border-white/30 hover:border-white/50' 
-                  : 'bg-white/10 border-2 border-white/20 cursor-not-allowed'
-              }`}
-              onClick={() => manejarMarcacion('salida_refrigerio')}
-              disabled={!estadisticas.puedeMarcarSalidaRefrigerio || marcando}
-            >
-              {marcando ? 'MARCANDO...' : getMarcacionConfig('salida_refrigerio').textoBoton}
-            </button>
-          </div>
-
-          {/* Card de Regreso Refrigerio */}
-          <div className={`${getMarcacionConfig('regreso_refrigerio').claseCard} ${
-            estadisticas.puedeMarcarRegresoRefrigerio ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'
-          }`}>
-            <h3 className="text-white text-lg font-bold mb-4 uppercase tracking-wide">
-              {getMarcacionConfig('regreso_refrigerio').titulo}
-            </h3>
-            <div className="flex justify-center mb-6">
-              {getMarcacionConfig('regreso_refrigerio').icono}
-            </div>
-            <button
-              className={`w-full py-3 px-4 rounded-xl font-bold text-white transition-all duration-300 ${
-                estadisticas.puedeMarcarRegresoRefrigerio 
-                  ? 'bg-white/20 hover:bg-white/30 border-2 border-white/30 hover:border-white/50' 
-                  : 'bg-white/10 border-2 border-white/20 cursor-not-allowed'
-              }`}
-              onClick={() => manejarMarcacion('regreso_refrigerio')}
-              disabled={!estadisticas.puedeMarcarRegresoRefrigerio || marcando}
-            >
-              {marcando ? 'MARCANDO...' : getMarcacionConfig('regreso_refrigerio').textoBoton}
-            </button>
-          </div>
-
-          {/* Card de Salida */}
-          <div className={`${getMarcacionConfig('salida').claseCard} ${
-            estadisticas.puedeMarcarSalida ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'
-          }`}>
-            <h3 className="text-white text-lg font-bold mb-4 uppercase tracking-wide">
-              {getMarcacionConfig('salida').titulo}
-            </h3>
-            <div className="flex justify-center mb-6">
-              {getMarcacionConfig('salida').icono}
-            </div>
-            <button
-              className={`w-full py-3 px-4 rounded-xl font-bold text-white transition-all duration-300 ${
-                estadisticas.puedeMarcarSalida 
-                  ? 'bg-white/20 hover:bg-white/30 border-2 border-white/30 hover:border-white/50' 
-                  : 'bg-white/10 border-2 border-white/20 cursor-not-allowed'
-              }`}
-              onClick={() => manejarMarcacion('salida')}
-              disabled={!estadisticas.puedeMarcarSalida || marcando}
-            >
-              {marcando ? 'MARCANDO...' : getMarcacionConfig('salida').textoBoton}
-            </button>
-          </div>
+          {tiposMarcacion.map((tipo) => (
+            <MarcacionCard
+              key={tipo}
+              tipo={tipo}
+              puedeMarcar={puedeMarcar[tipo]}
+              marcando={marcando}
+              onMarcar={manejarMarcacion}
+            />
+          ))}
         </div>
       </div>
 
@@ -670,7 +633,7 @@ export const AsistenciaModule: React.FC = () => {
                 </label>
                 <select
                     value={filtroFecha}
-                    onChange={(e) => setFiltroFecha(e.target.value)}
+                    onChange={(e) => setFiltroFecha(e.target.value as 'hoy' | 'rango')}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-600 dark:border-gray-500 dark:text-white"
                   >
                     <option value="hoy">Hoy</option>
@@ -717,11 +680,7 @@ export const AsistenciaModule: React.FC = () => {
                 
                 <div className="flex items-end">
                   <button
-                    onClick={() => {
-                      setFiltroFecha('hoy');
-                      setFechaInicio('');
-                      setFechaFin('');
-                    }}
+                    onClick={limpiarFiltros}
                     className="w-full bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
                   >
                     Limpiar Filtros
@@ -761,29 +720,7 @@ export const AsistenciaModule: React.FC = () => {
                 Mostrando {registrosFiltrados.length} registro(s) {filtroFecha === 'hoy' ? 'de hoy' : 'en el rango seleccionado'}
             </div>
               {registrosFiltrados.map((registro) => (
-                <div key={registro.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div style={{ color: getTipoColor(registro.tipo) }}>
-                      {getTipoIcon(registro.tipo)}
-          </div>
-              <div>
-                      <div 
-                        className="px-3 py-1 rounded-full text-xs font-bold text-white"
-                        style={{ backgroundColor: getTipoColor(registro.tipo) }}
-                      >
-                        {getTipoTexto(registro.tipo)}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-lg font-mono text-gray-900 dark:text-white">
-                      {formatTime(registro.hora)}
-                    </div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">
-                      {registro.fecha.split('-').reverse().join('/')}
-                    </div>
-              </div>
-            </div>
+                <RegistroItem key={registro.id} registro={registro} />
               ))}
         </div>
       )}
