@@ -43,6 +43,7 @@ import {
   ChevronsLeft,
   ChevronsRight
 } from 'lucide-react';
+import { AVAILABLE_ICONS } from '@/shared/utils/moduleIcons';
 import { useAuth } from "@/shared/hooks/useAuth";
 import { api } from '../../../services';
 import AccessRestricted from '@/shared/components/AccessRestricted';
@@ -61,6 +62,12 @@ interface SistemaExternoResponse {
   activo: boolean;
   createdAt: string;
   updatedAt: string;
+  grupo?: {
+    id: number;
+    nombre: string;
+    icono: string;
+    activo: boolean;
+  } | null;
 }
 
 interface CreateSistemaExternoData {
@@ -68,6 +75,7 @@ interface CreateSistemaExternoData {
   descripcion: string;
   url: string;
   grupo?: string; // Nombre del grupo al que pertenece el módulo
+  icono?: string; // Nombre del icono seleccionado
 }
 
 interface SistemaEstadoCambiadoEvent {
@@ -93,6 +101,14 @@ interface SistemaVerificadoEvent {
   mensaje: string;
 }
 
+// Interface para Grupos
+interface GrupoResponse {
+  id: number;
+  nombre: string;
+  icono: string;
+  activo: boolean;
+}
+
 const SistemasExternosModule: React.FC = () => {
   const authState = useAuth();
   const { fetchModules } = useAuthStore();
@@ -113,10 +129,15 @@ const SistemasExternosModule: React.FC = () => {
     nombre: '',
     descripcion: '',
     url: '',
-    grupo: undefined
+    grupo: undefined,
+    icono: 'AppWindow'
   });
-  const [grupoOption, setGrupoOption] = useState<'sistemas' | 'nuevo'>('sistemas');
+  const [gruposDisponibles, setGruposDisponibles] = useState<GrupoResponse[]>([]);
+  const [selectedGrupoId, setSelectedGrupoId] = useState<string>('none');
+  const [showQuickCreateGrupo, setShowQuickCreateGrupo] = useState(false);
   const [nuevoGrupoNombre, setNuevoGrupoNombre] = useState('');
+  const [nuevoGrupoIcono, setNuevoGrupoIcono] = useState('Server');
+  const [creatingGrupo, setCreatingGrupo] = useState(false);
 
   // Función para formatear timestamp
   const formatTimestamp = (timestamp: string) => {
@@ -211,6 +232,7 @@ const SistemasExternosModule: React.FC = () => {
 
   useEffect(() => {
     fetchSistemas();
+    fetchGrupos();
   }, []);
 
   const fetchSistemas = async () => {
@@ -226,16 +248,63 @@ const SistemasExternosModule: React.FC = () => {
     }
   };
 
+  // Cargar grupos disponibles (activos)
+  const fetchGrupos = async () => {
+    try {
+      const response = await api.get('/grupos/activos');
+      setGruposDisponibles(response.data || []);
+    } catch (error: any) {
+      console.warn('⚠️ No se pudieron cargar los grupos:', error?.response?.status || error.message);
+      // Si el endpoint no existe aún, usar lista vacía
+      setGruposDisponibles([]);
+    }
+  };
+
+  // Crear grupo rápido
+  const handleQuickCreateGrupo = async () => {
+    if (!nuevoGrupoNombre.trim()) {
+      showNotification('El nombre del grupo es requerido', 'error');
+      return;
+    }
+
+    try {
+      setCreatingGrupo(true);
+      const response = await api.post('/grupos', {
+        nombre: nuevoGrupoNombre.trim(),
+        icono: nuevoGrupoIcono || 'Server'
+      });
+      
+      // Agregar el nuevo grupo a la lista
+      setGruposDisponibles(prev => [...prev, response.data]);
+      
+      // Seleccionar el nuevo grupo
+      setSelectedGrupoId(response.data.id.toString());
+      
+      // Limpiar el formulario
+      setNuevoGrupoNombre('');
+      setNuevoGrupoIcono('Server');
+      setShowQuickCreateGrupo(false);
+      
+      showNotification('Grupo creado exitosamente', 'success');
+    } catch (error: any) {
+      console.error('Error creating grupo:', error);
+      showNotification(error.response?.data?.message || 'Error al crear grupo', 'error');
+    } finally {
+      setCreatingGrupo(false);
+    }
+  };
+
   const handleCreateSistema = async () => {
     try {
-      // Determinar el grupo final
-      const grupoFinal = grupoOption === 'sistemas' ? 'Sistemas' : nuevoGrupoNombre.trim();
+      // Determinar el grupoId (null si es 'none')
+      const grupoId = selectedGrupoId !== 'none' ? parseInt(selectedGrupoId) : null;
       
       const dataToSend = {
         ...formData,
-        grupo: grupoFinal || undefined,
+        grupoId: grupoId,
         tipo: 'GARANTIZADO',
-        activo: true
+        activo: true,
+        icono: formData.icono || 'AppWindow'
       };
       await api.post('/modules', dataToSend);
       setIsCreateDialogOpen(false);
@@ -243,10 +312,13 @@ const SistemasExternosModule: React.FC = () => {
         nombre: '',
         descripcion: '',
         url: '',
-        grupo: undefined
+        grupo: undefined,
+        icono: 'AppWindow'
       });
-      setGrupoOption('sistemas');
+      setSelectedGrupoId('none');
+      setShowQuickCreateGrupo(false);
       setNuevoGrupoNombre('');
+      setNuevoGrupoIcono('Server');
       
       // Actualizar la lista local
       await fetchSistemas();
@@ -263,10 +335,15 @@ const SistemasExternosModule: React.FC = () => {
 
   const handleUpdateSistema = async (id: number) => {
     try {
+      // Determinar el grupoId (null si es 'none')
+      const grupoId = selectedGrupoId !== 'none' ? parseInt(selectedGrupoId) : null;
+      
       const dataToSend = {
         ...formData,
+        grupoId: grupoId,
         tipo: 'GARANTIZADO',
-        activo: true
+        activo: true,
+        icono: formData.icono || 'AppWindow'
       };
       await api.put(`/modules/${id}`, dataToSend);
       setEditingSistema(null);
@@ -274,8 +351,13 @@ const SistemasExternosModule: React.FC = () => {
         nombre: '',
         descripcion: '',
         url: '',
-        grupo: undefined
+        grupo: undefined,
+        icono: 'AppWindow'
       });
+      setSelectedGrupoId('none');
+      setShowQuickCreateGrupo(false);
+      setNuevoGrupoNombre('');
+      setNuevoGrupoIcono('Server');
       
       // Actualizar la lista local
       await fetchSistemas();
@@ -390,8 +472,11 @@ const SistemasExternosModule: React.FC = () => {
     setFormData({
       nombre: sistema.nombre,
       descripcion: sistema.descripcion,
-      url: sistema.url || '' // Usar el campo url que envía el backend
+      url: sistema.url || '', // Usar el campo url que envía el backend
+      icono: (sistema as any).icono || 'AppWindow'
     });
+    // Inicializar el grupo seleccionado si existe
+    setSelectedGrupoId(sistema.grupo?.id ? sistema.grupo.id.toString() : 'none');
   };
 
   const closeDialog = () => {
@@ -401,10 +486,13 @@ const SistemasExternosModule: React.FC = () => {
       nombre: '',
       descripcion: '',
       url: '',
-      grupo: undefined
+      grupo: undefined,
+      icono: 'AppWindow'
     });
-    setGrupoOption('sistemas');
+    setSelectedGrupoId('none');
+    setShowQuickCreateGrupo(false);
     setNuevoGrupoNombre('');
+    setNuevoGrupoIcono('Server');
   };
 
   if (!authState || !authState.isAuthenticated) {
@@ -607,7 +695,7 @@ const SistemasExternosModule: React.FC = () => {
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))}
+                    ))}
                   </TableBody>
                 </Table>
               </div>
@@ -709,23 +797,25 @@ const SistemasExternosModule: React.FC = () => {
             </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-6 mt-4">
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Nombre</label>
-              <Input
-                value={formData.nombre}
-                onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                placeholder="Módulo Garantizado"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Descripción</label>
-              <Input
-                value={formData.descripcion}
-                onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
-                placeholder="Módulo de garantías de Yego"
-              />
+          <div className="space-y-4 mt-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Nombre</label>
+                <Input
+                  value={formData.nombre}
+                  onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                  placeholder="Módulo Garantizado"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Descripción</label>
+                <Input
+                  value={formData.descripcion}
+                  onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
+                  placeholder="Módulo de garantías de Yego"
+                />
+              </div>
             </div>
             
             <div>
@@ -737,48 +827,139 @@ const SistemasExternosModule: React.FC = () => {
               />
             </div>
 
-            {!editingSistema && (
-              <>
-                <div>
-                  <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
-                    Agrupar en
-                  </label>
-                  <Select 
-                    value={grupoOption} 
-                    onValueChange={(value) => {
-                      setGrupoOption(value as 'sistemas' | 'nuevo');
-                      if (value === 'sistemas') {
-                        setNuevoGrupoNombre('');
-                      }
-                    }}
+            {/* Selector de Iconos */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                  Icono del módulo
+                </label>
+                <span className="text-xs text-primary-500 font-medium px-2 py-1 bg-primary-50 dark:bg-primary-900/20 rounded-full">
+                  {AVAILABLE_ICONS.find(i => i.name === formData.icono)?.label || 'Aplicación'}
+                </span>
+              </div>
+              
+              <div className="grid grid-cols-11 gap-1.5 p-3 bg-neutral-50 dark:bg-neutral-800/50 rounded-xl border border-neutral-200 dark:border-neutral-700">
+                {AVAILABLE_ICONS.map(({ name, icon: IconComponent, label }) => (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => setFormData({ ...formData, icono: name })}
+                    className={`aspect-square rounded-lg flex items-center justify-center transition-all duration-150 ${
+                      formData.icono === name
+                        ? 'bg-primary-500 text-white shadow-lg ring-2 ring-primary-500 ring-offset-1 ring-offset-neutral-50 dark:ring-offset-neutral-800'
+                        : 'bg-white dark:bg-neutral-700 hover:bg-primary-50 dark:hover:bg-neutral-600 text-neutral-500 dark:text-neutral-400 hover:text-primary-500 border border-neutral-200 dark:border-neutral-600'
+                    }`}
+                    title={label}
                   >
-                    <SelectTrigger>
-                      <SelectValue />
+                    <IconComponent className="h-5 w-5" />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                  Agrupar en
+                </label>
+                <div className="flex gap-2">
+                  <Select 
+                    value={selectedGrupoId} 
+                    onValueChange={setSelectedGrupoId}
+                  >
+                    <SelectTrigger className={editingSistema ? "w-full" : "flex-1"}>
+                      <SelectValue placeholder="Sin grupo" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="sistemas">Sistemas (grupo existente)</SelectItem>
-                      <SelectItem value="nuevo">Crear nuevo grupo</SelectItem>
+                      <SelectItem value="none">Sin grupo (individual)</SelectItem>
+                      {gruposDisponibles.map(grupo => (
+                        <SelectItem key={grupo.id} value={grupo.id.toString()}>
+                          {grupo.nombre}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
+                  {/* Botón para crear grupo - solo en modo crear */}
+                  {!editingSistema && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowQuickCreateGrupo(!showQuickCreateGrupo)}
+                      className="px-3"
+                      title="Crear grupo rápido"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
+              </div>
 
-                {grupoOption === 'nuevo' && (
-                  <div>
-                    <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
-                      Nombre del nuevo grupo
-                    </label>
-                    <Input
-                      value={nuevoGrupoNombre}
-                      onChange={(e) => setNuevoGrupoNombre(e.target.value)}
-                      placeholder="Ej: Finanzas, Recursos Humanos, etc."
-                    />
-                    <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
-                      Los módulos de este grupo aparecerán juntos en el menú lateral
-                    </p>
+              {/* Formulario rápido para crear grupo - solo en modo crear */}
+              {!editingSistema && showQuickCreateGrupo && (
+                <div className="p-3 bg-neutral-50 dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                      Crear grupo rápido
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowQuickCreateGrupo(false)}
+                      className="text-neutral-400 hover:text-neutral-600"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
                   </div>
-                )}
-              </>
-            )}
+                  
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs text-neutral-500 mb-1">Nombre</label>
+                      <Input
+                        value={nuevoGrupoNombre}
+                        onChange={(e) => setNuevoGrupoNombre(e.target.value)}
+                        placeholder="Ej: Finanzas"
+                        className="h-9 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-neutral-500 mb-1">Icono</label>
+                      <Select value={nuevoGrupoIcono} onValueChange={setNuevoGrupoIcono}>
+                        <SelectTrigger className="h-9">
+                          <div className="flex items-center gap-2">
+                            {(() => {
+                              const IconSelected = AVAILABLE_ICONS.find(i => i.name === nuevoGrupoIcono)?.icon;
+                              return IconSelected ? <IconSelected className="h-4 w-4" /> : null;
+                            })()}
+                            <span className="text-sm">{AVAILABLE_ICONS.find(i => i.name === nuevoGrupoIcono)?.label || 'Servidor'}</span>
+                          </div>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {AVAILABLE_ICONS.slice(0, 15).map(({ name, icon: IconComponent, label }) => (
+                            <SelectItem key={name} value={name}>
+                              <div className="flex items-center gap-2">
+                                <IconComponent className="h-4 w-4" />
+                                <span>{label}</span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    onClick={handleQuickCreateGrupo}
+                    disabled={creatingGrupo || !nuevoGrupoNombre.trim()}
+                    className="w-full"
+                  >
+                    {creatingGrupo ? 'Creando...' : 'Crear y seleccionar'}
+                  </Button>
+                </div>
+              )}
+            </div>
             
           </div>
           

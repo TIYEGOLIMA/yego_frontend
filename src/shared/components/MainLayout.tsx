@@ -11,25 +11,15 @@ import {
   User, 
   Power, 
   Settings2, 
-  LayoutDashboard, 
-  UserRound, 
-  ShieldCheck, 
-  KeyRound, 
   AppWindow, 
-  ScrollText, 
-  MonitorSmartphone, 
-  BarChart4, 
   ChevronLeft, 
   ChevronRight, 
   Bell, 
   HelpCircle, 
   Lock,
-  ChevronDown,
-  Server,
-  Shield,
-  Clock,
-  Sparkles
+  ChevronDown
 } from 'lucide-react'
+import { ICON_MAP } from '../utils/moduleIcons'
 
 interface NavItem {
   label: string;
@@ -57,44 +47,31 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const navigate = useNavigate()
   const location = useLocation()
 
-  // Verificar autenticación
   useEffect(() => {
-    // Si no hay token, redirigir a login
     if (!token) {
       navigate('/login')
       return
     }
     
-    // Los módulos ya se cargan en el login con await antes de redirigir
-    // Solo cargar si realmente faltan después de recargar la página (onRehydrateStorage)
     if (token && (!modules || modules.length === 0)) {
-      // Esperar 2 segundos para dar tiempo al onRehydrateStorage de Zustand
       const timeout = setTimeout(() => {
-        // Verificar de nuevo antes de cargar (puede que ya se hayan cargado)
         const currentModules = useAuthStore.getState().modules;
         if (!currentModules || currentModules.length === 0) {
-          console.log('📦 [MainLayout] Módulos faltantes después de recarga, cargando...');
           fetchModules().catch((error: any) => {
-            console.warn('⚠️ [MainLayout] Error cargando módulos:', error);
-            // Si es error de autorización, redirigir a login
             if (error.message?.includes('Token inválido') || error.response?.status === 401 || error.response?.status === 403) {
               logout();
               navigate('/login');
             }
           });
         }
-      }, 2000); // Esperar 2 segundos para dar tiempo al rehydrate
+      }, 2000);
       
       return () => clearTimeout(timeout);
     }
-  }, [token]) // Solo depender de token para evitar ejecuciones múltiples cuando modules cambia
+  }, [token])
 
-  // Si no hay token, no renderizar nada
-  if (!token) {
-    return null
-  }
+  if (!token) return null
 
-  // Si hay token pero no hay usuario, mostrar loading
   if (token && !user) {
     return (
       <div className="min-h-screen bg-background-secondary dark:bg-background-dark flex items-center justify-center">
@@ -117,280 +94,102 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     }
   }
 
-  // Mapeo de nombres/URLs de módulos a iconos
-  const getModuleIcon = (module: { nombre: string; url: string }) => {
-    const name = module.nombre.toLowerCase();
-    const url = module.url?.toLowerCase() || '';
-    
-    // Mapeo basado en nombre del módulo
-    if (name.includes('dashboard') || url.includes('/dashboard')) {
-      return <LayoutDashboard className="h-5 w-5" />;
+  const getModuleIcon = (icono?: string) => {
+    if (icono && ICON_MAP[icono]) {
+      const IconComponent = ICON_MAP[icono];
+      return <IconComponent className="h-5 w-5" />;
     }
-    if (name.includes('usuario') || url.includes('/users')) {
-      return <UserRound className="h-5 w-5" />;
-    }
-    if (name.includes('rol') || url.includes('/roles')) {
-      return <ShieldCheck className="h-5 w-5" />;
-    }
-    if (name.includes('permiso') || url.includes('/permissions')) {
-      return <KeyRound className="h-5 w-5" />;
-    }
-    if (name.includes('módulo') || url.includes('/modules')) {
-      return <AppWindow className="h-5 w-5" />;
-    }
-    if (name.includes('auditor') || url.includes('/audit')) {
-      return <ScrollText className="h-5 w-5" />;
-    }
-    if (name.includes('sesión') || url.includes('/sessions')) {
-      return <MonitorSmartphone className="h-5 w-5" />;
-    }
-    if (name.includes('configuración') || name.includes('configuracion') || url.includes('/configuration')) {
-      return <Settings2 className="h-5 w-5" />;
-    }
-    if (name.includes('ticket') || url.includes('/tickets')) {
-      return <Bell className="h-5 w-5" />;
-    }
-    if (name.includes('sistema') || url.includes('/sistemas')) {
-      return <Server className="h-5 w-5" />;
-    }
-    if (name.includes('premiun') || name.includes('premium') || url.includes('yego-premiun')) {
-      return <Sparkles className="h-5 w-5" />;
-    }
-    if (name.includes('reporte') || url.includes('/reports')) {
-      return <BarChart4 className="h-5 w-5" />;
-    }
-    if (name.includes('garantizado') || url.includes('/garantizado')) {
-      return <Shield className="h-5 w-5" />;
-    }
-    if (name.includes('asistencia') || url.includes('/asistencia')) {
-      return <Clock className="h-5 w-5" />;
-    }
-    
-    // Icono por defecto
     return <AppWindow className="h-5 w-5" />;
   };
 
-  // Determinar si un módulo debe ir al dropdown de Sistemas
-  const isSistemaModule = (module: { nombre: string; url: string }) => {
-    const name = module.nombre?.toLowerCase().trim() || '';
-    const url = module.url?.toLowerCase().trim() || '';
-    
-    // Normalizar URL: remover leading/trailing slashes para comparación
-    const normalizedUrl = url.startsWith('/') ? url.substring(1) : url;
-    const urlWithoutSlash = normalizedUrl.replace(/\/$/, '');
-    
-    // Módulos que van al dropdown de Sistemas
-    const sistemasPaths = ['garantizado', 'reports', 'reportes', 'asistencia', 'tickets', 'ticket', 'yego-premiun', 'mensajes', 'marketni'];
-    const sistemasNames = ['garantizado', 'reporte', 'reportes', 'asistencia', 'tickets', 'ticket', 'yego-premiun', 'mensajes', 'marketni'];
-    
-    // Verificar por URL (sin slashes iniciales/finales)
-    const matchesUrl = sistemasPaths.some(path => 
-      urlWithoutSlash === path || 
-      urlWithoutSlash.includes(path) ||
-      url.includes(`/${path}`) ||
-      url.includes(`${path}/`)
-    );
-    
-    // Verificar por nombre
-    const matchesName = sistemasNames.some(sistemaName => 
-      name === sistemaName || 
-      name.includes(sistemaName)
-    );
-    
-    return matchesUrl || matchesName;
-  };
-
-  // Helper: Normalizar URL
   const normalizeUrl = (url?: string): string => {
     if (!url) return '';
     return url.startsWith('/') ? url : `/${url}`;
   };
 
-  // Helper: Crear NavItem desde módulo
-  const createNavItemFromModule = (module: Module, icon?: React.ReactNode): NavItem => ({
+  const createNavItemFromModule = (module: Module): NavItem => ({
     label: module.nombre || '',
     to: normalizeUrl(module.url),
-    icon: icon || getModuleIcon(module),
+    icon: getModuleIcon(module.icono),
     requiredPermission: null
   });
 
-  // Función para obtener el orden de prioridad de un módulo
-  const getModuleOrder = (module: Module): number => {
-    const name = module.nombre?.toLowerCase().trim() || '';
-    const url = (module.url || '').toLowerCase().replace(/^\/+|\/+$/g, '');
-    
-    // Orden definido:
-    if (name === 'dashboard' || name.includes('dashboard') || 
-        url === 'dashboard' || url.includes('dashboard')) return 1;
-    if (isSistemaModule(module)) return 2;
-    if (name === 'usuarios' || name === 'usuario' || name.includes('usuario') ||
-        url === 'users' || url === 'user' || url.includes('users') || url.includes('user')) return 3;
-    if (name === 'modulos' || name === 'módulos' || name === 'modulo' || name === 'módulo' ||
-        name.includes('modulo') || name.includes('módulo') ||
-        url === 'modules' || url === 'module' || url.includes('modules') || url.includes('module')) return 4;
-    if (name === 'permisos' || name === 'permiso' || name.includes('permiso') ||
-        url === 'permissions' || url === 'permission' || url.includes('permissions') || url.includes('permission')) return 5;
-    if (name === 'roles' || name === 'rol' || 
-        (name.includes('rol') && !name.includes('control') && !name.includes('auditor')) ||
-        url === 'roles' || url === 'role' || url.includes('roles') || url.includes('role')) return 6;
-    if (name === 'configuraciones' || name === 'configuración' || name === 'configuracion' ||
-        name.includes('configuración') || name.includes('configuracion') ||
-        url === 'configuration' || url === 'configurations' || 
-        url.includes('configuration') || url.includes('configurations')) return 7;
-    return 999; // Otros módulos
+  const isDashboard = (module: Module): boolean => {
+    const name = module.nombre?.toLowerCase() || '';
+    const url = module.url?.toLowerCase() || '';
+    return name.includes('dashboard') || url.includes('dashboard');
   };
 
-  // Convertir módulos del backend a NavItems
   const buildNavItemsFromModules = (): NavItem[] => {
     if (!modules || modules.length === 0) return [];
 
-    // Filtrar módulos activos y excluir importaciones
-    const activeModules = modules.filter(module => {
-      if (!module.activo) return false;
-      
-      const moduleName = (module.nombre || '').toLowerCase();
-      const moduleUrl = (module.url || '').toLowerCase();
-      const isImportModule = moduleName.includes('import') || moduleUrl.includes('import');
-      
-      return !isImportModule;
-    });
-
-    // Separar módulos con grupo y sin grupo
+    const activeModules = modules.filter(module => module.activo);
+    
+    const navItems: NavItem[] = [];
     const modulesWithGroup = new Map<string, Module[]>();
-    const dashboardModules: Module[] = [];
-    const otherOrderedModules = new Map<number, Module[]>();
+    const modulesWithoutGroup: Module[] = [];
 
     activeModules.forEach(module => {
-      const order = getModuleOrder(module);
-      
-      // Dashboard siempre va primero
-      if (order === 1) {
-        dashboardModules.push(module);
-        return;
-      }
-
-      // Si el módulo es un sistema (según lógica de detección), siempre agregarlo a "Sistemas"
-      // Esto prevalece sobre el grupo asignado si es un módulo de sistema
-      if (isSistemaModule(module)) {
-        if (!modulesWithGroup.has('Sistemas')) {
-          modulesWithGroup.set('Sistemas', []);
-        }
-        modulesWithGroup.get('Sistemas')!.push(module);
-      } else if (module.grupo && module.grupo.trim()) {
-        // Si tiene grupo definido y no es un sistema, usar su grupo
-        const grupoName = module.grupo.trim();
+      if (isDashboard(module)) {
+        navItems.push(createNavItemFromModule(module));
+      } else if (module.grupo?.nombre) {
+        const grupoName = module.grupo.nombre;
         if (!modulesWithGroup.has(grupoName)) {
           modulesWithGroup.set(grupoName, []);
         }
         modulesWithGroup.get(grupoName)!.push(module);
       } else {
-        // Módulos sin grupo que no son sistemas
-        if (!otherOrderedModules.has(order)) {
-          otherOrderedModules.set(order, []);
-        }
-        otherOrderedModules.get(order)!.push(module);
+        modulesWithoutGroup.push(module);
       }
     });
 
-    const navItems: NavItem[] = [];
-    
-    // 1. Dashboard primero
-    dashboardModules.forEach(module => {
+    modulesWithGroup.forEach((grupoModules, grupoName) => {
+      const grupoIconName = grupoModules[0]?.grupo?.icono;
+      const GrupoIcon = grupoIconName && ICON_MAP[grupoIconName] ? ICON_MAP[grupoIconName] : AppWindow;
+      
       navItems.push({
-        ...createNavItemFromModule(module),
-        icon: <LayoutDashboard className="h-5 w-5" />
+        label: grupoName,
+        to: `dropdown-${grupoName.toLowerCase().replace(/\s+/g, '-')}`,
+        icon: <GrupoIcon className="h-5 w-5" />,
+        requiredPermission: null,
+        children: grupoModules.map(module => createNavItemFromModule(module))
       });
     });
 
-    // 2. Grupos (incluyendo "Sistemas" y grupos personalizados)
-    // Ordenar grupos: "Sistemas" primero, luego alfabéticamente
-    const sortedGroups = Array.from(modulesWithGroup.entries()).sort((a, b) => {
-      if (a[0] === 'Sistemas') return -1;
-      if (b[0] === 'Sistemas') return 1;
-      return a[0].localeCompare(b[0]);
-    });
-
-    sortedGroups.forEach(([grupoName, grupoModules]) => {
-      if (grupoModules.length > 0) {
-        navItems.push({
-          label: grupoName,
-          to: `dropdown-${grupoName.toLowerCase().replace(/\s+/g, '-')}`,
-          icon: grupoName === 'Sistemas' ? <Server className="h-5 w-5" /> : <AppWindow className="h-5 w-5" />,
-          requiredPermission: null,
-          children: grupoModules.map(module => createNavItemFromModule(module))
-        });
-      }
-    });
-
-    // 3. Módulos individuales ordenados (Usuarios, Módulos, Permisos, Roles, Configuraciones, Otros)
-    const renderOrder = [3, 4, 5, 6, 7, 999];
-    renderOrder.forEach(order => {
-      const modulesInOrder = otherOrderedModules.get(order) || [];
-      modulesInOrder.forEach(module => {
-        navItems.push(createNavItemFromModule(module));
-      });
-    });
-
-    console.log(`📋 [MainLayout] Módulos organizados:`, {
-      dashboard: dashboardModules.length,
-      grupos: Array.from(modulesWithGroup.entries()).map(([name, mods]) => ({ nombre: name, cantidad: mods.length })),
-      individuales: Array.from(otherOrderedModules.entries()).reduce((acc, [order, mods]) => {
-        acc[order] = mods.length;
-        return acc;
-      }, {} as Record<number, number>)
+    modulesWithoutGroup.forEach(module => {
+      navItems.push(createNavItemFromModule(module));
     });
 
     return navItems;
   };
 
-  // Obtener elementos de navegación desde módulos del backend
   const navItems = buildNavItemsFromModules();
-
-  // Los módulos dinámicos del backend ya vienen filtrados según permisos del usuario
   const filteredNavItems = navItems;
 
-  // Verificar si una ruta está activa
   const isActive = (path: string) => {
-    // Considerar la ruta raíz como dashboard
-    if (path === '/dashboard' && (location.pathname === '/' || location.pathname === '/dashboard')) {
-      return true;
-    }
+    if (path === '/dashboard' && (location.pathname === '/' || location.pathname === '/dashboard')) return true;
     return location.pathname === path || location.pathname.startsWith(path + '/')
   }
 
-
-  // Obtener el título de la página actual
   const getCurrentPageTitle = () => {
-    // Si estamos en la raíz, mostrar Dashboard
-    if (location.pathname === '/') {
-      return 'Dashboard';
-    }
-    const currentItem = filteredNavItems.find(item => isActive(item.to))
-    return currentItem?.label || 'Dashboard'
+    if (location.pathname === '/') return 'Dashboard';
+    return filteredNavItems.find(item => isActive(item.to))?.label || 'Dashboard'
   }
 
-  // Cerrar el menú de usuario al hacer clic fuera
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (userMenuOpen && !(event.target as Element).closest('.user-menu-container')) {
         setUserMenuOpen(false)
       }
     }
-    
     document.addEventListener('mousedown', handleClickOutside)
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-    }
+    return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [userMenuOpen])
 
-  // Cerrar sidebar en móvil al cambiar de ruta
   useEffect(() => {
-    if (sidebarOpen) {
-      setSidebarOpen(false)
-    }
+    if (sidebarOpen) setSidebarOpen(false)
   }, [location.pathname])
 
-  // Expandir automáticamente los dropdowns cuando una opción está activa
   useEffect(() => {
     filteredNavItems.forEach(item => {
       if (item.to.startsWith('dropdown-') && item.children) {
@@ -402,19 +201,15 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     });
   }, [location.pathname, filteredNavItems])
 
-  // Cerrar dropdowns al hacer clic fuera
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (openDropdowns.size > 0 && !(event.target as Element).closest('.dropdown-menu-container')) {
         setOpenDropdowns(new Set());
       }
     }
-    
     if (openDropdowns.size > 0) {
       document.addEventListener('mousedown', handleClickOutside);
-      return () => {
-        document.removeEventListener('mousedown', handleClickOutside);
-      };
+      return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [openDropdowns])
 

@@ -378,16 +378,9 @@ const PermissionsModule: React.FC = () => {
       {/* Permissions Table */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Key className="h-5 w-5 text-primary-500" />
-              Permisos del Sistema
-            </div>
-            {!loading && (
-              <span className="text-sm font-normal text-neutral-500">
-                {totalPermissions} permiso{totalPermissions !== 1 ? 's' : ''} en total
-              </span>
-            )}
+          <CardTitle className="flex items-center gap-2">
+            <Key className="h-5 w-5 text-primary-500" />
+            Permisos del Sistema ({totalPermissions})
           </CardTitle>
         </CardHeader>
         <CardContent>

@@ -32,8 +32,18 @@ export interface PremiumProcessAvailableEvent {
   timestamp: string
 }
 
+export interface RoleDeactivatedEvent {
+  type: 'ROLE_DEACTIVATED'
+  message: string
+  autoLogoutDelay: number
+  redirectToLogin: boolean
+  roleName?: string
+  timestamp?: string
+}
+
 export type SystemEvent =
   | ForcedLogoutEvent
   | AccountBlockedEvent
   | UserTableUpdateEvent
   | PremiumProcessAvailableEvent
+  | RoleDeactivatedEvent

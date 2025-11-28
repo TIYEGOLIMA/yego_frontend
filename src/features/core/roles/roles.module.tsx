@@ -475,16 +475,9 @@ const RolesModule: React.FC = () => {
       {/* Roles Table */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Shield className="h-5 w-5 text-primary-500" />
-              Roles del Sistema
-            </div>
-            {!loading && (
-              <span className="text-sm font-normal text-neutral-500">
-                {totalRoles} rol{totalRoles !== 1 ? 'es' : ''} en total
-              </span>
-            )}
+          <CardTitle className="flex items-center gap-2">
+            <Shield className="h-5 w-5 text-primary-500" />
+            Roles del Sistema ({filteredRoles.length})
           </CardTitle>
         </CardHeader>
         <CardContent>

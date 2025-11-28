@@ -134,7 +134,6 @@ const UsersModule: React.FC = () => {
   // Estados de paginación
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
-  const [totalUsers, setTotalUsers] = useState(0);
 
   const fetchAvailableRoles = async () => {
     try {
@@ -164,19 +163,15 @@ const UsersModule: React.FC = () => {
 
   useEffect(() => {
     fetchUsers();
-  }, [userStatus, currentPage, itemsPerPage]);
+  }, [userStatus]);
 
   useEffect(() => {
     fetchAvailableRoles();
   }, []);
 
+  // Resetear página al cambiar búsqueda
   useEffect(() => {
-    const delaySearch = setTimeout(() => {
-      setCurrentPage(1);
-      fetchUsers();
-    }, 500);
-    
-    return () => clearTimeout(delaySearch);
+    setCurrentPage(1);
   }, [searchTerm]);
 
   // 🔔 WebSocket listener para actualizaciones en tiempo real
@@ -284,29 +279,43 @@ const UsersModule: React.FC = () => {
         params.active = userStatus === 'true';
       }
       
-      params.page = currentPage;
-      params.limit = itemsPerPage;
-      
-      if (searchTerm.trim()) {
-        params.search = searchTerm.trim();
-      }
+      // Cargar todos los usuarios sin paginación del backend
+      params.page = 1;
+      params.limit = 1000; // Cargar todos
       
       const response = await api.get('/users', { params });
       
       if (response.data.users) {
         setUsers(response.data.users);
-        setTotalUsers(response.data.total);
       } else {
         setUsers(Array.isArray(response.data) ? response.data : []);
-        setTotalUsers(Array.isArray(response.data) ? response.data.length : 0);
       }
     } catch (error: any) {
       setUsers([]);
-      setTotalUsers(0);
     } finally {
       setLoading(false);
     }
   };
+
+  // Filtrar usuarios localmente (búsqueda en todos los campos)
+  const filteredUsers = users.filter(user => {
+    if (!searchTerm.trim()) return true;
+    
+    const search = searchTerm.toLowerCase().trim();
+    
+    // Buscar en todos los campos
+    return (
+      user.name?.toLowerCase().includes(search) ||
+      user.lastName?.toLowerCase().includes(search) ||
+      user.username?.toLowerCase().includes(search) ||
+      user.email?.toLowerCase().includes(search) ||
+      user.role?.toLowerCase().includes(search) ||
+      user.dni?.toLowerCase().includes(search) ||
+      // Buscar también en nombre completo
+      `${user.name} ${user.lastName}`.toLowerCase().includes(search) ||
+      getDisplayName(user).toLowerCase().includes(search)
+    );
+  });
 
   const consultarDatosDNI = async (dni: string) => {
     try {
@@ -561,7 +570,12 @@ const UsersModule: React.FC = () => {
     }
   };
 
-  const totalPages = Math.ceil(totalUsers / itemsPerPage);
+  // Paginación local basada en usuarios filtrados
+  const totalFilteredUsers = filteredUsers.length;
+  const totalPages = Math.ceil(totalFilteredUsers / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedUsers = filteredUsers.slice(startIndex, endIndex);
 
   const handlePageChange = (page: number) => {
     if (page >= 1 && page <= totalPages) {
@@ -728,7 +742,7 @@ const UsersModule: React.FC = () => {
             </div>
             {!loading && (
               <span className="text-sm font-normal text-neutral-500">
-                {totalUsers} usuario{totalUsers !== 1 ? 's' : ''} en total
+                {searchTerm ? `${totalFilteredUsers} de ${users.length}` : totalFilteredUsers} usuario{totalFilteredUsers !== 1 ? 's' : ''}
               </span>
             )}
           </CardTitle>
@@ -742,7 +756,7 @@ const UsersModule: React.FC = () => {
               </div>
             </div>
           ) : viewMode === 'list' ? (
-            users.length === 0 ? (
+            paginatedUsers.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center">
                 <Users className="h-12 w-12 text-neutral-300 dark:text-neutral-600 mb-4" />
                 <h3 className="text-lg font-semibold mb-2">No se encontraron usuarios</h3>
@@ -764,7 +778,7 @@ const UsersModule: React.FC = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {users.map((user) => (
+                    {paginatedUsers.map((user) => (
                       <TableRow key={user.id} className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50">
                         <TableCell>
                           <div className="flex items-center gap-3">
@@ -840,7 +854,7 @@ const UsersModule: React.FC = () => {
             )
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-              {users.map((user) => (
+              {paginatedUsers.map((user) => (
                 <Card key={user.id} className="group hover:shadow-lg transition-shadow">
                   <CardHeader className="flex flex-row items-center justify-between gap-3 pb-2">
                     <div className="flex items-center gap-3">
@@ -904,12 +918,13 @@ const UsersModule: React.FC = () => {
       </Card>
 
       {/* Paginación */}
-      {!loading && users.length > 0 && (
+      {!loading && paginatedUsers.length > 0 && (
         <Card>
           <CardContent className="pt-6">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="text-sm text-neutral-600 dark:text-neutral-400">
-                Mostrando {((currentPage - 1) * itemsPerPage) + 1} a {Math.min(currentPage * itemsPerPage, totalUsers)} de {totalUsers} usuarios
+                Mostrando {startIndex + 1} a {Math.min(endIndex, totalFilteredUsers)} de {totalFilteredUsers} usuarios
+                {searchTerm && ` (filtrado de ${users.length} total)`}
               </div>
               
               <div className="flex items-center gap-2">
@@ -1153,11 +1168,19 @@ const UsersModule: React.FC = () => {
                   <SelectValue placeholder="Seleccionar rol" />
                 </SelectTrigger>
                 <SelectContent>
-                  {availableRoles.map(role => (
-                    <SelectItem key={role.id} value={role.id.toString()}>
-                      {role.name}
-                    </SelectItem>
-                  ))}
+                  {availableRoles
+                    .filter(role => {
+                      // Excluir roles de dispositivos (tablets, TV, principal)
+                      const excludedRoles = ['tablet1', 'tablet2', 'principal', 'tv', 'tablet', 'television'];
+                      return !excludedRoles.some(excluded => 
+                        role.name.toLowerCase().includes(excluded)
+                      );
+                    })
+                    .map(role => (
+                      <SelectItem key={role.id} value={role.id.toString()}>
+                        {role.name}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>

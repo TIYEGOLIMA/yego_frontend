@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/auth-store';
 import systemNotificationsService from '../services/system-notifications-service';
-import { ForcedLogoutEvent, AccountBlockedEvent } from '../types/system-notifications';
+import { ForcedLogoutEvent, AccountBlockedEvent, RoleDeactivatedEvent } from '../types/system-notifications';
 
 export interface SystemNotificationsState {
   forcedLogoutModal: {
@@ -13,11 +13,15 @@ export interface SystemNotificationsState {
     isVisible: boolean;
     event: AccountBlockedEvent | null;
   };
+  roleDeactivatedModal: {
+    isVisible: boolean;
+    event: RoleDeactivatedEvent | null;
+  };
 }
 
 export const useSystemNotifications = () => {
   const navigate = useNavigate();
-  const { logout } = useAuthStore();
+  const { logout, token, user } = useAuthStore();
   
   const [forcedLogoutModal, setForcedLogoutModal] = useState({
     isOpen: false,
@@ -28,117 +32,89 @@ export const useSystemNotifications = () => {
     isVisible: false,
     event: null as AccountBlockedEvent | null
   });
+  
+  const [roleDeactivatedModal, setRoleDeactivatedModal] = useState({
+    isVisible: false,
+    event: null as RoleDeactivatedEvent | null
+  });
 
+  // Configurar callbacks - esto debe ejecutarse siempre
   useEffect(() => {
-    console.log('🔧 [SystemNotifications] Configurando callbacks del hook...');
-    console.log('🔧 [SystemNotifications] Estado de conexión:', systemNotificationsService.connectionStatus);
-    
-    // Forzar reconexión si no está conectado
-    if (!systemNotificationsService.connectionStatus) {
-      console.log('🔧 [SystemNotifications] Forzando reconexión...');
-      systemNotificationsService.forceReconnect();
-    }
-    
-    // Configurar callbacks para eventos del sistema
     systemNotificationsService.setOnForcedLogout((event: ForcedLogoutEvent) => {
-      console.log('🚪 [SystemNotifications] Forced logout event received:', event);
-      
-      // Verificar si el usuario actual está realmente autenticado
       const currentUser = useAuthStore.getState().user;
-      if (!currentUser || !currentUser.id) {
-        console.log('🚪 [SystemNotifications] Usuario no autenticado, ignorando evento FORCED_LOGOUT');
-        return;
-      }
+      if (!currentUser?.id) return;
+      if (event.userId && event.userId !== currentUser.id) return;
+      if (event.username && event.username !== currentUser.username) return;
       
-      // Verificar si el evento es para el usuario actual
-      if (event.userId && event.userId !== currentUser.id) {
-        console.log(`🚪 [SystemNotifications] FORCED_LOGOUT ignorado - destinado para userId ${event.userId}, usuario actual ${currentUser.id}`);
-        return;
-      }
-      
-      // Verificar si el evento tiene username y no coincide con el usuario actual
-      if (event.username && event.username !== currentUser.username) {
-        console.log(`🚪 [SystemNotifications] FORCED_LOGOUT ignorado - destinado para username ${event.username}, usuario actual ${currentUser.username}`);
-        return;
-      }
-      
-      console.log('🚪 [SystemNotifications] Mostrando modal FORCED_LOGOUT para usuario actual');
-      setForcedLogoutModal({
-        isOpen: true,
-        event
-      });
+      setForcedLogoutModal({ isOpen: true, event });
     });
 
     systemNotificationsService.setOnAccountBlocked((event: AccountBlockedEvent) => {
-      console.log('🚫 [SystemNotifications] Account blocked event received:', event);
-      
-      // Verificar si el usuario actual está realmente autenticado
       const currentUser = useAuthStore.getState().user;
-      if (!currentUser || !currentUser.id) {
-        console.log('🚫 [SystemNotifications] Usuario no autenticado, ignorando evento ACCOUNT_BLOCKED');
-        return;
-      }
+      if (!currentUser?.id) return;
+      if (event.userId && event.userId !== currentUser.id) return;
+      if (event.username && event.username !== currentUser.username) return;
       
-      // Verificar si el evento es para el usuario actual
-      if (event.userId && event.userId !== currentUser.id) {
-        console.log(`🚫 [SystemNotifications] ACCOUNT_BLOCKED ignorado - destinado para userId ${event.userId}, usuario actual ${currentUser.id}`);
-        return;
-      }
-      
-      // Verificar si el evento tiene username y no coincide con el usuario actual
-      if (event.username && event.username !== currentUser.username) {
-        console.log(`🚫 [SystemNotifications] ACCOUNT_BLOCKED ignorado - destinado para username ${event.username}, usuario actual ${currentUser.username}`);
-        return;
-      }
-      
-      console.log('🚫 [SystemNotifications] Mostrando modal ACCOUNT_BLOCKED para usuario actual');
-      setAccountBlockedModal({
-        isVisible: true,
-        event
-      });
+      setAccountBlockedModal({ isVisible: true, event });
     });
 
-    // Verificar si el servicio está conectado, si no, reconectar
-    setTimeout(() => {
-      if (!systemNotificationsService.getConnectionStatus()) {
-        console.log('🔄 [SystemNotifications] Servicio no conectado, forzando reconexión...');
-        systemNotificationsService.forceReconnect();
-      }
-    }, 2000);
+    systemNotificationsService.setOnRoleDeactivated((event: RoleDeactivatedEvent) => {
+      setRoleDeactivatedModal({ isVisible: true, event });
+    });
 
-    // Cleanup al desmontar
     return () => {
-      console.log('🧹 [SystemNotifications] Limpiando callbacks...');
       systemNotificationsService.setOnForcedLogout(null);
       systemNotificationsService.setOnAccountBlocked(null);
+      systemNotificationsService.setOnRoleDeactivated(null);
     };
   }, []);
 
+  // Reconectar cuando cambia el token/usuario (nuevo login)
+  useEffect(() => {
+    if (token && user) {
+      // Esperar un momento para asegurar que el token esté guardado
+      const timer = setTimeout(() => {
+        if (!systemNotificationsService.getConnectionStatus()) {
+          systemNotificationsService.forceReconnect();
+        }
+      }, 500);
+      
+      return () => clearTimeout(timer);
+    } else {
+      // Si no hay token, desconectar
+      systemNotificationsService.disconnect();
+    }
+  }, [token, user]);
+
   const handleForcedLogout = () => {
-    console.log('🚪 [SystemNotifications] Handling forced logout');
     logout();
-    setForcedLogoutModal({
-      isOpen: false,
-      event: null
-    });
+    setForcedLogoutModal({ isOpen: false, event: null });
     navigate('/login');
   };
 
   const handleAccountBlocked = () => {
-    console.log('🚫 [SystemNotifications] Handling account blocked');
-    setAccountBlockedModal({
-      isVisible: false,
-      event: null
-    });
+    setAccountBlockedModal({ isVisible: false, event: null });
     logout();
     navigate('/login');
   };
 
+  const handleRoleDeactivated = useCallback(async () => {
+    setRoleDeactivatedModal({ isVisible: false, event: null });
+    try {
+      await logout();
+      navigate('/login');
+    } catch (error) {
+      navigate('/login');
+    }
+  }, [logout, navigate]);
+
   return {
     forcedLogoutModal,
     accountBlockedModal,
+    roleDeactivatedModal,
     handleForcedLogout,
-    handleAccountBlocked
+    handleAccountBlocked,
+    handleRoleDeactivated
   };
 };
 

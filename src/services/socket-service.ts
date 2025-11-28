@@ -18,8 +18,6 @@ class SocketService {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 10;
   private reconnectDelay = 2000; // 2 segundos
-  private heartbeatInterval: NodeJS.Timeout | null = null;
-  private heartbeatDelay = 3000; // 3 segundos
 
   private constructor() {}
 
@@ -62,55 +60,6 @@ class SocketService {
     }
   }
 
-  private startHeartbeat() {
-    if (this.heartbeatInterval) {
-      return; // Ya hay un heartbeat activo
-    }
-
-    console.log('💓 [SocketService] Iniciando heartbeat...');
-    
-    this.heartbeatInterval = setInterval(() => {
-      if (!this.stompClient) {
-        this.stopHeartbeat();
-        return;
-      }
-
-      // Verificar si realmente está conectado
-      const isReallyConnected = this.stompClient.connected;
-      console.log('💓 [SocketService] Verificando conexión real:', isReallyConnected);
-      
-      if (!isReallyConnected) {
-        console.log('❌ [SocketService] Cliente STOMP no está realmente conectado');
-        this.updateStatus('disconnected');
-        this.startReconnect();
-        this.stopHeartbeat();
-        return;
-      }
-
-      // Intentar enviar un mensaje simple para verificar la conexión
-      try {
-        this.stompClient.publish({
-          destination: '/topic/heartbeat',
-          body: JSON.stringify({ timestamp: Date.now(), type: 'ping' })
-        });
-        console.log('💓 [SocketService] Ping enviado exitosamente');
-      } catch (error) {
-        console.log('❌ [SocketService] Error enviando ping:', error);
-        this.updateStatus('disconnected');
-        this.startReconnect();
-        this.stopHeartbeat();
-      }
-
-    }, this.heartbeatDelay);
-  }
-
-  private stopHeartbeat() {
-    if (this.heartbeatInterval) {
-      console.log('🛑 [SocketService] Deteniendo heartbeat...');
-      clearInterval(this.heartbeatInterval);
-      this.heartbeatInterval = null;
-    }
-  }
 
   public static getInstance(): SocketService {
     if (!SocketService.instance) {
@@ -172,9 +121,10 @@ class SocketService {
         connectHeaders: {
           'Authorization': `Bearer ${token}`
         },
-        debug: (str) => {
-          console.log('🔌 [STOMP]', str);
-        },
+        // Deshabilitar reconexión automática de STOMP - usamos nuestro propio sistema
+        reconnectDelay: 0, // 0 = deshabilitado
+        heartbeatIncoming: 0, // Deshabilitar heartbeat entrante
+        heartbeatOutgoing: 0, // Deshabilitar heartbeat saliente
         onConnect: (frame) => {
           console.log('✅ [SocketService] Conectado exitosamente:', frame);
           this.updateStatus('connected');
@@ -190,9 +140,6 @@ class SocketService {
           
           // Suscribirse a eventos específicos del usuario
           this.subscribeToUserEvents();
-          
-          // Iniciar heartbeat para detectar desconexiones
-          this.startHeartbeat();
         },
         onStompError: (frame) => {
           console.error('❌ [SocketService] Error STOMP:', frame);
@@ -206,7 +153,6 @@ class SocketService {
         },
         onDisconnect: () => {
           console.log('🔌 [SocketService] Desconectado');
-          this.stopHeartbeat();
           this.updateStatus('disconnected');
           this.startReconnect();
         }
@@ -414,8 +360,8 @@ class SocketService {
           const event = JSON.parse(message.body);
           console.log('👤 [SocketService] Evento de usuario recibido:', event);
           
-          // Los eventos ACCOUNT_BLOCKED y FORCED_LOGOUT son procesados por SystemNotificationsService
-          if (event.type === 'ACCOUNT_BLOCKED' || event.type === 'FORCED_LOGOUT') {
+          // Los eventos ACCOUNT_BLOCKED, FORCED_LOGOUT y ROLE_DEACTIVATED son procesados por SystemNotificationsService
+          if (event.type === 'ACCOUNT_BLOCKED' || event.type === 'FORCED_LOGOUT' || event.type === 'ROLE_DEACTIVATED') {
             console.log(`🚫 [SocketService] Evento ${event.type} ignorado - debe ser procesado por SystemNotificationsService`);
             return;
           }
@@ -502,7 +448,6 @@ class SocketService {
    */
   public disconnect() {
     this.stopReconnect();
-    this.stopHeartbeat();
     if (this.stompClient) {
       console.log('🔌 [SocketService] Desconectando STOMP...');
       this.stompClient.deactivate();

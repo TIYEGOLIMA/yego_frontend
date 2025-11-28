@@ -1,10 +1,11 @@
 import { Client } from '@stomp/stompjs'
 import SockJS from 'sockjs-client'
-import { SystemEvent, ForcedLogoutEvent, AccountBlockedEvent, UserTableUpdateEvent, PremiumProcessAvailableEvent } from '../types/system-notifications'
+import { SystemEvent, ForcedLogoutEvent, AccountBlockedEvent, UserTableUpdateEvent, PremiumProcessAvailableEvent, RoleDeactivatedEvent } from '../types/system-notifications'
 
 class SystemNotificationsService {
   private client: Client | null = null
   private isConnected = false
+  private processedEvents = new Set<string>() // Para evitar procesar eventos duplicados
 
   public get connectionStatus() {
     return this.isConnected
@@ -16,6 +17,7 @@ class SystemNotificationsService {
   private onAccountBlocked: ((event: AccountBlockedEvent) => void) | null = null
   private onUserTableUpdate: ((event: UserTableUpdateEvent) => void) | null = null
   private onPremiumProcessAvailable: ((event: PremiumProcessAvailableEvent) => void) | null = null
+  private onRoleDeactivated: ((event: RoleDeactivatedEvent) => void) | null = null
 
   constructor() {
     this.connect()
@@ -23,8 +25,22 @@ class SystemNotificationsService {
 
   private connect() {
     try {
-      const token = localStorage.getItem('token')
-      if (!token) return
+      // Leer token desde auth-storage (Zustand persist) igual que SocketService
+      let token: string | null = null;
+      try {
+        const authStorage = localStorage.getItem('auth-storage');
+        if (authStorage) {
+          const parsed = JSON.parse(authStorage);
+          token = parsed?.state?.token || null;
+        }
+      } catch (err) {
+        // Fallback: intentar leer desde token directo (compatibilidad temporal)
+        token = localStorage.getItem('token');
+      }
+      
+      if (!token) {
+        return;
+      }
 
       // Usar variable de entorno para la URL del WebSocket
       const wsUrl = import.meta.env.VITE_SYSTEM_WS_URL || import.meta.env.VITE_STOMP_URL || 'http://localhost:3030/ws'
@@ -35,43 +51,51 @@ class SystemNotificationsService {
           Authorization: `Bearer ${token}`
         },
         onConnect: () => {
-          console.log('✅ [SystemNotifications] Conectado al WebSocket del sistema')
           this.isConnected = true
           this.reconnectAttempts = 0
-          this.subscribe()
-          this.subscribePremiumTopics()
+          this.processedEvents.clear() // Limpiar eventos procesados al reconectar
+          
+          setTimeout(() => {
+            if (this.client && this.client.connected) {
+              this.subscribe()
+              this.subscribePremiumTopics()
+            }
+          }, 100)
         },
-        onStompError: (frame) => {
-          console.error('❌ [SystemNotifications] Error STOMP:', frame)
+        onStompError: () => {
           this.handleReconnect()
         },
-        onWebSocketError: (error) => {
-          console.error('❌ [SystemNotifications] Error WebSocket:', error)
+        onWebSocketError: () => {
           this.handleReconnect()
         },
         onDisconnect: () => {
-          console.log('🔌 [SystemNotifications] Desconectado del WebSocket del sistema')
           this.isConnected = false
         }
       })
 
       this.client.activate()
     } catch (error) {
-      console.error('❌ [SystemNotifications] Error al conectar:', error)
       this.handleReconnect()
     }
   }
 
   private subscribe() {
-    if (!this.client || !this.isConnected) {
-      console.log('⚠️ [SystemNotifications] No se puede suscribir - cliente no conectado')
+    if (!this.client || !this.client.connected) {
       return
     }
-
-    console.log('🔔 [SystemNotifications] Suscribiéndose a topics del sistema')
     try {
-      // Obtener el usuario actual del token
-      const token = localStorage.getItem('token')
+      // Obtener el usuario actual del token (leer desde auth-storage)
+      let token: string | null = null;
+      try {
+        const authStorage = localStorage.getItem('auth-storage');
+        if (authStorage) {
+          const parsed = JSON.parse(authStorage);
+          token = parsed?.state?.token || null;
+        }
+      } catch (err) {
+        token = localStorage.getItem('token');
+      }
+      
       let currentUserId: number | null = null
       
       if (token) {
@@ -79,7 +103,7 @@ class SystemNotificationsService {
           const payload = JSON.parse(atob(token.split('.')[1]))
           currentUserId = payload.userId || payload.id
         } catch (error) {
-          console.warn('⚠️ [SystemNotifications] No se pudo obtener userId del token:', error)
+          // Silencioso - no es crítico
         }
       }
 
@@ -87,90 +111,80 @@ class SystemNotificationsService {
       this.client.subscribe('/topic/system', (message) => {
         try {
           const event: SystemEvent = JSON.parse(message.body)
-          console.log('🔔 [SystemNotifications] Evento del sistema recibido:', event)
+          const eventKey = `${event.type}-${(event as any).userId || (event as any).timestamp || Date.now()}`
 
-          // Filtrar eventos por usuario - solo procesar si el evento es para el usuario actual
+          // Evitar procesar el mismo evento múltiples veces
+          if (this.processedEvents.has(eventKey)) {
+            return
+          }
+          this.processedEvents.add(eventKey)
+
+          // Limpiar eventos antiguos (mantener solo los últimos 100)
+          if (this.processedEvents.size > 100) {
+            const firstKey = this.processedEvents.values().next().value
+            if (firstKey) {
+              this.processedEvents.delete(firstKey)
+            }
+          }
+
+          // Filtrar eventos por usuario
           if ('userId' in event && event.userId && currentUserId && event.userId !== currentUserId) {
-            console.log(`🚫 [SystemNotifications] Evento ignorado - destinado para userId ${event.userId}, usuario actual ${currentUserId}`)
             return
           }
 
           switch (event.type) {
             case 'FORCED_LOGOUT':
-              console.log('🚪 [SystemNotifications] Procesando FORCED_LOGOUT para usuario actual')
-              console.log('🚪 [SystemNotifications] Callback disponible:', !!this.onForcedLogout)
-              if (this.onForcedLogout) {
-                this.onForcedLogout(event)
-              } else {
-                console.warn('⚠️ [SystemNotifications] Callback de FORCED_LOGOUT no configurado')
-              }
+              this.onForcedLogout?.(event as ForcedLogoutEvent)
               break
             case 'ACCOUNT_BLOCKED':
-              console.log('🚫 [SystemNotifications] Procesando ACCOUNT_BLOCKED para usuario actual')
-              console.log('🚫 [SystemNotifications] Callback disponible:', !!this.onAccountBlocked)
-              if (this.onAccountBlocked) {
-                this.onAccountBlocked(event)
-              } else {
-                console.warn('⚠️ [SystemNotifications] Callback de ACCOUNT_BLOCKED no configurado')
-              }
+              this.onAccountBlocked?.(event as AccountBlockedEvent)
               break
             case 'USER_TABLE_UPDATE':
-              console.log('👥 [SystemNotifications] Procesando USER_TABLE_UPDATE')
-              this.onUserTableUpdate?.(event)
+              this.onUserTableUpdate?.(event as UserTableUpdateEvent)
               break
             case 'PREMIUN_PROCESS_AVAILABLE':
-              console.log('🚦 [SystemNotifications] Procesando PREMIIUN_PROCESS_AVAILABLE (topic system)')
-              this.onPremiumProcessAvailable?.(event)
+              this.onPremiumProcessAvailable?.(event as PremiumProcessAvailableEvent)
+              break
+            case 'ROLE_DEACTIVATED':
+              this.onRoleDeactivated?.(event as RoleDeactivatedEvent)
               break
           }
         } catch (error) {
-          console.error('❌ [SystemNotifications] Error al procesar mensaje del sistema:', error)
+          console.error('❌ [SystemNotifications] Error procesando evento:', error)
         }
       })
 
       // Suscribirse al topic específico del usuario para eventos personales
-      if (currentUserId) {
-        console.log(`🔔 [SystemNotifications] Suscribiéndose a /topic/user/${currentUserId}`)
-        console.log(`🔔 [SystemNotifications] Cliente disponible:`, !!this.client)
-        console.log(`🔔 [SystemNotifications] Estado de conexión:`, this.connectionStatus)
-        
+      if (currentUserId && this.client && this.client.connected) {
         this.client.subscribe(`/topic/user/${currentUserId}`, (message) => {
-          console.log(`🔔 [SystemNotifications] MENSAJE RECIBIDO en /topic/user/${currentUserId}:`, message.body)
           try {
             const event: SystemEvent = JSON.parse(message.body)
-            console.log('🔔 [SystemNotifications] Evento personal recibido:', event)
+            const eventKey = `${event.type}-${(event as any).userId || (event as any).timestamp || Date.now()}`
+
+            // Evitar procesar el mismo evento múltiples veces
+            if (this.processedEvents.has(eventKey)) {
+              return
+            }
+            this.processedEvents.add(eventKey)
 
             switch (event.type) {
               case 'FORCED_LOGOUT':
-                console.log('🚪 [SystemNotifications] Procesando FORCED_LOGOUT personal')
-                console.log('🚪 [SystemNotifications] Callback disponible:', !!this.onForcedLogout)
-                if (this.onForcedLogout) {
-                  this.onForcedLogout(event)
-                } else {
-                  console.warn('⚠️ [SystemNotifications] Callback de FORCED_LOGOUT no configurado')
-                }
+                this.onForcedLogout?.(event as ForcedLogoutEvent)
                 break
               case 'ACCOUNT_BLOCKED':
-                console.log('🚫 [SystemNotifications] Procesando ACCOUNT_BLOCKED personal')
-                console.log('🚫 [SystemNotifications] Callback disponible:', !!this.onAccountBlocked)
-                if (this.onAccountBlocked) {
-                  this.onAccountBlocked(event)
-                } else {
-                  console.warn('⚠️ [SystemNotifications] Callback de ACCOUNT_BLOCKED no configurado')
-                }
+                this.onAccountBlocked?.(event as AccountBlockedEvent)
                 break
-              default:
-                console.log('🔔 [SystemNotifications] Evento personal no reconocido:', event.type)
+              case 'ROLE_DEACTIVATED':
+                this.onRoleDeactivated?.(event as RoleDeactivatedEvent)
+                break
             }
           } catch (error) {
-            console.error('❌ [SystemNotifications] Error al procesar mensaje personal:', error)
+            console.error('❌ [SystemNotifications] Error procesando evento:', error)
           }
         })
-      } else {
-        console.warn('⚠️ [SystemNotifications] No se pudo obtener userId para suscripción personal')
       }
     } catch (error) {
-      console.error('❌ [SystemNotifications] Error al suscribirse:', error)
+      console.error('❌ [SystemNotifications] Error suscribiéndose:', error)
     }
   }
 
@@ -203,12 +217,10 @@ class SystemNotificationsService {
   }
 
   public setOnForcedLogout(callback: ((event: ForcedLogoutEvent) => void) | null) {
-    console.log('🔧 [SystemNotifications] Configurando callback de forced logout:', !!callback)
     this.onForcedLogout = callback
   }
 
   public setOnAccountBlocked(callback: ((event: AccountBlockedEvent) => void) | null) {
-    console.log('🔧 [SystemNotifications] Configurando callback de account blocked:', !!callback)
     this.onAccountBlocked = callback
   }
 
@@ -220,15 +232,17 @@ class SystemNotificationsService {
     this.onPremiumProcessAvailable = callback
   }
 
+  public setOnRoleDeactivated(callback: ((event: RoleDeactivatedEvent) => void) | null) {
+    this.onRoleDeactivated = callback
+  }
+
   public reconnect() {
-    console.log('🔄 [SystemNotifications] Reconectando servicio...')
     this.disconnect()
     this.reconnectAttempts = 0
     this.connect()
   }
 
   public forceReconnect() {
-    console.log('🔄 [SystemNotifications] Forzando reconexión del servicio...')
     this.disconnect()
     setTimeout(() => {
       this.reconnectAttempts = 0
@@ -242,6 +256,7 @@ class SystemNotificationsService {
       this.client = null
     }
     this.isConnected = false
+    this.processedEvents.clear()
   }
 
   public getConnectionStatus() {
