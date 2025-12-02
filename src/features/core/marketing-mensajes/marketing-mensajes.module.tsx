@@ -729,13 +729,6 @@ const MarketingMensajesModule: React.FC = () => {
 
   const hasValue = (value: any): boolean => !isEmpty(value);
 
-  // Función auxiliar para agregar arrays a FormData
-  const appendArrayToFormData = (formData: FormData, fieldName: string, array: string[] | undefined) => {
-    if (hasValue(array)) {
-      array!.forEach(item => formData.append(fieldName, item));
-    }
-  };
-
   // Función auxiliar para validar campos del formulario
   const validateFormData = (): string | null => {
     if (isEmpty(formData.titulo)) {
@@ -928,10 +921,10 @@ const MarketingMensajesModule: React.FC = () => {
       comentarioImagen: response.comentarioImagen || '',
       whatsapp: response.whatsapp || false,
       yandex: response.yandex || false,
-      diasActivos: response.diasActivos || [],
+      diasActivos: Array.isArray(response.diasActivos) ? response.diasActivos : [],
       horasEspecificas: parseHorasEspecificas(response.horasEspecificas),
-      grupos: response.grupos || [],
-      flotas: response.flotas || [],
+      grupos: Array.isArray(response.grupos) ? response.grupos : [],
+      flotas: Array.isArray(response.flotas) ? response.flotas : [],
       activo: response.activo !== undefined ? response.activo : true,
       createdAt: response.createdAt || new Date().toISOString(),
       updatedAt: response.updatedAt || new Date().toISOString()
@@ -1010,9 +1003,44 @@ const MarketingMensajesModule: React.FC = () => {
       formDataToSend.append('file', selectedFile);
     }
     
-    appendArrayToFormData(formDataToSend, 'diasActivos', formData.diasActivos);
-    appendArrayToFormData(formDataToSend, 'grupos', formData.grupos);
-    appendArrayToFormData(formDataToSend, 'flotas', formData.flotas);
+    // Enviar arrays como múltiples campos FormData (Spring Boot espera List<String>)
+    // Siempre enviar los campos, incluso si están vacíos, para que el backend pueda limpiarlos
+    const diasActivos = Array.isArray(formData.diasActivos) ? formData.diasActivos : [];
+    if (diasActivos.length > 0) {
+      diasActivos.forEach(dia => {
+        formDataToSend.append('diasActivos', dia);
+      });
+    }
+    
+    const grupos = Array.isArray(formData.grupos) ? formData.grupos : [];
+    // Siempre enviar grupos, incluso si está vacío, para que el backend pueda limpiarlos
+    console.log('🔍 Debug grupos en buildFormData:', {
+      formDataGrupos: formData.grupos,
+      gruposArray: grupos,
+      gruposLength: grupos.length,
+      isArray: Array.isArray(formData.grupos)
+    });
+    if (grupos.length > 0) {
+      grupos.forEach(grupo => {
+        console.log('📤 Enviando grupo:', grupo);
+        formDataToSend.append('grupos', grupo);
+      });
+    } else {
+      // Enviar un campo vacío cuando no hay grupos para que el backend limpie el array
+      console.log('📤 Enviando grupos vacío');
+      formDataToSend.append('grupos', '');
+    }
+    
+    const flotas = Array.isArray(formData.flotas) ? formData.flotas : [];
+    // Siempre enviar flotas, incluso si está vacío, para que el backend pueda limpiarlas
+    if (flotas.length > 0) {
+      flotas.forEach(flota => {
+        formDataToSend.append('flotas', flota);
+      });
+    } else {
+      // Enviar un campo vacío cuando no hay flotas para que el backend limpie el array
+      formDataToSend.append('flotas', '');
+    }
     
     if (formData.horasEspecificas) {
       formDataToSend.append('horasEspecificas', JSON.stringify(formData.horasEspecificas));
@@ -1216,10 +1244,10 @@ const MarketingMensajesModule: React.FC = () => {
       comentarioImagen: mensaje.comentarioImagen || '',
       whatsapp: mensaje.whatsapp,
       yandex: mensaje.yandex,
-      diasActivos: mensaje.diasActivos,
+      diasActivos: Array.isArray(mensaje.diasActivos) ? mensaje.diasActivos : [],
       horasEspecificas: mensaje.horasEspecificas,
-      grupos: mensaje.grupos,
-      flotas: mensaje.flotas,
+      grupos: Array.isArray(mensaje.grupos) ? mensaje.grupos : [],
+      flotas: Array.isArray(mensaje.flotas) ? mensaje.flotas : [],
       activo: mensaje.activo
     });
   };
@@ -1259,12 +1287,22 @@ const MarketingMensajesModule: React.FC = () => {
 
   // Función genérica para toggle de arrays
   const toggleArrayItem = <T,>(key: keyof MensajeMarketing, item: T) => {
-    const currentArray = (formData[key] as T[]) || [];
+    const currentValue = formData[key];
+    const currentArray = Array.isArray(currentValue) ? (currentValue as T[]) : [];
+    const newArray = currentArray.includes(item)
+      ? currentArray.filter(i => i !== item)
+      : [...currentArray, item];
+    
+    console.log(`🔄 toggleArrayItem ${String(key)}:`, {
+      item,
+      currentArray,
+      newArray,
+      isIncluded: currentArray.includes(item)
+    });
+    
     setFormData({ 
       ...formData, 
-      [key]: currentArray.includes(item)
-        ? currentArray.filter(i => i !== item)
-        : [...currentArray, item]
+      [key]: newArray
     } as Partial<MensajeMarketing>);
   };
 
@@ -2094,15 +2132,19 @@ const MarketingMensajesModule: React.FC = () => {
                     <p className="text-xs text-neutral-500">No se encontraron grupos</p>
                   ) : (
                     <div className="space-y-2">
-                      {gruposFiltrados.map(grupo => (
-                        <DestinatarioCheckbox
-                          key={grupo.id}
-                          label={grupo.subject}
-                          checked={formData.grupos?.includes(grupo.id) || false}
-                          onChange={() => toggleGrupo(grupo.id)}
-                          imageUrl={grupo.pictureUrl}
-                        />
-                      ))}
+                      {gruposFiltrados.map(grupo => {
+                        const gruposArray = Array.isArray(formData.grupos) ? formData.grupos : [];
+                        const isChecked = gruposArray.includes(grupo.id);
+                        return (
+                          <DestinatarioCheckbox
+                            key={grupo.id}
+                            label={grupo.subject}
+                            checked={isChecked}
+                            onChange={() => toggleGrupo(grupo.id)}
+                            imageUrl={grupo.pictureUrl}
+                          />
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -2128,15 +2170,19 @@ const MarketingMensajesModule: React.FC = () => {
                     <p className="text-xs text-neutral-500">No se encontraron flotas</p>
                   ) : (
                     <div className="space-y-2">
-                      {flotasFiltradas.map(flota => (
-                        <DestinatarioCheckbox
-                          key={flota.id}
-                          label={flota.nombre}
-                          sublabel={flota.ubicacion}
-                          checked={formData.flotas?.includes(flota.id) || false}
-                          onChange={() => toggleFlota(flota.id)}
-                        />
-                      ))}
+                      {flotasFiltradas.map(flota => {
+                        const flotasArray = Array.isArray(formData.flotas) ? formData.flotas : [];
+                        const isChecked = flotasArray.includes(flota.id);
+                        return (
+                          <DestinatarioCheckbox
+                            key={flota.id}
+                            label={flota.nombre}
+                            sublabel={flota.ubicacion}
+                            checked={isChecked}
+                            onChange={() => toggleFlota(flota.id)}
+                          />
+                        );
+                      })}
                     </div>
                   )}
                 </div>

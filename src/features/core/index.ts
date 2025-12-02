@@ -14,6 +14,7 @@ export { default as ReportsModule } from './reports/reports.module';
 export { default as ModulesModule } from './modules/modules.module';
 export { AsistenciaModule } from './asistencia';
 export { default as YegoPremiunModule } from './yego-premiun/yego-premiun.module';
+export { default as YegoProOpsModule } from './yego-pro-ops/yego-pro-ops.module';
 export { WelcomeModule } from './welcome';
 export { MarketingMensajesModule } from './marketing-mensajes';
 
@@ -24,6 +25,6 @@ export const CORE_FEATURES_CONFIG = {
   version: '1.0.0',
   features: [
     'audit', 'configuration', 'users', 'permissions', 'roles', 
-    'sessions', 'reports', 'modules', 'asistencia', 'yego-premiun'
+    'sessions', 'reports', 'modules', 'asistencia', 'yego-premiun', 'yego-pro-ops'
   ]
 } as const;

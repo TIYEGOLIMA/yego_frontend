@@ -26,6 +26,7 @@ import { AsistenciaModule } from './features/core/asistencia'
 import { WelcomeModule } from './features/core/welcome'
 import YegoPremiunModule from './features/core/yego-premiun/yego-premiun.module'
 import { MarketingMensajesModule } from './features/core/marketing-mensajes'
+import YegoProOpsModule from './features/core/yego-pro-ops/yego-pro-ops.module'
 
 // Importar módulos de features - TICKETERA
 import TicketsModule from './features/ticketera/tickets/tickets.module'
@@ -276,6 +277,11 @@ function App() {
            <Route path="yego-premiun" element={
              <PermissionRoute module="yego-premiun">
                <YegoPremiunModule />
+             </PermissionRoute>
+           } />
+           <Route path="yego-pro-ops" element={
+             <PermissionRoute module="yego-pro-ops">
+               <YegoProOpsModule />
              </PermissionRoute>
            } />
            <Route path="mensajes-marketing" element={
