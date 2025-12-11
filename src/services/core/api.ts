@@ -16,7 +16,7 @@ export const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 15000, // 15 segundos de timeout
+  timeout: 60000, // 60 segundos de timeout (aumentado para reportes que pueden demorar)
 })
 
 // Interceptor para agregar el token de autenticación a todas las peticiones
