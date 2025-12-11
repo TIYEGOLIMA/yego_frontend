@@ -15,42 +15,26 @@ import {
   ChevronDown,
   FileSpreadsheet,
   Image,
-  Loader2
+  Loader2,
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  X
 } from 'lucide-react'
 import { reportsService, ReportData } from './services/reportsService'
 
 const Reports: React.FC = () => {
   const [reportData, setReportData] = useState<ReportData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [currentUser, setCurrentUser] = useState<any>(null)
+  const [loading, setLoading] = useState(false)
   const [showExportMenu, setShowExportMenu] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [fechaInicio, setFechaInicio] = useState<string>('')
+  const [fechaFin, setFechaFin] = useState<string>('')
+  const [datosCargados, setDatosCargados] = useState(false)
+  const [showDatePicker, setShowDatePicker] = useState(false)
+  const [currentMonth, setCurrentMonth] = useState(new Date())
+  const datePickerRef = useRef<HTMLDivElement>(null)
   const exportMenuRef = useRef<HTMLDivElement>(null)
-
-  // 🎯 CARGAR DATOS DEL USUARIO
-  useEffect(() => {
-    try {
-      const userData = localStorage.getItem('user')
-      if (userData) {
-        const user = JSON.parse(userData)
-        console.log('👤 [Reports] Usuario cargado:', user)
-        setCurrentUser({
-          id: user.id,
-          name: user.name,
-          username: user.username,
-          role: user.role,
-          moduleId: user.moduleId || null
-        })
-      }
-    } catch (error) {
-      console.error('❌ [Reports] Error cargando datos del usuario:', error)
-    }
-  }, [])
-
-  // 🎯 CARGAR DATOS DE REPORTES DE SAC (solo una vez al montar)
-  useEffect(() => {
-    loadReportData()
-  }, [])
 
   // 🎯 CERRAR MENÚ AL HACER CLIC FUERA
   useEffect(() => {
@@ -58,29 +42,160 @@ const Reports: React.FC = () => {
       if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
         setShowExportMenu(false)
       }
+      if (datePickerRef.current && !datePickerRef.current.contains(event.target as Node)) {
+        setShowDatePicker(false)
+      }
     }
 
     document.addEventListener('mousedown', manejarClicExterno)
     return () => document.removeEventListener('mousedown', manejarClicExterno)
   }, [])
 
-  // 🎯 FUNCIONES DE ACCIÓN
-  const handleRefresh = () => {
-    console.log('🔄 [Reports] Actualizando datos...')
-    // Reutilizar la misma función de carga
-    loadReportData()
+  // 🎯 FUNCIONES PARA EL CALENDARIO
+  const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+  const diasSemana = ['L', 'M', 'M', 'J', 'V', 'S', 'D']
+  
+  const obtenerDiasDelMes = (fecha: Date) => {
+    const año = fecha.getFullYear()
+    const mes = fecha.getMonth()
+    const primerDia = new Date(año, mes, 1)
+    const ultimoDia = new Date(año, mes + 1, 0)
+    const diasEnMes = ultimoDia.getDate()
+    const diaInicioSemana = (primerDia.getDay() + 6) % 7 // Ajustar para que Lunes = 0
+    
+    const dias: (number | null)[] = []
+    // Agregar días vacíos al inicio
+    for (let i = 0; i < diaInicioSemana; i++) {
+      dias.push(null)
+    }
+    // Agregar días del mes
+    for (let i = 1; i <= diasEnMes; i++) {
+      dias.push(i)
+    }
+    
+    return dias
   }
 
-  // 🎯 FUNCIÓN DE CARGA DE DATOS (reutilizable)
+  // 🎯 FUNCIÓN PARA VERIFICAR SI UNA FECHA ES FUTURA
+  const esFechaFutura = (dia: number) => {
+    const fecha = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), dia)
+    const hoy = new Date()
+    hoy.setHours(23, 59, 59, 999) // Incluir todo el día de hoy
+    return fecha > hoy
+  }
+
+  const seleccionarFecha = (dia: number) => {
+    const fechaSeleccionada = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), dia)
+    const fechaStr = fechaSeleccionada.toISOString().split('T')[0]
+    
+    // Validar que no sea una fecha futura
+    if (esFechaFutura(dia)) {
+      return // No permitir seleccionar fechas futuras
+    }
+    
+    if (!fechaInicio || (fechaInicio && fechaFin)) {
+      // Iniciar nueva selección
+      setFechaInicio(fechaStr)
+      setFechaFin('')
+    } else if (fechaStr < fechaInicio) {
+      // Si la fecha seleccionada es anterior a la de inicio, hacerla la nueva fecha de inicio
+      setFechaInicio(fechaStr)
+      setFechaFin('')
+    } else {
+      // Completar el rango
+      setFechaFin(fechaStr)
+    }
+  }
+
+  const formatearRangoFechas = () => {
+    if (!fechaInicio && !fechaFin) return 'Seleccionar rango de fechas'
+    if (!fechaFin) {
+      const fecha = new Date(fechaInicio)
+      return `${fecha.getDate()} de ${meses[fecha.getMonth()].toLowerCase()}`
+    }
+    const inicio = new Date(fechaInicio)
+    const fin = new Date(fechaFin)
+    if (inicio.getMonth() === fin.getMonth()) {
+      return `${inicio.getDate()}-${fin.getDate()} de ${meses[inicio.getMonth()].toLowerCase()}`
+    }
+    return `${inicio.getDate()} ${meses[inicio.getMonth()].toLowerCase()} - ${fin.getDate()} ${meses[fin.getMonth()].toLowerCase()}`
+  }
+
+  const esFechaEnRango = (dia: number) => {
+    if (!fechaInicio || !fechaFin) return false
+    const fecha = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), dia)
+    const inicio = new Date(fechaInicio)
+    const fin = new Date(fechaFin)
+    return fecha >= inicio && fecha <= fin
+  }
+
+  const esFechaInicio = (dia: number) => {
+    if (!fechaInicio) return false
+    const fecha = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), dia)
+    return fecha.toISOString().split('T')[0] === fechaInicio
+  }
+
+  const esFechaFin = (dia: number) => {
+    if (!fechaFin) return false
+    const fecha = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), dia)
+    return fecha.toISOString().split('T')[0] === fechaFin
+  }
+
+  const cambiarMes = (direccion: 'anterior' | 'siguiente') => {
+    setCurrentMonth(prev => {
+      const nuevoMes = new Date(prev)
+      if (direccion === 'anterior') {
+        nuevoMes.setMonth(prev.getMonth() - 1)
+      } else {
+        // Validar que no se pueda avanzar a un mes futuro
+        const mesSiguiente = new Date(prev)
+        mesSiguiente.setMonth(prev.getMonth() + 1)
+        const hoy = new Date()
+        // Si el mes siguiente es mayor que el mes actual, no permitir avanzar
+        if (mesSiguiente.getFullYear() > hoy.getFullYear() || 
+            (mesSiguiente.getFullYear() === hoy.getFullYear() && mesSiguiente.getMonth() > hoy.getMonth())) {
+          return prev // No cambiar el mes
+        }
+        nuevoMes.setMonth(prev.getMonth() + 1)
+      }
+      return nuevoMes
+    })
+  }
+
+
+  // 🎯 OBTENER FECHAS PARA USAR EN LAS PETICIONES
+  const obtenerFechasParaPeticion = () => {
+    if (fechaInicio && fechaFin) {
+      return { fechaInicio, fechaFin }
+    }
+    return {}
+  }
+
+  // 🎯 FUNCIÓN DE CARGA DE DATOS
   const loadReportData = async () => {
     try {
       setLoading(true)
-      console.log('📊 [Reports] Cargando datos de reportes de SAC...')
+      setDatosCargados(false)
+      
+      const params = obtenerFechasParaPeticion()
+      
+      // Log para indicar si se está cargando con o sin filtros
+      if (params.fechaInicio && params.fechaFin) {
+        console.log('📊 [Reports] Cargando datos de reportes de SAC con filtro de fechas:', params)
+      } else {
+        console.log('📊 [Reports] Cargando todo el historial de reportes de SAC (sin filtros de fecha)')
+      }
       
       // Obtener datos reales del backend
-      const data = await reportsService.getSACPerformanceReports()
+      const data = await reportsService.getSACPerformanceReports(params)
       setReportData(data)
-      console.log('✅ [Reports] Datos de reportes cargados:', data)
+      setDatosCargados(true)
+      
+      if (params.fechaInicio && params.fechaFin) {
+        console.log('✅ [Reports] Datos de reportes cargados con filtro:', params, data)
+      } else {
+        console.log('✅ [Reports] Todo el historial de reportes cargado:', data)
+      }
       
     } catch (error) {
       console.error('❌ [Reports] Error cargando datos de reportes:', error)
@@ -94,10 +209,69 @@ const Reports: React.FC = () => {
         topPerformers: [],
         recentRatings: []
       })
+      setDatosCargados(false)
     } finally {
       setLoading(false)
     }
   }
+
+  // 🎯 FUNCIÓN PARA CARGAR TODO EL HISTORIAL (endpoint /all)
+  const cargarHistorialCompleto = async () => {
+    try {
+      console.log('📚 [Reports] Cargando historial completo usando endpoint /all...')
+      setLoading(true)
+      setDatosCargados(false)
+      // No limpiar las fechas aquí para que el usuario pueda ver qué filtro tenía antes
+      setShowDatePicker(false)
+      
+      // Llamar al endpoint /all que devuelve todo el historial
+      const data = await reportsService.obtenerTodoElHistorial()
+      setReportData(data)
+      setDatosCargados(true)
+      // Limpiar fechas después de cargar los datos
+      setFechaInicio('')
+      setFechaFin('')
+      console.log('✅ [Reports] Historial completo cargado:', data)
+      
+    } catch (error) {
+      console.error('❌ [Reports] Error cargando historial completo:', error)
+      // En caso de error, mostrar datos vacíos
+      setReportData({
+        totalSACs: 0,
+        totalTickets: 0,
+        averageRating: 0,
+        totalRatings: 0,
+        sacPerformance: [],
+        topPerformers: [],
+        recentRatings: []
+      })
+      setDatosCargados(false)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 🎯 CARGAR HISTORIAL COMPLETO POR DEFECTO AL MONTAR EL COMPONENTE
+  useEffect(() => {
+    // Cargar todo el historial al iniciar
+    cargarHistorialCompleto()
+  }, []) // Solo se ejecuta una vez al montar el componente
+
+  // 🎯 CARGAR DATOS AUTOMÁTICAMENTE CUANDO SE COMPLETA EL RANGO
+  useEffect(() => {
+    if (fechaInicio && fechaFin) {
+      // Validar que la fecha de inicio sea anterior a la de fin
+      if (new Date(fechaInicio) > new Date(fechaFin)) {
+        return
+      }
+      // Cargar datos automáticamente cuando se seleccionan ambas fechas
+      const timer = setTimeout(() => {
+        loadReportData()
+      }, 300) // Pequeño delay para evitar múltiples llamadas
+      
+      return () => clearTimeout(timer)
+    }
+  }, [fechaInicio, fechaFin])
 
   // 🎯 FUNCIONES DE EXPORTACIÓN
   const descargarArchivo = (blob: Blob, nombreArchivo: string) => {
@@ -111,57 +285,79 @@ const Reports: React.FC = () => {
     window.URL.revokeObjectURL(url)
   }
 
-  const exportarAExcel = async () => {
+  // 🎯 FUNCIÓN HELPER PARA EXPORTAR
+  const exportarReporte = async (tipo: 'excel' | 'imagen', formato?: string) => {
     try {
       setExporting(true)
       setShowExportMenu(false)
-      console.log('📊 [Reports] Exportando a Excel...')
       
-      const blob = await reportsService.exportarAExcel()
-      const nombreArchivo = `reporte_sac_${new Date().toISOString().split('T')[0]}.xlsx`
+      // Obtener parámetros de fecha para enviar al backend
+      // Si hay fechas seleccionadas, usar esos filtros; si no, exportar todo el historial
+      const tieneFechas = fechaInicio && fechaFin
+      const params = tieneFechas ? { fechaInicio, fechaFin } : {}
+      
+      console.log(`📤 [Reports] Exportando a ${tipo}...`)
+      
+      if (tieneFechas) {
+        console.log(`📅 [Reports] Exportando con filtro de fechas: ${fechaInicio} - ${fechaFin}`)
+        console.log(`📅 [Reports] Parámetros enviados:`, params)
+      } else {
+        console.log(`📚 [Reports] Exportando todo el historial (sin filtros de fecha)`)
+      }
+      
+      let blob: Blob
+      let extension: string
+      
+      if (tipo === 'excel') {
+        // Si hay fechas, enviar con parámetros; si no, el backend debe manejar sin parámetros
+        blob = await reportsService.exportarAExcel(tieneFechas ? params : undefined)
+        extension = 'xlsx'
+      } else {
+        blob = await reportsService.exportarAImagen(formato || 'png', tieneFechas ? params : undefined)
+        extension = formato || 'png'
+      }
+      
+      const dateRange = tieneFechas
+        ? `${fechaInicio}_${fechaFin}`
+        : 'historial_completo'
+      const nombreArchivo = `reporte_sac_${dateRange}.${extension}`
       
       descargarArchivo(blob, nombreArchivo)
-      console.log('✅ [Reports] Exportación a Excel completada')
+      
+      if (tieneFechas) {
+        console.log(`✅ [Reports] Exportación a ${tipo} completada con filtro de fechas:`, params)
+      } else {
+        console.log(`✅ [Reports] Exportación a ${tipo} completada (historial completo)`)
+      }
     } catch (error) {
-      console.error('❌ [Reports] Error exportando a Excel:', error)
-      alert('Error al exportar a Excel. Por favor, intente nuevamente.')
+      console.error(`❌ [Reports] Error exportando a ${tipo}:`, error)
+      alert(`Error al exportar a ${tipo === 'excel' ? 'Excel' : formato}. Por favor, intente nuevamente.`)
     } finally {
       setExporting(false)
     }
   }
 
-  const exportarAImagen = async (formato: string) => {
-    try {
-      setExporting(true)
-      setShowExportMenu(false)
-      console.log('📊 [Reports] Exportando a imagen:', formato)
-      
-      const blob = await reportsService.exportarAImagen(formato)
-      const nombreArchivo = `reporte_sac_${new Date().toISOString().split('T')[0]}.${formato}`
-      
-      descargarArchivo(blob, nombreArchivo)
-      console.log('✅ [Reports] Exportación a imagen completada')
-    } catch (error) {
-      console.error('❌ [Reports] Error exportando a imagen:', error)
-      alert('Error al exportar a imagen. Por favor, intente nuevamente.')
-    } finally {
-      setExporting(false)
-    }
-  }
+  const exportarAExcel = () => exportarReporte('excel')
+  const exportarAImagen = (formato: string) => exportarReporte('imagen', formato)
 
   const toggleExportMenu = () => {
     setShowExportMenu(!showExportMenu)
   }
 
-  // 🎯 RENDERIZADO DE LOADING
+  // 🎯 RENDERIZADO DE LOADING (solo cuando está cargando datos)
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-white dark:from-slate-900 dark:to-slate-800 p-6">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-center h-96">
             <div className="text-center">
-              <RefreshCw className="w-8 h-8 animate-spin text-blue-600 dark:text-blue-400 mx-auto mb-4" />
-              <p className="text-lg text-slate-600 dark:text-slate-400">Cargando reportes de SAC...</p>
+              <RefreshCw className="w-8 h-8 animate-spin text-slate-600 dark:text-slate-400 mx-auto mb-4" />
+              <p className="text-lg text-slate-600 dark:text-slate-400">Procesando datos de reportes...</p>
+              {fechaInicio && fechaFin && (
+                <p className="text-sm text-slate-500 dark:text-slate-500 mt-2">
+                  Rango: {new Date(fechaInicio).toLocaleDateString()} - {new Date(fechaFin).toLocaleDateString()}
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -185,22 +381,119 @@ const Reports: React.FC = () => {
               </p>
             </div>
             <div className="flex items-center space-x-4">
-              <Button
-                onClick={handleRefresh}
-                disabled={loading}
-                className="bg-blue-600 hover:bg-blue-700 text-white dark:bg-blue-500 dark:hover:bg-blue-600"
-              >
-                <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                Actualizar
-              </Button>
+              {/* Date Picker */}
+              <div className="relative flex items-center gap-2" ref={datePickerRef}>
+                <button
+                  type="button"
+                  onClick={() => setShowDatePicker(!showDatePicker)}
+                  className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-900 dark:focus:ring-slate-100 focus:border-transparent flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-sm"
+                >
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+                    <span className={fechaInicio && fechaFin ? 'text-slate-900 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400'}>
+                      {formatearRangoFechas()}
+                    </span>
+                  </div>
+                  <ChevronDown className={`w-4 h-4 text-slate-500 dark:text-slate-400 transition-transform ml-2 ${showDatePicker ? 'rotate-180' : ''}`} />
+                </button>
+                
+                {/* Botón de Histórico */}
+                {(fechaInicio || fechaFin) && (
+                  <button
+                    type="button"
+                    onClick={cargarHistorialCompleto}
+                    className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-100 transition-colors text-sm font-medium flex items-center gap-2"
+                    title="Cargar todo el historial sin filtros"
+                  >
+                    <X className="w-4 h-4" />
+                    Histórico
+                  </button>
+                )}
+                
+                {/* Calendario desplegable */}
+                {showDatePicker && (
+                  <div className="absolute top-full right-0 mt-2 w-80 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-slate-200 dark:border-slate-700 p-5 z-50">
+                    {/* Header del calendario */}
+                    <div className="flex items-center justify-between mb-4">
+                      <button
+                        onClick={() => cambiarMes('anterior')}
+                        className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"
+                      >
+                        <ChevronLeft className="w-5 h-5 text-slate-600 dark:text-slate-400" />
+                      </button>
+                      <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                        {meses[currentMonth.getMonth()]} {currentMonth.getFullYear()}
+                      </h3>
+                      <button
+                        onClick={() => cambiarMes('siguiente')}
+                        disabled={(() => {
+                          const mesSiguiente = new Date(currentMonth)
+                          mesSiguiente.setMonth(currentMonth.getMonth() + 1)
+                          const hoy = new Date()
+                          return mesSiguiente.getFullYear() > hoy.getFullYear() || 
+                                 (mesSiguiente.getFullYear() === hoy.getFullYear() && mesSiguiente.getMonth() > hoy.getMonth())
+                        })()}
+                        className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                      >
+                        <ChevronRight className="w-5 h-5 text-slate-600 dark:text-slate-400" />
+                      </button>
+                    </div>
+                    
+                    {/* Días de la semana */}
+                    <div className="grid grid-cols-7 gap-2 mb-3">
+                      {diasSemana.map((dia, index) => (
+                        <div key={index} className="text-center text-sm font-medium text-slate-600 dark:text-slate-400 py-2">
+                          {dia}
+                        </div>
+                      ))}
+                    </div>
+                    
+                    {/* Días del mes */}
+                    <div className="grid grid-cols-7 gap-2">
+                      {obtenerDiasDelMes(currentMonth).map((dia, index) => {
+                        if (dia === null) {
+                          return <div key={index} className="py-2"></div>
+                        }
+                        const esFutura = esFechaFutura(dia)
+                        const estaEnRango = esFechaEnRango(dia)
+                        const esInicio = esFechaInicio(dia)
+                        const esFin = esFechaFin(dia)
+                        
+                        return (
+                          <button
+                            key={index}
+                            onClick={() => seleccionarFecha(dia)}
+                            disabled={esFutura}
+                            className={`py-2.5 rounded text-sm transition-colors ${
+                              esFutura
+                                ? 'opacity-30 cursor-not-allowed text-slate-400 dark:text-slate-600'
+                                : esInicio || esFin
+                                ? 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-semibold'
+                                : estaEnRango
+                                ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-slate-100'
+                                : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                            }`}
+                            title={esFutura ? 'No se pueden seleccionar fechas futuras' : ''}
+                          >
+                            {dia}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
               
               {/* Botón de exportar con menú desplegable */}
               <div className="relative" ref={exportMenuRef}>
                 <Button
                   onClick={toggleExportMenu}
-                  disabled={exporting}
+                  disabled={exporting || !datosCargados}
                   variant="ghost"
-                  className="border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center"
+                  className={`border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center ${
+                    !datosCargados ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                  title={!datosCargados ? 'Esperando a que se carguen los datos' : (fechaInicio && fechaFin) ? 'Exportar reporte filtrado' : 'Exportar historial completo'}
                 >
                   {exporting ? (
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -225,14 +518,14 @@ const Reports: React.FC = () => {
                       onClick={() => exportarAImagen('png')}
                       className="w-full px-4 py-2 text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center"
                     >
-                      <Image className="w-4 h-4 mr-3 text-blue-600 dark:text-blue-400" />
+                      <Image className="w-4 h-4 mr-3 text-slate-600 dark:text-slate-400" />
                       Exportar como PNG
                     </button>
                     <button
                       onClick={() => exportarAImagen('jpg')}
                       className="w-full px-4 py-2 text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center"
                     >
-                      <Image className="w-4 h-4 mr-3 text-blue-600 dark:text-blue-400" />
+                      <Image className="w-4 h-4 mr-3 text-slate-600 dark:text-slate-400" />
                       Exportar como JPG
                     </button>
                   </div>
@@ -242,56 +535,33 @@ const Reports: React.FC = () => {
           </div>
         </div>
 
-        {/* MÉTRICAS PRINCIPALES */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-slate-800 dark:to-slate-700 border-blue-200 dark:border-slate-600">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-blue-600 dark:text-slate-400">Total SAC</p>
-                  <p className="text-3xl font-bold text-blue-900 dark:text-slate-200">{reportData?.totalSACs || 0}</p>
-                </div>
-                <Users className="w-8 h-8 text-blue-600 dark:text-blue-400" />
-              </div>
-            </CardContent>
-          </Card>
 
-          <Card className="bg-gradient-to-br from-green-50 to-green-100 dark:from-slate-800 dark:to-slate-700 border-green-200 dark:border-slate-600">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-green-600 dark:text-slate-400">Total Tickets</p>
-                  <p className="text-3xl font-bold text-green-900 dark:text-slate-200">{reportData?.totalTickets || 0}</p>
-                </div>
-                <BarChart3 className="w-8 h-8 text-green-600 dark:text-green-400" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-br from-yellow-50 to-yellow-100 dark:from-slate-800 dark:to-slate-700 border-yellow-200 dark:border-slate-600">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-yellow-600 dark:text-slate-400">Calificación Promedio</p>
-                  <p className="text-3xl font-bold text-yellow-900 dark:text-slate-200">{reportData?.averageRating || 0}/5</p>
-                </div>
-                <Star className="w-8 h-8 text-yellow-600 dark:text-yellow-400" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-slate-800 dark:to-slate-700 border-purple-200 dark:border-slate-600">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-purple-600 dark:text-slate-400">Total Valoraciones</p>
-                  <p className="text-3xl font-bold text-purple-900 dark:text-slate-200">{reportData?.totalRatings || 0}</p>
-                </div>
-                <ThumbsUp className="w-8 h-8 text-purple-600 dark:text-purple-400" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        {/* MÉTRICAS PRINCIPALES - Solo mostrar si hay datos cargados */}
+        {datosCargados && reportData ? (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+              {[
+                { label: 'Total SAC', value: reportData?.totalSACs || 0, icon: Users },
+                { label: 'Total Tickets', value: reportData?.totalTickets || 0, icon: BarChart3 },
+                { label: 'Calificación Promedio', value: `${reportData?.averageRating || 0}/5`, icon: Star },
+                { label: 'Total Valoraciones', value: reportData?.totalRatings || 0, icon: ThumbsUp }
+              ].map((metric, index) => {
+                const IconComponent = metric.icon
+                return (
+                  <Card key={index} className="bg-slate-800 dark:bg-slate-800 border-slate-700 dark:border-slate-700">
+                    <CardContent className="p-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-slate-400">{metric.label}</p>
+                          <p className="text-3xl font-bold text-slate-100">{metric.value}</p>
+                        </div>
+                        <IconComponent className="w-8 h-8 text-slate-400" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </div>
 
         {/* TOP 3 MEJORES SAC */}
         <Card className="mb-8 dark:bg-slate-800 dark:border-slate-700">
@@ -367,7 +637,7 @@ const Reports: React.FC = () => {
                     <tr key={sac.id} className="border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50">
                       <td className="py-4 px-4">
                         <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
+                          <div className="w-10 h-10 bg-gradient-to-br from-slate-500 to-slate-600 rounded-full flex items-center justify-center">
                             <span className="text-white font-semibold text-sm">
                               {sac.name.charAt(0)}
                             </span>
@@ -457,6 +727,20 @@ const Reports: React.FC = () => {
             </div>
           </CardContent>
         </Card>
+          </>
+        ) : (
+          <Card className="mb-8 dark:bg-slate-800 dark:border-slate-700">
+            <CardContent className="p-12 text-center">
+              <Calendar className="w-16 h-16 text-slate-400 dark:text-slate-600 mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-100 mb-2">
+                No hay datos cargados
+              </h3>
+              <p className="text-slate-600 dark:text-slate-400">
+                Selecciona un rango de fechas para ver los reportes
+              </p>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   )
