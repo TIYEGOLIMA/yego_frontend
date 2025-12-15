@@ -35,6 +35,7 @@ const Reports: React.FC = () => {
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const datePickerRef = useRef<HTMLDivElement>(null)
   const exportMenuRef = useRef<HTMLDivElement>(null)
+  const hasLoadedRef = useRef(false)
 
   // 🎯 CERRAR MENÚ AL HACER CLIC FUERA
   useEffect(() => {
@@ -54,6 +55,20 @@ const Reports: React.FC = () => {
   // 🎯 FUNCIONES PARA EL CALENDARIO
   const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
   const diasSemana = ['L', 'M', 'M', 'J', 'V', 'S', 'D']
+  
+  // Función para formatear fecha sin conversión UTC (mantiene fecha local)
+  const formatearFechaLocal = (fecha: Date): string => {
+    const año = fecha.getFullYear()
+    const mes = String(fecha.getMonth() + 1).padStart(2, '0')
+    const dia = String(fecha.getDate()).padStart(2, '0')
+    return `${año}-${mes}-${dia}`
+  }
+
+  // Función para parsear fecha YYYY-MM-DD como fecha local (sin conversión UTC)
+  const parsearFechaLocal = (fechaStr: string): Date => {
+    const [año, mes, dia] = fechaStr.split('-').map(Number)
+    return new Date(año, mes - 1, dia)
+  }
   
   const obtenerDiasDelMes = (fecha: Date) => {
     const año = fecha.getFullYear()
@@ -86,7 +101,7 @@ const Reports: React.FC = () => {
 
   const seleccionarFecha = (dia: number) => {
     const fechaSeleccionada = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), dia)
-    const fechaStr = fechaSeleccionada.toISOString().split('T')[0]
+    const fechaStr = formatearFechaLocal(fechaSeleccionada)
     
     // Validar que no sea una fecha futura
     if (esFechaFutura(dia)) {
@@ -110,11 +125,11 @@ const Reports: React.FC = () => {
   const formatearRangoFechas = () => {
     if (!fechaInicio && !fechaFin) return 'Seleccionar rango de fechas'
     if (!fechaFin) {
-      const fecha = new Date(fechaInicio)
+      const fecha = parsearFechaLocal(fechaInicio)
       return `${fecha.getDate()} de ${meses[fecha.getMonth()].toLowerCase()}`
     }
-    const inicio = new Date(fechaInicio)
-    const fin = new Date(fechaFin)
+    const inicio = parsearFechaLocal(fechaInicio)
+    const fin = parsearFechaLocal(fechaFin)
     if (inicio.getMonth() === fin.getMonth()) {
       return `${inicio.getDate()}-${fin.getDate()} de ${meses[inicio.getMonth()].toLowerCase()}`
     }
@@ -124,21 +139,22 @@ const Reports: React.FC = () => {
   const esFechaEnRango = (dia: number) => {
     if (!fechaInicio || !fechaFin) return false
     const fecha = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), dia)
-    const inicio = new Date(fechaInicio)
-    const fin = new Date(fechaFin)
-    return fecha >= inicio && fecha <= fin
+    const fechaStr = formatearFechaLocal(fecha)
+    return fechaStr >= fechaInicio && fechaStr <= fechaFin
   }
 
   const esFechaInicio = (dia: number) => {
     if (!fechaInicio) return false
     const fecha = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), dia)
-    return fecha.toISOString().split('T')[0] === fechaInicio
+    const fechaStr = formatearFechaLocal(fecha)
+    return fechaStr === fechaInicio
   }
 
   const esFechaFin = (dia: number) => {
     if (!fechaFin) return false
     const fecha = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), dia)
-    return fecha.toISOString().split('T')[0] === fechaFin
+    const fechaStr = formatearFechaLocal(fecha)
+    return fechaStr === fechaFin
   }
 
   const cambiarMes = (direccion: 'anterior' | 'siguiente') => {
@@ -253,6 +269,10 @@ const Reports: React.FC = () => {
 
   // 🎯 CARGAR HISTORIAL COMPLETO POR DEFECTO AL MONTAR EL COMPONENTE
   useEffect(() => {
+    // Evitar llamadas duplicadas (especialmente en React StrictMode)
+    if (hasLoadedRef.current) return
+    hasLoadedRef.current = true
+    
     // Cargar todo el historial al iniciar
     cargarHistorialCompleto()
   }, []) // Solo se ejecuta una vez al montar el componente
@@ -355,7 +375,7 @@ const Reports: React.FC = () => {
               <p className="text-lg text-slate-600 dark:text-slate-400">Procesando datos de reportes...</p>
               {fechaInicio && fechaFin && (
                 <p className="text-sm text-slate-500 dark:text-slate-500 mt-2">
-                  Rango: {new Date(fechaInicio).toLocaleDateString()} - {new Date(fechaFin).toLocaleDateString()}
+                  Rango: {parsearFechaLocal(fechaInicio).toLocaleDateString()} - {parsearFechaLocal(fechaFin).toLocaleDateString()}
                 </p>
               )}
             </div>
@@ -548,14 +568,14 @@ const Reports: React.FC = () => {
               ].map((metric, index) => {
                 const IconComponent = metric.icon
                 return (
-                  <Card key={index} className="bg-slate-800 dark:bg-slate-800 border-slate-700 dark:border-slate-700">
+                  <Card key={index} className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
                     <CardContent className="p-6">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm font-medium text-slate-400">{metric.label}</p>
-                          <p className="text-3xl font-bold text-slate-100">{metric.value}</p>
+                          <p className="text-sm font-medium text-slate-600 dark:text-slate-400">{metric.label}</p>
+                          <p className="text-3xl font-bold text-slate-900 dark:text-slate-100">{metric.value}</p>
                         </div>
-                        <IconComponent className="w-8 h-8 text-slate-400" />
+                        <IconComponent className="w-8 h-8 text-slate-600 dark:text-slate-400" />
                       </div>
                     </CardContent>
                   </Card>
@@ -564,7 +584,7 @@ const Reports: React.FC = () => {
             </div>
 
         {/* TOP 3 MEJORES SAC */}
-        <Card className="mb-8 dark:bg-slate-800 dark:border-slate-700">
+        <Card className="mb-8 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
           <CardHeader>
             <CardTitle className="flex items-center space-x-2 text-slate-900 dark:text-slate-100">
               <Award className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
@@ -600,7 +620,7 @@ const Reports: React.FC = () => {
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-slate-600 dark:text-slate-400">Satisfacción</span>
+                      <span className="text-sm text-slate-600 dark:text-slate-400">Rendimiento</span>
                       <span className="font-semibold text-green-600 dark:text-green-400">{sac.satisfactionPercentage}%</span>
                     </div>
                   </div>
@@ -611,7 +631,7 @@ const Reports: React.FC = () => {
         </Card>
 
         {/* TABLA DE DESEMPEÑO DETALLADO */}
-        <Card className="mb-8 dark:bg-slate-800 dark:border-slate-700">
+        <Card className="mb-8 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
           <CardHeader>
             <CardTitle className="flex items-center space-x-2 text-slate-900 dark:text-slate-100">
               <Target className="w-6 h-6 text-red-600 dark:text-red-400" />
@@ -679,7 +699,7 @@ const Reports: React.FC = () => {
         </Card>
 
         {/* VALORACIONES RECIENTES */}
-        <Card className="dark:bg-slate-800 dark:border-slate-700">
+        <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
           <CardHeader>
             <CardTitle className="flex items-center space-x-2 text-slate-900 dark:text-slate-100">
               <MessageSquare className="w-6 h-6 text-green-600 dark:text-green-400" />
@@ -729,7 +749,7 @@ const Reports: React.FC = () => {
         </Card>
           </>
         ) : (
-          <Card className="mb-8 dark:bg-slate-800 dark:border-slate-700">
+          <Card className="mb-8 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
             <CardContent className="p-12 text-center">
               <Calendar className="w-16 h-16 text-slate-400 dark:text-slate-600 mx-auto mb-4" />
               <h3 className="text-xl font-semibold text-slate-900 dark:text-slate-100 mb-2">
