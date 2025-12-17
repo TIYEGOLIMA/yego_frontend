@@ -10,7 +10,6 @@ export interface SACPerformance {
   totalRatings: number;
   satisfactionPercentage: number;
   averageResponseTime: string;
-  lastActivity: string;
   ratings: Array<{
     id: number;
     score: number;
@@ -54,9 +53,7 @@ export const reportsService = {
   // Obtener todas las estadísticas sin filtro (histórico completo)
   async obtenerTodoElHistorial(): Promise<ReportData> {
     try {
-      console.log('📊 [reportsService] Obteniendo TODO el historial de reportes de SAC (endpoint /all)...');
       const response = await api.get('/ticketera/sac-stats/all');
-      console.log('✅ [reportsService] Todo el historial obtenido:', response.data);
       return response.data;
     } catch (error) {
       console.error('❌ [reportsService] Error obteniendo todo el historial:', error);
@@ -81,11 +78,11 @@ export const reportsService = {
         return response.data;
       } else {
         console.log('📊 [reportsService] Exportando todo el historial a Excel (sin filtros)');
-        const response = await api.get('/ticketera/sac-stats/export/excel', {
-          responseType: 'blob'
-        });
+      const response = await api.get('/ticketera/sac-stats/export/excel', {
+        responseType: 'blob'
+      });
         console.log('✅ [reportsService] Historial completo exportado a Excel');
-        return response.data;
+      return response.data;
       }
     } catch (error) {
       console.error('❌ [reportsService] Error exportando a Excel:', error);
@@ -110,11 +107,11 @@ export const reportsService = {
         return response.data;
       } else {
         console.log('📊 [reportsService] Exportando todo el historial a imagen (sin filtros):', formato);
-        const response = await api.get(`/ticketera/sac-stats/export/image/${formato}`, {
-          responseType: 'blob'
-        });
+      const response = await api.get(`/ticketera/sac-stats/export/image/${formato}`, {
+        responseType: 'blob'
+      });
         console.log('✅ [reportsService] Historial completo exportado a imagen');
-        return response.data;
+      return response.data;
       }
     } catch (error) {
       console.error('❌ [reportsService] Error exportando a imagen:', error);

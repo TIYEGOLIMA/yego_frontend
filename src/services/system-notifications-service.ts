@@ -44,7 +44,11 @@ class SystemNotificationsService {
 
       // Usar variable de entorno para la URL del WebSocket
       const wsUrl = import.meta.env.VITE_SYSTEM_WS_URL || import.meta.env.VITE_STOMP_URL || 'http://localhost:3030/ws'
-      const socket = new SockJS(wsUrl)
+      // Deshabilitar transporte iframe para evitar errores con X-Frame-Options
+      // SockJS intentará usar solo estos transportes en orden
+      const socket = new SockJS(wsUrl, undefined, {
+        transports: ['websocket', 'xhr-streaming', 'xhr-polling']
+      })
       this.client = new Client({
         webSocketFactory: () => socket,
         connectHeaders: {
@@ -62,10 +66,20 @@ class SystemNotificationsService {
             }
           }, 100)
         },
-        onStompError: () => {
+        onStompError: (frame) => {
+          // Ignorar errores de iframe silenciosamente
+          const errorMessage = frame?.headers?.message || '';
+          if (!errorMessage.includes('iframe') && !errorMessage.includes('X-Frame-Options')) {
+            console.error('❌ [SystemNotifications] Error STOMP:', frame);
+          }
           this.handleReconnect()
         },
-        onWebSocketError: () => {
+        onWebSocketError: (error) => {
+          // Ignorar errores de iframe silenciosamente
+          const errorMessage = error?.message || error?.toString() || '';
+          if (!errorMessage.includes('iframe') && !errorMessage.includes('X-Frame-Options')) {
+            console.error('❌ [SystemNotifications] Error WebSocket:', error);
+          }
           this.handleReconnect()
         },
         onDisconnect: () => {

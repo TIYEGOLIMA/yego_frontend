@@ -14,19 +14,15 @@ export const useAutoLogout = () => {
 
     // Estos usuarios deben mantenerse logueados hasta que presionen logout manualmente
     if (user.role === 'TABLET1' || user.role === 'TABLET2' || user.role === 'SAC' || user.role === 'TV' || user.role === 'PRINCIPAL') {
-      console.log('📱 [useAutoLogout] Rol', user.role, '- Auto-logout deshabilitado')
       return
     }
 
-    console.log('🔄 [useAutoLogout] Configurando logout automático para rol:', user.role)
-
     // 🚫 NO configurar ningún evento de auto-logout
     // El usuario debe hacer logout manualmente
-    console.log('✅ [useAutoLogout] Auto-logout configurado pero sin eventos activos')
 
     // Cleanup function (vacía por ahora)
     return () => {
-      console.log('🧹 [useAutoLogout] Limpiando...')
+      // Cleanup
     }
   }, [user, token, logout])
 

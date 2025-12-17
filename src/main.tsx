@@ -3,12 +3,7 @@ import ReactDOM from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 
-// Mostrar información de entorno en desarrollo
-if (import.meta.env.DEV) {
-  console.log('🚀 Iniciando aplicación en modo desarrollo');
-  console.log('📡 API URL:', import.meta.env.VITE_API_URL);
-  console.log('🔌 Socket URL:', import.meta.env.VITE_SOCKET_URL);
-}
+// Información de entorno disponible en import.meta.env
 
 // Aplicar tema inmediatamente antes de que React se monte
 (function() {

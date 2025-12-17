@@ -353,8 +353,4 @@ export const ticketService = {
 if (typeof window !== 'undefined') {
   window.debugTickets = () => ticketService.debugPreAsignaciones()
   window.resetPreAssignments = () => ticketService.reiniciarPreAsignaciones()
-  
-  console.log('🔧 [ticketService] Funciones de debug disponibles:')
-  console.log('  - window.debugTickets() - Ver estado del sistema')
-  console.log('  - window.resetPreAssignments() - Reiniciar pre-asignaciones')
 }

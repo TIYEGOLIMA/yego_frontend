@@ -14,8 +14,6 @@ export const useFullscreen = () => {
     const needsFullscreen = shouldUseFullscreen(user.role)
     
     if (needsFullscreen) {
-      console.log(`🖥️ [useFullscreen] Activando pantalla completa para rol: ${user.role}`)
-      
       // Intentar entrar en pantalla completa
       const enterFullscreen = async () => {
         try {
@@ -28,10 +26,8 @@ export const useFullscreen = () => {
           } else if ((document.documentElement as any).msRequestFullscreen) {
             await (document.documentElement as any).msRequestFullscreen()
           }
-          
-          console.log('✅ [useFullscreen] Pantalla completa activada')
         } catch (error) {
-          console.warn('⚠️ [useFullscreen] No se pudo activar pantalla completa:', error)
+          // Silencioso - no es crítico
         }
       }
 
@@ -39,8 +35,6 @@ export const useFullscreen = () => {
       const timer = setTimeout(enterFullscreen, 500)
       
       return () => clearTimeout(timer)
-    } else {
-      console.log(`🖥️ [useFullscreen] Rol ${user.role} no requiere pantalla completa`)
     }
   }, [user?.role])
 

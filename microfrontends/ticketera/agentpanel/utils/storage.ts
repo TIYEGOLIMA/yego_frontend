@@ -48,7 +48,6 @@ class SafeStorage implements StorageService {
         localStorage.setItem(testKey, 'test')
         localStorage.removeItem(testKey)
         this.localStorage = localStorage
-        console.log('✅ [SafeStorage] localStorage disponible')
       } else {
         console.warn('⚠️ [SafeStorage] localStorage no disponible, usando fallback en memoria')
       }
@@ -132,8 +131,6 @@ export const safeClear = (): void => safeStorage.clear()
 
 // 🔍 FUNCIÓN DE DEBUG GLOBAL
 export const debugStorage = () => {
-  console.log('🔍 [SafeStorage] Estado del almacenamiento:', safeStorage.getStatus())
-  
   // Exponer funciones de debug globalmente
   if (typeof window !== 'undefined') {
     (window as any).debugStorage = debugStorage

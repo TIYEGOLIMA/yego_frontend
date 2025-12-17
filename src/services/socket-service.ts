@@ -111,11 +111,12 @@ class SocketService {
     }
     
     if (!this.stompClient) {
-      console.log('🚀 [SocketService] Iniciando conexión STOMP/SockJS...');
-      console.log('🌐 [SocketService] URL del servidor:', SOCKET_URL);
-      
       // Crear cliente STOMP con SockJS
-      const socket = new SockJS(`${SOCKET_URL}/ws`);
+      // Deshabilitar transporte iframe para evitar errores con X-Frame-Options
+      // SockJS intentará usar solo estos transportes en orden
+      const socket = new SockJS(`${SOCKET_URL}/ws`, undefined, {
+        transports: ['websocket', 'xhr-streaming', 'xhr-polling']
+      });
       this.stompClient = new Client({
         webSocketFactory: () => socket,
         connectHeaders: {
@@ -138,33 +139,48 @@ class SocketService {
           // Suscribirse a eventos de Garantizado
           this.subscribeToGarantizadoEvents();
           
+          // Suscribirse a eventos de Pro-Ops
+          this.subscribeToProOpsEvents();
+          
           // Suscribirse a eventos específicos del usuario
           this.subscribeToUserEvents();
         },
         onStompError: (frame) => {
+          // Solo loggear errores críticos, ignorar errores de iframe
+          if (frame.headers && frame.headers['message'] && !frame.headers['message'].includes('iframe')) {
           console.error('❌ [SocketService] Error STOMP:', frame);
+          }
           this.updateStatus('error');
+          // Solo reconectar si no hemos excedido el máximo de intentos
+          if (this.reconnectAttempts < this.maxReconnectAttempts) {
           this.startReconnect();
+          }
         },
         onWebSocketError: (error) => {
+          // Ignorar errores de iframe silenciosamente
+          const errorMessage = error?.message || error?.toString() || '';
+          if (!errorMessage.includes('iframe') && !errorMessage.includes('X-Frame-Options')) {
           console.error('❌ [SocketService] Error WebSocket:', error);
+          }
           this.updateStatus('error');
+          // Solo reconectar si no hemos excedido el máximo de intentos
+          if (this.reconnectAttempts < this.maxReconnectAttempts) {
           this.startReconnect();
+          }
         },
         onDisconnect: () => {
           console.log('🔌 [SocketService] Desconectado');
           this.updateStatus('disconnected');
+          // Solo reconectar si no hemos excedido el máximo de intentos
+          if (this.reconnectAttempts < this.maxReconnectAttempts) {
           this.startReconnect();
+          }
         }
       });
-      
-      console.log('🔑 [SocketService] Token encontrado:', token.substring(0, 20) + '...');
-      console.log('🔑 [SocketService] Conectando con autenticación JWT...');
       
       // Activar el cliente STOMP
       this.stompClient.activate();
     } else {
-      console.log('🔄 [SocketService] Cliente STOMP ya existe, reconectando...');
       this.stompClient.activate();
     }
   }
@@ -441,6 +457,31 @@ class SocketService {
     });
 
     console.log('✅ [SocketService] Suscrito a todos los topics de garantizado');
+  }
+
+  /**
+   * Suscribirse a eventos de Pro-Ops (KPIs)
+   */
+  private subscribeToProOpsEvents() {
+    if (!this.stompClient || !this.stompClient.connected) {
+      console.log('⚠️ [SocketService] Cliente STOMP no conectado, no se pueden suscribir eventos de pro-ops');
+      return;
+    }
+
+    // 🎯 SUSCRIBIRSE AL TOPIC PRINCIPAL: /topic/pro-ops/kpis
+    this.stompClient.subscribe('/topic/pro-ops/kpis', (message: IMessage) => {
+      try {
+        const kpis = JSON.parse(message.body);
+        console.log('📊 [SocketService] KPIs de Pro-Ops recibidos:', kpis);
+        
+        // Emitir evento genérico de pro-ops
+        this.emit('pro-ops-kpis', kpis);
+      } catch (error) {
+        console.error('❌ [SocketService] Error procesando KPIs de Pro-Ops:', error);
+      }
+    });
+
+    console.log('✅ [SocketService] Suscrito a todos los topics de Pro-Ops');
   }
 
   /**

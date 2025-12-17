@@ -2136,13 +2136,13 @@ const MarketingMensajesModule: React.FC = () => {
                         const gruposArray = Array.isArray(formData.grupos) ? formData.grupos : [];
                         const isChecked = gruposArray.includes(grupo.id);
                         return (
-                          <DestinatarioCheckbox
-                            key={grupo.id}
-                            label={grupo.subject}
+                        <DestinatarioCheckbox
+                          key={grupo.id}
+                          label={grupo.subject}
                             checked={isChecked}
-                            onChange={() => toggleGrupo(grupo.id)}
-                            imageUrl={grupo.pictureUrl}
-                          />
+                          onChange={() => toggleGrupo(grupo.id)}
+                          imageUrl={grupo.pictureUrl}
+                        />
                         );
                       })}
                     </div>
@@ -2174,13 +2174,13 @@ const MarketingMensajesModule: React.FC = () => {
                         const flotasArray = Array.isArray(formData.flotas) ? formData.flotas : [];
                         const isChecked = flotasArray.includes(flota.id);
                         return (
-                          <DestinatarioCheckbox
-                            key={flota.id}
-                            label={flota.nombre}
-                            sublabel={flota.ubicacion}
+                        <DestinatarioCheckbox
+                          key={flota.id}
+                          label={flota.nombre}
+                          sublabel={flota.ubicacion}
                             checked={isChecked}
-                            onChange={() => toggleFlota(flota.id)}
-                          />
+                          onChange={() => toggleFlota(flota.id)}
+                        />
                         );
                       })}
                     </div>

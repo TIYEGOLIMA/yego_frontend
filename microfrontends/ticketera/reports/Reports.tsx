@@ -234,7 +234,6 @@ const Reports: React.FC = () => {
   // 🎯 FUNCIÓN PARA CARGAR TODO EL HISTORIAL (endpoint /all)
   const cargarHistorialCompleto = async () => {
     try {
-      console.log('📚 [Reports] Cargando historial completo usando endpoint /all...')
       setLoading(true)
       setDatosCargados(false)
       // No limpiar las fechas aquí para que el usuario pueda ver qué filtro tenía antes
@@ -323,7 +322,7 @@ const Reports: React.FC = () => {
         console.log(`📅 [Reports] Parámetros enviados:`, params)
       } else {
         console.log(`📚 [Reports] Exportando todo el historial (sin filtros de fecha)`)
-      }
+    }
       
       let blob: Blob
       let extension: string
@@ -559,7 +558,7 @@ const Reports: React.FC = () => {
         {/* MÉTRICAS PRINCIPALES - Solo mostrar si hay datos cargados */}
         {datosCargados && reportData ? (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
               {[
                 { label: 'Total SAC', value: reportData?.totalSACs || 0, icon: Users },
                 { label: 'Total Tickets', value: reportData?.totalTickets || 0, icon: BarChart3 },
@@ -569,19 +568,19 @@ const Reports: React.FC = () => {
                 const IconComponent = metric.icon
                 return (
                   <Card key={index} className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                    <CardContent className="p-6">
-                      <div className="flex items-center justify-between">
-                        <div>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
                           <p className="text-sm font-medium text-slate-600 dark:text-slate-400">{metric.label}</p>
                           <p className="text-3xl font-bold text-slate-900 dark:text-slate-100">{metric.value}</p>
-                        </div>
+                </div>
                         <IconComponent className="w-8 h-8 text-slate-600 dark:text-slate-400" />
-                      </div>
-                    </CardContent>
-                  </Card>
+              </div>
+            </CardContent>
+          </Card>
                 )
               })}
-            </div>
+        </div>
 
         {/* TOP 3 MEJORES SAC */}
         <Card className="mb-8 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
@@ -649,7 +648,6 @@ const Reports: React.FC = () => {
                     <th className="text-center py-3 px-4 font-semibold text-slate-900 dark:text-slate-100">Calificación</th>
                     <th className="text-center py-3 px-4 font-semibold text-slate-900 dark:text-slate-100">Satisfacción</th>
                     <th className="text-center py-3 px-4 font-semibold text-slate-900 dark:text-slate-100">Tiempo Respuesta</th>
-                    <th className="text-center py-3 px-4 font-semibold text-slate-900 dark:text-slate-100">Última Actividad</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -686,9 +684,6 @@ const Reports: React.FC = () => {
                       </td>
                       <td className="text-center py-4 px-4">
                         <span className="text-sm text-slate-600 dark:text-slate-400">{sac.averageResponseTime}</span>
-                      </td>
-                      <td className="text-center py-4 px-4">
-                        <span className="text-sm text-slate-600 dark:text-slate-400">{sac.lastActivity}</span>
                       </td>
                     </tr>
                   ))}
