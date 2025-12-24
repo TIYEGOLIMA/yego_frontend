@@ -104,9 +104,30 @@ const processDriverActiveStats = async () => {
     : []
 }
 
+const processDriverActiveStatsByMonth = async (month: number, year: number) => {
+  // Usar timeout extendido (10 minutos) para esta operación que puede tardar mucho tiempo
+  const response = await api.post(
+    '/yego-premiun/driver-active/process',
+    { month, year },
+    {
+      timeout: 600000, // 10 minutos (600000ms)
+    }
+  )
+  const responseData = response.data
+
+  if (Array.isArray(responseData)) {
+    return responseData as DriverMonthlyStat[]
+  }
+
+  return Array.isArray(responseData?.data)
+    ? (responseData.data as DriverMonthlyStat[])
+    : []
+}
+
 export const yegoPremiunService = {
   fetchDriverMonthlyStats,
   processDriverActiveStats,
+  processDriverActiveStatsByMonth,
 }
 
 export default yegoPremiunService

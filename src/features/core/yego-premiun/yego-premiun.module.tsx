@@ -208,6 +208,9 @@ const YegoPremiunModule: React.FC = () => {
   const [currentPeriodKey, setCurrentPeriodKey] = useState<string | null>(null)
   const [showProgressModal, setShowProgressModal] = useState(false)
   const [processingTime, setProcessingTime] = useState(0)
+  const [showMonthModal, setShowMonthModal] = useState(false)
+  const [selectedProcessMonth, setSelectedProcessMonth] = useState<string>(String(previousMonth))
+  const [selectedProcessYear, setSelectedProcessYear] = useState<string>(String(previousYear))
 
   const getValue = <T,>(stat: DriverMonthlyStat, ...keys: (keyof DriverMonthlyStat)[]): T | null => {
     for (const key of keys) {
@@ -396,54 +399,58 @@ const YegoPremiunModule: React.FC = () => {
     setPage(1)
   }
 
-  const handleProcessActives = async () => {
-     try {
-       setProcessing(true)
-       setError(null)
-       setLoading(true)
-       setShowProgressModal(true)
-       setProcessingTime(0)
+  const handleProcessByMonth = async () => {
+    if (selectedProcessMonth === 'all' || selectedProcessYear === 'all') {
+      setError('Por favor selecciona un mes y año específicos')
+      return
+    }
 
-       // Iniciar contador de tiempo
-       const startTime = Date.now()
-       const timeInterval = setInterval(() => {
-         const elapsed = Math.floor((Date.now() - startTime) / 1000)
-         setProcessingTime(elapsed)
-       }, 1000)
+    try {
+      setProcessing(true)
+      setError(null)
+      setLoading(true)
+      setShowMonthModal(false)
+      setShowProgressModal(true)
+      setProcessingTime(0)
 
-       try {
-         const processed = await yegoPremiunService.processDriverActiveStats()
-         clearInterval(timeInterval)
-         
-         setStats(processed)
-         setPage(1)
-         setProcessAvailable(false)
+      const month = Number(selectedProcessMonth)
+      const year = Number(selectedProcessYear)
 
-         const latest = getLatestPeriodStat(processed)
-         if (latest && latest.year && latest.month) {
-           const key = `${latest.year}-${latest.month}`
-           setCurrentPeriodKey(key)
-           localStorage.setItem('yego-premiun-last-processed', key)
-         } else if (currentPeriodKey) {
-           localStorage.setItem('yego-premiun-last-processed', currentPeriodKey)
-         }
-       } catch (processError) {
-         clearInterval(timeInterval)
-         throw processError
-       } finally {
-         setShowProgressModal(false)
-         setProcessingTime(0)
-       }
-     } catch (err: any) {
-       console.error('❌ [YegoPremiun] Error al procesar conductores activos:', err)
-       setError('No se pudo procesar la información. Intenta nuevamente.')
-       setShowProgressModal(false)
-       setProcessingTime(0)
-     } finally {
-       setProcessing(false)
-       setLoading(false)
-     }
-   }
+      // Iniciar contador de tiempo
+      const startTime = Date.now()
+      const timeInterval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000)
+        setProcessingTime(elapsed)
+      }, 1000)
+
+      try {
+        const processed = await yegoPremiunService.processDriverActiveStatsByMonth(month, year)
+        clearInterval(timeInterval)
+        
+        setStats(processed)
+        setPage(1)
+        setProcessAvailable(false)
+
+        const key = `${year}-${month}`
+        setCurrentPeriodKey(key)
+        localStorage.setItem('yego-premiun-last-processed', key)
+      } catch (processError) {
+        clearInterval(timeInterval)
+        throw processError
+      } finally {
+        setShowProgressModal(false)
+        setProcessingTime(0)
+      }
+    } catch (err: any) {
+      console.error('❌ [YegoPremiun] Error al procesar por mes:', err)
+      setError('No se pudo procesar la información del mes seleccionado. Intenta nuevamente.')
+      setShowProgressModal(false)
+      setProcessingTime(0)
+    } finally {
+      setProcessing(false)
+      setLoading(false)
+    }
+  }
 
   const handlePrevPage = () => setPage((prev) => Math.max(1, prev - 1))
   const handleNextPage = () => setPage((prev) => Math.min(totalPages, prev + 1))
@@ -680,13 +687,14 @@ const YegoPremiunModule: React.FC = () => {
         </div>
         <div className="flex flex-wrap items-center gap-2">
            <Button
-             onClick={handleProcessActives}
+             onClick={() => setShowMonthModal(true)}
              loading={processing}
-             disabled={processing || loading || !processAvailable}
+             disabled={processing || loading}
+             variant="outline"
              className="gap-2"
            >
              <RefreshCcw className="h-4 w-4" />
-             Procesar conductores activos
+             Procesar por mes
            </Button>
          </div>
 
@@ -1140,6 +1148,77 @@ const YegoPremiunModule: React.FC = () => {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showMonthModal} onOpenChange={setShowMonthModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Procesar por mes</DialogTitle>
+            <DialogDescription>
+              Selecciona el mes y año que deseas procesar. Este proceso puede tardar varios minutos.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="processMonth" className="text-sm font-medium">
+                Mes
+              </Label>
+              <Select
+                value={selectedProcessMonth}
+                onValueChange={setSelectedProcessMonth}
+              >
+                <SelectTrigger id="processMonth">
+                  <SelectValue placeholder="Selecciona un mes" />
+                </SelectTrigger>
+                <SelectContent>
+                  {MONTH_OPTIONS.filter(option => option.value !== 'all').map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="processYear" className="text-sm font-medium">
+                Año
+              </Label>
+              <Select
+                value={selectedProcessYear}
+                onValueChange={setSelectedProcessYear}
+              >
+                <SelectTrigger id="processYear">
+                  <SelectValue placeholder="Selecciona un año" />
+                </SelectTrigger>
+                <SelectContent>
+                  {yearOptions.filter(option => option.value !== 'all').map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4">
+              <Button
+                variant="outline"
+                onClick={() => setShowMonthModal(false)}
+                disabled={processing}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleProcessByMonth}
+                loading={processing}
+                disabled={processing || selectedProcessMonth === 'all' || selectedProcessYear === 'all'}
+              >
+                Procesar
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

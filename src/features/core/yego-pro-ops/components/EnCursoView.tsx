@@ -684,7 +684,7 @@ export function EnCursoView({ statusFilter = null, onFilterChange }: EnCursoView
   return (
     <div className="relative">
       <NotificationContainer notifications={notifications} onRemove={removeNotification} />
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[calc(100vh-250px)] max-h-[calc(100vh-250px)] overflow-hidden">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[calc(100vh-250px)] max-h-[calc(100vh-250px)] overflow-hidden">
       <div className="flex flex-col h-full overflow-hidden lg:col-span-1">
         <div className="flex-shrink-0 mb-4">
           <h2 className="text-xl font-semibold text-neutral-900 dark:text-white">
@@ -982,8 +982,8 @@ export function EnCursoView({ statusFilter = null, onFilterChange }: EnCursoView
                       <h4 className="text-md font-semibold text-white">Histórico de Gestión de Turnos</h4>
                       <div className="flex items-center gap-2">
                         {fechaTurnos === new Date().toISOString().split('T')[0] && (
-                          <button
-                            onClick={() => {
+                        <button
+                          onClick={() => {
                               const ahora = new Date()
                               const fechaHoraInicio = ahora.toISOString().slice(0, 16) // YYYY-MM-DDTHH:mm
                               const fechaHoraFin = new Date(ahora.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 16) // +8 horas
@@ -991,12 +991,12 @@ export function EnCursoView({ statusFilter = null, onFilterChange }: EnCursoView
                               setFechaFin(fechaHoraFin)
                               setTipoTurnoManual(null) // Resetear selección manual para que calcule automáticamente
                               setShowRegistrarModal(true)
-                            }}
+                          }}
                             className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-green-600 text-white hover:bg-green-700 transition-colors"
-                          >
+                        >
                             <Activity className="w-4 h-4" />
                             <span>Registrar</span>
-                          </button>
+                        </button>
                         )}
                         <button
                           onClick={() => {
@@ -1203,41 +1203,41 @@ export function EnCursoView({ statusFilter = null, onFilterChange }: EnCursoView
 
                                 // Componente para renderizar una fila de turno
                                 const renderTurnoRow = (turno: { id: string; inicio: Date; fin: Date | null; activo: boolean; tipoTurno: 'diurno' | 'nocturno' }) => (
-                                  <TableRow key={turno.id} className="border-gray-700 hover:bg-[#1A1A1A]">
-                                    <TableCell className="text-gray-300">
-                                      {formatTime(turno.inicio)}
-                                    </TableCell>
-                                    <TableCell className="text-gray-300">
-                                      {turno.fin ? formatTime(turno.fin) : 'En curso'}
-                                    </TableCell>
-                                    <TableCell>
-                                      <Badge
-                                        variant="secondary"
-                                        className={cn(
-                                          'text-xs px-2 py-1',
-                                          turno.tipoTurno === 'diurno'
-                                            ? 'bg-blue-500 text-white'
-                                            : 'bg-purple-500 text-white'
-                                        )}
-                                      >
-                                        {turno.tipoTurno === 'diurno' ? 'Diurno' : 'Nocturno'}
-                                      </Badge>
-                                    </TableCell>
-                                    <TableCell>
-                                      <Badge
-                                        variant="secondary"
-                                        className={cn(
-                                          'text-xs px-2 py-1',
-                                          turno.activo
-                                            ? 'bg-green-500 text-white'
-                                            : 'bg-gray-500 text-white'
-                                        )}
-                                      >
-                                        {turno.activo ? 'Activo' : 'Finalizado'}
-                                      </Badge>
-                                    </TableCell>
-                                  </TableRow>
-                                )
+                                        <TableRow key={turno.id} className="border-gray-700 hover:bg-[#1A1A1A]">
+                                          <TableCell className="text-gray-300">
+                                            {formatTime(turno.inicio)}
+                                          </TableCell>
+                                          <TableCell className="text-gray-300">
+                                            {turno.fin ? formatTime(turno.fin) : 'En curso'}
+                                          </TableCell>
+                                          <TableCell>
+                                            <Badge
+                                              variant="secondary"
+                                              className={cn(
+                                                'text-xs px-2 py-1',
+                                                turno.tipoTurno === 'diurno'
+                                                  ? 'bg-blue-500 text-white'
+                                                  : 'bg-purple-500 text-white'
+                                              )}
+                                            >
+                                              {turno.tipoTurno === 'diurno' ? 'Diurno' : 'Nocturno'}
+                                            </Badge>
+                                          </TableCell>
+                                          <TableCell>
+                                            <Badge
+                                              variant="secondary"
+                                              className={cn(
+                                                'text-xs px-2 py-1',
+                                                turno.activo
+                                                  ? 'bg-green-500 text-white'
+                                                  : 'bg-gray-500 text-white'
+                                              )}
+                                            >
+                                              {turno.activo ? 'Activo' : 'Finalizado'}
+                                            </Badge>
+                                          </TableCell>
+                                        </TableRow>
+                                      )
 
                                 // Si hay respuesta del backend (aunque sea array vacío), usar esa respuesta
                                 if (turnosGuardados !== null && turnosGuardados !== undefined) {

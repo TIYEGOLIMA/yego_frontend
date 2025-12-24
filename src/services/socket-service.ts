@@ -481,6 +481,19 @@ class SocketService {
       }
     });
 
+    // 🎯 SUSCRIBIRSE AL TOPIC: /topic/pro-ops/conductores-en-orden
+    this.stompClient.subscribe('/topic/pro-ops/conductores-en-orden', (message: IMessage) => {
+      try {
+        const data = JSON.parse(message.body);
+        console.log('🚗 [SocketService] Conductores en orden recibidos:', data);
+        
+        // Emitir evento para conductores en orden
+        this.emit('pro-ops-conductores-en-orden', data);
+      } catch (error) {
+        console.error('❌ [SocketService] Error procesando conductores en orden:', error);
+      }
+    });
+
     console.log('✅ [SocketService] Suscrito a todos los topics de Pro-Ops');
   }
 

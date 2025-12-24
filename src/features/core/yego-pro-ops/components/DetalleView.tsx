@@ -14,16 +14,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { User, Search, DollarSign, CreditCard, MapPin, TrendingUp, Calendar, ChevronLeft, ChevronRight, ChevronDown, Car, ChevronsLeft, ChevronsRight, Table2, LayoutGrid, Eye, Pencil, Save, X } from 'lucide-react'
 import { cn } from '../../../../utils/cn'
 
-// Constantes
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 const DIAS_SEMANA = ['L', 'M', 'M', 'J', 'V', 'S', 'D']
 const ITEMS_PER_PAGE_OPTIONS = [5, 10] as const
 const DEFAULT_ITEMS_PER_PAGE = 10
 const SECTION_CARD_CLASS = "bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 border border-gray-200 dark:border-gray-700"
-
-// Los filtros se generarán dinámicamente basados en hiring_segment
-
-// Helper functions
 const formatBalance = (balance: number): string => {
   const formatted = new Intl.NumberFormat('es-PE', {
     minimumFractionDigits: 2,
@@ -39,12 +34,14 @@ const formatNumber = (value: number): string => {
   }).format(value)
 }
 
-const formatDate = (dateString: string): string => {
+const formatDateTime = (dateString: string): string => {
   const date = new Date(dateString)
-  return date.toLocaleDateString('es-PE', {
+  return date.toLocaleString('es-PE', {
     day: '2-digit',
     month: '2-digit',
-    year: 'numeric'
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
   })
 }
 
@@ -67,14 +64,12 @@ const obtenerFechaAyer = (): string => {
   return formatearFechaLocal(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate())
 }
 
-// Helper para parsear números de forma segura
 const parseNumber = (value: string | undefined | null, defaultValue = 0): number => {
   if (!value || value.trim() === '') return defaultValue
   const parsed = parseFloat(value)
   return isNaN(parsed) ? defaultValue : parsed
 }
 
-// Helper para calcular valores del cierre
 const calcularValoresCierre = (
   totalIngresos: number,
   gnvSoles: string,
@@ -254,7 +249,7 @@ const usePagination = <T,>(items: T[], itemsPerPage: number) => {
     if (totalPages > 0 && currentPage > totalPages) {
       setCurrentPage(1)
     }
-  }, [totalPages]) // Solo dependemos de totalPages para evitar loops
+  }, [totalPages])
 
   const handleItemsPerPageChange = (_newItemsPerPage: number) => {
     setCurrentPage(1)
@@ -279,7 +274,7 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
   const [tipoConductorFilter, setTipoConductorFilter] = useState<string | null>(null)
   const [selectedDriver, setSelectedDriver] = useState<DriverItem | null>(null)
   const [showModal, setShowModal] = useState(false)
-  const [vistaTabla, setVistaTabla] = useState(true) // true = tabla, false = cards
+  const [vistaTabla, setVistaTabla] = useState(true)
   const [itemsPerPage, setItemsPerPage] = useState(DEFAULT_ITEMS_PER_PAGE)
   const [itemsPerPageDrivers, setItemsPerPageDrivers] = useState(DEFAULT_ITEMS_PER_PAGE)
   const [showModalCierre, setShowModalCierre] = useState(false)
@@ -289,8 +284,6 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
   const [registrandoCierre, setRegistrandoCierre] = useState(false)
   const [editandoCierre, setEditandoCierre] = useState(false)
   const [actualizandoCierre, setActualizandoCierre] = useState(false)
-  
-  // Estados para edición de cierre
   const [editGnvM3, setEditGnvM3] = useState('')
   const [editGnvSoles, setEditGnvSoles] = useState('')
   const [editGasolinaGalones, setEditGasolinaGalones] = useState('')
@@ -299,8 +292,6 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
   const [editLiquidaYape, setEditLiquidaYape] = useState('')
   const [editOtrosGastos, setEditOtrosGastos] = useState('')
   const [editOtrosGastosDescripcion, setEditOtrosGastosDescripcion] = useState('')
-  
-  // Estados para el formulario de cierre
   const [gnvM3, setGnvM3] = useState('')
   const [gnvSoles, setGnvSoles] = useState('')
   const [gasolinaGalones, setGasolinaGalones] = useState('')
@@ -319,10 +310,8 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
   // Resetear estado del calendario cuando se abre/cierra el modal
   useEffect(() => {
     if (showModal) {
-      // Al abrir el modal, cerrar el calendario
       setShowDatePicker(false)
     } else {
-      // Al cerrar el modal, resetear todo el estado del calendario
       setShowDatePicker(false)
       setFechaInicio(obtenerFechaAyer())
       setFechaFin(obtenerFechaAyer())
@@ -330,7 +319,6 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
     }
   }, [showModal])
 
-  // Cerrar calendario al hacer clic fuera
   useEffect(() => {
     if (!showDatePicker) return
     
@@ -394,7 +382,6 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
       setFechaInicio(fechaStr)
       setFechaFin('')
     } else {
-      // Establecer como fechaFin y cerrar el calendario
       setFechaFin(fechaStr)
       setShowDatePicker(false)
     }
@@ -460,6 +447,9 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
     queryFn: () => yegoProOpsService.obtenerReglasTrabajo(),
     refetchInterval: 30000,
   })
+
+  // Query para obtener viajes - ÚNICA FUENTE: /api/pro-ops/driver/viajes-completos
+  // Todos los viajes mostrados en esta vista provienen exclusivamente de este endpoint
 
   // Mapear contractors a DriverItem
   const driversList = useMemo<DriverItem[]>(() => {
@@ -542,6 +532,7 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
   }, [driversList, searchTerm])
 
   // Memoizar viajesData para evitar recrear arrays
+  // Los viajes provienen exclusivamente de /api/pro-ops/driver/viajes-completos
   const viajesArray = useMemo(() => {
     return viajesData?.viajes ?? []
   }, [viajesData])
@@ -557,7 +548,6 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
     )
   }, [viajesArray, searchTermViajes])
 
-  // Calcular métricas (usar viajesArray completo, no filtrado)
   const metricas = useMemo<Metricas | null>(() => {
     if (!viajesArray || viajesArray.length === 0) return null
 
@@ -617,7 +607,6 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
     paginationViajes.handleItemsPerPageChange(newItemsPerPage)
   }
 
-  // Verificar si es un solo día seleccionado
   const esUnSoloDia = fechaInicio && fechaFin && fechaInicio === fechaFin
 
   const handleAbrirModalCierre = () => {
@@ -679,8 +668,9 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
   }
 
   // Validar formulario de cierre (compartido entre registro y actualización)
-  const validarFormularioCierre = (gnvSoles: string, gasolinaSoles: string, liquidaEfectivo: string, liquidaYape: string, otrosGastos: string, otrosGastosDescripcion: string): string | null => {
-    if (!gnvSoles || !gasolinaSoles || !liquidaEfectivo || !liquidaYape) {
+  // gasolinaSoles es opcional, puede ser 0 o vacío
+  const validarFormularioCierre = (gnvSoles: string, _gasolinaSoles: string, liquidaEfectivo: string, liquidaYape: string, otrosGastos: string, otrosGastosDescripcion: string): string | null => {
+    if (!gnvSoles || !liquidaEfectivo || !liquidaYape) {
       return 'Por favor, completa todos los campos obligatorios'
     }
     if (otrosGastos && parseNumber(otrosGastos) > 0 && !otrosGastosDescripcion.trim()) {
@@ -701,7 +691,6 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
     try {
       setActualizandoCierre(true)
 
-      // Calcular valores usando la función helper
       const valoresCalculados = calcularValoresCierre(
         cierreDetalle.totalIngresos,
         editGnvSoles,
@@ -725,7 +714,7 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
         gnvM3: editGnvM3 || null,
         gnvSoles: parseNumber(editGnvSoles),
         gasolinaGalones: editGasolinaGalones || null,
-        gasolinaSoles: parseNumber(editGasolinaSoles),
+        gasolinaSoles: editGasolinaSoles ? parseNumber(editGasolinaSoles) : 0,
         liquidaEfectivo: parseNumber(editLiquidaEfectivo),
         liquidaYape: parseNumber(editLiquidaYape),
         otrosGastos: valoresCalculados.totalOtrosGastos,
@@ -748,10 +737,8 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
     }
   }
 
-  // Verificar si el usuario NO tiene rol Gestor (solo los que NO son Gestor pueden editar)
   const puedeEditar = user?.role?.toUpperCase() !== 'GESTOR'
 
-  // Calcular valores del cierre
   const valoresCierre = useMemo(() => {
     if (!metricas?.totalIngresos) return null
     return calcularValoresCierre(
@@ -789,7 +776,7 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
         gnvM3: gnvM3 || null,
         gnvSoles: parseNumber(gnvSoles),
         gasolinaGalones: gasolinaGalones || null,
-        gasolinaSoles: parseNumber(gasolinaSoles),
+        gasolinaSoles: gasolinaSoles ? parseNumber(gasolinaSoles) : 0,
         liquidaEfectivo: parseNumber(liquidaEfectivo),
         liquidaYape: parseNumber(liquidaYape),
         otrosGastos: valoresCierre.totalOtrosGastos,
@@ -955,7 +942,6 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
         onOpenChange={(open) => {
           setShowModal(open)
           if (!open) {
-            // Al cerrar el modal, resetear el estado del calendario y búsqueda
             setShowDatePicker(false)
             setFechaInicio(obtenerFechaAyer())
             setFechaFin(obtenerFechaAyer())
@@ -964,10 +950,10 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
           }
         }}
       >
-        <DialogContent className="max-w-7xl w-[95vw] max-h-[95vh] overflow-y-auto">
+        <DialogContent className="max-w-7xl w-[95vw] max-h-[95vh] overflow-hidden flex flex-col p-6">
           {selectedDriver && (
             <>
-              <DialogHeader>
+              <DialogHeader className="flex-shrink-0">
                 <DialogTitle className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-3">
                   <span>{selectedDriver.full_name}</span>
                   {firstTripVehicle && (
@@ -982,7 +968,7 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
                 </p>
               </DialogHeader>
               
-              <div className="relative">
+              <div className="relative flex-1 flex flex-col min-h-0 overflow-hidden">
                 {/* Filtro de rango de fechas con calendario */}
                 <div className="mb-4 relative" ref={datePickerRef}>
                   <div className="flex items-center gap-2">
@@ -1154,15 +1140,15 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
 
                     {/* Promedio por viaje */}
                     {metricas && (
-                    <div className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 bg-gray-100 dark:bg-gray-800/50 px-3 py-2 rounded-md inline-block">
+                    <div className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 bg-gray-100 dark:bg-gray-800/50 px-3 py-2 rounded-md inline-block flex-shrink-0">
                       Promedio por viaje: <span className="text-red-600 dark:text-red-400">{formatBalance(metricas.promedioPorViaje)}</span>
                     </div>
                     )}
 
                     {/* Tabla de viajes - Solo mostrar si hay viajes */}
                     {viajesArray.length > 0 && (
-                    <div className="mt-4">
-                      <div className="flex items-center gap-4 mb-3 border-b border-gray-200 dark:border-gray-700 pb-2">
+                    <div className="mt-4 flex-1 flex flex-col min-h-0">
+                      <div className="flex items-center gap-4 mb-3 border-b border-gray-200 dark:border-gray-700 pb-2 flex-shrink-0">
                         <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">
                           Detalle de Viajes
                         </h3>
@@ -1227,13 +1213,14 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
                       {paginationViajes.paginatedItems.length > 0 ? (
                         <>
                           {vistaTabla ? (
-                            <div className="overflow-x-auto mb-4">
+                            <div className="overflow-x-auto overflow-y-auto max-h-[calc(95vh-400px)] mb-4">
                               <Table>
                                 <TableHeader>
                                   <TableRow>
                                     <TableHead className="w-16">ID</TableHead>
                                     <TableHead>Inicio</TableHead>
                                     <TableHead>Fin</TableHead>
+                                    <TableHead className="min-w-[500px]">Dirección</TableHead>
                                     <TableHead className="text-right">Distancia</TableHead>
                                     <TableHead className="text-right">Efectivo</TableHead>
                                     <TableHead className="text-right">Tarjeta</TableHead>
@@ -1255,12 +1242,17 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
                                       </TableCell>
                                       <TableCell>
                                         <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                          {formatDate(viaje.booked_at)}
+                                          {formatDateTime(viaje.booked_at)}
                                         </span>
                                       </TableCell>
                                       <TableCell>
                                         <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                          {formatDate(viaje.ended_at)}
+                                          {formatDateTime(viaje.ended_at)}
+                                        </span>
+                                      </TableCell>
+                                      <TableCell className="min-w-[500px]">
+                                        <span className="text-xs text-gray-700 dark:text-gray-300 whitespace-normal break-words">
+                                          {viaje.address_from || ''} {viaje.address_from && viaje.address_to && '→'} {viaje.address_to && <><br />{viaje.address_to}</>}
                                         </span>
                                       </TableCell>
                                       <TableCell className="text-right">
@@ -1314,7 +1306,8 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
                               </Table>
                             </div>
                           ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+                            <div className="flex-1 overflow-y-auto min-h-0">
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
                               {paginationViajes.paginatedItems.map((viaje) => (
                                 <Card key={viaje.id} className="border border-gray-200 dark:border-gray-700">
                                   <CardContent className="p-4">
@@ -1334,16 +1327,24 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
                                       <div className="flex justify-between">
                                         <span className="text-gray-500 dark:text-gray-400">Inicio:</span>
                                         <span className="text-gray-700 dark:text-gray-300 font-medium">
-                                          {formatDate(viaje.booked_at)}
+                                          {formatDateTime(viaje.booked_at)}
                                         </span>
                                       </div>
                                       <div className="flex justify-between">
                                         <span className="text-gray-500 dark:text-gray-400">Fin:</span>
                                         <span className="text-gray-700 dark:text-gray-300 font-medium">
-                                          {formatDate(viaje.ended_at)}
+                                          {formatDateTime(viaje.ended_at)}
                                         </span>
                                       </div>
-                                      <div className="flex justify-between">
+                                      {(viaje.address_from || viaje.address_to) && (
+                                        <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
+                                          <span className="text-gray-500 dark:text-gray-400 text-[10px] block mb-1.5">Dirección:</span>
+                                          <span className="text-gray-700 dark:text-gray-300 text-xs whitespace-normal break-words">
+                                            {viaje.address_from || ''} {viaje.address_from && viaje.address_to && '→'} {viaje.address_to && <><br />{viaje.address_to}</>}
+                                          </span>
+                                        </div>
+                                      )}
+                                      <div className="flex justify-between pt-2 border-t border-gray-200 dark:border-gray-700">
                                         <span className="text-gray-500 dark:text-gray-400">Distancia:</span>
                                         <span className="text-blue-600 dark:text-blue-400 font-semibold">
                                           {(viaje.distance ?? 0).toFixed(2)} km
@@ -1388,24 +1389,27 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
                                   </CardContent>
                                 </Card>
                               ))}
+                              </div>
                             </div>
                           )}
                           
                           {viajesArray.length > 0 && (
-                          <Paginacion
-                            currentPage={paginationViajes.currentPage}
-                            totalPages={paginationViajes.totalPages}
-                            itemsPerPage={itemsPerPage}
-                            totalItems={filteredViajes.length}
-                            startIndex={paginationViajes.startIndex}
-                            endIndex={paginationViajes.endIndex}
-                            onPageChange={paginationViajes.setCurrentPage}
-                            onItemsPerPageChange={handleItemsPerPageChangeViajes}
-                          />
+                            <div className="flex-shrink-0">
+                              <Paginacion
+                                currentPage={paginationViajes.currentPage}
+                                totalPages={paginationViajes.totalPages}
+                                itemsPerPage={itemsPerPage}
+                                totalItems={filteredViajes.length}
+                                startIndex={paginationViajes.startIndex}
+                                endIndex={paginationViajes.endIndex}
+                                onPageChange={paginationViajes.setCurrentPage}
+                                onItemsPerPageChange={handleItemsPerPageChangeViajes}
+                              />
+                            </div>
                           )}
                         </>
                       ) : (
-                        <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                        <div className="text-center py-8 text-gray-500 dark:text-gray-400 flex-shrink-0">
                           <Calendar className="w-12 h-12 mx-auto mb-2 opacity-50" />
                           <p className="text-sm">No hay viajes registrados para el período seleccionado</p>
                         </div>
@@ -1414,7 +1418,7 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
                     )}
                   </>
                 ) : (
-                  <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                  <div className="text-center py-12 text-gray-500 dark:text-gray-400 flex-shrink-0">
                     <p>Selecciona un rango de fechas para ver los viajes</p>
                   </div>
                 )}
@@ -1519,10 +1523,10 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
                   />
                 </div>
 
-                {/* Gasolina Combustible en Soles - Obligatorio */}
+                {/* Gasolina Combustible en Soles - Opcional */}
                 <div>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                    Gasolina Combustible (S/.) <span className="text-red-600">*</span>
+                    Gasolina Combustible (S/.) <span className="text-gray-500 text-xs font-normal">(Opcional)</span>
                   </label>
                   <Input
                     type="number"
@@ -1537,7 +1541,6 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
                     }}
                     placeholder="0.00"
                     className="w-full h-9 text-sm"
-                    required
                   />
                 </div>
               </div>
@@ -1695,7 +1698,7 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
             </Button>
             <Button
               onClick={handleRegistrarCierre}
-              disabled={registrandoCierre || !gnvSoles || !gasolinaSoles || !liquidaEfectivo || !liquidaYape}
+              disabled={registrandoCierre || !gnvSoles || !liquidaEfectivo || !liquidaYape}
               className="bg-red-600 text-white px-6"
             >
               {registrandoCierre ? 'Registrando...' : 'Registrar Cierre'}
@@ -1807,7 +1810,7 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                      Gasolina Combustible (S/.) <span className="text-red-600">*</span>
+                      Gasolina Combustible (S/.) <span className="text-gray-500 text-xs font-normal">(Opcional)</span>
                     </label>
                     {editandoCierre ? (
                       <Input
@@ -1823,7 +1826,6 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
                         }}
                         placeholder="0.00"
                         className="w-full h-9 text-sm"
-                        required
                       />
                     ) : (
                       <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
@@ -2133,6 +2135,7 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
         notifications={notifications}
         onRemove={removeNotification}
       />
+
     </div>
   )
 }

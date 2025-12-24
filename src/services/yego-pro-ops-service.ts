@@ -113,6 +113,43 @@ export interface DriverKpiResponse {
   items: DriverItem[]
 }
 
+export interface RutaPunto {
+  address: string
+}
+
+export interface ConductorEnOrden {
+  id: string
+  avatar_url: string
+  balance: string
+  first_name: string
+  last_name: string
+  status: string
+  vehicle_number: string | null
+  route: RutaPunto[]
+  summary_distance?: SummaryDistance
+  total_activity_time?: number
+}
+
+export interface SummaryDistance {
+  common: number
+  active: number
+  not_active: number
+  offline: number
+  busy: number
+  free: number
+  in_order: number
+  vehicle_number?: string
+}
+
+export interface ConductoresEnOrdenResponse {
+  type: string
+  total: number
+  timestamp: string
+  conductores: ConductorEnOrden[]
+  summary_distance?: SummaryDistance
+}
+
+
 export interface DriverTimelineOrder {
   status: string
   short_id: number
@@ -177,6 +214,8 @@ export interface ViajeCompleto {
   price_partner_rides: number | null
   price_promotion: number | null
   price_tip: number | null
+  address_from?: string | null
+  address_to?: string | null
 }
 
 /**
@@ -259,6 +298,25 @@ export const yegoProOpsService = {
     return response.data
   },
 
+  /**
+   * Obtener conductores en orden desde la API
+   */
+  obtenerConductoresEnOrden: async (): Promise<ConductoresEnOrdenResponse> => {
+    const response = await api.get<{ 
+      total: number
+      conductores: ConductorEnOrden[]
+      summary_distance?: SummaryDistance
+      timestamp?: string
+    }>('/pro-ops/drivers/in-order')
+    return {
+      type: 'DRIVERS_IN_ORDER_UPDATE',
+      total: response.data.total,
+      timestamp: response.data.timestamp || new Date().toISOString(),
+      conductores: response.data.conductores,
+      summary_distance: response.data.summary_distance
+    }
+  },
+
   refrescarKpis: async (): Promise<DriverKpiResponse> => {
     const response = await api.post<DriverKpiResponse>('/pro-ops/kpis/refresh')
     return response.data
@@ -283,6 +341,7 @@ export const yegoProOpsService = {
     })
     return response.data
   },
+
 
   /**
    * Obtener viajes completos de conductores
