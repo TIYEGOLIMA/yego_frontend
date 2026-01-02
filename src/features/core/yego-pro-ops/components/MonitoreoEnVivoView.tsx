@@ -6,14 +6,12 @@ import { Card, CardContent } from '../../../../components/ui/card'
 import { Badge } from '../../../../components/ui/badge'
 import { Input } from '../../../../components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../../components/ui/select'
-import { Activity, Search, User, MapPin, Car, DollarSign, Radio, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Navigation } from 'lucide-react'
+import { Activity, Search, User, MapPin, Car, DollarSign, Radio, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Navigation, WifiOff } from 'lucide-react'
 import { Button } from '../../../../components/ui/button'
 import { cn } from '../../../../utils/cn'
 import SocketService from '../../../../services/socket-service'
 import { useConnectionStatus } from '../../../../shared/hooks/useConnectionStatus'
 import { yegoProOpsService, type ConductoresEnOrdenResponse } from '../../../../services/yego-pro-ops-service'
-
-interface MonitoreoEnVivoViewProps {}
 
 const formatBalance = (balance: string | number): string => {
   const numBalance = typeof balance === 'string' ? parseFloat(balance) : balance
@@ -55,7 +53,7 @@ const formatActivityTime = (seconds: number): string => {
   }
 }
 
-export function MonitoreoEnVivoView({}: MonitoreoEnVivoViewProps) {
+export function MonitoreoEnVivoView() {
   const { notifications, removeNotification } = useToastNotifications()
   const { isConnected } = useConnectionStatus()
   const [searchQuery, setSearchQuery] = useState('')
@@ -75,8 +73,6 @@ export function MonitoreoEnVivoView({}: MonitoreoEnVivoViewProps) {
   // Sincronizar datos iniciales con el estado solo una vez
   useEffect(() => {
     if (initialData && !conductoresEnOrden) {
-      console.log('📊 [MonitoreoEnVivo] Datos iniciales recibidos:', initialData)
-      console.log('📊 [MonitoreoEnVivo] summary_distance:', initialData.summary_distance)
       setConductoresEnOrden(initialData)
     }
   }, [initialData, conductoresEnOrden])
@@ -85,13 +81,11 @@ export function MonitoreoEnVivoView({}: MonitoreoEnVivoViewProps) {
   useEffect(() => {
     const handleConductoresEnOrdenUpdate = (data: ConductoresEnOrdenResponse) => {
       try {
-        console.log('🚗 [MonitoreoEnVivo] Conductores en orden actualizados por WebSocket:', data)
-        console.log('🚗 [MonitoreoEnVivo] summary_distance en WebSocket:', data.summary_distance)
         if (data && data.type === 'DRIVERS_IN_ORDER_UPDATE') {
           setConductoresEnOrden(data)
         }
       } catch (error) {
-        console.error('❌ [MonitoreoEnVivo] Error actualizando conductores en orden:', error)
+        console.error('Error actualizando conductores en orden:', error)
       }
     }
 
@@ -168,7 +162,7 @@ export function MonitoreoEnVivoView({}: MonitoreoEnVivoViewProps) {
         {/* Estadísticas generales */}
         {conductoresEnOrden && (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <Card className="bg-[#2A2A2A] border-gray-700">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-3">
@@ -185,14 +179,29 @@ export function MonitoreoEnVivoView({}: MonitoreoEnVivoViewProps) {
               <Card className="bg-[#2A2A2A] border-gray-700">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                      <Car className="w-6 h-6 text-blue-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-400">Cantidad de Viajes</p>
+                      <p className="text-2xl font-bold text-white">
+                        {conductoresEnOrden.conductores.reduce((sum, c) => sum + (c.completed_trips_count || 0), 0)}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="bg-[#2A2A2A] border-gray-700">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
                     <div className="w-12 h-12 rounded-lg bg-green-500/20 flex items-center justify-center">
                       <DollarSign className="w-6 h-6 text-green-400" />
                     </div>
                     <div>
-                      <p className="text-sm text-gray-400">Balance Total</p>
+                      <p className="text-sm text-gray-400">Plata Generada</p>
                       <p className="text-2xl font-bold text-white">
                         {formatBalance(
-                          conductoresEnOrden.conductores.reduce((sum, c) => sum + parseFloat(c.balance || '0'), 0)
+                          conductoresEnOrden.conductores.reduce((sum, c) => sum + (c.completed_trips_total_price || 0), 0)
                         )}
                       </p>
                     </div>
@@ -281,7 +290,7 @@ export function MonitoreoEnVivoView({}: MonitoreoEnVivoViewProps) {
               >
                 <CardContent className="p-3">
                   {/* Header del conductor */}
-                  <div className="flex items-start gap-2 mb-3">
+                  <div className="flex items-start gap-2 mb-2">
                     <div className="relative">
                       {conductor.avatar_url ? (
                         <img
@@ -300,50 +309,62 @@ export function MonitoreoEnVivoView({}: MonitoreoEnVivoViewProps) {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2 mb-1">
-                        <h3 className="text-white font-bold text-sm line-clamp-1 flex-1">
+                        <h3 className="text-white font-bold text-sm line-clamp-1 flex-1 pt-0.5">
                           {conductor.first_name} {conductor.last_name}
                         </h3>
-                        {/* Balance compacto en el costado */}
-                        {(() => {
-                          const balance = parseFloat(conductor.balance || '0')
-                          const isNegative = balance < 0
-                          return (
-                            <div className={cn(
-                              "flex items-center gap-1 px-2 py-0.5 rounded-md border",
-                              isNegative 
-                                ? "bg-red-500/10 border-red-500/30" 
-                                : "bg-green-500/10 border-green-500/30"
-                            )}>
-                              <span className={cn(
-                                "text-xs font-semibold",
-                                isNegative ? "text-red-400" : "text-green-400"
-                              )}>
-                                S/ {balance.toFixed(2)}
+                        {/* Indicadores principales - Valor producido y viajes */}
+                        <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                          {conductor.completed_trips_total_price !== undefined && (
+                            <div className="px-1.5 py-0 rounded-md bg-green-500/10 border border-green-500/30">
+                              <span className="text-[10px] font-semibold text-green-300 leading-tight">
+                                {formatBalance(conductor.completed_trips_total_price)}
                               </span>
                             </div>
-                          )
-                        })()}
+                          )}
+                          {conductor.completed_trips_count !== undefined && (
+                            <div className="px-1.5 py-0 rounded-md bg-orange-500/10 border border-orange-500/30">
+                              <span className="text-[10px] font-semibold text-orange-300 leading-tight">
+                              {conductor.completed_trips_count} viajes
+                            </span>
+                              </div>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <Badge variant="secondary" className="bg-orange-500 text-white text-[10px] px-1.5 py-0.5">
-                          En Orden
-                        </Badge>
+
+                      {/* Badges de vehículo */}
+                      <div className="flex items-center gap-1.5 mb-1 flex-wrap">
                         {conductor.vehicle_number && (
-                          <Badge variant="outline" className="text-[10px] border-gray-600 text-gray-300 px-1.5 py-0.5">
-                            <Car className="w-2.5 h-2.5 mr-1" />
+                          <Badge variant="outline" className="text-[10px] border-gray-500/50 text-gray-200 px-2 py-1 bg-gray-700/30">
+                            <Car className="w-3 h-3 mr-1" />
                             {conductor.vehicle_number}
                           </Badge>
                         )}
-                        {conductor.summary_distance && (
-                          <Badge variant="outline" className="text-[10px] border-blue-500/30 text-blue-400 px-1.5 py-0.5 bg-blue-500/10">
-                            <Navigation className="w-2.5 h-2.5 mr-1" />
+                      </div>
+
+                      {/* Métricas de distancia y tiempo */}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {conductor.summary_distance?.common !== undefined && (
+                          <Badge variant="outline" className="text-[10px] border-blue-500/40 text-blue-300 px-2 py-1 bg-blue-500/15 shadow-sm">
+                            <Navigation className="w-3 h-3 mr-1" />
                             {formatDistance(conductor.summary_distance.common)} km
                           </Badge>
                         )}
                         {conductor.total_activity_time !== undefined && conductor.total_activity_time !== null && (
-                          <Badge variant="outline" className="text-[10px] border-purple-500/30 text-purple-400 px-1.5 py-0.5 bg-purple-500/10">
-                            <Activity className="w-2.5 h-2.5 mr-1" />
+                          <Badge variant="outline" className="text-[10px] border-purple-500/40 text-purple-300 px-2 py-1 bg-purple-500/15 shadow-sm">
+                            <Activity className="w-3 h-3 mr-1" />
                             {formatActivityTime(conductor.total_activity_time)}
+                          </Badge>
+                        )}
+                        {conductor.summary_distance?.free !== undefined && conductor.summary_distance.free > 0 && (
+                          <Badge variant="outline" className="text-[10px] border-yellow-500/40 text-yellow-300 px-2 py-1 bg-yellow-500/15 shadow-sm">
+                            <Navigation className="w-3 h-3 mr-1" />
+                            {formatDistance(conductor.summary_distance.free)} km libre
+                          </Badge>
+                        )}
+                        {conductor.summary_distance?.offline !== undefined && conductor.summary_distance.offline > 0 && (
+                          <Badge variant="outline" className="text-[10px] border-red-500/40 text-red-300 px-2 py-1 bg-red-500/15 shadow-sm">
+                            <WifiOff className="w-3 h-3 mr-1" />
+                            {formatDistance(conductor.summary_distance.offline)} km desconectado
                           </Badge>
                         )}
                       </div>
@@ -352,12 +373,12 @@ export function MonitoreoEnVivoView({}: MonitoreoEnVivoViewProps) {
 
                   {/* Ruta */}
                   {conductor.route && conductor.route.length > 0 && (
-                    <div className="space-y-1.5">
-                      <div className="flex items-center gap-1.5 mb-1.5">
+                    <div className="space-y-1 mt-2">
+                      <div className="flex items-center gap-1.5 mb-1">
                         <MapPin className="w-3 h-3 text-orange-400" />
                         <span className="text-xs font-semibold text-gray-300">Ruta</span>
                       </div>
-                      <div className="space-y-1.5">
+                      <div className="space-y-1">
                         {conductor.route.map((punto, index) => (
                           <div key={index} className="flex items-start gap-2">
                             <div className="flex flex-col items-center mt-0.5">
@@ -399,7 +420,7 @@ export function MonitoreoEnVivoView({}: MonitoreoEnVivoViewProps) {
 
         {/* Controles de navegación de páginas */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-center gap-2 mt-6">
+          <div className="flex items-center justify-end gap-2 mt-6">
             <Button
               variant="outline"
               size="sm"
@@ -472,3 +493,4 @@ export function MonitoreoEnVivoView({}: MonitoreoEnVivoViewProps) {
     </div>
   )
 }
+

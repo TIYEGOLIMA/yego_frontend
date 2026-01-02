@@ -128,6 +128,8 @@ export interface ConductorEnOrden {
   route: RutaPunto[]
   summary_distance?: SummaryDistance
   total_activity_time?: number
+  completed_trips_count?: number
+  completed_trips_total_price?: number
 }
 
 export interface SummaryDistance {
@@ -147,6 +149,8 @@ export interface ConductoresEnOrdenResponse {
   timestamp: string
   conductores: ConductorEnOrden[]
   summary_distance?: SummaryDistance
+  completed_trips_count?: number
+  completed_trips_total_price?: number
 }
 
 
@@ -180,6 +184,21 @@ export interface ObtenerTurnosCalculadosResponse {
   driver_id: string
   fecha: string
   turnos: TurnoCalculado[]
+}
+
+export interface TipoTurnoFecha {
+  id: number
+  tipoTurno: 'diurno' | 'nocturno'
+}
+
+export interface FechaTurno {
+  fecha: string
+  tiposTurno: TipoTurnoFecha[]
+}
+
+export interface FechasTurnosResponse {
+  driverId: string
+  fechas: FechaTurno[]
 }
 
 export interface KpiFilterParams {
@@ -307,13 +326,17 @@ export const yegoProOpsService = {
       conductores: ConductorEnOrden[]
       summary_distance?: SummaryDistance
       timestamp?: string
+      completed_trips_count?: number
+      completed_trips_total_price?: number
     }>('/pro-ops/drivers/in-order')
     return {
       type: 'DRIVERS_IN_ORDER_UPDATE',
       total: response.data.total,
       timestamp: response.data.timestamp || new Date().toISOString(),
       conductores: response.data.conductores,
-      summary_distance: response.data.summary_distance
+      summary_distance: response.data.summary_distance,
+      completed_trips_count: response.data.completed_trips_count,
+      completed_trips_total_price: response.data.completed_trips_total_price
     }
   },
 
@@ -339,6 +362,16 @@ export const yegoProOpsService = {
         fecha: fechaHoy,
       },
     })
+    return response.data
+  },
+
+  /**
+   * Obtener fechas de turnos para un conductor
+   * @param driverId ID del conductor
+   * @returns Lista de fechas con sus tipos de turno
+   */
+  obtenerFechasTurnos: async (driverId: string): Promise<FechasTurnosResponse> => {
+    const response = await api.get<FechasTurnosResponse>(`/pro-ops/driver/fechas-turnos/${driverId}`)
     return response.data
   },
 

@@ -96,7 +96,6 @@ class QueueAgentService {
 
   async liberarModuloDelUsuario(): Promise<void> {
     try {
-      // 🎯 LEER DESDE auth-storage
       const authStorageData = localStorage.getItem('auth-storage')
       if (!authStorageData) {
         throw new Error('No hay datos de autenticación')
@@ -108,17 +107,45 @@ class QueueAgentService {
         throw new Error('Usuario no encontrado')
       }
 
-      console.log('⚠️ Función de liberar módulo no implementada en el backend')
-      console.log('✅ Módulo liberado exitosamente (simulado)')
+      const userId = user.id
+      await api.post(`/queue-agents/liberar-modulo/${userId}`)
+      localStorage.removeItem(`selectedModule_${userId}`)
     } catch (error) {
-      console.error('❌ Error liberando módulo:', error)
+      console.error('Error liberando módulo:', error)
       throw error
+    }
+  }
+
+  async liberarModuloPorId(moduleId: number): Promise<{ message?: string; moduleId?: number; userId?: number }> {
+    try {
+      const response = await api.post(`/queue-agents/liberar-modulo-por-id/${moduleId}`)
+      console.log('✅ [queueAgentService] Módulo liberado por ID:', response.data)
+      return response.data || {}
+    } catch (error) {
+      console.error('❌ [queueAgentService] Error liberando módulo por ID:', error)
+      throw error
+    }
+  }
+
+  // Función privada para obtener el módulo desde el backend (evita duplicación de llamadas)
+  private async obtenerModuloDesdeBackend(userId: number): Promise<number | null> {
+    try {
+      const response = await api.get(`/queue-agents/recuperar-modulo/${userId}`)
+      if (response.data && response.data.moduleId) {
+        const moduloId = response.data.moduleId
+        console.log('✅ [queueAgentService] Módulo recuperado desde el backend:', moduloId)
+        localStorage.setItem(`selectedModule_${userId}`, moduloId.toString())
+        return moduloId
+      }
+      return null
+    } catch (error) {
+      console.log('⚠️ [queueAgentService] Backend no disponible:', error)
+      return null
     }
   }
 
   async recuperarModuloAsignado(): Promise<number | null> {
     try {
-      // 🎯 LEER DESDE auth-storage
       const authStorageData = localStorage.getItem('auth-storage')
       if (!authStorageData) {
         console.log('❌ No hay datos de autenticación')
@@ -135,25 +162,13 @@ class QueueAgentService {
       const userId = user.id
       console.log('🔍 [queueAgentService] Recuperando módulo asignado para usuario:', userId)
 
-      // 🎯 PRIMERO: Intentar obtener desde el backend
-      try {
-        const response = await api.get(`/queue-agents/recuperar-modulo/${userId}`)
-        if (response.data && response.data.moduleId) {
-          const moduloId = response.data.moduleId
-          console.log('✅ [queueAgentService] Módulo recuperado desde el backend:', moduloId)
-          
-          // 🎯 SINCRONIZAR CON LOCALSTORAGE
-          localStorage.setItem(`selectedModule_${userId}`, moduloId.toString())
-          console.log('💾 [queueAgentService] Módulo sincronizado en localStorage:', moduloId)
-          
-          return moduloId
-        }
-      } catch (backendError) {
-        console.log('⚠️ [queueAgentService] Backend no disponible, intentando localStorage...')
-        console.log('🔍 [queueAgentService] Error del backend:', backendError)
+      // Intentar obtener desde el backend
+      const moduloBackend = await this.obtenerModuloDesdeBackend(userId)
+      if (moduloBackend !== null) {
+        return moduloBackend
       }
 
-      // 🎯 FALLBACK: Usar localStorage si el backend no está disponible
+      // FALLBACK: Usar localStorage si el backend no está disponible
       const moduloGuardado = localStorage.getItem(`selectedModule_${userId}`)
       if (moduloGuardado) {
         const moduloId = parseInt(moduloGuardado)
@@ -171,7 +186,6 @@ class QueueAgentService {
 
   async verificarYUsarModuloExistente(): Promise<ModuleAssignmentResponse> {
     try {
-      // 🎯 LEER DESDE auth-storage
       const authStorageData = localStorage.getItem('auth-storage')
       if (!authStorageData) {
         return { success: false, message: 'No hay datos de autenticación', existing: false }
@@ -186,35 +200,13 @@ class QueueAgentService {
       const userId = user.id
       console.log('🔍 [queueAgentService] Verificando módulo existente para usuario:', userId)
 
-      // 🎯 PRIMERO: Intentar obtener desde el backend
-      try {
-        const response = await api.get(`/queue-agents/recuperar-modulo/${userId}`)
-        if (response.data && response.data.moduleId) {
-          const moduloId = response.data.moduleId
-          console.log('✅ [queueAgentService] Usuario ya tiene módulo asignado en backend:', moduloId)
-          
-          // 🎯 SINCRONIZAR CON LOCALSTORAGE
-          localStorage.setItem(`selectedModule_${userId}`, moduloId.toString())
-          
-          return {
-            success: true,
-            message: 'Usuario ya tiene módulo asignado',
-            moduleId: moduloId,
-            existing: true
-          }
-        }
-      } catch (backendError) {
-        console.log('⚠️ [queueAgentService] Backend no disponible, verificando localStorage...')
-      }
-
-      // 🎯 FALLBACK: Verificar localStorage
-      const moduloGuardado = localStorage.getItem(`selectedModule_${userId}`)
-      if (moduloGuardado) {
-        const moduloId = parseInt(moduloGuardado)
-        console.log('✅ [queueAgentService] Usuario ya tiene módulo asignado en localStorage:', moduloId)
+      // Usar recuperarModuloAsignado para evitar duplicar la llamada al API
+      const moduloId = await this.recuperarModuloAsignado()
+      
+      if (moduloId !== null) {
         return {
           success: true,
-          message: 'Usuario ya tiene módulo asignado (localStorage)',
+          message: 'Usuario ya tiene módulo asignado',
           moduleId: moduloId,
           existing: true
         }
@@ -227,15 +219,6 @@ class QueueAgentService {
     }
   }
 
-  async getActiveAgents(): Promise<ActiveAgent[]> {
-    try {
-      const response = await api.get('/queue-agents/active-agents')
-      return response.data || []
-    } catch (error) {
-      console.error('❌ Error obteniendo agentes activos:', error)
-      return []
-    }
-  }
 
   async getAgentStatus(userId: number): Promise<QueueAgent | null> {
     try {

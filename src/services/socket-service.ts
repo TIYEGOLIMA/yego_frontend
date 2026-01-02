@@ -284,7 +284,25 @@ class SocketService {
       }
     });
 
-    console.log('✅ [SocketService] Suscrito a todos los topics de tickets');
+    // 🎯 Topic para actualizaciones de módulos de atención
+    this.stompClient.subscribe('/topic/modulos-atencion', (message: IMessage) => {
+      try {
+        const modulosData = JSON.parse(message.body);
+        console.log('📦 [SocketService] Actualización de módulos recibida:', modulosData);
+        
+        // El mensaje ya viene con type: "MODULOS_ACTUALIZADOS" desde el backend
+        const event = {
+          type: modulosData.type || 'MODULOS_ACTUALIZADOS',
+          data: modulosData,
+          timestamp: modulosData.timestamp || Date.now()
+        };
+        this.emit('ticketera', event);
+      } catch (error) {
+        console.error('❌ [SocketService] Error procesando /topic/modulos-atencion:', error);
+      }
+    });
+
+    console.log('✅ [SocketService] Suscrito a todos los topics de tickets y módulos');
   }
 
   /**

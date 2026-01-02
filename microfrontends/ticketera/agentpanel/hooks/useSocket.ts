@@ -65,6 +65,7 @@ export const useSocket = (): UseSocketReturn => {
       '/topic/queue-changes': 'queue_changed',
       '/topic/module-assigned': 'module_assigned',
       '/topic/module-released': 'module_released',
+      '/topic/modulos-atencion': 'MODULOS_ACTUALIZADOS',
     }
     
     // Si el topic está mapeado, suscribirse a eventos de Ticketera
@@ -73,7 +74,8 @@ export const useSocket = (): UseSocketReturn => {
       
       // Suscribirse a eventos de Ticketera y filtrar por tipo
       const unsubscribe = onTicketeraEvent((event: any) => {
-        if (event.type === topicMap[topic]) {
+        // Para MODULOS_ACTUALIZADOS, el tipo puede venir directamente en el mensaje
+        if (event.type === topicMap[topic] || event.type === 'MODULOS_ACTUALIZADOS') {
           console.log(`🎫 [useSocket] Evento recibido para ${topic}:`, event)
           callback(event.data || event)
         }

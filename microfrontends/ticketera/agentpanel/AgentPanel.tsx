@@ -36,6 +36,9 @@ const AgentPanel: React.FC = () => {
     atenderTicket,
     completarTicket,
     cancelarTicket,
+    liberarModulo,
+    actualizarModulos,
+    actualizarModulosDesdeLista,
   } = useAgentPanel()
 
   // 🎯 FUNCIONES ESPECÍFICAS PARA CADA ACCIÓN
@@ -126,6 +129,8 @@ const AgentPanel: React.FC = () => {
       <div className="min-h-screen bg-gray-100 dark:bg-gray-900 p-4">
         <ModuleSelection
           onModuleSelected={seleccionarModulo}
+          modules={modules}
+          onModulesUpdated={actualizarModulosDesdeLista}
         />
       </div>
     )
@@ -167,7 +172,13 @@ const AgentPanel: React.FC = () => {
                 </span>
               </div>
             </div>
-            {/* 🚫 BOTÓN DE LOGOUT ELIMINADO - Se maneja desde el sidebar principal */}
+            <button
+              onClick={liberarModulo}
+              className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white font-medium rounded-lg transition-colors duration-200 shadow-md hover:shadow-lg text-sm"
+              title="Salir del módulo"
+            >
+              Salir del módulo
+            </button>
           </div>
         </div>
       </div>

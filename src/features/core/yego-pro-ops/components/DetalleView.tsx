@@ -1,6 +1,6 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { yegoProOpsService, type DriverItem, type ViajesCompletosResponse, type RegistroCierre, type DriversResponse, type ContractorDriver, type WorkRulesResponse } from '../../../../services/yego-pro-ops-service'
+import { yegoProOpsService, type DriverItem, type ViajesCompletosResponse, type RegistroCierre, type DriversResponse, type ContractorDriver, type WorkRulesResponse, type FechasTurnosResponse } from '../../../../services/yego-pro-ops-service'
 import { useAuth } from '../../../../shared/hooks/useAuth'
 import { useToastNotifications } from '../../../../hooks/useToastNotifications'
 import { NotificationContainer } from '../../../../components/NotificationToast'
@@ -64,10 +64,51 @@ const obtenerFechaAyer = (): string => {
   return formatearFechaLocal(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate())
 }
 
+// Función para parsear fecha YYYY-MM-DD sin problemas de zona horaria
+const parsearFechaLocal = (fechaStr: string): Date => {
+  const [year, month, day] = fechaStr.split('-').map(Number)
+  // month - 1 porque los meses en Date van de 0-11
+  return new Date(year, month - 1, day)
+}
+
 const parseNumber = (value: string | undefined | null, defaultValue = 0): number => {
   if (!value || value.trim() === '') return defaultValue
   const parsed = parseFloat(value)
   return isNaN(parsed) ? defaultValue : parsed
+}
+
+// Función para validar y filtrar solo números positivos (sin letras ni negativos)
+const validarNumeroPositivo = (value: string): string => {
+  // Permitir cadena vacía
+  if (value === '') return ''
+  
+  // Rechazar si contiene signo negativo
+  if (value.includes('-')) return ''
+  
+  // Remover cualquier carácter que no sea número o punto decimal
+  let cleaned = value.replace(/[^0-9.]/g, '')
+  
+  // Si después de limpiar está vacío, retornar vacío
+  if (cleaned === '') return ''
+  
+  // Permitir solo un punto decimal
+  const parts = cleaned.split('.')
+  if (parts.length > 2) {
+    cleaned = parts[0] + '.' + parts.slice(1).join('')
+  }
+  
+  // Asegurar que no comience con punto
+  if (cleaned.startsWith('.')) {
+    cleaned = '0' + cleaned
+  }
+  
+  // Convertir a número y verificar que sea positivo o cero
+  const num = parseFloat(cleaned)
+  if (isNaN(num) || num < 0) {
+    return ''
+  }
+  
+  return cleaned
 }
 
 const calcularValoresCierre = (
@@ -94,9 +135,6 @@ const calcularValoresCierre = (
 }
 
 // Tipos
-interface DetalleViewProps {
-}
-
 interface PaginacionProps {
   currentPage: number
   totalPages: number
@@ -131,7 +169,7 @@ interface KPICardProps {
   isHighlighted?: boolean
 }
 
-const KPICard: React.FC<KPICardProps> = ({
+const KPICard = ({
   icon,
   label,
   value,
@@ -140,7 +178,7 @@ const KPICard: React.FC<KPICardProps> = ({
   borderColor,
   iconColor,
   isHighlighted = false
-}) => {
+}: KPICardProps) => {
   const borderClass = isHighlighted ? 'border-2 shadow-md' : 'border'
   return (
     <div className={`${bgColor} rounded-lg p-3 ${borderClass} ${borderColor}`}>
@@ -149,14 +187,14 @@ const KPICard: React.FC<KPICardProps> = ({
         <p className={`text-xs font-medium ${textColor}`}>{label}</p>
       </div>
       <div className={`text-lg font-bold ${textColor}`}>
-        {typeof value === 'string' ? value : value}
+        {value}
       </div>
     </div>
   )
 }
 
 // Componente de Paginación
-const Paginacion: React.FC<PaginacionProps> = ({
+const Paginacion = ({
   currentPage,
   totalPages,
   itemsPerPage,
@@ -165,7 +203,7 @@ const Paginacion: React.FC<PaginacionProps> = ({
   endIndex,
   onPageChange,
   onItemsPerPageChange
-}) => {
+}: PaginacionProps) => {
   const calcularNumerosPagina = (current: number, total: number): number[] => {
     if (total <= 5) {
       return Array.from({ length: total }, (_, i) => i + 1)
@@ -266,7 +304,7 @@ const usePagination = <T,>(items: T[], itemsPerPage: number) => {
   }
 }
 
-export const DetalleView: React.FC<DetalleViewProps> = () => {
+export const DetalleView = () => {
   const { user } = useAuth()
   const { showSuccess, showError, showWarning, notifications, removeNotification } = useToastNotifications()
   const [searchTerm, setSearchTerm] = useState('')
@@ -319,19 +357,6 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
     }
   }, [showModal])
 
-  useEffect(() => {
-    if (!showDatePicker) return
-    
-    const manejarClicExterno = (event: MouseEvent) => {
-      if (datePickerRef.current && !datePickerRef.current.contains(event.target as Node)) {
-        setShowDatePicker(false)
-      }
-    }
-
-    document.addEventListener('mousedown', manejarClicExterno)
-    return () => document.removeEventListener('mousedown', manejarClicExterno)
-  }, [showDatePicker])
-
   // Funciones del calendario
   const obtenerDiasDelMes = (fecha: Date) => {
     const año = fecha.getFullYear()
@@ -363,25 +388,30 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
     
     const fechaStr = obtenerFechaStr(dia)
     
-    // Si ya hay un rango completo, resetear y empezar de nuevo
+    // Si ya hay un rango completo seleccionado, resetear y empezar de nuevo
     if (fechaInicio && fechaFin) {
       setFechaInicio(fechaStr)
       setFechaFin('')
+      // NO cerrar el calendario, permitir seleccionar la segunda fecha
       return
     }
     
-    // Si no hay fechaInicio, establecerla
+    // Si no hay fechaInicio, establecerla (primera fecha)
     if (!fechaInicio) {
       setFechaInicio(fechaStr)
+      setFechaFin('')
+      // NO cerrar el calendario, esperar a que se seleccione la segunda fecha
       return
     }
     
-    // Si hay fechaInicio pero no fechaFin
+    // Si hay fechaInicio pero no fechaFin (seleccionando la segunda fecha)
     if (fechaStr < fechaInicio) {
-      // Si la nueva fecha es menor, resetear y establecer como inicio
+      // Si la nueva fecha es menor, resetear y establecer como nueva fecha inicio
       setFechaInicio(fechaStr)
       setFechaFin('')
+      // NO cerrar el calendario, esperar a que se seleccione la segunda fecha
     } else {
+      // Establecer rango de fechas y cerrar el calendario
       setFechaFin(fechaStr)
       setShowDatePicker(false)
     }
@@ -390,14 +420,25 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
   const formatearRangoFechas = () => {
     if (!fechaInicio && !fechaFin) return 'Seleccionar rango de fechas'
     if (!fechaFin) {
+      // Solo hay fecha inicio seleccionada
       const [, month, day] = fechaInicio.split('-').map(Number)
-      return `${day} de ${MESES[month - 1].toLowerCase()}`
+      return `${day} de ${MESES[month - 1].toLowerCase()}...`
     }
+    
     const [, monthInicio, dayInicio] = fechaInicio.split('-').map(Number)
     const [, monthFin, dayFin] = fechaFin.split('-').map(Number)
+    
+    // Si es la misma fecha, mostrar solo una fecha
+    if (fechaInicio === fechaFin) {
+      return `${dayInicio} de ${MESES[monthInicio - 1].toLowerCase()}`
+    }
+    
+    // Si es rango del mismo mes
     if (monthInicio === monthFin) {
       return `${dayInicio}-${dayFin} de ${MESES[monthInicio - 1].toLowerCase()}`
     }
+    
+    // Rango de diferentes meses
     return `${dayInicio} ${MESES[monthInicio - 1].toLowerCase()} - ${dayFin} ${MESES[monthFin - 1].toLowerCase()}`
   }
 
@@ -412,6 +453,11 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
   const esFechaInicio = (dia: number) => fechaInicio ? obtenerFechaStr(dia) === fechaInicio : false
 
   const esFechaFin = (dia: number) => fechaFin ? obtenerFechaStr(dia) === fechaFin : false
+
+  const tieneTurno = (dia: number) => {
+    const fechaStr = obtenerFechaStr(dia)
+    return fechasConTurnos.has(fechaStr)
+  }
 
   const esMesFuturo = (year: number, month: number): boolean => {
     const hoy = new Date()
@@ -445,11 +491,31 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
   const { data: workRulesData } = useQuery<WorkRulesResponse>({
     queryKey: ['yego-pro-ops-work-rules'],
     queryFn: () => yegoProOpsService.obtenerReglasTrabajo(),
-    refetchInterval: 30000,
+    refetchInterval: false, // No hacer refetch automático
+    refetchOnWindowFocus: false, // No refetch al enfocar la ventana
+    refetchOnMount: false, // No refetch al montar si ya hay datos en caché
+    staleTime: Infinity, // Los datos nunca se consideran obsoletos
+    gcTime: 24 * 60 * 60 * 1000, // Mantener en caché por 24 horas
   })
 
-  // Query para obtener viajes - ÚNICA FUENTE: /api/pro-ops/driver/viajes-completos
-  // Todos los viajes mostrados en esta vista provienen exclusivamente de este endpoint
+  // Query para obtener fechas de turnos cuando se abre el modal de detalles
+  const { data: fechasTurnosData } = useQuery<FechasTurnosResponse>({
+    queryKey: ['yego-pro-ops-fechas-turnos', selectedDriver?.driver_id],
+    queryFn: () => {
+      if (!selectedDriver) {
+        throw new Error('No hay conductor seleccionado')
+      }
+      return yegoProOpsService.obtenerFechasTurnos(selectedDriver.driver_id)
+    },
+    enabled: showModal && !!selectedDriver,
+    refetchOnWindowFocus: false,
+  })
+
+  // Crear un Set con las fechas que tienen turnos para fácil búsqueda
+  const fechasConTurnos = useMemo(() => {
+    if (!fechasTurnosData?.fechas) return new Set<string>()
+    return new Set(fechasTurnosData.fechas.map(f => f.fecha))
+  }, [fechasTurnosData])
 
   // Mapear contractors a DriverItem
   const driversList = useMemo<DriverItem[]>(() => {
@@ -494,12 +560,15 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
     refetchOnWindowFocus: false,
   })
 
-  // Detectar si hay un registro de cierre
+  const datosParaMostrar = viajesData
+
+  // Detectar si hay un registro de cierre (solo de los datos actuales, no de los anteriores)
   const cierreRegistrado = viajesData?.cierre_registrado ?? false
 
   // Obtener opciones de tipo de trabajo desde las reglas de trabajo
+  // Memoizado con dependencia específica de work_rules para evitar re-renderizados innecesarios
   const tipoTrabajoOptions = useMemo(() => {
-    if (!workRulesData?.work_rules) {
+    if (!workRulesData?.work_rules || workRulesData.work_rules.length === 0) {
       return []
     }
 
@@ -508,7 +577,12 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
       value: rule.id,
       label: rule.name
     }))
-  }, [workRulesData])
+  }, [workRulesData?.work_rules])
+
+  // Memoizar el callback para evitar re-renderizados del Select
+  const handleTipoConductorChange = useCallback((value: string) => {
+    setTipoConductorFilter(value === 'all' ? null : value)
+  }, [])
 
   // Filtrar conductores
   const filteredDrivers = useMemo(() => {
@@ -531,11 +605,9 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
     return filtered
   }, [driversList, searchTerm])
 
-  // Memoizar viajesData para evitar recrear arrays
-  // Los viajes provienen exclusivamente de /api/pro-ops/driver/viajes-completos
   const viajesArray = useMemo(() => {
-    return viajesData?.viajes ?? []
-  }, [viajesData])
+    return datosParaMostrar?.viajes ?? []
+  }, [datosParaMostrar])
 
   // Filtrar viajes por ID
   const filteredViajes = useMemo(() => {
@@ -823,7 +895,7 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
                 <div className="w-56">
                   <Select
                     value={tipoConductorFilter || 'all'}
-                    onValueChange={(value) => setTipoConductorFilter(value === 'all' ? null : value)}
+                    onValueChange={handleTipoConductorChange}
                   >
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Tipo de trabajo" />
@@ -950,7 +1022,7 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
           }
         }}
       >
-        <DialogContent className="max-w-7xl w-[95vw] max-h-[95vh] overflow-hidden flex flex-col p-6">
+        <DialogContent className="max-w-7xl w-[95vw] max-h-[95vh] overflow-y-auto overflow-x-hidden flex flex-col p-6">
           {selectedDriver && (
             <>
               <DialogHeader className="flex-shrink-0">
@@ -968,9 +1040,9 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
                 </p>
               </DialogHeader>
               
-              <div className="relative flex-1 flex flex-col min-h-0 overflow-hidden">
+              <div className="relative flex-1 flex flex-col min-h-0 overflow-y-auto overflow-x-hidden">
                 {/* Filtro de rango de fechas con calendario */}
-                <div className="mb-4 relative" ref={datePickerRef}>
+                <div className="mb-4 relative z-50" ref={datePickerRef}>
                   <div className="flex items-center gap-2">
                     <label className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
                       Período:
@@ -978,25 +1050,33 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
                     <button
                       type="button"
                       onClick={() => setShowDatePicker(!showDatePicker)}
-                      className="w-48 px-3 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm"
+                      className="w-56 px-4 py-2.5 rounded-lg border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-200 text-sm font-medium shadow-sm hover:shadow-md"
                     >
-                      <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                        <span className={fechaInicio && fechaFin ? 'text-gray-900 dark:text-gray-100' : 'text-gray-500 dark:text-gray-400'}>
+                      <div className="flex items-center gap-2.5">
+                        <Calendar className="w-4 h-4 text-red-600 dark:text-red-400" />
+                        <span className={fechaInicio && fechaFin ? 'text-gray-900 dark:text-gray-100 font-semibold' : 'text-gray-500 dark:text-gray-400'}>
                           {formatearRangoFechas()}
                         </span>
                       </div>
-                      <ChevronDown className={`w-4 h-4 text-gray-500 dark:text-gray-400 transition-transform ${showDatePicker ? 'rotate-180' : ''}`} />
+                      <ChevronDown className={`w-4 h-4 text-gray-500 dark:text-gray-400 transition-transform duration-200 ${showDatePicker ? 'rotate-180' : ''}`} />
                     </button>
                   </div>
                 
                   {/* Calendario desplegable */}
                   {showDatePicker && (
-                    <div className="absolute top-full left-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 p-3 z-[100]">
-                      <div className="flex items-center justify-between mb-2">
+                    <div 
+                      className="absolute top-full left-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 p-3 z-[9999]"
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                    >
+                      {/* Header del calendario */}
+                      <div className="flex items-center justify-between mb-3">
                         <button
-                          onClick={() => cambiarMes('anterior')}
-                          className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            cambiarMes('anterior')
+                          }}
+                          className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
                         >
                           <ChevronLeft className="w-4 h-4 text-gray-600 dark:text-gray-400" />
                         </button>
@@ -1004,53 +1084,73 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
                           {MESES[currentMonth.getMonth()]} {currentMonth.getFullYear()}
                         </h3>
                         <button
-                          onClick={() => cambiarMes('siguiente')}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            cambiarMes('siguiente')
+                          }}
                           disabled={esMesFuturo(
                             currentMonth.getFullYear(),
                             currentMonth.getMonth() + 1
                           )}
-                          className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                          className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                         >
                           <ChevronRight className="w-4 h-4 text-gray-600 dark:text-gray-400" />
                         </button>
                       </div>
                       
+                      {/* Días de la semana */}
                       <div className="grid grid-cols-7 gap-1 mb-2">
                         {DIAS_SEMANA.map((dia, index) => (
-                          <div key={index} className="text-center text-xs font-medium text-gray-600 dark:text-gray-400 py-1">
+                          <div key={index} className="text-center text-xs font-medium text-gray-500 dark:text-gray-400 py-1">
                             {dia}
                           </div>
                         ))}
                       </div>
                       
+                      {/* Días del mes */}
                       <div className="grid grid-cols-7 gap-1">
                         {obtenerDiasDelMes(currentMonth).map((dia, index) => {
                           if (dia === null) {
-                            return <div key={index} className="py-1"></div>
+                            return <div key={index} className="py-1.5"></div>
                           }
                           const esFutura = esFechaFutura(dia)
                           const estaEnRango = esFechaEnRango(dia)
                           const esInicio = esFechaInicio(dia)
                           const esFin = esFechaFin(dia)
+                          const tieneTurnoEnFecha = tieneTurno(dia)
                           
                           return (
                             <button
                               key={index}
-                              onClick={() => seleccionarFecha(dia)}
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                seleccionarFecha(dia)
+                              }}
+                              onMouseDown={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                              }}
                               disabled={esFutura}
                               className={cn(
-                                "py-1.5 rounded text-xs transition-colors",
+                                "py-1.5 rounded text-xs font-medium transition-colors relative",
                                 esFutura
                                   ? 'opacity-30 cursor-not-allowed text-gray-400 dark:text-gray-600'
                                   : esInicio || esFin
                                   ? 'bg-red-600 text-white font-semibold'
                                   : estaEnRango
                                   ? 'bg-red-100 dark:bg-red-900/30 text-red-900 dark:text-red-100'
+                                  : tieneTurnoEnFecha
+                                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-900 dark:text-blue-100 hover:bg-blue-200 dark:hover:bg-blue-900/50'
                                   : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'
                               )}
-                              title={esFutura ? 'No se pueden seleccionar fechas futuras' : ''}
+                              title={esFutura ? 'No se pueden seleccionar fechas futuras' : tieneTurnoEnFecha ? 'Esta fecha tiene turnos asignados' : ''}
                             >
                               {dia}
+                              {tieneTurnoEnFecha && !esInicio && !esFin && !estaEnRango && (
+                                <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 bg-blue-600 dark:bg-blue-400 rounded-full"></span>
+                              )}
                             </button>
                           )
                         })}
@@ -1069,7 +1169,7 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
                   <div className="text-center py-8 text-red-600 dark:text-red-400">
                     <p className="text-sm font-medium">Error al cargar los viajes</p>
                   </div>
-                ) : (viajesData !== undefined && metricas) ? (
+                ) : (datosParaMostrar !== undefined && metricas) ? (
                   <>
                     {/* Métricas compactas */}
                     {metricas && (
@@ -1417,9 +1517,13 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
                     </div>
                     )}
                   </>
-                ) : (
+                ) : (!fechaInicio || !fechaFin) ? (
                   <div className="text-center py-12 text-gray-500 dark:text-gray-400 flex-shrink-0">
                     <p>Selecciona un rango de fechas para ver los viajes</p>
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-gray-500 dark:text-gray-400 flex-shrink-0">
+                    <p>No hay viajes registrados para el período seleccionado</p>
                   </div>
                 )}
               </div>
@@ -1486,15 +1590,12 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
                     GNV Combustible (S/.) <span className="text-red-600">*</span>
                   </label>
                   <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
+                    type="text"
+                    inputMode="decimal"
                     value={gnvSoles}
                     onChange={(e) => {
-                      const value = e.target.value
-                      if (value === '' || parseFloat(value) >= 0) {
+                      const value = validarNumeroPositivo(e.target.value)
                         setGnvSoles(value)
-                      }
                     }}
                     placeholder="0.00"
                     className="w-full h-9 text-sm"
@@ -1529,15 +1630,12 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
                     Gasolina Combustible (S/.) <span className="text-gray-500 text-xs font-normal">(Opcional)</span>
                   </label>
                   <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
+                    type="text"
+                    inputMode="decimal"
                     value={gasolinaSoles}
                     onChange={(e) => {
-                      const value = e.target.value
-                      if (value === '' || parseFloat(value) >= 0) {
+                      const value = validarNumeroPositivo(e.target.value)
                         setGasolinaSoles(value)
-                      }
                     }}
                     placeholder="0.00"
                     className="w-full h-9 text-sm"
@@ -1558,15 +1656,12 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
                     Cuanto Liquida en Efectivo (S/.) <span className="text-red-600">*</span>
                   </label>
                   <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
+                    type="text"
+                    inputMode="decimal"
                     value={liquidaEfectivo}
                     onChange={(e) => {
-                      const value = e.target.value
-                      if (value === '' || parseFloat(value) >= 0) {
+                      const value = validarNumeroPositivo(e.target.value)
                         setLiquidaEfectivo(value)
-                      }
                     }}
                     placeholder="0.00"
                     className="w-full h-9 text-sm"
@@ -1580,15 +1675,12 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
                     Cuanto Liquida en Yape (S/.) <span className="text-red-600">*</span>
                   </label>
                   <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
+                    type="text"
+                    inputMode="decimal"
                     value={liquidaYape}
                     onChange={(e) => {
-                      const value = e.target.value
-                      if (value === '' || parseFloat(value) >= 0) {
+                      const value = validarNumeroPositivo(e.target.value)
                         setLiquidaYape(value)
-                      }
                     }}
                     placeholder="0.00"
                     className="w-full h-9 text-sm"
@@ -1721,7 +1813,7 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
               {cierreDetalle && (
                 <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
                   Fecha: <span className="text-gray-900 dark:text-gray-100">
-                    {new Date(cierreDetalle.fecha).toLocaleDateString('es-PE', { 
+                    {parsearFechaLocal(cierreDetalle.fecha).toLocaleDateString('es-PE', { 
                       weekday: 'long', 
                       day: '2-digit', 
                       month: 'long', 
@@ -1770,15 +1862,12 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
                     </label>
                     {editandoCierre ? (
                       <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
+                        type="text"
+                        inputMode="decimal"
                         value={editGnvSoles}
                         onChange={(e) => {
-                          const value = e.target.value
-                          if (value === '' || parseFloat(value) >= 0) {
+                          const value = validarNumeroPositivo(e.target.value)
                             setEditGnvSoles(value)
-                          }
                         }}
                         placeholder="0.00"
                         className="w-full h-9 text-sm"
@@ -1814,15 +1903,12 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
                     </label>
                     {editandoCierre ? (
                       <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
+                        type="text"
+                        inputMode="decimal"
                         value={editGasolinaSoles}
                         onChange={(e) => {
-                          const value = e.target.value
-                          if (value === '' || parseFloat(value) >= 0) {
+                          const value = validarNumeroPositivo(e.target.value)
                             setEditGasolinaSoles(value)
-                          }
                         }}
                         placeholder="0.00"
                         className="w-full h-9 text-sm"
@@ -1848,15 +1934,12 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
                     </label>
                     {editandoCierre ? (
                       <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
+                        type="text"
+                        inputMode="decimal"
                         value={editLiquidaEfectivo}
                         onChange={(e) => {
-                          const value = e.target.value
-                          if (value === '' || parseFloat(value) >= 0) {
+                          const value = validarNumeroPositivo(e.target.value)
                             setEditLiquidaEfectivo(value)
-                          }
                         }}
                         placeholder="0.00"
                         className="w-full h-9 text-sm"
@@ -1874,15 +1957,12 @@ export const DetalleView: React.FC<DetalleViewProps> = () => {
                     </label>
                     {editandoCierre ? (
                       <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
+                        type="text"
+                        inputMode="decimal"
                         value={editLiquidaYape}
                         onChange={(e) => {
-                          const value = e.target.value
-                          if (value === '' || parseFloat(value) >= 0) {
+                          const value = validarNumeroPositivo(e.target.value)
                             setEditLiquidaYape(value)
-                          }
                         }}
                         placeholder="0.00"
                         className="w-full h-9 text-sm"

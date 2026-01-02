@@ -7,7 +7,6 @@ import { Clock, FileText, Radio } from 'lucide-react'
 
 const YegoProOpsModule: React.FC = () => {
   const [statusFilterEnCurso, setStatusFilterEnCurso] = useState<'free' | 'busy' | 'in_order' | 'no-gps' | null>(null)
-  const [statusFilterMonitoreo, setStatusFilterMonitoreo] = useState<'free' | 'busy' | 'in_order' | 'no-gps' | null>(null)
 
   return (
     <div className="space-y-6">
@@ -39,7 +38,7 @@ const YegoProOpsModule: React.FC = () => {
         </TabsList>
 
         <TabsContent value="monitoreo" className="space-y-4">
-          <MonitoreoEnVivoView statusFilter={statusFilterMonitoreo} onFilterChange={setStatusFilterMonitoreo} />
+          <MonitoreoEnVivoView />
         </TabsContent>
 
         <TabsContent value="activos" className="space-y-4">

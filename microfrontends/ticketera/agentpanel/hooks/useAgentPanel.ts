@@ -43,14 +43,19 @@ interface UseAgentPanelReturn {
   atenderTicket: (ticket: Ticket) => Promise<void>
   completarTicket: (ticket: Ticket, notes?: string) => Promise<void>
   cancelarTicket: (ticket: Ticket) => Promise<void>
-  refreshModules: () => Promise<void>
   
   // 🎯 NUEVO: Funciones de manejo de loading
   marcarTicketEnProceso: (ticketId: number) => void
   desmarcarTicketEnProceso: (ticketId: number) => void
   
-  // 🆕 Funciones de verificación automática
-  verificarModuloAsignadoAutomaticamente: () => Promise<void>
+  // 🆕 Función para liberar módulo
+  liberarModulo: () => Promise<void>
+  
+  // 🆕 Función para actualizar módulos disponibles
+  actualizarModulos: () => Promise<void>
+  
+  // 🆕 Función para actualizar módulos desde lista externa
+  actualizarModulosDesdeLista: (modules: any[]) => void
   
 }
 
@@ -71,6 +76,8 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
   // 🎯 Usar useRef para evitar múltiples llamadas al endpoint de módulos
   const hasLoadedModules = useRef(false)
   const isLoadingModules = useRef(false)
+  const hasRecuperadoModulo = useRef(false)
+  const isInicializando = useRef(false)
 
   // 🎯 HELPER: Obtener datos del usuario desde auth-storage
   const getCurrentUser = useCallback(() => {
@@ -381,49 +388,6 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
     setTimeout(() => setShowError(false), 3000)
   }, [])
 
-  // 🎯 FUNCIÓN SIMPLE: Cargar módulos
-  const cargarModulos = useCallback(async () => {
-    // 🎯 EVITAR LLAMADAS MÚLTIPLES: Si ya se están cargando o ya se cargaron, no hacer nada
-    if (isLoadingModules.current) {
-      console.log('⚠️ [useAgentPanel] Ya se están cargando módulos, evitando llamada duplicada')
-      return
-    }
-    
-    if (hasLoadedModules.current) {
-      console.log('⚠️ [useAgentPanel] Los módulos ya fueron cargados, evitando llamada duplicada')
-      return
-    }
-    
-    isLoadingModules.current = true
-    
-    try {
-      const { moduloAtencionService } = await import('../services/moduloAtencionService')
-      const modulos = await moduloAtencionService.getFrontendModules()
-      setModules(modulos)
-      hasLoadedModules.current = true // Marcar como cargado
-      console.log('✅ [useAgentPanel] Módulos cargados del backend:', modulos.length)
-    } catch (error: any) {
-      console.error('Error cargando módulos:', error)
-      
-      // 🎯 MANEJAR ERRORES DE AUTENTICACIÓN ESPECÍFICAMENTE
-      if (error?.response?.status === 401) {
-        console.log('🔑 [useAgentPanel] Error de autenticación al cargar módulos')
-        mostrarError('Error de autenticación. Por favor, inicie sesión nuevamente.')
-        
-        // 🎯 MICROFRONTEND: Solo limpiar datos locales (NO hacer logout completo)
-        console.log('🧹 [AgentPanel] Limpiando datos locales del microfrontend')
-        safeSetItem('selectedModule', '')
-        
-        // Redirigir al login (el sistema principal manejará el logout completo)
-        window.location.href = '/login'
-        return
-      }
-      
-      mostrarError('Error al cargar módulos')
-    } finally {
-      isLoadingModules.current = false // Marcar como terminado
-    }
-  }, [mostrarError]) // Sin modules.length para evitar recreaciones
 
   // 🎯 FUNCIÓN REAL: Cargar tickets del backend
   const cargarTickets = useCallback(async (esConsultaAutomatica = false) => {
@@ -972,16 +936,16 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
     }
   }, [selectedModule, mostrarError, cargarTickets])
 
-  // 🎯 FUNCIÓN SIMPLE: Seleccionar módulo
   const handleModuleSelection = useCallback(async (moduleId: number) => {
     try {
-      console.log('🎯 [AgentPanel] Seleccionando módulo:', moduleId)
-      
       const selectedModuleData = modules.find(m => m.id === moduleId)
       if (!selectedModuleData) {
         mostrarError('Módulo no encontrado')
         return
       }
+      
+      // Marcar que ya se recuperó el módulo para evitar que el useEffect inicial se ejecute de nuevo
+      hasRecuperadoModulo.current = true
       
       // Limpiar estado anterior
       setTickets([])
@@ -991,8 +955,8 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       setShowModuleSelection(false)
       
       // Persistir módulo seleccionado
-      safeSetItem(`selectedModule`, moduleId.toString())
-      safeSetItem(`selectedModuleName`, selectedModuleData.name)
+      safeSetItem('selectedModule', moduleId.toString())
+      safeSetItem('selectedModuleName', selectedModuleData.name)
       
       // Cargar tickets del nuevo módulo
       await cargarTickets()
@@ -1001,17 +965,11 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
     } catch (error: any) {
       console.error('Error seleccionando módulo:', error)
       
-      // 🎯 MANEJAR ERRORES DE AUTENTICACIÓN ESPECÍFICAMENTE
       if (error?.response?.status === 401) {
         mostrarError('Error de autenticación. Por favor, inicie sesión nuevamente.')
-        
-        // 🎯 MICROFRONTEND: Solo limpiar datos locales (NO hacer logout completo)
-        console.log('🧹 [AgentPanel] Limpiando datos locales del microfrontend por error 401')
         safeSetItem('selectedModule', '')
         setTickets([])
         setModules([])
-        
-        // Redirigir al login (el sistema principal manejará el logout completo)
         window.location.href = '/login'
         return
       }
@@ -1020,84 +978,86 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
     }
   }, [modules, cargarTickets, mostrarError])
 
-  // 🆕 FUNCIÓN: Verificar módulo asignado automáticamente
-  const verificarModuloAsignadoAutomaticamente = useCallback(async () => {
-    try {
-      console.log('🔍 [AgentPanel] Verificando módulo asignado automáticamente...')
-      const moduloExistente = await queueAgentService.verificarYUsarModuloExistente()
-      
-      if (moduloExistente.success && moduloExistente.existing) {
-        console.log('✅ [AgentPanel] Usuario ya tiene módulo asignado en backend:', moduloExistente.moduleId)
-        
-        // 🎯 USAR EL MÓDULO EXISTENTE
-        setSelectedModule(moduloExistente.moduleId!)
-        setShowModuleSelection(false)
-        
-        // 🎯 PERSISTIR MÓDULO EXISTENTE
-        const moduleName = modules.find(m => m.id === moduloExistente.moduleId)?.name || 'Módulo'
-        safeSetItem(`selectedModule`, moduloExistente.moduleId!.toString())
-        safeSetItem(`selectedModuleName`, moduleName)
-        
-        console.log('✅ [AgentPanel] Módulo existente configurado automáticamente:', moduleName)
-      } else {
-        console.log('❌ [AgentPanel] Usuario no tiene módulo asignado, mostrar selección')
-        setShowModuleSelection(true)
-      }
-    } catch (error) {
-      console.error('❌ [AgentPanel] Error verificando módulo asignado automáticamente:', error)
-      setShowModuleSelection(true)
-    }
-  }, [modules])
 
-  // 🎯 EFECTO INICIAL: Cargar módulos y restaurar estado
   useEffect(() => {
+    if (hasRecuperadoModulo.current || selectedModule || isInicializando.current) {
+      return
+    }
+
+    isInicializando.current = true
+
     const inicializar = async () => {
       try {
-        console.log('🚀 [useAgentPanel] Inicializando...')
-        
-        // Cargar módulos
-        await cargarModulos()
-        
-        // 🆕 INTENTAR RECUPERAR MÓDULO ASIGNADO AUTOMÁTICAMENTE
-        const moduloRecuperado = await queueAgentService.recuperarModuloAsignado()
-        
-        if (moduloRecuperado) {
-          console.log('✅ [useAgentPanel] Módulo recuperado automáticamente:', moduloRecuperado)
-          setSelectedModule(moduloRecuperado)
-          setShowModuleSelection(false)
-          
-          // 🎯 GUARDAR EN LOCALSTORAGE PARA FUTURAS SESIONES
-          safeSetItem('selectedModule', moduloRecuperado.toString())
-        } else {
-          // 🎯 SI NO SE RECUPERÓ, INTENTAR RESTAURAR DEL LOCALSTORAGE
-          const moduloGuardado = safeGetItem('selectedModule')
-          if (moduloGuardado) {
-            const moduloId = parseInt(moduloGuardado)
-            setSelectedModule(moduloId)
-            setShowModuleSelection(false)
-          } else {
-            setShowModuleSelection(true)
-          }
+        const user = getCurrentUser()
+        if (!user?.id) {
+          setLoading(false)
+          isInicializando.current = false
+          return
         }
         
-      } catch (error) {
-        console.error('❌ [useAgentPanel] Error en inicialización:', error)
-        mostrarError('Error al inicializar')
+        const { moduloAtencionService } = await import('../services/moduloAtencionService')
+        const respuesta = await moduloAtencionService.verificarModuloOListarDisponibles(user.id)
+        
+        if (Array.isArray(respuesta)) {
+          if (respuesta.length > 0) {
+            setModules(respuesta)
+            setShowModuleSelection(true)
+            hasLoadedModules.current = true
+          } else {
+            setShowModuleSelection(true)
+            mostrarError('No hay módulos disponibles')
+          }
+        } else if (respuesta && typeof respuesta === 'object' && 'tieneModuloAsignado' in respuesta) {
+          const respuestaObj = respuesta as any
+          if (respuestaObj.tieneModuloAsignado && respuestaObj.moduloAsignado?.moduleId) {
+            const moduloId = respuestaObj.moduloAsignado.moduleId
+            setSelectedModule(moduloId)
+            setShowModuleSelection(false)
+            safeSetItem('selectedModule', moduloId.toString())
+            safeSetItem('selectedModuleName', `Módulo ${moduloId}`)
+            
+            if (respuestaObj.modulosDisponibles) {
+              setModules(respuestaObj.modulosDisponibles)
+              hasLoadedModules.current = true
+            }
+          } else if (respuestaObj.modulosDisponibles && respuestaObj.modulosDisponibles.length > 0) {
+            setModules(respuestaObj.modulosDisponibles)
+            setShowModuleSelection(true)
+            hasLoadedModules.current = true
+          } else {
+            setShowModuleSelection(true)
+            mostrarError('No hay módulos disponibles')
+          }
+        } else {
+          setShowModuleSelection(true)
+          mostrarError('No hay módulos disponibles')
+        }
+        
+        hasRecuperadoModulo.current = true
+        
+      } catch (error: any) {
+        console.error('Error en inicialización:', error)
+        
+        if (error?.response?.status === 401) {
+          mostrarError('Error de autenticación. Por favor, inicie sesión nuevamente.')
+          window.location.href = '/login'
+          return
+        }
+        
+        mostrarError('Error al inicializar. Intente nuevamente.')
+        setShowModuleSelection(true)
       } finally {
         setLoading(false)
+        isInicializando.current = false
       }
     }
 
     inicializar()
-  }, []) // Solo se ejecuta al montar
+  }, [getCurrentUser, mostrarError, selectedModule])
 
-  // 🎯 EFECTO SIMPLE: Cargar tickets cuando hay módulo
   useEffect(() => {
     if (selectedModule) {
-      console.log('🔄 [useAgentPanel] Módulo seleccionado, cargando tickets automáticamente...', selectedModule)
       cargarTickets()
-    } else {
-      console.log('⚠️ [useAgentPanel] No hay módulo seleccionado, no se cargan tickets')
     }
   }, [selectedModule]) 
 
@@ -1129,6 +1089,85 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
   const ticketsAtendiendo = useMemo(() => {
     return tickets.filter(t => t.status === 'IN_PROGRESS' && t.moduleId === selectedModule)
   }, [tickets, selectedModule])
+
+  const liberarModulo = useCallback(async () => {
+    try {
+      const user = getCurrentUser()
+      if (!user?.id) {
+        mostrarError('No se pudo obtener el usuario')
+        return
+      }
+
+      await queueAgentService.liberarModuloDelUsuario()
+      
+      // El WebSocket actualizará automáticamente la lista de módulos disponibles y ocupados
+      
+      setSelectedModule(null)
+      setTickets([])
+      safeSetItem('selectedModule', '')
+      safeSetItem('selectedModuleName', '')
+      
+      try {
+        const authStorageData = localStorage.getItem('auth-storage')
+        if (authStorageData) {
+          const parsedData = JSON.parse(authStorageData)
+          const updatedAuthStorage = {
+            ...parsedData,
+            state: {
+              ...parsedData.state,
+              user: {
+                ...parsedData.state.user,
+                moduleId: null
+              }
+            }
+          }
+          localStorage.setItem('auth-storage', JSON.stringify(updatedAuthStorage))
+        }
+      } catch (error) {
+        console.error('Error actualizando auth-storage:', error)
+      }
+      
+      setShowModuleSelection(true)
+    } catch (error: any) {
+      console.error('Error liberando módulo:', error)
+      mostrarError('Error al liberar el módulo. Intente nuevamente.')
+    }
+  }, [mostrarError, getCurrentUser])
+
+  const actualizarModulos = useCallback(async () => {
+    try {
+      const user = getCurrentUser()
+      if (!user?.id) {
+        console.error('No se pudo obtener el usuario para actualizar módulos')
+        return
+      }
+
+      const { moduloAtencionService } = await import('../services/moduloAtencionService')
+      const respuesta = await moduloAtencionService.verificarModuloOListarDisponibles(user.id)
+      
+      let modulosParaActualizar: any[] = []
+      if (Array.isArray(respuesta)) {
+        modulosParaActualizar = respuesta
+      } else if (respuesta && typeof respuesta === 'object' && 'modulosDisponibles' in respuesta) {
+        modulosParaActualizar = (respuesta as any).modulosDisponibles || []
+      }
+      
+      if (modulosParaActualizar.length > 0) {
+        setModules(modulosParaActualizar)
+        hasLoadedModules.current = true
+      } else {
+        setModules([])
+      }
+    } catch (error) {
+      console.error('Error actualizando módulos:', error)
+    }
+  }, [getCurrentUser])
+
+  const actualizarModulosDesdeLista = useCallback((modules: any[]) => {
+    console.log('🔄 [useAgentPanel] Actualizando módulos desde lista externa:', modules.length)
+    setModules(modules)
+    hasLoadedModules.current = true
+  }, [])
 
   return {
     // Estados básicos
@@ -1166,13 +1205,17 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
     atenderTicket,
     completarTicket,
     cancelarTicket,
-    refreshModules: cargarModulos,
-    
     // 🎯 NUEVO: Funciones de manejo de loading
     marcarTicketEnProceso,
     desmarcarTicketEnProceso,
     
-    // 🆕 Funciones de verificación automática
-    verificarModuloAsignadoAutomaticamente
+    // 🆕 Función para liberar módulo
+    liberarModulo,
+    
+    // 🆕 Función para actualizar módulos disponibles
+    actualizarModulos,
+    
+    // 🆕 Función para actualizar módulos desde lista externa
+    actualizarModulosDesdeLista
   }
 }
