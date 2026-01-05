@@ -1020,13 +1020,12 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
               setModules(respuestaObj.modulosDisponibles)
               hasLoadedModules.current = true
             }
-          } else if (respuestaObj.modulosDisponibles && respuestaObj.modulosDisponibles.length > 0) {
-            setModules(respuestaObj.modulosDisponibles)
+          } else {
+            // Cuando tieneModuloAsignado es false, NO mostrar módulos disponibles, solo ocupados para liberar
+            // No establecer módulos disponibles
+            setModules([])
             setShowModuleSelection(true)
             hasLoadedModules.current = true
-          } else {
-            setShowModuleSelection(true)
-            mostrarError('No hay módulos disponibles')
           }
         } else {
           setShowModuleSelection(true)

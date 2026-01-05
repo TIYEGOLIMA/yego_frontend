@@ -261,6 +261,8 @@ export interface RegistroCierre {
   totalIngresos: number
   totalGastos: number
   resta: number
+  calculatedShiftIds?: string // Mantener por compatibilidad (legacy)
+  tiposTurno?: ('diurno' | 'nocturno')[] // Nuevo campo: Array de tipos de turno
 }
 
 /**

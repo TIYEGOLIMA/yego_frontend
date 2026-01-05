@@ -1811,16 +1811,31 @@ export const DetalleView = () => {
                 Conductor: <span className="text-gray-900 dark:text-gray-100">{selectedDriver?.full_name}</span>
               </p>
               {cierreDetalle && (
-                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Fecha: <span className="text-gray-900 dark:text-gray-100">
-                    {parsearFechaLocal(cierreDetalle.fecha).toLocaleDateString('es-PE', { 
-                      weekday: 'long', 
-                      day: '2-digit', 
-                      month: 'long', 
-                      year: 'numeric' 
-                    })}
-                  </span>
-                </p>
+                <>
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Fecha: <span className="text-gray-900 dark:text-gray-100">
+                      {parsearFechaLocal(cierreDetalle.fecha).toLocaleDateString('es-PE', { 
+                        weekday: 'long', 
+                        day: '2-digit', 
+                        month: 'long', 
+                        year: 'numeric' 
+                      })}
+                    </span>
+                  </p>
+                  {cierreDetalle.tiposTurno && cierreDetalle.tiposTurno.length > 0 && (
+                    <div className="flex gap-2 mt-2">
+                      {cierreDetalle.tiposTurno.map((tipo, index) => (
+                        <Badge 
+                          key={index}
+                          variant="outline"
+                          className="capitalize bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800"
+                        >
+                          {tipo}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </DialogHeader>
