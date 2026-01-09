@@ -171,6 +171,17 @@ export interface DriverTimelineResponse {
   orders: DriverTimelineOrder[]
 }
 
+export interface DriverViajesData {
+  driver_id: string
+  trips: DriverTimelineOrder[]
+}
+
+export interface ViajesSimplificadosResponse {
+  date_from: string
+  date_to: string
+  drivers: DriverViajesData[]
+}
+
 export interface TurnoCalculado {
   id: string
   hora_inicio: string
@@ -185,6 +196,7 @@ export interface ObtenerTurnosCalculadosResponse {
   fecha: string
   turnos: TurnoCalculado[]
 }
+
 
 export interface TipoTurnoFecha {
   id: number
@@ -295,7 +307,6 @@ export const yegoProOpsService = {
     await api.delete(`/pro-ops/shifts/${id}`)
   },
 
-
   obtenerKpis: async (): Promise<DriverKpiResponse> => {
     const response = await api.get<DriverKpiResponse>('/pro-ops/kpis')
     return response.data
@@ -322,7 +333,7 @@ export const yegoProOpsService = {
   /**
    * Obtener conductores en orden desde la API
    */
-  obtenerConductoresEnOrden: async (): Promise<ConductoresEnOrdenResponse> => {
+  obtenerConductoresEnOrden: async (page: number = 0, limit: number = 4): Promise<ConductoresEnOrdenResponse> => {
     const response = await api.get<{ 
       total: number
       conductores: ConductorEnOrden[]
@@ -330,7 +341,12 @@ export const yegoProOpsService = {
       timestamp?: string
       completed_trips_count?: number
       completed_trips_total_price?: number
-    }>('/pro-ops/drivers/in-order')
+    }>('/pro-ops/drivers/in-order', {
+      params: {
+        page,
+        limit
+      }
+    })
     return {
       type: 'DRIVERS_IN_ORDER_UPDATE',
       total: response.data.total,
@@ -342,15 +358,26 @@ export const yegoProOpsService = {
     }
   },
 
-  refrescarKpis: async (): Promise<DriverKpiResponse> => {
-    const response = await api.post<DriverKpiResponse>('/pro-ops/kpis/refresh')
-    return response.data
-  },
-
-  obtenerTimelineConductor: async (driverId: string): Promise<DriverTimelineResponse> => {
-    const response = await api.post<DriverTimelineResponse>('/pro-ops/driver/orders', {
-      driver_id: driverId,
-    })
+  /**
+   * Obtener viajes simplificados para múltiples conductores
+   * @param driverIds Lista de IDs de conductores
+   * @param dateFrom Fecha inicial en formato ISO 8601 (ej: "2026-01-08T00:00:00-05:00")
+   * @param dateTo Fecha final en formato ISO 8601 (ej: "2026-01-09T23:59:59-05:00")
+   * @returns Respuesta con viajes simplificados agrupados por conductor
+   */
+  obtenerViajesSimplificados: async (driverIds: string[], dateFrom?: string, dateTo?: string): Promise<ViajesSimplificadosResponse> => {
+    const body: {
+      driver_ids: string[]
+      date_from?: string
+      date_to?: string
+    } = {
+      driver_ids: driverIds
+    }
+    
+    if (dateFrom) body.date_from = dateFrom
+    if (dateTo) body.date_to = dateTo
+    
+    const response = await api.post<ViajesSimplificadosResponse>('/pro-ops/drivers/viajes-simplificados', body)
     return response.data
   },
 

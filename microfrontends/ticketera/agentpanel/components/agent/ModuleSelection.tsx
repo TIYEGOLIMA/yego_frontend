@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card'
 import { Button } from '../ui/Button'
 import { Loader2, LogOut, Lock, Unlock, ChevronDown, ChevronUp } from 'lucide-react'
-import { ModuloAtencion, ModuloOcupado, moduloAtencionService } from '../../services/moduloAtencionService'
+import { ModuloAtencion, ModuloOcupado } from '../../services/moduloAtencionService'
 import { queueAgentService } from '../../services/queueAgentService'
 import { useSocket } from '../../contexts/SocketContext'
 import { useToastNotifications } from '../../../../../src/hooks/useToastNotifications'
@@ -146,6 +146,7 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
       hasLoadedInitialData.current = true
 
       try {
+        const { moduloAtencionService } = await import('../../services/moduloAtencionService')
         const respuesta = await moduloAtencionService.verificarModuloOListarDisponibles(user.id)
         
         if (respuesta && typeof respuesta === 'object' && !Array.isArray(respuesta)) {
@@ -186,10 +187,23 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
     cargarEstadoInicial()
   }, [user?.id, onModulesUpdated])
 
+  // Usar useRef para mantener referencias estables
+  const onModulesUpdatedRef = useRef(onModulesUpdated)
+  const userRef = useRef(user)
+  
+  // Actualizar refs cuando cambian
   useEffect(() => {
-    if (!isConnected || !user?.id) return
+    onModulesUpdatedRef.current = onModulesUpdated
+    userRef.current = user
+  }, [onModulesUpdated, user])
 
+  useEffect(() => {
+    if (!isConnected || !userRef.current?.id) return
+
+    let isSubscribed = true
     const unsubscribe = subscribe('/topic/modulos-atencion', (message: any) => {
+      if (!isSubscribed) return
+      
       const modulosData = message?.data || message
       
       if (modulosData.type === 'MODULOS_ACTUALIZADOS' || message?.type === 'MODULOS_ACTUALIZADOS') {
@@ -200,10 +214,10 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
           )
           
           const moduloAnteriorDelUsuario = modulosOcupadosAnterioresRef.current.find(
-            (mod: ModuloOcupado) => mod.userId === user.id
+            (mod: ModuloOcupado) => mod.userId === userRef.current?.id
           )
           
-          if (moduloAnteriorDelUsuario && !nuevosOcupados.some((mod: ModuloOcupado) => mod.userId === user.id)) {
+          if (moduloAnteriorDelUsuario && !nuevosOcupados.some((mod: ModuloOcupado) => mod.userId === userRef.current?.id)) {
             setShowModalLiberacion(true)
           }
           
@@ -211,14 +225,23 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
           setModulosOcupadosData(nuevosOcupados)
         }
         
-        if (modulosData.modulosDisponibles && Array.isArray(modulosData.modulosDisponibles) && onModulesUpdated) {
-          onModulesUpdated(modulosData.modulosDisponibles.map(mapearModuloAtencion))
+        if (modulosData.modulosDisponibles && Array.isArray(modulosData.modulosDisponibles) && onModulesUpdatedRef.current) {
+          onModulesUpdatedRef.current(modulosData.modulosDisponibles.map(mapearModuloAtencion))
         }
       }
     })
 
-    return () => unsubscribe?.()
-  }, [isConnected, subscribe, onModulesUpdated, user?.id])
+    return () => {
+      isSubscribed = false
+      if (unsubscribe) {
+        try {
+          unsubscribe()
+        } catch (error) {
+          // Silenciar error de desuscripción
+          }
+        }
+      }
+  }, [isConnected, subscribe]) // Solo isConnected y subscribe como dependencias
 
   const handleModuleSelect = async (moduleId: number) => {
     if (!user) return
@@ -396,85 +419,85 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
         </div>
 
         {modulesFromProps.length > 0 && (
-          <div className="mb-8">
-            <button
-              onClick={() => setShowDisponibles(!showDisponibles)}
-              className="w-full bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-2 border-green-200 dark:border-green-800 rounded-xl p-4 shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-between"
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                  <Unlock className="h-5 w-5 text-green-600 dark:text-green-400" />
-                </div>
-                <div className="text-left">
-                  <h2 className="text-xl font-bold text-green-800 dark:text-green-200">
-                    Módulos Disponibles
-                  </h2>
-                  <p className="text-sm text-green-600 dark:text-green-400">
-                    {modulesFromProps.length} {modulesFromProps.length === 1 ? 'módulo disponible' : 'módulos disponibles'}
-                  </p>
-                </div>
+        <div className="mb-8">
+          <button
+            onClick={() => setShowDisponibles(!showDisponibles)}
+            className="w-full bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-2 border-green-200 dark:border-green-800 rounded-xl p-4 shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-between"
+          >
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                <Unlock className="h-5 w-5 text-green-600 dark:text-green-400" />
               </div>
-              {showDisponibles ? (
-                <ChevronUp className="h-5 w-5 text-green-600 dark:text-green-400" />
-              ) : (
-                <ChevronDown className="h-5 w-5 text-green-600 dark:text-green-400" />
-              )}
-            </button>
-
-            {showDisponibles && (
-              <div className="mt-4 bg-white dark:bg-gray-800 border-2 border-green-200 dark:border-green-800 rounded-xl p-6 shadow-lg">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {modulesFromProps.map((module) => (
-                    <Card
-                      key={module.id}
-                      className={`cursor-pointer transition-all duration-200 ${
-                        assigning === module.id 
-                          ? 'ring-2 ring-red-500 bg-red-50 dark:bg-red-900/20' 
-                          : 'bg-white dark:bg-gray-800 border-2 border-green-300 dark:border-green-700 hover:border-green-400 dark:hover:border-green-600 shadow-md hover:shadow-lg'
-                      }`}
-                    >
-                      <CardHeader className="pb-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <CardTitle className="text-lg font-bold text-gray-800 dark:text-white">
-                            {module.name || `Módulo ${module.id}`}
-                          </CardTitle>
-                          <div className="px-2 py-1 bg-green-100 dark:bg-green-900/30 rounded-full">
-                            <span className="text-xs font-semibold text-green-700 dark:text-green-300">
-                              DISPONIBLE
-                            </span>
-                          </div>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="pt-0">
-                        {module.description && (
-                          <div className="mb-4">
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Descripción:</p>
-                            <p className="text-sm text-gray-700 dark:text-gray-300 min-h-[2.5rem]">
-                              {module.description}
-                            </p>
-                          </div>
-                        )}
-                        <Button
-                          onClick={() => handleModuleSelect(module.id)}
-                          disabled={assigning !== null}
-                          className="w-full py-2 text-sm font-medium rounded-lg transition-all bg-red-600 hover:bg-red-700 text-white shadow-sm hover:shadow-md"
-                        >
-                          {assigning === module.id ? (
-                            <>
-                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                              Asignando...
-                            </>
-                          ) : (
-                            'Seleccionar Módulo'
-                          )}
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
+              <div className="text-left">
+                <h2 className="text-xl font-bold text-green-800 dark:text-green-200">
+                  Módulos Disponibles
+                </h2>
+                <p className="text-sm text-green-600 dark:text-green-400">
+                  {modulesFromProps.length} {modulesFromProps.length === 1 ? 'módulo disponible' : 'módulos disponibles'}
+                </p>
               </div>
+            </div>
+            {showDisponibles ? (
+              <ChevronUp className="h-5 w-5 text-green-600 dark:text-green-400" />
+            ) : (
+              <ChevronDown className="h-5 w-5 text-green-600 dark:text-green-400" />
             )}
-          </div>
+          </button>
+
+          {showDisponibles && (
+            <div className="mt-4 bg-white dark:bg-gray-800 border-2 border-green-200 dark:border-green-800 rounded-xl p-6 shadow-lg">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {modulesFromProps.map((module) => (
+                  <Card
+                    key={module.id}
+                    className={`cursor-pointer transition-all duration-200 ${
+                      assigning === module.id 
+                        ? 'ring-2 ring-red-500 bg-red-50 dark:bg-red-900/20' 
+                        : 'bg-white dark:bg-gray-800 border-2 border-green-300 dark:border-green-700 hover:border-green-400 dark:hover:border-green-600 shadow-md hover:shadow-lg'
+                    }`}
+                  >
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <CardTitle className="text-lg font-bold text-gray-800 dark:text-white">
+                          {module.name || `Módulo ${module.id}`}
+                        </CardTitle>
+                        <div className="px-2 py-1 bg-green-100 dark:bg-green-900/30 rounded-full">
+                          <span className="text-xs font-semibold text-green-700 dark:text-green-300">
+                            DISPONIBLE
+                          </span>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      {module.description && (
+                        <div className="mb-4">
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Descripción:</p>
+                          <p className="text-sm text-gray-700 dark:text-gray-300 min-h-[2.5rem]">
+                            {module.description}
+                          </p>
+                        </div>
+                      )}
+                      <Button
+                        onClick={() => handleModuleSelect(module.id)}
+                        disabled={assigning !== null}
+                        className="w-full py-2 text-sm font-medium rounded-lg transition-all bg-red-600 hover:bg-red-700 text-white shadow-sm hover:shadow-md"
+                      >
+                        {assigning === module.id ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            Asignando...
+                          </>
+                        ) : (
+                          'Seleccionar Módulo'
+                        )}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
         )}
 
         {modulosOcupadosData.length > 0 && (
@@ -526,20 +549,20 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
                       <CardContent className="pt-0">
                         <div className="space-y-3 mb-4">
                           {modulo.userName && modulo.userName !== 'Usuario desconocido' && (
-                            <div>
-                              <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Usuario:</p>
-                              <p className="text-sm font-semibold text-gray-800 dark:text-white">
-                                {modulo.userName}
-                              </p>
-                            </div>
+                          <div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Usuario:</p>
+                            <p className="text-sm font-semibold text-gray-800 dark:text-white">
+                              {modulo.userName}
+                            </p>
+                          </div>
                           )}
                           {modulo.horaAsignacion && (
-                            <div>
-                              <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Asignado:</p>
-                              <p className="text-sm text-gray-700 dark:text-gray-300">
-                                {formatearFecha(modulo.horaAsignacion)}
-                              </p>
-                            </div>
+                          <div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Asignado:</p>
+                            <p className="text-sm text-gray-700 dark:text-gray-300">
+                              {formatearFecha(modulo.horaAsignacion)}
+                            </p>
+                          </div>
                           )}
                         </div>
                         <Button

@@ -31,6 +31,9 @@ export const getRedirectPathForRole = (role: string): string => {
       return '/rating-tablet'; // RatingTablet #2 maximizada
     case 'TV':
       return '/tv-display'; // TV Display maximizado por defecto
+    case 'DISEÑADOR GRAFICO':
+    case 'DISEÑADOR GRÁFICO':
+      return '/'; // Vista de bienvenida para diseñador gráfico
     default:
       console.warn(`⚠️ Rol '${role}' no tiene ruta configurada, redirigiendo a vista de bienvenida`);
       return '/'; // Vista de bienvenida por defecto en lugar de dashboard
@@ -88,6 +91,18 @@ export const COMPLETE_ROLE_MAPPING = {
     permissions: ['VIEW_DISPLAY'],
     fullscreen: true,
     component: 'TVDisplay'
+  },
+  'DISEÑADOR GRAFICO': {
+    description: 'Diseñador gráfico con acceso a vista de bienvenida',
+    permissions: ['VIEW_DASHBOARD'],
+    fullscreen: false,
+    component: 'MainLayout'
+  },
+  'DISEÑADOR GRÁFICO': {
+    description: 'Diseñador gráfico con acceso a vista de bienvenida',
+    permissions: ['VIEW_DASHBOARD'],
+    fullscreen: false,
+    component: 'MainLayout'
   }
 } as const;
 

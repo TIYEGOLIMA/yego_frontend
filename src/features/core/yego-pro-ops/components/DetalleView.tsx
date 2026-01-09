@@ -1812,16 +1812,16 @@ export const DetalleView = () => {
               </p>
               {cierreDetalle && (
                 <>
-                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Fecha: <span className="text-gray-900 dark:text-gray-100">
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Fecha: <span className="text-gray-900 dark:text-gray-100">
                       {parsearFechaLocal(cierreDetalle.fecha).toLocaleDateString('es-PE', { 
-                        weekday: 'long', 
-                        day: '2-digit', 
-                        month: 'long', 
-                        year: 'numeric' 
-                      })}
-                    </span>
-                  </p>
+                      weekday: 'long', 
+                      day: '2-digit', 
+                      month: 'long', 
+                      year: 'numeric' 
+                    })}
+                  </span>
+                </p>
                   {cierreDetalle.tiposTurno && cierreDetalle.tiposTurno.length > 0 && (
                     <div className="flex gap-2 mt-2">
                       {cierreDetalle.tiposTurno.map((tipo, index) => (
