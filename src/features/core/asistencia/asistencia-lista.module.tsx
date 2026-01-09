@@ -77,6 +77,117 @@ export const AsistenciaListaModule: React.FC = () => {
   const [exportando, setExportando] = useState(false);
   const [exportacionExitosa, setExportacionExitosa] = useState(false);
   const [nombreArchivoExportado, setNombreArchivoExportado] = useState<string>('');
+
+  // Funciones helper para calcular fechas
+  const obtenerPrimerDiaMes = (fecha: Date = new Date()): string => {
+    const año = fecha.getFullYear();
+    const mes = String(fecha.getMonth() + 1).padStart(2, '0');
+    return `${año}-${mes}-01`;
+  };
+
+  const obtenerDiasAntesQuincena = (): number => {
+    const hoy = new Date();
+    const dia = hoy.getDate();
+    
+    // Si estamos antes del 15, calcular días antes del 15
+    if (dia < 15) {
+      return 15 - dia;
+    }
+    
+    // Si estamos después del 15, calcular días antes del fin de mes
+    const ultimoDiaMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate();
+    return ultimoDiaMes - dia;
+  };
+
+  // Verificar si estamos en el último día del mes
+  const esUltimoDiaMes = (): boolean => {
+    const hoy = new Date();
+    const dia = hoy.getDate();
+    const ultimoDiaMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate();
+    return dia === ultimoDiaMes;
+  };
+
+  // Determinar si estamos en primera quincena (antes del 15) o segunda quincena (después del 15)
+  const estaEnPrimeraQuincena = (): boolean => {
+    const hoy = new Date();
+    const dia = hoy.getDate();
+    return dia < 15;
+  };
+
+  const obtenerFechaInicioExportacion = (): string => {
+    // Siempre empezar desde el día 1 del mes
+    return obtenerPrimerDiaMes();
+  };
+
+  const obtenerFechaFinExportacion = (): string => {
+    const hoy = new Date();
+    const año = hoy.getFullYear();
+    const mes = hoy.getMonth();
+    
+    let fechaFin: Date;
+    
+    if (estaEnPrimeraQuincena()) {
+      // Primera quincena: fecha fin por defecto es dos días antes del 15 (día 13)
+      // Pero el usuario puede seleccionar cualquier día entre 1 y 15
+      fechaFin = new Date(año, mes, 13);
+    } else {
+      // Fin de mes: 
+      // - Si es último día del mes: fecha fin por defecto es el último día
+      // - Si es 2 días antes del fin de mes: fecha fin por defecto es 2 días antes
+      const ultimoDiaMes = new Date(año, mes + 1, 0).getDate();
+      if (esUltimoDiaMes()) {
+        // Último día del mes: fecha fin por defecto es el último día
+        fechaFin = new Date(año, mes, ultimoDiaMes);
+      } else {
+        // 2 días antes del fin de mes: fecha fin por defecto es 2 días antes
+        fechaFin = new Date(año, mes, ultimoDiaMes - 2);
+      }
+    }
+    
+    const añoFin = fechaFin.getFullYear();
+    const mesFin = String(fechaFin.getMonth() + 1).padStart(2, '0');
+    const diaFin = String(fechaFin.getDate()).padStart(2, '0');
+    return `${añoFin}-${mesFin}-${diaFin}`;
+  };
+
+  // Obtener fecha máxima permitida para fecha fin
+  const obtenerFechaMaxima = (): string => {
+    const hoy = new Date();
+    const año = hoy.getFullYear();
+    const mes = hoy.getMonth();
+    
+    if (estaEnPrimeraQuincena()) {
+      // Primera quincena: máximo día 15
+      return `${año}-${String(mes + 1).padStart(2, '0')}-15`;
+    } else {
+      // Fin de mes: 
+      // - Si estamos 2 días antes del fin de mes: máximo 2 días antes del fin de mes
+      // - Si estamos el último día del mes: máximo último día del mes
+      const ultimoDiaMes = new Date(año, mes + 1, 0).getDate();
+      if (esUltimoDiaMes()) {
+        // Último día del mes: permitir hasta el último día
+        return `${año}-${String(mes + 1).padStart(2, '0')}-${String(ultimoDiaMes).padStart(2, '0')}`;
+      } else {
+        // 2 días antes del fin de mes: permitir hasta 2 días antes
+        return `${año}-${String(mes + 1).padStart(2, '0')}-${String(ultimoDiaMes - 2).padStart(2, '0')}`;
+      }
+    }
+  };
+
+  // Obtener fecha mínima permitida para fecha fin
+  const obtenerFechaMinima = (): string => {
+    // Siempre permitir desde el día 1
+    return obtenerPrimerDiaMes();
+  };
+
+  const puedeExportar = (): boolean => {
+    const diasAntes = obtenerDiasAntesQuincena();
+    // Habilitar exportación:
+    // - 2 días antes de quincena (día 13)
+    // - 2 días antes del fin de mes
+    // - Último día del mes
+    return diasAntes === 2 || esUltimoDiaMes();
+  };
   
   // Roles únicos para el filtro (excluyendo TABLET1, TABLET2, PRINCIPAL, TV)
   const rolesExcluidos = ['TABLET1', 'TABLET2', 'PRINCIPAL', 'TV'];
@@ -128,10 +239,8 @@ export const AsistenciaListaModule: React.FC = () => {
 
   // Función para ver historial de asistencias
   const verHistorialAsistencia = async (usuario: UsuarioAsistencia) => {
-    console.log('📊 Ver historial de asistencia para:', usuario.nombre);
     setUsuarioSeleccionado(usuario);
     setModalHistorial(true);
-    // No cargar automáticamente, solo cuando el usuario seleccione una fecha
   };
 
   // Función para cargar historial de asistencias
@@ -203,7 +312,6 @@ export const AsistenciaListaModule: React.FC = () => {
           departamento: '',
           email: usuario.email,
           rol: usuario.rol,
-          dni: usuario.dni,
           totalMarcaciones: 0,
           ultimaMarcacion: null,
           marcaciones: []
@@ -225,6 +333,16 @@ export const AsistenciaListaModule: React.FC = () => {
   useEffect(() => {
     cargarListaAsistencia();
   }, []);
+
+  // Inicializar fechas cuando se abre el modal de exportación
+  useEffect(() => {
+    if (modalExportarAbierto) {
+      const primerDia = obtenerPrimerDiaMes();
+      const fechaFinCalculada = obtenerFechaFinExportacion();
+      setFechaInicio(primerDia);
+      setFechaFin(fechaFinCalculada);
+    }
+  }, [modalExportarAbierto]);
 
 
   // Función para exportar a Excel
@@ -358,19 +476,36 @@ export const AsistenciaListaModule: React.FC = () => {
               </div>
               
               <div className="flex items-center gap-4">
-                {!loading && (
-                  <span className="text-sm font-normal text-neutral-500">
-                    {usuarios.length} usuario{usuarios.length !== 1 ? 's' : ''} en total
-                  </span>
-                )}
-                <Button
-                  onClick={() => setModalExportarAbierto(true)}
-                  variant="outline"
-                  className="flex items-center gap-2"
-                >
-                  <Download className="h-4 w-4" />
-                  Exportar a Excel
-                </Button>
+                <div className="flex flex-col items-end gap-2">
+                  <Button
+                    onClick={() => setModalExportarAbierto(true)}
+                    variant={puedeExportar() ? "primary" : "outline"}
+                    className={`flex items-center gap-2 ${
+                      puedeExportar() 
+                        ? "bg-green-600 hover:bg-green-700 text-white border-green-600" 
+                        : "border-neutral-300 dark:border-neutral-600 text-neutral-400 dark:text-neutral-500 cursor-not-allowed opacity-60"
+                    }`}
+                    disabled={!puedeExportar()}
+                    title={!puedeExportar() ? 'La exportación solo está disponible 2 días antes de quincena o fin de mes' : 'Exportar a Excel'}
+                  >
+                    <Download className={`h-4 w-4 ${puedeExportar() ? "text-white" : ""}`} />
+                    Exportar a Excel
+                  </Button>
+                  {!puedeExportar() && (
+                    <div className="flex items-center gap-1.5 px-2 py-1 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-md">
+                      <span className="text-xs font-medium text-amber-700 dark:text-amber-300">
+                        Disponible 2 días antes de quincena/fin de mes
+                      </span>
+                    </div>
+                  )}
+                  {puedeExportar() && (
+                    <div className="flex items-center gap-1.5 px-2 py-1 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md">
+                      <span className="text-xs font-medium text-green-700 dark:text-green-300">
+                        ✓ Exportación disponible
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -561,6 +696,12 @@ export const AsistenciaListaModule: React.FC = () => {
           setFechaFin('');
           setRolFiltro('');
           setExportando(false); // Resetear estado de exportación
+        } else {
+          // Al abrir el modal, inicializar fechas automáticamente
+          const fechaInicioCalculada = obtenerFechaInicioExportacion();
+          const fechaFinCalculada = obtenerFechaFinExportacion();
+          setFechaInicio(fechaInicioCalculada);
+          setFechaFin(fechaFinCalculada);
         }
       }}>
         <DialogContent className="sm:max-w-[500px]">
@@ -576,7 +717,7 @@ export const AsistenciaListaModule: React.FC = () => {
             <DialogDescription>
               {exportacionExitosa 
                 ? `El archivo ${nombreArchivoExportado} se ha descargado exitosamente.`
-                : 'Selecciona el rango de fechas y el rol para exportar los registros de asistencia.'
+                : ''
               }
             </DialogDescription>
           </DialogHeader>
@@ -598,24 +739,91 @@ export const AsistenciaListaModule: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
-                  Fecha de Inicio *
+                  Fecha de Inicio * {estaEnPrimeraQuincena() ? '(día 1)' : '(desde día 1)'}
                 </label>
                 <Input
                   type="date"
                   value={fechaInicio}
-                  onChange={(e) => setFechaInicio(e.target.value)}
-                  className="w-full"
+                  onChange={(e) => {
+                    // Si estamos en primera quincena, forzar día 1
+                    // Si estamos en fin de mes, permitir desde día 1
+                    const fechaSeleccionada = new Date(e.target.value);
+                    const año = fechaSeleccionada.getFullYear();
+                    const mes = fechaSeleccionada.getMonth();
+                    
+                    if (estaEnPrimeraQuincena()) {
+                      // Primera quincena: siempre día 1
+                      const primerDia = `${año}-${String(mes + 1).padStart(2, '0')}-01`;
+                      setFechaInicio(primerDia);
+                    } else {
+                      // Fin de mes: permitir desde día 1, pero validar que no sea menor
+                      const fechaMin = obtenerFechaMinima();
+                      const fechaSeleccionadaStr = e.target.value;
+                      if (fechaSeleccionadaStr >= fechaMin) {
+                        setFechaInicio(fechaSeleccionadaStr);
+                      } else {
+                        setFechaInicio(fechaMin);
+                      }
+                    }
+                  }}
+                  min={obtenerFechaMinima()}
+                  max={estaEnPrimeraQuincena() ? obtenerFechaMinima() : obtenerFechaMaxima()}
+                  className={estaEnPrimeraQuincena() ? "w-full bg-neutral-50 dark:bg-neutral-800 cursor-not-allowed" : "w-full"}
                   required
+                  readOnly={estaEnPrimeraQuincena()}
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
-                  Fecha de Fin *
+                  Fecha de Fin * {estaEnPrimeraQuincena() 
+                    ? '(máximo día 15)' 
+                    : esUltimoDiaMes() 
+                      ? '(máximo último día del mes)' 
+                      : '(máximo 2 días antes del fin de mes)'}
                 </label>
                 <Input
                   type="date"
                   value={fechaFin}
-                  onChange={(e) => setFechaFin(e.target.value)}
+                  onChange={(e) => {
+                    const fechaSeleccionada = e.target.value;
+                    const fechaMax = obtenerFechaMaxima();
+                    const fechaMin = obtenerFechaMinima();
+                    const hoy = new Date();
+                    const año = hoy.getFullYear();
+                    const mes = hoy.getMonth();
+                    const dia15 = `${año}-${String(mes + 1).padStart(2, '0')}-15`;
+                    
+                    // Si estamos en fin de mes, permitir elegir hasta el día 15 también (para primera quincena)
+                    if (!estaEnPrimeraQuincena()) {
+                      const fechaSeleccionadaDate = new Date(fechaSeleccionada);
+                      const fecha15Date = new Date(dia15);
+                      
+                      // Si la fecha seleccionada es el día 15 o menor, y es mayor o igual a fecha inicio, permitirla
+                      if (fechaSeleccionadaDate <= fecha15Date && fechaSeleccionada >= fechaInicio) {
+                        setFechaFin(fechaSeleccionada);
+                        return;
+                      }
+                    }
+                    
+                    // Validar que la fecha esté en el rango permitido y que sea mayor o igual a fecha inicio
+                    if (fechaSeleccionada >= fechaInicio && fechaSeleccionada <= fechaMax && fechaSeleccionada >= fechaMin) {
+                      setFechaFin(fechaSeleccionada);
+                    } else if (fechaSeleccionada > fechaMax) {
+                      // Si selecciona una fecha mayor al máximo, establecer el máximo
+                      setFechaFin(fechaMax);
+                      alert(`La fecha de fin no puede ser mayor al ${new Date(fechaMax).toLocaleDateString('es-PE', { day: 'numeric', month: 'long' })}. Se ha establecido el máximo permitido.`);
+                    } else if (fechaSeleccionada < fechaInicio) {
+                      // Si selecciona una fecha menor a la fecha inicio, establecer la fecha inicio
+                      setFechaFin(fechaInicio);
+                      alert('La fecha de fin no puede ser menor a la fecha de inicio. Se ha establecido la fecha de inicio.');
+                    } else {
+                      // Si selecciona una fecha menor al mínimo, establecer el mínimo
+                      setFechaFin(fechaMin);
+                      alert(`La fecha de fin no puede ser menor al ${new Date(fechaMin).toLocaleDateString('es-PE', { day: 'numeric', month: 'long' })}. Se ha establecido el mínimo permitido.`);
+                    }
+                  }}
+                  min={fechaInicio || obtenerFechaMinima()}
+                  max={obtenerFechaMaxima()}
                   className="w-full"
                   required
                 />

@@ -91,18 +91,6 @@ export const COMPLETE_ROLE_MAPPING = {
     permissions: ['VIEW_DISPLAY'],
     fullscreen: true,
     component: 'TVDisplay'
-  },
-  'DISEÑADOR GRAFICO': {
-    description: 'Diseñador gráfico con acceso a vista de bienvenida',
-    permissions: ['VIEW_DASHBOARD'],
-    fullscreen: false,
-    component: 'MainLayout'
-  },
-  'DISEÑADOR GRÁFICO': {
-    description: 'Diseñador gráfico con acceso a vista de bienvenida',
-    permissions: ['VIEW_DASHBOARD'],
-    fullscreen: false,
-    component: 'MainLayout'
   }
 } as const;
 

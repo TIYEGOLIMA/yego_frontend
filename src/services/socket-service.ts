@@ -127,6 +127,7 @@ class SocketService {
         heartbeatIncoming: 0, // Deshabilitar heartbeat entrante
         heartbeatOutgoing: 0, // Deshabilitar heartbeat saliente
         onConnect: (frame) => {
+          console.log('✅ [SocketService] Conectado exitosamente:', frame);
           this.updateStatus('connected');
           
           // Suscribirse a eventos de Ticketera
@@ -300,6 +301,8 @@ class SocketService {
         console.error('❌ [SocketService] Error procesando /topic/modulos-atencion:', error);
       }
     });
+
+    console.log('✅ [SocketService] Suscrito a todos los topics de tickets y módulos');
   }
 
   /**
@@ -345,6 +348,8 @@ class SocketService {
         console.error('❌ [SocketService] Error procesando verificación:', error);
       }
     });
+
+    console.log('✅ [SocketService] Suscrito a todos los topics de sistemas externos');
   }
 
   /**
@@ -401,6 +406,8 @@ class SocketService {
           console.error('❌ [SocketService] Error procesando evento de usuario:', error);
         }
       });
+
+      console.log(`✅ [SocketService] Suscrito a eventos del usuario ${userId}`);
     } catch (error) {
       console.error('❌ [SocketService] Error obteniendo userId del token:', error);
     }
@@ -466,6 +473,8 @@ class SocketService {
         console.error('❌ [SocketService] Error procesando evento del sistema:', error);
       }
     });
+
+    console.log('✅ [SocketService] Suscrito a todos los topics de garantizado');
   }
 
   /**
@@ -481,6 +490,7 @@ class SocketService {
     this.stompClient.subscribe('/topic/pro-ops/kpis', (message: IMessage) => {
       try {
         const kpis = JSON.parse(message.body);
+        console.log('📊 [SocketService] KPIs de Pro-Ops recibidos:', kpis);
         
         // Emitir evento genérico de pro-ops
         this.emit('pro-ops-kpis', kpis);
@@ -493,6 +503,7 @@ class SocketService {
     this.stompClient.subscribe('/topic/pro-ops/conductores-en-orden', (message: IMessage) => {
       try {
         const data = JSON.parse(message.body);
+        console.log('🚗 [SocketService] Conductores en orden recibidos:', data);
         
         // Emitir evento para conductores en orden
         this.emit('pro-ops-conductores-en-orden', data);
@@ -500,6 +511,8 @@ class SocketService {
         console.error('❌ [SocketService] Error procesando conductores en orden:', error);
       }
     });
+
+    console.log('✅ [SocketService] Suscrito a todos los topics de Pro-Ops');
   }
 
   /**
