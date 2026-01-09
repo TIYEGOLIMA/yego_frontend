@@ -191,27 +191,55 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   }, [location.pathname])
 
   useEffect(() => {
+    // Gestionar automáticamente los dropdowns basándose en la ruta activa
+    // Solo se ejecuta cuando cambia la ruta (intencional - no agregar otras dependencias)
+    const newOpenDropdowns = new Set<string>();
+    
     filteredNavItems.forEach(item => {
       if (item.to.startsWith('dropdown-') && item.children) {
         const hasActiveOption = item.children.some(child => isActive(child.to));
-        if (hasActiveOption && !openDropdowns.has(item.to)) {
-          setOpenDropdowns(prev => new Set(prev).add(item.to));
+        if (hasActiveOption) {
+          // Mantener abierto si tiene una opción activa
+          newOpenDropdowns.add(item.to);
         }
+        // Si no tiene opción activa, no lo agregamos (se cierra automáticamente)
       }
     });
-  }, [location.pathname, filteredNavItems])
+    
+    // Comparar si hay cambios antes de actualizar para evitar re-renders innecesarios
+    const currentDropdowns = Array.from(openDropdowns).sort().join(',');
+    const nextDropdowns = Array.from(newOpenDropdowns).sort().join(',');
+    
+    if (currentDropdowns !== nextDropdowns) {
+      setOpenDropdowns(newOpenDropdowns);
+    }
+  }, [location.pathname])
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (openDropdowns.size > 0 && !(event.target as Element).closest('.dropdown-menu-container')) {
-        setOpenDropdowns(new Set());
+        // Solo cerrar dropdowns que NO tienen una opción activa
+        // para evitar el parpadeo de re-render
+        const dropdownsToKeep = new Set<string>();
+        filteredNavItems.forEach(item => {
+          if (item.to.startsWith('dropdown-') && item.children) {
+            const hasActiveOption = item.children.some(child => isActive(child.to));
+            if (hasActiveOption && openDropdowns.has(item.to)) {
+              dropdownsToKeep.add(item.to);
+            }
+          }
+        });
+        
+        if (dropdownsToKeep.size !== openDropdowns.size) {
+          setOpenDropdowns(dropdownsToKeep);
+        }
       }
     }
     if (openDropdowns.size > 0) {
       document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
-  }, [openDropdowns])
+  }, [openDropdowns, filteredNavItems])
 
   return (
     <div className="min-h-screen bg-background-secondary dark:bg-background-dark">
@@ -434,13 +462,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                             key={child.to}
                             onClick={() => {
                               navigate(child.to);
-                              setOpenDropdowns(prev => {
-                                const newSet = new Set(prev);
-                                newSet.delete(dropdownId);
-                                return newSet;
-                              });
                             }}
-                            className={`${isOptionActive ? 'bg-transparent border-2 border-red-500 rounded-lg text-gray-800 dark:text-white p-' : 'yego-nav-item-inactive'} w-full flex items-center relative text-sm pl-3 py-3`}
+                            className={`${isOptionActive ? 'bg-transparent border-2 border-red-500 rounded-lg text-gray-800 dark:text-white' : 'yego-nav-item-inactive'} w-full flex items-center relative text-sm pl-3 py-3`}
                           >
                             <div className="flex items-center justify-center">
                               {child.icon}
@@ -464,8 +487,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                 key={item.to}
                 onClick={() => {
                   navigate(item.to);
-                  // Cerrar todos los dropdowns al navegar a otra sección
-                  setOpenDropdowns(new Set());
+                  // El useEffect se encarga de cerrar dropdowns que ya no tienen opción activa
                 }}
                 className={`${isActiveItem ? 'yego-nav-item-active' : 'yego-nav-item-inactive'} w-full flex items-center relative`}
                 title={sidebarCollapsed ? item.label : undefined}

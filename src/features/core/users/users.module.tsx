@@ -643,18 +643,18 @@ const UsersModule: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-neutral-900 dark:text-white mb-2">
+          <h1 className="yego-heading-1 mb-2">
             Gestión de Usuarios
           </h1>
-          <p className="text-neutral-600 dark:text-neutral-400">
+          <p className="yego-body">
             Administra los usuarios del sistema
           </p>
         </div>
         <Button 
+          variant="primary"
           onClick={() => setIsCreateDialogOpen(true)}
-          className="flex items-center gap-2"
+          leftIcon={<Plus className="h-4 w-4" />}
         >
-          <Plus className="h-4 w-4" />
           Nuevo Usuario
         </Button>
       </div>
@@ -1192,14 +1192,14 @@ const UsersModule: React.FC = () => {
             <Button 
               variant="outline" 
               onClick={closeDialog}
+              leftIcon={<X className="h-4 w-4" />}
             >
-              <X className="h-4 w-4 mr-2" />
               Cancelar
             </Button>
             <Button 
               onClick={() => editingUser ? handleUpdateUser(editingUser.id) : handleCreateUser()}
+              leftIcon={<Save className="h-4 w-4" />}
             >
-              <Save className="h-4 w-4 mr-2" />
               {editingUser ? 'Actualizar' : 'Crear'}
             </Button>
           </DialogFooter>

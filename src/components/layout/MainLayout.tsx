@@ -33,8 +33,7 @@ export default function MainLayout() {
                 <User className="h-4 w-4 text-gray-500" />
                 <span className="text-sm text-gray-700">{user?.username}</span>
               </div>
-              <Button variant="outline" size="sm" onClick={handleLogout}>
-                <LogOut className="h-4 w-4 mr-2" />
+              <Button variant="outline" size="sm" onClick={handleLogout} leftIcon={<LogOut className="h-4 w-4" />}>
                 Cerrar sesión
               </Button>
             </div>
@@ -53,8 +52,8 @@ export default function MainLayout() {
                   variant="ghost"
                   className="w-full justify-start"
                   onClick={() => navigate(item.path)}
+                  leftIcon={<item.icon className="h-4 w-4" />}
                 >
-                  <item.icon className="h-4 w-4 mr-3" />
                   {item.label}
                 </Button>
               ))}

@@ -1223,10 +1223,10 @@ export const GarantizadoModule: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+          <h1 className="yego-heading-1 mb-2">
             Módulo Garantizado
           </h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">
+          <p className="yego-body">
             Gestión y seguimiento de conductores con garantía de ingresos
           </p>
           <div className="mt-2 inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">
@@ -1243,8 +1243,8 @@ export const GarantizadoModule: React.FC = () => {
                 className="px-6 py-2"
                 onClick={handleOpenExportModal}
                 disabled={filteredData.length === 0}
+                leftIcon={<Download className="h-4 w-4" />}
               >
-                <Download className="h-4 w-4 mr-2" />
                 Exportar Excel
               </Button>
               <div className="relative group">
@@ -1254,23 +1254,10 @@ export const GarantizadoModule: React.FC = () => {
                   className="px-6 py-2 bg-red-600 text-white"
                   onClick={handleOpenProcessModal}
                   disabled={loadingTable || botonBloqueado}
+                  loading={loadingTable}
+                  leftIcon={!loadingTable ? <Shield className="h-4 w-4" /> : undefined}
                 >
-                  {loadingTable ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Procesando...
-                    </>
-                  ) : botonBloqueado ? (
-                    <>
-                      <Shield className="h-4 w-4 mr-2" />
-                      Procesar (Bloqueado)
-                    </>
-                  ) : (
-                    <>
-                      <Shield className="h-4 w-4 mr-2" />
-                      Procesar
-                    </>
-                  )}
+                  {loadingTable ? 'Procesando...' : botonBloqueado ? 'Procesar (Bloqueado)' : 'Procesar'}
                 </Button>
                 {botonBloqueado && mensajeBloqueo && (
                   <div className="absolute top-full left-0 mt-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg shadow-lg z-50 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
@@ -1898,18 +1885,10 @@ export const GarantizadoModule: React.FC = () => {
                 onClick={handleExportExcel}
                 disabled={exporting}
                 className="bg-red-600 hover:bg-red-700 text-white"
+                loading={exporting}
+                leftIcon={!exporting ? <Download className="h-4 w-4" /> : undefined}
               >
-                {exporting ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Exportando...
-                  </>
-                ) : (
-                  <>
-                    <Download className="h-4 w-4 mr-2" />
-                    Exportar
-                  </>
-                )}
+                {exporting ? 'Exportando...' : 'Exportar'}
               </Button>
             </div>
           </div>

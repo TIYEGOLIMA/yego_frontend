@@ -530,11 +530,11 @@ export const AsistenciaModule: React.FC = () => {
       <div className="yego-card">
         <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4">
               <div>
-            <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
+            <h1 className="yego-heading-1 mb-2 flex items-center gap-3">
               <Building className="h-6 w-6 lg:h-8 lg:w-8 text-primary-500" />
               Marcación de Asistencia
             </h1>
-            <p className="text-gray-600 dark:text-gray-400 text-sm lg:text-base">
+            <p className="yego-body">
               Sistema de control de asistencia Yego
                 </p>
               </div>

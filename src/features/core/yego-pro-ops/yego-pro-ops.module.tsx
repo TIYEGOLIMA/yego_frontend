@@ -12,10 +12,10 @@ const YegoProOpsModule: React.FC = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-neutral-900 dark:text-white mt-5 mb-2">
+          <h1 className="yego-heading-1 mb-2">
             Gestión de Turnos
           </h1>
-          <p className="text-neutral-600 dark:text-neutral-400">
+          <p className="yego-body">
             Administra turnos de conductores diurnos y nocturnos con asignación de vehículos
           </p>
         </div>

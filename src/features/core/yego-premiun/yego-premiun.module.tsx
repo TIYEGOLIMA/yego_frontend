@@ -680,8 +680,8 @@ const YegoPremiunModule: React.FC = () => {
     <div className="p-6 space-y-6 w-full max-w-none">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-neutral-900 dark:text-white">Módulo Yego Premiun</h1>
-          <p className="mt-1 text-neutral-600 dark:text-neutral-400">
+          <h1 className="yego-heading-1 mb-2">Módulo Yego Premiun</h1>
+          <p className="yego-body">
             Consulta los registros mensuales de conductores asociados a la categoría Yego Premiun.
           </p>
         </div>

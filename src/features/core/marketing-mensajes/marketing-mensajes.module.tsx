@@ -2884,6 +2884,18 @@ const MarketingMensajesModule: React.FC = () => {
 
   return (
     <div className="space-y-6 p-6 relative">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="yego-heading-1 mb-2">
+            Marketing y Mensajes
+          </h1>
+          <p className="yego-body">
+            Gestiona y programa mensajes de marketing para conductores
+          </p>
+        </div>
+      </div>
+
       <Tabs
         tabs={tabsConfig}
         activeTab={activeTab}

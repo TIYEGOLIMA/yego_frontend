@@ -51,8 +51,9 @@ export const ForcedLogoutModal: React.FC<ForcedLogoutModalProps> = ({
             <Button
               onClick={onLogout}
               className="bg-red-600 hover:bg-red-700 text-white"
+              leftIcon={<LogOut className="h-4 w-4" />}
             >
-              <LogOut className="h-4 w-4 mr-2" /> Cerrar Sesión
+              Cerrar Sesión
             </Button>
           </div>
         </div>
