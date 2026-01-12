@@ -99,7 +99,6 @@ const PermissionRoute = ({ children, module }: { children: React.ReactNode, modu
   
   // Si no hay módulos, permitir acceso (para desarrollo/testing)
   if (!modules || modules.length === 0) {
-    console.warn(`⚠️ [PermissionRoute] No hay módulos disponibles para verificar acceso a '${module}'`);
     return <>{children}</>
   }
   
@@ -119,24 +118,16 @@ const PermissionRoute = ({ children, module }: { children: React.ReactNode, modu
                         moduleNombre.includes(moduleName) ||
                         moduleName.includes(moduleNombre);
     
-    if (urlMatches || nameMatches) {
-      console.log(`✅ [PermissionRoute] Acceso permitido a '${module}' - Módulo encontrado: ${m.nombre} (${m.url})`);
-    }
-    
     return urlMatches || nameMatches;
   });
   
   if (!hasPermission) {
-    console.warn(`⚠️ [PermissionRoute] Acceso denegado a '${module}'. Módulos disponibles:`, 
-      modules.filter(m => m.activo).map(m => `${m.nombre} (${m.url})`));
-    
     // Intentar redirigir al primer módulo activo disponible
     const firstActiveModule = modules.find(m => m.activo);
     if (firstActiveModule) {
       const redirectUrl = firstActiveModule.url?.startsWith('/') 
         ? firstActiveModule.url 
         : `/${firstActiveModule.url}`;
-      console.log(`🔄 [PermissionRoute] Redirigiendo a: ${redirectUrl}`);
       return <Navigate to={redirectUrl} replace />
     }
     return <Navigate to="/" replace />

@@ -36,8 +36,6 @@ class SocketService {
     if (this.reconnectInterval) {
       return; // Ya hay un intervalo de reconexión activo
     }
-
-    console.log('🔄 [SocketService] Iniciando reconexión automática...');
     
     this.reconnectInterval = setInterval(() => {
       if (this.connectionStatus === 'connected') {
@@ -46,15 +44,12 @@ class SocketService {
       }
 
       this.reconnectAttempts++;
-      console.log(`🔄 [SocketService] Intento de reconexión ${this.reconnectAttempts}/${this.maxReconnectAttempts}`);
-      
       this.connect(`reconnect-${this.reconnectAttempts}`);
     }, this.reconnectDelay);
   }
 
   private stopReconnect() {
     if (this.reconnectInterval) {
-      console.log('🛑 [SocketService] Deteniendo reconexión automática...');
       clearInterval(this.reconnectInterval);
       this.reconnectInterval = null;
     }
@@ -99,14 +94,12 @@ class SocketService {
     }
     
     if (!token) {
-      console.log('❌ [SocketService] No hay token - no se puede conectar');
       this.updateStatus('disconnected');
       return;
     }
 
     // Verificar si ya está conectado
     if (this.stompClient && this.stompClient.connected) {
-      console.log('✅ [SocketService] Ya está conectado, no es necesario reconectar');
       return;
     }
     
@@ -126,8 +119,7 @@ class SocketService {
         reconnectDelay: 0, // 0 = deshabilitado
         heartbeatIncoming: 0, // Deshabilitar heartbeat entrante
         heartbeatOutgoing: 0, // Deshabilitar heartbeat saliente
-        onConnect: (frame) => {
-          console.log('✅ [SocketService] Conectado exitosamente:', frame);
+        onConnect: () => {
           this.updateStatus('connected');
           
           // Suscribirse a eventos de Ticketera
@@ -148,23 +140,14 @@ class SocketService {
           // Suscribirse a eventos específicos del usuario
           this.subscribeToUserEvents();
         },
-        onStompError: (frame) => {
-          // Solo loggear errores críticos, ignorar errores de iframe
-          if (frame.headers && frame.headers['message'] && !frame.headers['message'].includes('iframe')) {
-          console.error('❌ [SocketService] Error STOMP:', frame);
-          }
+        onStompError: () => {
           this.updateStatus('error');
           // Solo reconectar si no hemos excedido el máximo de intentos
           if (this.reconnectAttempts < this.maxReconnectAttempts) {
           this.startReconnect();
           }
         },
-        onWebSocketError: (error) => {
-          // Ignorar errores de iframe silenciosamente
-          const errorMessage = error?.message || error?.toString() || '';
-          if (!errorMessage.includes('iframe') && !errorMessage.includes('X-Frame-Options')) {
-          console.error('❌ [SocketService] Error WebSocket:', error);
-          }
+        onWebSocketError: () => {
           this.updateStatus('error');
           // Solo reconectar si no hemos excedido el máximo de intentos
           if (this.reconnectAttempts < this.maxReconnectAttempts) {
@@ -172,7 +155,6 @@ class SocketService {
           }
         },
         onDisconnect: () => {
-          console.log('🔌 [SocketService] Desconectado');
           this.updateStatus('disconnected');
           // Solo reconectar si no hemos excedido el máximo de intentos
           if (this.reconnectAttempts < this.maxReconnectAttempts) {
@@ -193,7 +175,6 @@ class SocketService {
    */
   private subscribeToTicketeraEvents() {
     if (!this.stompClient || !this.stompClient.connected) {
-      console.log('⚠️ [SocketService] Cliente STOMP no conectado, no se pueden suscribir eventos');
       return;
     }
 
@@ -201,9 +182,6 @@ class SocketService {
     this.stompClient.subscribe('/topic/tickets', (message: IMessage) => {
       try {
         const ticket = JSON.parse(message.body);
-        console.log('🎫 [SocketService] Ticket recibido de /topic/tickets:', ticket);
-        
-        // Emitir evento genérico de ticketera con el ticket
         const event = {
           type: 'ticket_updated',
           data: ticket,
@@ -211,7 +189,7 @@ class SocketService {
         };
         this.emit('ticketera', event);
       } catch (error) {
-        console.error('❌ [SocketService] Error procesando evento de /topic/tickets:', error);
+        // Error silencioso
       }
     });
 
@@ -219,11 +197,10 @@ class SocketService {
     this.stompClient.subscribe('/topic/new-ticket', (message: IMessage) => {
       try {
         const ticket = JSON.parse(message.body);
-        console.log('🆕 [SocketService] Nuevo ticket recibido:', ticket);
         const event = { type: 'ticket_created', data: ticket, timestamp: Date.now() };
         this.emit('ticketera', event);
       } catch (error) {
-        console.error('❌ [SocketService] Error procesando /topic/new-ticket:', error);
+        // Error silencioso
       }
     });
 
@@ -231,11 +208,10 @@ class SocketService {
     this.stompClient.subscribe('/topic/ticket-called', (message: IMessage) => {
       try {
         const ticket = JSON.parse(message.body);
-        console.log('📞 [SocketService] Ticket llamado recibido:', ticket);
         const event = { type: 'ticket_called', data: ticket, timestamp: Date.now() };
         this.emit('ticketera', event);
       } catch (error) {
-        console.error('❌ [SocketService] Error procesando /topic/ticket-called:', error);
+        // Error silencioso
       }
     });
 
@@ -243,11 +219,10 @@ class SocketService {
     this.stompClient.subscribe('/topic/ticket-started', (message: IMessage) => {
       try {
         const ticket = JSON.parse(message.body);
-        console.log('🚀 [SocketService] Ticket iniciado recibido:', ticket);
         const event = { type: 'ticket_started', data: ticket, timestamp: Date.now() };
         this.emit('ticketera', event);
       } catch (error) {
-        console.error('❌ [SocketService] Error procesando /topic/ticket-started:', error);
+        // Error silencioso
       }
     });
 
@@ -255,11 +230,10 @@ class SocketService {
     this.stompClient.subscribe('/topic/ticket-completed', (message: IMessage) => {
       try {
         const ticket = JSON.parse(message.body);
-        console.log('✅ [SocketService] Ticket completado recibido:', ticket);
         const event = { type: 'ticket_completed', data: ticket, timestamp: Date.now() };
         this.emit('ticketera', event);
       } catch (error) {
-        console.error('❌ [SocketService] Error procesando /topic/ticket-completed:', error);
+        // Error silencioso
       }
     });
 
@@ -267,23 +241,19 @@ class SocketService {
     this.stompClient.subscribe('/topic/ticket-cancelled', (message: IMessage) => {
       try {
         const ticket = JSON.parse(message.body);
-        console.log('❌ [SocketService] Ticket cancelado recibido:', ticket);
         const event = { type: 'ticket_cancelled', data: ticket, timestamp: Date.now() };
         this.emit('ticketera', event);
       } catch (error) {
-        console.error('❌ [SocketService] Error procesando /topic/ticket-cancelled:', error);
+        // Error silencioso
       }
     });
 
     // Suscribirse a pong del servidor
     this.stompClient.subscribe('/topic/pong', (message: IMessage) => {
       try {
-        const pong = JSON.parse(message.body);
-        console.log('💓 [SocketService] Pong recibido:', pong);
-        
-        // Pong recibido exitosamente
+        JSON.parse(message.body);
       } catch (error) {
-        console.error('❌ [SocketService] Error procesando pong:', error);
+        // Error silencioso
       }
     });
 
@@ -293,7 +263,7 @@ class SocketService {
         const modulosData = JSON.parse(message.body);
         this.emitModulosActualizados(modulosData);
       } catch (error) {
-        console.error('❌ [SocketService] Error procesando /topic/modulos-atencion:', error);
+        // Error silencioso
       }
     });
   }
@@ -303,7 +273,6 @@ class SocketService {
    */
   private subscribeToSistemasExternosEvents() {
     if (!this.stompClient || !this.stompClient.connected) {
-      console.log('⚠️ [SocketService] Cliente STOMP no conectado, no se pueden suscribir eventos de sistemas externos');
       return;
     }
 
@@ -311,12 +280,9 @@ class SocketService {
     this.stompClient.subscribe('/topic/sistemas-externos', (message: IMessage) => {
       try {
         const event = JSON.parse(message.body);
-        console.log('🌐 [SocketService] Evento de sistemas externos recibido:', event);
-        
-        // Emitir evento genérico de sistemas externos
         this.emit('sistemas-externos', event);
       } catch (error) {
-        console.error('❌ [SocketService] Error procesando evento de sistemas externos:', error);
+        // Error silencioso
       }
     });
 
@@ -324,10 +290,9 @@ class SocketService {
     this.stompClient.subscribe('/topic/sistema-estado-cambiado', (message: IMessage) => {
       try {
         const event = JSON.parse(message.body);
-        console.log('🔄 [SocketService] Estado de sistema cambiado:', event);
         this.emit('sistema-estado-cambiado', event);
       } catch (error) {
-        console.error('❌ [SocketService] Error procesando cambio de estado:', error);
+        // Error silencioso
       }
     });
 
@@ -335,14 +300,11 @@ class SocketService {
     this.stompClient.subscribe('/topic/sistema-verificado', (message: IMessage) => {
       try {
         const event = JSON.parse(message.body);
-        console.log('✅ [SocketService] Sistema verificado:', event);
         this.emit('sistema-verificado', event);
       } catch (error) {
-        console.error('❌ [SocketService] Error procesando verificación:', error);
+        // Error silencioso
       }
     });
-
-    console.log('✅ [SocketService] Suscrito a todos los topics de sistemas externos');
   }
 
   /**
@@ -350,7 +312,6 @@ class SocketService {
    */
   private subscribeToUserEvents() {
     if (!this.stompClient || !this.stompClient.connected) {
-      console.log('⚠️ [SocketService] Cliente STOMP no conectado, no se pueden suscribir eventos de usuario');
       return;
     }
 
@@ -368,7 +329,6 @@ class SocketService {
       token = localStorage.getItem('token');
     }
     if (!token) {
-      console.log('⚠️ [SocketService] No hay token, no se puede suscribir a eventos de usuario');
       return;
     }
 
@@ -377,7 +337,6 @@ class SocketService {
       const userId = payload.userId || payload.id;
       
       if (!userId) {
-        console.log('⚠️ [SocketService] No se pudo obtener userId del token');
         return;
       }
 
@@ -385,24 +344,17 @@ class SocketService {
       this.stompClient.subscribe(`/topic/user/${userId}`, (message: IMessage) => {
         try {
           const event = JSON.parse(message.body);
-          console.log('👤 [SocketService] Evento de usuario recibido:', event);
           
           // Los eventos ACCOUNT_BLOCKED, FORCED_LOGOUT y ROLE_DEACTIVATED son procesados por SystemNotificationsService
           if (event.type === 'ACCOUNT_BLOCKED' || event.type === 'FORCED_LOGOUT' || event.type === 'ROLE_DEACTIVATED') {
-            console.log(`🚫 [SocketService] Evento ${event.type} ignorado - debe ser procesado por SystemNotificationsService`);
             return;
           }
-          
-          // Procesar otros eventos específicos del usuario si los hay
-          console.log(`🔔 [SocketService] Evento de usuario procesado: ${event.type}`);
         } catch (error) {
-          console.error('❌ [SocketService] Error procesando evento de usuario:', error);
+          // Error silencioso
         }
       });
-
-      console.log(`✅ [SocketService] Suscrito a eventos del usuario ${userId}`);
     } catch (error) {
-      console.error('❌ [SocketService] Error obteniendo userId del token:', error);
+      // Error silencioso
     }
   }
 
@@ -412,7 +364,6 @@ class SocketService {
    */
   private subscribeToSystemTopic() {
     if (!this.stompClient || !this.stompClient.connected) {
-      console.log('⚠️ [SocketService] Cliente STOMP no conectado, no se puede suscribir a /topic/system');
       return;
     }
 
@@ -458,11 +409,9 @@ class SocketService {
           this.emit('system', event);
         }
       } catch (error) {
-        console.error('❌ [SocketService] Error procesando evento del sistema:', error);
+        // Error silencioso
       }
     });
-
-    console.log('✅ [SocketService] Suscrito al topic general /topic/system');
   }
 
   /**
@@ -471,7 +420,6 @@ class SocketService {
    */
   private subscribeToGarantizadoEvents() {
     if (!this.stompClient || !this.stompClient.connected) {
-      console.log('⚠️ [SocketService] Cliente STOMP no conectado, no se pueden suscribir eventos de garantizado');
       return;
     }
 
@@ -481,11 +429,9 @@ class SocketService {
         const event = JSON.parse(message.body);
         this.emit('garantizado', event);
       } catch (error) {
-        console.error('❌ [SocketService] Error procesando evento de garantizado:', error);
+        // Error silencioso
       }
     });
-
-    console.log('✅ [SocketService] Suscrito a todos los topics de garantizado');
   }
 
   /**
@@ -495,7 +441,6 @@ class SocketService {
    */
   private subscribeToProOpsEvents() {
     if (!this.stompClient || !this.stompClient.connected) {
-      console.log('⚠️ [SocketService] Cliente STOMP no conectado, no se pueden suscribir eventos de pro-ops');
       return;
     }
 
@@ -505,7 +450,7 @@ class SocketService {
         const kpis = JSON.parse(message.body);
         this.emit('pro-ops-kpis', kpis);
       } catch (error) {
-        console.error('❌ [SocketService] Error procesando KPIs de Pro-Ops:', error);
+        // Error silencioso
       }
     });
 
@@ -515,11 +460,9 @@ class SocketService {
         const data = JSON.parse(message.body);
         this.emit('pro-ops-conductores-en-orden', data);
       } catch (error) {
-        console.error('❌ [SocketService] Error procesando conductores en orden:', error);
+        // Error silencioso
       }
     });
-
-    console.log('✅ [SocketService] Suscrito a todos los topics de Pro-Ops');
   }
 
   /**
@@ -569,7 +512,6 @@ class SocketService {
    */
   public sendTicketeraEvent(event: any) {
     if (!this.stompClient || !this.stompClient.connected) {
-      console.log('⚠️ [SocketService] Cliente STOMP no conectado, no se puede enviar evento');
       return;
     }
 
@@ -607,7 +549,7 @@ class SocketService {
         try {
           callback(data);
         } catch (error) {
-          console.error(`❌ [SocketService] Error ejecutando listener para '${event}':`, error);
+          // Error silencioso
         }
       });
     }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -240,21 +240,26 @@ const FORM_DATA_DEFAULT: Partial<MensajeMarketing> = {
 };
 
 // Componentes auxiliares
-// Componente de modal de carga profesional
 const LoadingModal: React.FC = () => (
   <Dialog open={true}>
-    <DialogContent className="sm:max-w-[425px] border-none shadow-2xl">
-      <div className="flex flex-col items-center justify-center py-8 px-6">
-        <div className="relative mb-6">
-          <div className="w-16 h-16 border-4 border-primary-200 dark:border-primary-800 rounded-full"></div>
-          <div className="w-16 h-16 border-4 border-primary-500 border-t-transparent rounded-full animate-spin absolute top-0 left-0"></div>
-        </div>
-        <h3 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100 mb-2">
+    <DialogContent 
+      className="sm:max-w-[425px] border-none shadow-2xl [&>button]:hidden"
+      onPointerDownOutside={(e) => e.preventDefault()}
+      onInteractOutside={(e) => e.preventDefault()}
+    >
+      <DialogHeader className="text-center">
+        <DialogTitle className="text-xl font-semibold text-neutral-900 dark:text-neutral-100 mb-3">
           Preparando todo para ti
-        </h3>
-        <p className="text-sm text-neutral-600 dark:text-neutral-400 text-center max-w-sm">
+        </DialogTitle>
+        <DialogDescription className="text-sm text-neutral-600 dark:text-neutral-400 max-w-sm mx-auto">
           Estamos configurando todo para que funcione correctamente. Esto tomará solo unos segundos...
-        </p>
+        </DialogDescription>
+      </DialogHeader>
+      <div className="flex flex-col items-center justify-center py-6 px-6">
+        <div className="relative mb-4">
+          <div className="w-20 h-20 border-4 border-primary-200 dark:border-primary-800 rounded-full"></div>
+          <div className="w-20 h-20 border-4 border-primary-500 border-t-transparent rounded-full animate-spin absolute top-0 left-0"></div>
+        </div>
       </div>
     </DialogContent>
   </Dialog>
@@ -678,6 +683,9 @@ const MarketingMensajesModule: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [mensajesFiltrados, setMensajesFiltrados] = useState<MensajeMarketing[]>([]);
+  const [mensajesCargados, setMensajesCargados] = useState(false); // Flag para evitar cargas duplicadas
+  const [cargandoDatos, setCargandoDatos] = useState(false); // Flag para evitar llamadas simultáneas
+  const datosCargadosRef = useRef(false); // Ref para rastrear si ya se cargaron los datos iniciales
 
   // Helpers
   const resetForm = () => {
@@ -943,6 +951,28 @@ const MarketingMensajesModule: React.FC = () => {
     }
   };
 
+  // Cargar flotas (extraído para reutilización)
+  const fetchFlotas = async () => {
+    try {
+      const flotasRes = await api.get('/marketing-mensajes/flotas');
+      const flotasMapeadas: Flota[] = (flotasRes.data || []).map(mapFlotaResponse);
+      setFlotas(flotasMapeadas);
+    } catch (error: any) {
+      handleFetchError(error, 'Error al cargar las flotas', () => setFlotas([]));
+    }
+  };
+
+  // Cargar grupos (extraído para reutilización)
+  const fetchGrupos = async () => {
+    try {
+      const gruposRes = await api.get('/marketing-mensajes/grupos', { timeout: 0 });
+      const gruposMapeados: Grupo[] = (gruposRes.data || []).map(mapGrupoResponse);
+      setGrupos(gruposMapeados);
+    } catch (error: any) {
+      handleFetchError(error, 'Error al cargar los grupos', () => setGrupos([]));
+    }
+  };
+
   // Cargar mensajes completos para la lista (solo cuando se necesite)
   const fetchMensajesCompletos = async () => {
     try {
@@ -950,40 +980,37 @@ const MarketingMensajesModule: React.FC = () => {
       const mensajesData = mensajesRes.data || [];
       const mensajesMapeados: MensajeMarketing[] = mensajesData.map(mapMensajeResponse);
       setMensajes(mensajesMapeados);
+      setMensajesCargados(true);
     } catch (error: any) {
-      handleFetchError(error, 'Error al cargar los mensajes', () => setMensajes([]));
+      handleFetchError(error, 'Error al cargar los mensajes', () => {
+        setMensajes([]);
+        setMensajesCargados(false);
+      });
     }
   };
 
   // Handlers
   const fetchData = async () => {
+    // Evitar llamadas duplicadas simultáneas
+    if (cargandoDatos) {
+      return;
+    }
+    
     try {
+      setCargandoDatos(true);
       setLoading(true);
       
-      await fetchCalendario();
-      
-      // Obtener flotas desde la API
-      try {
-        const flotasRes = await api.get('/marketing-mensajes/flotas');
-        const flotasMapeadas: Flota[] = (flotasRes.data || []).map(mapFlotaResponse);
-        setFlotas(flotasMapeadas);
-      } catch (error: any) {
-        handleFetchError(error, 'Error al cargar las flotas', () => setFlotas([]));
-      }
-      
-      // Obtener grupos desde la API
-      try {
-
-        const gruposRes = await api.get('/marketing-mensajes/grupos', { timeout: 0 });
-        const gruposMapeados: Grupo[] = (gruposRes.data || []).map(mapGrupoResponse);
-        setGrupos(gruposMapeados);
-      } catch (error: any) {
-        handleFetchError(error, 'Error al cargar los grupos', () => setGrupos([]));
-      }
+      // Cargar todos los datos en paralelo para mejor rendimiento
+      await Promise.all([
+        fetchCalendario(),
+        fetchFlotas(),
+        fetchGrupos()
+      ]);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
+      setCargandoDatos(false);
     }
   };
 
@@ -1092,6 +1119,7 @@ const MarketingMensajesModule: React.FC = () => {
         ));
       } else {
         setMensajes([...mensajes, mensajeActualizado]);
+        setMensajesCargados(true);
       }
       
       closeModalAndReset();
@@ -1153,8 +1181,8 @@ const MarketingMensajesModule: React.FC = () => {
       
       setMensajes(mensajes.filter(m => m.id !== mensajeToDelete.id));
       
-      // Recargar datos después de eliminar
-      await reloadDataAfterOperation();
+      // Recargar datos después de eliminar (solo calendario, los mensajes ya se actualizaron localmente)
+      await fetchCalendario();
       
       setIsDeleteModalOpen(false);
       setMensajeToDelete(null);
@@ -1202,6 +1230,7 @@ const MarketingMensajesModule: React.FC = () => {
     // Recargar mensajes completos solo si estamos en la pestaña de lista
     if (activeTab === 'lista') {
       await fetchMensajesCompletos();
+      setMensajesCargados(true);
     }
   };
 
@@ -1312,18 +1341,21 @@ const MarketingMensajesModule: React.FC = () => {
   // Effects - Cargar datos al inicializar el módulo
   useEffect(() => {
     // Cargar todos los datos automáticamente al entrar al módulo
-    if (authState?.isAuthenticated) {
+    // Solo cargar una vez cuando el usuario esté autenticado
+    if (authState?.isAuthenticated && !datosCargadosRef.current) {
+      datosCargadosRef.current = true;
       fetchData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authState?.isAuthenticated]);
 
   // Cargar datos según la pestaña activa
   useEffect(() => {
-    if (activeTab === 'lista') {
-      // Cargar mensajes completos solo cuando se va a la pestaña lista
+    if (activeTab === 'lista' && !mensajesCargados) {
+      // Cargar mensajes completos solo cuando se va a la pestaña lista y no se han cargado aún
       fetchMensajesCompletos();
     }
-  }, [activeTab]);
+  }, [activeTab, mensajesCargados]);
 
   // Inicializar horarios seleccionados cuando se abre el modal
   useEffect(() => {
@@ -2831,6 +2863,10 @@ const MarketingMensajesModule: React.FC = () => {
     return (
       <Dialog open={!!archivoVisualizar} onOpenChange={() => setArchivoVisualizar(null)}>
         <DialogContent className="sm:max-w-[800px] max-w-[800px] w-[800px] p-0">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Visualización de archivo</DialogTitle>
+            <DialogDescription>Vista previa del archivo adjunto</DialogDescription>
+          </DialogHeader>
           <div className="flex items-center justify-center bg-neutral-50 dark:bg-neutral-900 p-4">
             {isVideo ? (
               <video
