@@ -239,7 +239,6 @@ export const authService = {
       
       // 🎯 Limpiar datos locales SIEMPRE (esto es lo más importante)
       this.clearLocalStorage();
-      console.log('✅ [authService] Logout completado exitosamente');
       
     } catch (error) {
       console.error('❌ [authService] Error en logout:', error);
@@ -387,10 +386,8 @@ export const authService = {
    */
   async getMyModules(): Promise<any[]> {
     try {
-      console.log('📦 [authService] Obteniendo módulos del usuario...');
       const response = await api.get('/auth/my-modules');
       const modules = Array.isArray(response.data) ? response.data : [];
-      console.log(`✅ [authService] ${modules.length} módulos obtenidos exitosamente`);
       return modules;
     } catch (error: any) {
       console.error('❌ [authService] Error obteniendo módulos:', error.response?.data || error.message);
@@ -445,6 +442,5 @@ export const authService = {
     delete api.defaults.headers.common['Authorization'];
     delete api.defaults.headers.Authorization;
     
-    console.log('✅ [authService] Limpieza local completada');
   }
 }

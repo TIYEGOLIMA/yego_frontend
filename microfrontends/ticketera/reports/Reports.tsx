@@ -246,7 +246,6 @@ const Reports: React.FC = () => {
       // Limpiar fechas después de cargar los datos
       setFechaInicio('')
       setFechaFin('')
-      console.log('✅ [Reports] Historial completo cargado:', data)
       
     } catch (error) {
       console.error('❌ [Reports] Error cargando historial completo:', error)
