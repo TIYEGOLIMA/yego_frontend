@@ -18,19 +18,13 @@ export default function Login() {
   const navigate = useNavigate()
   const { login, loading, error, clearError, token, user, modules } = useAuthStore()
 
-  // Si ya está autenticado, redirigir según el rol
+  // Si ya está autenticado, redirigir según el rol y módulos
   useEffect(() => {
     if (token && user) {
-      if (user.role === 'OPERADOR') {
-        navigate('/reports')
-      } else if (user.role === 'SAC') {
-        navigate('/tickets')
-      } else if (user.role === 'PRINCIPAL') {
-        navigate('/tablet-interface')
-      } else {
-        // Redirigir a la vista de bienvenida
-        navigate('/')
-      }
+      import('../utils/role-based-routing').then(({ getRedirectPathForRole }) => {
+        const redirectPath = getRedirectPathForRole(user.role, modules || []);
+        navigate(redirectPath);
+      });
     }
   }, [token, user, modules, navigate])
 
@@ -49,17 +43,10 @@ export default function Login() {
       
       console.log('✅ [Login] Módulos cargados, redirigiendo...');
       
-      // 🎯 OPERADOR va a reportes, SAC va a tickets, PRINCIPAL a tablet-interface, otros a la vista de bienvenida
-      if (response.user.role === 'OPERADOR') {
-        navigate('/reports')
-      } else if (response.user.role === 'SAC') {
-        navigate('/tickets')
-      } else if (response.user.role === 'PRINCIPAL') {
-        navigate('/tablet-interface')
-      } else {
-        // Redirigir a la vista de bienvenida
-        navigate('/')
-      }
+      // Usar getRedirectPathForRole con módulos para redirección dinámica
+      const { getRedirectPathForRole } = await import('../utils/role-based-routing');
+      const redirectPath = getRedirectPathForRole(response.user.role, modules || []);
+      navigate(redirectPath);
     } catch (error) {
       // Error ya manejado en el store
     }

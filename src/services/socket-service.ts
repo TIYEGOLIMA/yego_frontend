@@ -136,10 +136,13 @@ class SocketService {
           // Suscribirse a eventos de Sistemas Externos
           this.subscribeToSistemasExternosEvents();
           
-          // Suscribirse a eventos de Garantizado
+          // Suscribirse al topic general /topic/system (debe ir antes de los específicos)
+          this.subscribeToSystemTopic();
+          
+          // Suscribirse a eventos de Garantizado (topics específicos)
           this.subscribeToGarantizadoEvents();
           
-          // Suscribirse a eventos de Pro-Ops
+          // Suscribirse a eventos de Pro-Ops (topics específicos)
           this.subscribeToProOpsEvents();
           
           // Suscribirse a eventos específicos del usuario
@@ -288,21 +291,11 @@ class SocketService {
     this.stompClient.subscribe('/topic/modulos-atencion', (message: IMessage) => {
       try {
         const modulosData = JSON.parse(message.body);
-        console.log('📦 [SocketService] Actualización de módulos recibida:', modulosData);
-        
-        // El mensaje ya viene con type: "MODULOS_ACTUALIZADOS" desde el backend
-        const event = {
-          type: modulosData.type || 'MODULOS_ACTUALIZADOS',
-          data: modulosData,
-          timestamp: modulosData.timestamp || Date.now()
-        };
-        this.emit('ticketera', event);
+        this.emitModulosActualizados(modulosData);
       } catch (error) {
         console.error('❌ [SocketService] Error procesando /topic/modulos-atencion:', error);
       }
     });
-
-    console.log('✅ [SocketService] Suscrito a todos los topics de tickets y módulos');
   }
 
   /**
@@ -414,44 +407,33 @@ class SocketService {
   }
 
   /**
-   * Suscribirse a eventos de Garantizado
+   * Suscribirse al topic general /topic/system
+   * Filtra eventos por tipo: GARANTIZADO_*, PRO_OPS_*, MODULOS_ACTUALIZADOS, etc.
    */
-  private subscribeToGarantizadoEvents() {
+  private subscribeToSystemTopic() {
     if (!this.stompClient || !this.stompClient.connected) {
-      console.log('⚠️ [SocketService] Cliente STOMP no conectado, no se pueden suscribir eventos de garantizado');
+      console.log('⚠️ [SocketService] Cliente STOMP no conectado, no se puede suscribir a /topic/system');
       return;
     }
 
-    // 🎯 SUSCRIBIRSE AL TOPIC PRINCIPAL: /topic/garantizado
-    this.stompClient.subscribe('/topic/garantizado', (message: IMessage) => {
-      try {
-        const event = JSON.parse(message.body);
-        console.log('📊 [SocketService] Evento de garantizado recibido:', event);
-        
-        // Emitir evento genérico de garantizado
-        this.emit('garantizado', event);
-      } catch (error) {
-        console.error('❌ [SocketService] Error procesando evento de garantizado:', error);
-      }
-    });
-
-    // 🎯 Topic para actualizaciones de tabla
     this.stompClient.subscribe('/topic/system', (message: IMessage) => {
       try {
         const event = JSON.parse(message.body);
-        console.log('🔔 [SocketService] Evento del sistema recibido:', event);
         
         // Los eventos ACCOUNT_BLOCKED y FORCED_LOGOUT ahora llegan por /topic/user/{userId}
-        // No procesarlos aquí para evitar conflictos con SystemNotificationsService
         if (event.type === 'ACCOUNT_BLOCKED' || event.type === 'FORCED_LOGOUT') {
-          console.log(`🚫 [SocketService] Evento ${event.type} ignorado - debe ser procesado por SystemNotificationsService`);
           return;
         }
         
-        // Si es un evento de garantizado, emitirlo con la estructura correcta
+        // 🎯 Si es un evento MODULOS_ACTUALIZADOS desde /topic/system, solo emitir como 'system'
+        // (el evento ya se procesó desde /topic/modulos-atencion)
+        if (event.type === 'MODULOS_ACTUALIZADOS') {
+          this.emit('system', event);
+          return;
+        }
+        
+        // Filtrar eventos de garantizado desde /topic/system
         if (event.type === 'GARANTIZADO_TABLE_UPDATE' || event.event === 'GARANTIZADO_PROCESS_SUCCESS') {
-          console.log('📊 [SocketService] Actualización de garantizado recibida desde /topic/system');
-          // Si viene con estructura {event, data}, normalizar a {type, ...}
           if (event.event && event.data) {
             const normalizedEvent = {
               type: event.event,
@@ -465,12 +447,41 @@ class SocketService {
             this.emit('system', event);
           }
         } else if (event.type && event.type.startsWith('GARANTIZADO_')) {
-          // Cualquier otro evento de garantizado
           this.emit('garantizado', event);
+          this.emit('system', event);
+        } else if (event.type && event.type.startsWith('PRO_OPS_')) {
+          // Filtrar eventos de pro-ops desde /topic/system
+          this.emit('pro-ops-kpis', event);
+          this.emit('system', event);
+        } else {
+          // Otros eventos del sistema
           this.emit('system', event);
         }
       } catch (error) {
         console.error('❌ [SocketService] Error procesando evento del sistema:', error);
+      }
+    });
+
+    console.log('✅ [SocketService] Suscrito al topic general /topic/system');
+  }
+
+  /**
+   * Suscribirse a eventos de Garantizado
+   * Topics específicos: /topic/garantizado/*
+   */
+  private subscribeToGarantizadoEvents() {
+    if (!this.stompClient || !this.stompClient.connected) {
+      console.log('⚠️ [SocketService] Cliente STOMP no conectado, no se pueden suscribir eventos de garantizado');
+      return;
+    }
+
+    // 🎯 Topic específico: /topic/garantizado
+    this.stompClient.subscribe('/topic/garantizado', (message: IMessage) => {
+      try {
+        const event = JSON.parse(message.body);
+        this.emit('garantizado', event);
+      } catch (error) {
+        console.error('❌ [SocketService] Error procesando evento de garantizado:', error);
       }
     });
 
@@ -479,6 +490,8 @@ class SocketService {
 
   /**
    * Suscribirse a eventos de Pro-Ops (KPIs)
+   * Topics específicos: /topic/pro-ops/*
+   * Topic general: /topic/system (filtrado por tipo si es necesario)
    */
   private subscribeToProOpsEvents() {
     if (!this.stompClient || !this.stompClient.connected) {
@@ -486,26 +499,20 @@ class SocketService {
       return;
     }
 
-    // 🎯 SUSCRIBIRSE AL TOPIC PRINCIPAL: /topic/pro-ops/kpis
+    // 🎯 Topic específico: /topic/pro-ops/kpis
     this.stompClient.subscribe('/topic/pro-ops/kpis', (message: IMessage) => {
       try {
         const kpis = JSON.parse(message.body);
-        console.log('📊 [SocketService] KPIs de Pro-Ops recibidos:', kpis);
-        
-        // Emitir evento genérico de pro-ops
         this.emit('pro-ops-kpis', kpis);
       } catch (error) {
         console.error('❌ [SocketService] Error procesando KPIs de Pro-Ops:', error);
       }
     });
 
-    // 🎯 SUSCRIBIRSE AL TOPIC: /topic/pro-ops/conductores-en-orden
+    // 🎯 Topic específico: /topic/pro-ops/conductores-en-orden
     this.stompClient.subscribe('/topic/pro-ops/conductores-en-orden', (message: IMessage) => {
       try {
         const data = JSON.parse(message.body);
-        console.log('🚗 [SocketService] Conductores en orden recibidos:', data);
-        
-        // Emitir evento para conductores en orden
         this.emit('pro-ops-conductores-en-orden', data);
       } catch (error) {
         console.error('❌ [SocketService] Error procesando conductores en orden:', error);
@@ -516,12 +523,34 @@ class SocketService {
   }
 
   /**
+   * Helper para emitir eventos de módulos actualizados (evita código duplicado)
+   */
+  private emitModulosActualizados(modulosData: any) {
+    const event = {
+      type: modulosData.type || 'MODULOS_ACTUALIZADOS',
+      data: {
+        type: modulosData.type || 'MODULOS_ACTUALIZADOS',
+        modulosDisponibles: modulosData.modulosDisponibles || [],
+        modulosOcupados: modulosData.modulosOcupados || [],
+        timestamp: modulosData.timestamp || Date.now()
+      },
+      timestamp: modulosData.timestamp || Date.now()
+    };
+    
+    this.emit('ticketera', event);
+    this.emit('modulos-actualizados', {
+      modulosDisponibles: modulosData.modulosDisponibles || [],
+      modulosOcupados: modulosData.modulosOcupados || [],
+      timestamp: modulosData.timestamp || Date.now()
+    });
+  }
+
+  /**
    * Desconecta del servidor de WebSockets
    */
   public disconnect() {
     this.stopReconnect();
     if (this.stompClient) {
-      console.log('🔌 [SocketService] Desconectando STOMP...');
       this.stompClient.deactivate();
       this.stompClient = null;
     }
@@ -574,7 +603,13 @@ class SocketService {
    */
   private emit(event: string, data: any) {
     if (this.listeners[event]) {
-      this.listeners[event].forEach(callback => callback(data));
+      this.listeners[event].forEach(callback => {
+        try {
+          callback(data);
+        } catch (error) {
+          console.error(`❌ [SocketService] Error ejecutando listener para '${event}':`, error);
+        }
+      });
     }
   }
 }

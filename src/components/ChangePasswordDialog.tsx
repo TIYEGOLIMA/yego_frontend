@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -176,6 +176,9 @@ export const ChangePasswordDialog: React.FC<ChangePasswordDialogProps> = ({
             <Lock className="h-5 w-5" />
             Cambiar Contraseña
           </DialogTitle>
+          <DialogDescription>
+            Ingresa tu contraseña actual y la nueva contraseña para actualizar tu cuenta.
+          </DialogDescription>
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-4">

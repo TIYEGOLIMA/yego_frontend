@@ -91,9 +91,9 @@ const getDayLabels = (viewMode: ViewMode, dateOffset: number): { day1Label: stri
 }
 
 const processTimelineData = (timeline: DriverTimelineResponse | null | undefined, baseDate: Date, viewMode: ViewMode) => {
-  if (!timeline?.orders || timeline.orders.length === 0) {
+    if (!timeline?.orders || timeline.orders.length === 0) {
     return { hourActivity: Array(TIMELINE_HOURS).fill(false), hourOrders: new Map<number, OrderInfo[]>() }
-  }
+    }
 
   const hourActivity: boolean[] = Array(TIMELINE_HOURS).fill(false)
   const hourOrders = new Map<number, OrderInfo[]>()
@@ -107,13 +107,13 @@ const processTimelineData = (timeline: DriverTimelineResponse | null | undefined
     day2.setDate(day2.getDate() + 1)
   }
 
-  timeline.orders.forEach((order) => {
-    const isComplete = order.status === 'complete'
-    const isCancelled = order.status === 'cancelled' || order.status === 'canceled'
-    
-    if ((isComplete || isCancelled) && order.booked_at) {
-      const bookedDate = new Date(order.booked_at)
-      const endedDate = order.ended_at ? new Date(order.ended_at) : bookedDate
+    timeline.orders.forEach((order) => {
+      const isComplete = order.status === 'complete'
+      const isCancelled = order.status === 'cancelled' || order.status === 'canceled'
+      
+      if ((isComplete || isCancelled) && order.booked_at) {
+        const bookedDate = new Date(order.booked_at)
+        const endedDate = order.ended_at ? new Date(order.ended_at) : bookedDate
       const bookedDay = new Date(bookedDate.getFullYear(), bookedDate.getMonth(), bookedDate.getDate())
       
       const isDay1 = bookedDay.getTime() === day1.getTime()
@@ -143,10 +143,10 @@ const processTimelineData = (timeline: DriverTimelineResponse | null | undefined
           hourIndex: startHourIndex
         })
       }
-    }
-  })
+      }
+    })
 
-  return { hourActivity, hourOrders }
+    return { hourActivity, hourOrders }
 }
 
 
@@ -172,7 +172,7 @@ const useDriverViewStates = () => {
 
 const getFirstTripInfo = (timeline: DriverTimelineResponse | null | undefined) => {
   if (!timeline?.orders || timeline.orders.length === 0) return null
-  
+    
   const sortedTrips = [...timeline.orders].sort((a, b) => {
     const timeA = new Date(a.booked_at || 0).getTime()
     const timeB = new Date(b.booked_at || 0).getTime()
@@ -208,7 +208,7 @@ const getFirstTripHourIndex = (firstTripInfo: ReturnType<typeof getFirstTripInfo
   const day2 = new Date(baseDay)
   if (viewMode === 'ayer-hoy') {
     day1.setDate(day1.getDate() - 1)
-  } else {
+    } else {
     day2.setDate(day2.getDate() + 1)
   }
   
@@ -456,8 +456,8 @@ export function EnCursoView({}: EnCursoViewProps) {
           date_from: driverTimelineData.dateFrom,
           date_to: driverTimelineData.dateTo,
           orders: driverTimelineData.trips
-        }
-        
+  }
+
         const { hourActivity, hourOrders } = processTimelineData(timelineResponse, baseDate, driverState.viewMode)
         
         map.set(driver.driver_id, {
@@ -469,7 +469,7 @@ export function EnCursoView({}: EnCursoViewProps) {
           dateOffset: driverState.dateOffset,
           baseDate
         })
-      }
+    }
     })
     
     return map
@@ -562,7 +562,7 @@ export function EnCursoView({}: EnCursoViewProps) {
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-full bg-orange-500 flex items-center justify-center flex-shrink-0">
             <Activity className="w-6 h-6 text-white" />
-          </div>
+                      </div>
           <div>
             <h2 className="text-2xl font-bold text-neutral-900 dark:text-white">
               {filteredAndSortedItems.length} conductor{filteredAndSortedItems.length !== 1 ? 'es' : ''} activo{filteredAndSortedItems.length !== 1 ? 's' : ''}
@@ -570,36 +570,36 @@ export function EnCursoView({}: EnCursoViewProps) {
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
               Personal de flota en viaje
             </p>
+                        </div>
           </div>
         </div>
-      </div>
 
       <Card className="mb-6 bg-[#1A1A1A] dark:bg-[#1A1A1A]">
         <CardContent className="p-0">
           <div className="p-3 border-b border-gray-700">
             <div className="flex items-center gap-3">
               <div className="flex-1 max-w-md">
-                <Input
+          <Input
                   placeholder="Buscar conductor..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  leftIcon={<Search className="w-4 h-4" />}
-                  className="w-full"
-                />
-              </div>
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            leftIcon={<Search className="w-4 h-4" />}
+            className="w-full"
+          />
+        </div>
               {searchQuery && (
                 <p className="text-xs text-gray-400 whitespace-nowrap">
                   {filteredAndSortedItems.length} resultado{filteredAndSortedItems.length !== 1 ? 's' : ''}
                 </p>
               )}
             </div>
-          </div>
-          
+      </div>
+
           <div className="max-h-[calc(100vh-400px)] overflow-y-auto">
             {isLoadingTimeline ? (
               <div className="flex items-center justify-center py-12">
                 <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-              </div>
+                  </div>
             ) : filteredAndSortedItems.length === 0 ? (
               <div className="text-center py-12 text-neutral-700 dark:text-neutral-300 font-medium">
                 No hay conductores con viaje activo
@@ -621,22 +621,22 @@ export function EnCursoView({}: EnCursoViewProps) {
                     <Card key={driver.driver_id} className="bg-gradient-to-br from-[#1A1A1A] to-[#252525] border border-gray-800/50 shadow-lg hover:shadow-xl transition-all duration-300">
                       <CardContent className="p-3">
                         <div className="mb-3 pb-3 border-b border-gray-800">
-                          <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-3">
                               <div className="relative">
                                 {driver.photo_url ? (
-                                  <img
+                          <img
                                     src={driver.photo_url}
                                     alt={driver.full_name || 'Conductor'}
                                     className="w-12 h-12 rounded-lg object-cover border-2 border-orange-500/30"
-                                  />
-                                ) : (
+                          />
+                        ) : (
                                   <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-gray-700 to-gray-800 flex items-center justify-center border-2 border-gray-600">
                                     <User className="w-6 h-6 text-gray-400" />
-                                  </div>
-                                )}
+                          </div>
+                        )}
                                 <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-orange-500 rounded-full border-2 border-[#1A1A1A]" />
-                              </div>
+                      </div>
                               <div className="flex-1">
                                 <h3 className="font-bold text-white text-base mb-1">
                                   {driver.full_name || 'Sin nombre'}
@@ -659,21 +659,21 @@ export function EnCursoView({}: EnCursoViewProps) {
                                   <Badge variant="outline" className="bg-green-500/10 text-green-400 border-green-500/30 px-1.5 py-0.5 font-medium">
                                     {totalTrips} viaje{totalTrips !== 1 ? 's' : ''}
                                   </Badge>
-                                </div>
+                      </div>
                               </div>
                             </div>
                             <Badge variant="secondary" className="bg-gradient-to-r from-orange-500/20 to-orange-600/20 text-orange-300 border border-orange-500/40 px-3 py-1 font-semibold">
                               En viaje
                             </Badge>
-                          </div>
-                          
+                    </div>
+                    
                           <NavigationControls
                             driverId={driver.driver_id}
                             viewMode={viewMode}
                             dateOffset={dateOffset}
                             onUpdate={updateDriverViewState}
                           />
-                        </div>
+                      </div>
                   
                         <div className="relative overflow-visible bg-gradient-to-br from-[#2A2A2A] to-[#1F1F1F] rounded-lg p-2.5 border border-gray-800/50 shadow-inner">
                           <div className={cn(
@@ -689,18 +689,18 @@ export function EnCursoView({}: EnCursoViewProps) {
                               const isCurrentHour = currentHourIndex !== null && hourIndex === currentHourIndex
                               
                               return (
-                                <span
+                              <span
                                   key={hourIndex}
-                                  className={cn(
+                                className={cn(
                                     'text-xs w-[calc(100%/48)] text-center transition-all',
                                     isCurrentHour
                                       ? 'text-blue-400 font-bold text-sm drop-shadow-[0_0_4px_rgba(96,165,250,0.5)]'
                                       : hour % 6 === 0
                                         ? 'text-gray-400 font-medium'
                                         : 'text-transparent'
-                                  )}
+                                )}
                                   title={isDay1 ? `${day1Label} ${hour}:00` : `${day2Label} ${hour}:00`}
-                                >
+                              >
                                   {hour % 6 === 0 || isCurrentHour ? (
                                     <div className="flex flex-col items-center">
                                       {(isDay1 && hourIndex === 0) || (isDay2 && hourIndex === HOURS_PER_DAY) ? (
@@ -711,7 +711,7 @@ export function EnCursoView({}: EnCursoViewProps) {
                                             : (viewMode === 'ayer-hoy' ? "text-blue-400" : "text-purple-400")
                                         )}>
                                           {isDay1 ? day1Label : day2Label}
-                                        </span>
+                              </span>
                                       ) : null}
                                       <span className={cn(isCurrentHour && "bg-blue-500/20 px-1.5 py-0.5 rounded")}>
                                         {hour.toString().padStart(2, '0')}
@@ -722,7 +722,7 @@ export function EnCursoView({}: EnCursoViewProps) {
                               )
                             })}
                           </div>
-                    
+                          
                           <div className="flex gap-0.5 relative mb-2">
                             {Array.from({ length: TIMELINE_HOURS }, (_, hourIndex) => {
                               const hour = hourIndex < HOURS_PER_DAY ? hourIndex : hourIndex - HOURS_PER_DAY
@@ -799,25 +799,25 @@ export function EnCursoView({}: EnCursoViewProps) {
                                         <div>
                                           <div className="text-sm font-bold text-white">
                                             {dayLabel} {realHour.toString().padStart(2, '0')}:00
-                                          </div>
+                                    </div>
                                           <div className="text-xs text-gray-400">
                                             {orders.length} viaje{orders.length > 1 ? 's' : ''} registrado{orders.length > 1 ? 's' : ''}
                                           </div>
                                         </div>
                                       </div>
                                       {pinnedHour?.driverId === driver.driver_id && pinnedHour?.hour === activeHourIndex && (
-                                        <button
-                                          onClick={() => {
-                                            setPinnedHour(null)
-                                            setTooltipPosition(null)
-                                          }}
+                                      <button
+                                        onClick={() => {
+                                          setPinnedHour(null)
+                                          setTooltipPosition(null)
+                                        }}
                                           className="text-gray-400 hover:text-white transition-all p-1 rounded hover:bg-gray-800/50"
-                                          aria-label="Cerrar"
-                                        >
-                                          <X className="w-4 h-4" />
-                                        </button>
-                                      )}
-                                    </div>
+                                        aria-label="Cerrar"
+                                      >
+                                        <X className="w-4 h-4" />
+                                      </button>
+                                    )}
+                                  </div>
                                   </div>
                                   
                                   <div className="p-3 space-y-2 max-h-[300px] overflow-y-auto">
@@ -856,17 +856,17 @@ export function EnCursoView({}: EnCursoViewProps) {
                                               >
                                                 {statusLabel}
                                               </Badge>
-                                              <Badge
-                                                variant="secondary"
-                                                className={cn(
+                                            <Badge
+                                              variant="secondary"
+                                              className={cn(
                                                   'text-xs px-2 py-0.5 font-medium border-0',
-                                                  order.turnoType === 'diurno'
-                                                    ? 'bg-blue-500 text-white'
-                                                    : 'bg-purple-500 text-white'
-                                                )}
-                                              >
-                                                {order.turnoType === 'diurno' ? 'Diurno' : 'Nocturno'}
-                                              </Badge>
+                                                order.turnoType === 'diurno'
+                                                  ? 'bg-blue-500 text-white'
+                                                  : 'bg-purple-500 text-white'
+                                              )}
+                                            >
+                                              {order.turnoType === 'diurno' ? 'Diurno' : 'Nocturno'}
+                                            </Badge>
                                             </div>
                                           </div>
                                         </div>
@@ -885,21 +885,21 @@ export function EnCursoView({}: EnCursoViewProps) {
                                 <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" />
                                 <span className="text-xs text-blue-400 font-semibold">
                                   {currentHour.toString().padStart(2, '0')}:{currentMinute.toString().padStart(2, '0')}
-                                </span>
-                              </div>
+                            </span>
+                          </div>
                             )}
                             <span className="text-xs text-gray-500 font-medium">{day2Label} 23:59</span>
-                          </div>
+                  </div>
                         </div>
                       </CardContent>
                     </Card>
                   )
                 })}
-              </div>
-            )}
+                  </div>
+                )}
           </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
     </div>
   )
 }

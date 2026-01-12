@@ -158,14 +158,15 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       return
     }
     
-    console.log('🔌 [AgentPanel] Configurando suscripciones WebSocket (módulo actual:', selectedModule, ')')
-    console.log('✅ [AgentPanel] WebSocket conectado - creando suscripciones para TODOS los tickets')
     
     const subscriptions: any[] = []
     
     // 🎯 SUSCRIPCIÓN PRINCIPAL: Escuchar todos los eventos de tickets
     const ticketsSub = subscribe('/topic/tickets', (message: any) => {
-      console.log('📊 [WebSocket] Evento de tickets recibido:', message)
+      // Ignorar eventos que no son de tickets (ej: MODULOS_ACTUALIZADOS)
+      if (!message || message.type === 'MODULOS_ACTUALIZADOS' || (!message.id && !message.ticketId && !message.ticketNumber)) {
+        return;
+      }
       
       setTickets(prevTickets => {
         // Si es un nuevo ticket WAITING sin módulo (moduleId = null), agregarlo (visible para todos los módulos)
@@ -203,12 +204,6 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
                 ...message, // Agregar/sobrescribir con nueva información
                 _lastUpdated: Date.now()
               }
-              console.log('🔄 [WebSocket] Actualizando ticket:', updatedTicket.ticketNumber, 'status:', updatedTicket.status, 'moduleId:', updatedTicket.moduleId)
-              console.log('🔄 [WebSocket] Información conservada:', {
-                driverName: updatedTicket.driverName,
-                licenseNumber: updatedTicket.licenseNumber,
-                optionId: updatedTicket.optionId
-              })
               
               return updatedTicket
             }
@@ -221,12 +216,14 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
         return prevTickets
       })
       
-      console.log('✅ [WebSocket] Evento procesado desde /topic/tickets:', message.id || message.ticketId)
     })
 
     // Suscripción para tickets llamados (fallback)
     const ticketCalledSub = subscribe('/topic/ticket-called', (message: any) => {
-      console.log('📞 [WebSocket] Ticket llamado recibido:', message)
+      // Ignorar eventos que no son de tickets
+      if (!message || message.type === 'MODULOS_ACTUALIZADOS' || !message.ticketId) {
+        return;
+      }
       
       setTickets(prevTickets => {
         const updatedTickets = prevTickets.map(t => {
@@ -242,11 +239,9 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
             
             // 🎯 SI NO TIENE NOMBRE DEL CONDUCTOR, OBTENERLO
             if (!updatedTicket.driverName && updatedTicket.licenseNumber) {
-              console.log('🔍 [WebSocket] Obteniendo nombre para ticket llamado por WebSocket:', updatedTicket.ticketNumber)
               obtenerNombreConductorAsync(updatedTicket)
             }
             
-            console.log('📞 [WebSocket] Ticket actualizado a CALLED:', updatedTicket.ticketNumber, 'para módulo:', updatedTicket.moduleId, 'con nombre:', updatedTicket.driverName || 'PENDIENTE')
             return updatedTicket
           }
           return t
@@ -258,7 +253,10 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
     
     // Suscripción para tickets iniciados
     const ticketStartedSub = subscribe('/topic/ticket-started', (message: any) => {
-      console.log('🚀 [WebSocket] Ticket iniciado recibido:', message)
+      // Ignorar eventos que no son de tickets
+      if (!message || message.type === 'MODULOS_ACTUALIZADOS' || !message.ticketId) {
+        return;
+      }
       
       setTickets(prevTickets => {
         const updatedTickets = prevTickets.map(t => {
@@ -281,30 +279,22 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
     
     // Suscripción para tickets completados
     const ticketCompletedSub = subscribe('/topic/ticket-completed', (message: any) => {
-      console.log('✅ [WebSocket] Ticket completado recibido:', message)
+      // Ignorar eventos que no son de tickets
+      if (!message || message.type === 'MODULOS_ACTUALIZADOS' || !message.ticketId) {
+        return;
+      }
       
       setTickets(prevTickets => {
         return prevTickets.filter(t => t.id !== message.ticketId)
       })
-      console.log('✅ [WebSocket] Ticket removido de la lista:', message.ticketId)
     })
     
     // Suscripción para nuevos tickets
     const newTicketSub = subscribe('/topic/new-ticket', (message: any) => {
-      console.log('🚨 [AGENTPANEL] ¡NUEVO TICKET RECIBIDO VIA WEBSOCKET!', {
-        ticketNumber: message.ticketNumber,
-        status: message.status,
-        id: message.id
-      })
-      console.log('🆕 [WebSocket] Nuevo ticket recibido:', message)
-      console.log('🆕 [WebSocket] Datos del ticket:', {
-        ticketNumber: message.ticketNumber,
-        licenseNumber: message.licenseNumber,
-        driverName: message.driverName,
-        optionId: message.optionId,
-        status: message.status,
-        moduleId: message.moduleId
-      })
+      // Ignorar eventos que no son de tickets
+      if (!message || message.type === 'MODULOS_ACTUALIZADOS' || (!message.id && !message.ticketNumber)) {
+        return;
+      }
       
       // Los tickets nuevos WAITING sin módulo están disponibles para todos
       if ((message.status === 'WAITING' && (message.moduleId === null || message.moduleId === undefined)) || 
@@ -324,11 +314,7 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
               obtenerNombreConductorAsync(newTicket)
             }
             
-            console.log('✅ [WebSocket] Nuevo ticket agregado:', newTicket.ticketNumber)
-            console.log('🎯 [WebSocket] Agregando ticket a la lista. Tickets antes:', prevTickets.length, 'después:', prevTickets.length + 1)
-            
             const updatedTickets = [...prevTickets, newTicket]
-            console.log('📋 [WebSocket] Lista actualizada con nuevo ticket:', updatedTickets.map(t => `${t.ticketNumber}(${t.status})`))
             return updatedTickets
           }
           return prevTickets
@@ -343,11 +329,9 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
     if (ticketCompletedSub) subscriptions.push(ticketCompletedSub)
     if (newTicketSub) subscriptions.push(newTicketSub)
     
-    console.log('🔌 [AgentPanel] Suscripciones WebSocket configuradas:', subscriptions.length)
     
     // Cleanup
     return () => {
-      console.log('🧹 [AgentPanel] Limpiando suscripciones WebSocket')
       subscriptions.forEach(sub => {
         try {
           if (sub && typeof sub.unsubscribe === 'function') {
@@ -392,25 +376,12 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
   // 🎯 FUNCIÓN REAL: Cargar tickets del backend
   const cargarTickets = useCallback(async (esConsultaAutomatica = false) => {
     if (!selectedModule) {
-      console.log('❌ [AgentPanel] No hay módulo seleccionado para cargar tickets')
       return
     }
     
     try {
-      if (!esConsultaAutomatica) {
-        console.log('🎯 [AgentPanel] Cargando tickets reales para módulo:', selectedModule)
-      }
-      
       // 🎯 OBTENER TODOS LOS TICKETS usando /tickets/all
       const todosLosTicketsBackend = await ticketService.getAllTickets()
-      if (!esConsultaAutomatica) {
-        console.log('🎯 [AgentPanel] Todos los tickets del backend:', todosLosTicketsBackend.length)
-        console.log('🔍 [AgentPanel] DETALLES de cada ticket:')
-        todosLosTicketsBackend.forEach((ticket, index) => {
-          console.log(`  ${index + 1}. ${ticket.ticketNumber}: status="${ticket.status}", moduleId=${ticket.moduleId}, agentId=${ticket.agentId}`)
-        })
-        console.log('🎯 [AgentPanel] Módulo seleccionado actual:', selectedModule)
-      }
       
       // 🎯 OBTENER AGENT ID DEL USUARIO ACTUAL
       const currentUser = getCurrentUser()
@@ -448,9 +419,6 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
         return false
       })
       
-      if (!esConsultaAutomatica) {
-        console.log('🎯 [AgentPanel] Tickets relevantes para módulo', selectedModule, ':', ticketsRelevantes.length)
-      }
       
       // 🎯 PROCESAR TICKETS FILTRADOS CONSERVANDO TODOS LOS DATOS
       const todosLosTickets = ticketsRelevantes.map(ticket => {
@@ -461,9 +429,6 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
             userId: null, // Solo limpiar el userId para tickets en espera
           }
           
-          if (!esConsultaAutomatica) {
-            console.log('📋 [AgentPanel] Procesando ticket WAITING:', processedTicket.ticketNumber, 'licenseNumber:', processedTicket.licenseNumber, 'driverName:', processedTicket.driverName)
-          }
           
           return processedTicket
         }
@@ -473,18 +438,12 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
           ...ticket // Conservar TODA la información del ticket
         }
         
-        if (!esConsultaAutomatica) {
-          console.log('📋 [AgentPanel] Procesando ticket', ticket.status + ':', processedTicket.ticketNumber, 'licenseNumber:', processedTicket.licenseNumber, 'driverName:', processedTicket.driverName)
-        }
         
         return processedTicket
       })
 
       // 🎯 CARGAR NOMBRES DE CONDUCTORES PARA TODOS LOS TICKETS
       if (!esConsultaAutomatica) {
-        console.log('🔍 [AgentPanel] Iniciando carga de nombres de conductores para:', todosLosTickets.length, 'tickets')
-        console.log('🔍 [AgentPanel] Tickets con licenseNumber:', todosLosTickets.filter(t => t.licenseNumber).length)
-        console.log('🔍 [AgentPanel] Tickets sin licenseNumber:', todosLosTickets.filter(t => !t.licenseNumber).length)
         
         // 🧹 Limpiar cache corrupto si es necesario (una vez por sesión)
         if (!sessionStorage.getItem('cache_cleaned')) {
@@ -691,19 +650,8 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
         })
       )
       
-      if (!esConsultaAutomatica) {
-        console.log('✅ [AgentPanel] Tickets con nombres cargados:', ticketsConNombres.filter(t => t.driverName).length, 'de', ticketsConNombres.length)
-        ticketsConNombres.forEach(ticket => {
-          console.log('📋 [AgentPanel] Ticket:', ticket.ticketNumber, 'driverName:', ticket.driverName || 'SIN NOMBRE', 'licenseNumber:', ticket.licenseNumber)
-        })
-      }
-      
       // 🎯 MOSTRAR TICKETS INMEDIATAMENTE CON TODOS LOS DETALLES
       setTickets(ticketsConNombres)
-      if (!esConsultaAutomatica) {
-        console.log('✅ [AgentPanel] Tickets cargados del backend con detalles:', ticketsConNombres.length)
-        console.log('📋 [AgentPanel] Ejemplo de detalles cargados:', ticketsConNombres[0] || 'No hay tickets')
-      }
 
       // 🎯 OBTENER NOMBRES ASINCRÓNICAMENTE (SIN BLOQUEAR LA UI)
       const ticketsSinNombre = ticketsConNombres.filter(ticket => 
@@ -750,7 +698,6 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
     console.log('🎯 [AgentPanel] ===== INICIANDO LLAMAR TICKET =====')
     
     if (!selectedModule) {
-      console.log('❌ [AgentPanel] No hay módulo seleccionado')
       mostrarError('Debe seleccionar un módulo primero')
       return
     }
@@ -1163,7 +1110,6 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
   }, [getCurrentUser])
 
   const actualizarModulosDesdeLista = useCallback((modules: any[]) => {
-    console.log('🔄 [useAgentPanel] Actualizando módulos desde lista externa:', modules.length)
     setModules(modules)
     hasLoadedModules.current = true
   }, [])

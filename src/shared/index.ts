@@ -4,7 +4,6 @@
 // 🎭 HOOKS COMPARTIDOS
 export { useAuth, useAuthEvents } from './hooks/useAuth';
 export { useConnectionStatus } from './hooks/useConnectionStatus';
-export { usePermissions } from './hooks/usePermissions';
 
 // 🧩 COMPONENTES COMPARTIDOS  
 export { default as AccessRestricted } from './components/AccessRestricted';
@@ -17,5 +16,5 @@ export const SHARED_CONFIG = {
   version: '1.0.0',
   description: 'Componentes y hooks compartidos entre todos los sistemas',
   components: ['AccessRestricted', 'MainLayout', 'ThemeToggle'],
-  hooks: ['useAuth', 'useConnectionStatus', 'usePermissions']
+  hooks: ['useAuth', 'useConnectionStatus']
 } as const;

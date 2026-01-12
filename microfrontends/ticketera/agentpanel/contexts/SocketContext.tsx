@@ -23,12 +23,6 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
 
   // 🎯 MEMOIZAR EL CONTEXT VALUE PARA EVITAR RE-RENDERS INFINITOS
   const contextValue: SocketContextType = useMemo(() => {
-    console.log('🎬 [SocketProvider] Iniciando con WebSocket centralizado')
-    console.log('🔌 [SocketProvider] Estado de conexión:', {
-      isConnected: socketHook.isConnected,
-      latency: socketHook.latency
-    })
-
     return {
       client: null, // No hay cliente STOMP, ahora usa Socket.IO centralizado
       isConnected: socketHook.isConnected,

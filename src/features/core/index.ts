@@ -3,7 +3,6 @@
 
 // Módulos de administración
 export { default as AuditModule } from './audit/audit.module';
-export { default as ConfigurationModule } from './configuration/configuration.module';
 export { default as UsersModule } from './users/users.module';
 export { default as PermissionsModule } from './permissions/permissions.module';
 export { default as RolesModule } from './roles/roles.module';
@@ -24,7 +23,7 @@ export const CORE_FEATURES_CONFIG = {
   description: 'Features de administración y gestión general del sistema',
   version: '1.0.0',
   features: [
-    'audit', 'configuration', 'users', 'permissions', 'roles', 
+    'audit', 'users', 'permissions', 'roles', 
     'sessions', 'reports', 'modules', 'asistencia', 'yego-premiun', 'yego-pro-ops'
   ]
 } as const;

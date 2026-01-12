@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore, Module } from '../../store/auth-store'
-import { usePermissions } from '../hooks/usePermissions'
 import { useConnectionStatus } from '../hooks/useConnectionStatus'
 import { ThemeToggle } from './ThemeToggle'
 import { Button } from '../../components/ui/button'
@@ -10,7 +9,6 @@ import {
   Menu, 
   User, 
   Power, 
-  Settings2, 
   AppWindow, 
   ChevronLeft, 
   ChevronRight, 
@@ -39,8 +37,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [changePasswordOpen, setChangePasswordOpen] = useState(false)
   const [openDropdowns, setOpenDropdowns] = useState<Set<string>>(new Set())
-  const { user, logout, token, modules, fetchModules } = useAuthStore()
-  const { hasAnyPermission } = usePermissions()
+  const { user, logout, token, modules, fetchModules, refreshTrigger } = useAuthStore()
   const { status } = useConnectionStatus()
   
   
@@ -94,6 +91,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     }
   }
 
+  // Helper functions
   const getModuleIcon = (icono?: string) => {
     if (icono && ICON_MAP[icono]) {
       const IconComponent = ICON_MAP[icono];
@@ -120,11 +118,10 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     return name.includes('dashboard') || url.includes('dashboard');
   };
 
-  const buildNavItemsFromModules = (): NavItem[] => {
-    if (!modules || modules.length === 0) return [];
+  const buildNavItemsFromModules = (modulesList: Module[] = modules): NavItem[] => {
+    if (!modulesList || modulesList.length === 0) return [];
 
-    const activeModules = modules.filter(module => module.activo);
-      
+    const activeModules = modulesList.filter(module => module.activo);
     const navItems: NavItem[] = [];
     const modulesWithGroup = new Map<string, Module[]>();
     const modulesWithoutGroup: Module[] = [];
@@ -147,12 +144,12 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       const grupoIconName = grupoModules[0]?.grupo?.icono;
       const GrupoIcon = grupoIconName && ICON_MAP[grupoIconName] ? ICON_MAP[grupoIconName] : AppWindow;
       
-        navItems.push({
-          label: grupoName,
-          to: `dropdown-${grupoName.toLowerCase().replace(/\s+/g, '-')}`,
+      navItems.push({
+        label: grupoName,
+        to: `dropdown-${grupoName.toLowerCase().replace(/\s+/g, '-')}`,
         icon: <GrupoIcon className="h-5 w-5" />,
-          requiredPermission: null,
-          children: grupoModules.map(module => createNavItemFromModule(module))
+        requiredPermission: null,
+        children: grupoModules.map(module => createNavItemFromModule(module))
       });
     });
 
@@ -163,8 +160,10 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     return navItems;
   };
 
-  const navItems = buildNavItemsFromModules();
-  const filteredNavItems = navItems;
+  // Re-calcular navItems cuando cambien los módulos o el refreshTrigger
+  const navItems = useMemo(() => {
+    return buildNavItemsFromModules(modules);
+  }, [modules, refreshTrigger]);
 
   const isActive = (path: string) => {
     if (path === '/dashboard' && (location.pathname === '/' || location.pathname === '/dashboard')) return true;
@@ -173,7 +172,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
   const getCurrentPageTitle = () => {
     if (location.pathname === '/') return 'Dashboard';
-    return filteredNavItems.find(item => isActive(item.to))?.label || 'Dashboard'
+    return navItems.find(item => isActive(item.to))?.label || 'Dashboard'
   }
 
   useEffect(() => {
@@ -192,17 +191,15 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
   useEffect(() => {
     // Gestionar automáticamente los dropdowns basándose en la ruta activa
-    // Solo se ejecuta cuando cambia la ruta (intencional - no agregar otras dependencias)
+    // También se ejecuta cuando cambian los módulos (refreshTrigger) para actualizar navegación
     const newOpenDropdowns = new Set<string>();
     
-    filteredNavItems.forEach(item => {
+    navItems.forEach(item => {
       if (item.to.startsWith('dropdown-') && item.children) {
         const hasActiveOption = item.children.some(child => isActive(child.to));
         if (hasActiveOption) {
-          // Mantener abierto si tiene una opción activa
           newOpenDropdowns.add(item.to);
         }
-        // Si no tiene opción activa, no lo agregamos (se cierra automáticamente)
       }
     });
     
@@ -213,7 +210,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     if (currentDropdowns !== nextDropdowns) {
       setOpenDropdowns(newOpenDropdowns);
     }
-  }, [location.pathname])
+  }, [location.pathname, navItems, refreshTrigger])
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -221,7 +218,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         // Solo cerrar dropdowns que NO tienen una opción activa
         // para evitar el parpadeo de re-render
         const dropdownsToKeep = new Set<string>();
-        filteredNavItems.forEach(item => {
+        navItems.forEach(item => {
           if (item.to.startsWith('dropdown-') && item.children) {
             const hasActiveOption = item.children.some(child => isActive(child.to));
             if (hasActiveOption && openDropdowns.has(item.to)) {
@@ -239,7 +236,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
-  }, [openDropdowns, filteredNavItems])
+  }, [openDropdowns, navItems])
 
   return (
     <div className="min-h-screen bg-background-secondary dark:bg-background-dark">
@@ -345,19 +342,6 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                     <span>Cambiar Contraseña</span>
                   </button>
                   
-                  {hasAnyPermission('configuration') && (
-                    <button
-                      className="w-full text-left px-4 py-2 text-sm text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 flex items-center space-x-2 transition-colors"
-                      onClick={() => {
-                        setUserMenuOpen(false);
-                        navigate('/configuration');
-                        setOpenDropdowns(new Set());
-                      }}
-                    >
-                      <Settings2 className="h-4 w-4" />
-                      <span>Configuración</span>
-                    </button>
-                  )}
                   
                   <button
                     className="w-full text-left px-4 py-2 text-sm text-error-600 dark:text-error-400 hover:bg-error-50 dark:hover:bg-error-900/20 flex items-center space-x-2 transition-colors"
@@ -393,7 +377,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         
         {/* Navegación */}
         <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
-          {filteredNavItems.length === 0 ? (
+          {navItems.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8 text-center px-4">
               <AppWindow className="h-8 w-8 text-neutral-400 dark:text-neutral-600 mb-3" />
               <p className="text-xs text-neutral-500 dark:text-neutral-400">
@@ -404,7 +388,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               </p>
             </div>
           ) : (
-            filteredNavItems.map((item) => {
+            navItems.map((item) => {
             const isActiveItem = isActive(item.to);
             
             // Manejar menús expandibles (dropdowns)

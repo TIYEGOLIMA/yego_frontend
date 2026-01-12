@@ -1,78 +1,86 @@
 // 🎭 SISTEMA DE RUTEO BASADO EN ROLES
-// Sistema simplificado para redirección basada en roles
+// Sistema dinámico para redirección basada en roles y módulos disponibles
 
-export interface UserSession {
+export interface Module {
   id: number;
-  username: string;
-  role: string;
-  email: string;
-  name: string;
+  nombre: string;
+  descripcion?: string;
+  url: string;
+  estado: string;
+  ultimoCheck?: string;
+  activo: boolean;
+  fechaCreacion?: string;
+  fechaActualizacion?: string;
+  icono?: string;
+  grupo?: {
+    id: number;
+    nombre: string;
+    icono?: string;
+    activo?: boolean;
+    fechaCreacion?: string;
+  } | null;
 }
 
 /**
- * Determinar ruta de redirección según rol
+ * Normalizar URL para asegurar que comience con /
  */
-export const getRedirectPathForRole = (role: string): string => {
-  switch (role?.toUpperCase()) {
-    case 'SUPERADMIN':
-    case 'ADMIN':
-      return '/dashboard'; // Dashboard principal para administradores
-    case 'SUPERVISOR':
-      return '/'; // Vista de bienvenida para supervisor
+const normalizeUrl = (url?: string): string => {
+  if (!url) return '/';
+  return url.startsWith('/') ? url : `/${url}`;
+};
+
+/**
+ * Determinar ruta de redirección según rol y módulos disponibles
+ * Prioridad: 1) Verificar si el rol tiene módulos disponibles, 2) Roles especiales con rutas fijas, 3) Vista de bienvenida
+ */
+export const getRedirectPathForRole = (role: string, modules?: Module[]): string => {
+  const roleUpper = role?.toUpperCase();
+  
+  // Roles especiales con rutas fijas (TV, TABLET1, TABLET2, PRINCIPAL) - NO TOCAR
+  switch (roleUpper) {
     case 'PRINCIPAL':
-      return '/tablet-interface'; // TabletInterface maximizado
-    case 'OPERADOR': 
-      return '/reports'; // Panel de reportes para operador
-    case 'SAC': 
-      return '/tickets'; // Panel de SAC
+      return '/tablet-interface';
     case 'TABLET1':
-      return '/rating-tablet'; // RatingTablet #1 maximizada
     case 'TABLET2':
-      return '/rating-tablet'; // RatingTablet #2 maximizada
+      return '/rating-tablet';
     case 'TV':
-      return '/tv-display'; // TV Display maximizado por defecto
-    case 'DISEÑADOR GRAFICO':
-    case 'DISEÑADOR GRÁFICO':
-      return '/'; // Vista de bienvenida para diseñador gráfico
-    default:
-      console.warn(`⚠️ Rol '${role}' no tiene ruta configurada, redirigiendo a vista de bienvenida`);
-      return '/'; // Vista de bienvenida por defecto en lugar de dashboard
+      return '/tv-display';
   }
+  
+  // Para todos los demás roles, usar el primer módulo activo disponible
+  if (modules && modules.length > 0) {
+    const activeModules = modules.filter(m => m.activo);
+    
+    if (activeModules.length > 0) {
+      // Priorizar dashboard si existe
+      const dashboardModule = activeModules.find(m => {
+        const name = m.nombre?.toLowerCase() || '';
+        const url = m.url?.toLowerCase() || '';
+        return name.includes('dashboard') || url.includes('dashboard');
+      });
+      
+      if (dashboardModule) {
+        return normalizeUrl(dashboardModule.url);
+      }
+      
+      // Usar el primer módulo activo
+      return normalizeUrl(activeModules[0].url);
+    }
+  }
+  
+  // Fallback: vista de bienvenida
+  return '/';
 };
 
 /**
  * Mapeo completo de roles para referencia
  */
 export const COMPLETE_ROLE_MAPPING = {
-  'SUPERADMIN': {
-    description: 'Administrador del sistema con acceso completo',
-    permissions: ['ALL_PERMISSIONS'],
-    fullscreen: false,
-    component: 'MainLayout'
-  },
-  'ADMIN': {
-    description: 'Administrador con acceso completo',
-    permissions: ['ALL_PERMISSIONS'],
-    fullscreen: false,
-    component: 'MainLayout'
-  },
   'PRINCIPAL': {
     description: 'Interfaz principal para creación de tickets',
     permissions: ['CREATE_TICKETS', 'VIEW_QUEUE'],
     fullscreen: true,
     component: 'TabletInterface'
-  },
-  'OPERADOR': {
-    description: 'Panel de operador para gestión de tickets',
-    permissions: ['MANAGE_TICKETS', 'CALL_TICKETS', 'COMPLETE_TICKETS'],
-    fullscreen: false,
-    component: 'TicketeraWrapper'
-  },
-  'SAC': {
-    description: 'Panel de SAC para gestión de tickets',
-    permissions: ['MANAGE_TICKETS', 'CALL_TICKETS', 'COMPLETE_TICKETS'],
-    fullscreen: false,
-    component: 'TicketeraWrapper'
   },
   'TABLET1': {
     description: 'Tablet de calificación #1',
@@ -100,73 +108,4 @@ export const COMPLETE_ROLE_MAPPING = {
 export const shouldUseFullscreen = (role: string): boolean => {
   const roleConfig = COMPLETE_ROLE_MAPPING[role as keyof typeof COMPLETE_ROLE_MAPPING];
   return roleConfig?.fullscreen || false;
-};
-
-/**
- * Obtener el componente específico para un rol
- */
-export const getComponentForRole = (role: string): string => {
-  const roleConfig = COMPLETE_ROLE_MAPPING[role as keyof typeof COMPLETE_ROLE_MAPPING];
-  return roleConfig?.component || 'TicketeraWrapper';
-};
-
-/**
- * Obtener configuración del usuario basada en su rol
- */
-export const getUserModuleConfiguration = (role: string) => {
-  const defaultPath = getRedirectPathForRole(role);
-  const roleConfig = COMPLETE_ROLE_MAPPING[role as keyof typeof COMPLETE_ROLE_MAPPING];
-
-  if (!roleConfig) {
-    return null;
-  }
-
-  return {
-    role,
-    defaultPath,
-    description: roleConfig.description,
-    permissions: roleConfig.permissions,
-    fullscreen: roleConfig.fullscreen,
-    component: roleConfig.component
-  };
-};
-
-/**
- * Función de login simplificada
- */
-export const handleUserLogin = async (loginResponse: { user: UserSession }) => {
-  try {
-    const { user } = loginResponse;
-    
-    console.log(`🚪 Usuario logueado: ${user.username} con rol: ${user.role}`);
-    
-    // Determinar ruta de redirección
-    const redirectPath = getRedirectPathForRole(user.role);
-    
-    console.log(`✅ Redirigiendo a: ${redirectPath}`);
-    
-    return {
-      success: true,
-      redirectTo: redirectPath,
-      userConfig: getUserModuleConfiguration(user.role)
-    };
-    
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
-    console.error('❌ Error en login:', error);
-    return {
-      success: false,
-      error: errorMessage,
-      redirectTo: '/dashboard' // Fallback
-    };
-  }
-};
-
-export default {
-  getRedirectPathForRole,
-  getUserModuleConfiguration,
-  handleUserLogin,
-  shouldUseFullscreen,
-  getComponentForRole,
-  COMPLETE_ROLE_MAPPING
 };

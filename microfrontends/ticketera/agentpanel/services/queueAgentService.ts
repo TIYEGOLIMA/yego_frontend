@@ -237,14 +237,10 @@ class QueueAgentService {
    */
   async assignModuleToUser(userId: number, moduleId: number): Promise<ModuleAssignmentResponse> {
     try {
-      console.log(`🔄 [queueAgentService] Asignando módulo ${moduleId} al usuario ${userId}...`);
-      
       const response = await api.post<any>('/queue-agents/asignar', {
         userId,
         moduleId
       });
-      
-      console.log('✅ [queueAgentService] Módulo asignado exitosamente:', response.data);
       
       // Verificar diferentes formatos de respuesta del backend
       let moduleAssignment;

@@ -4,7 +4,6 @@
 // 🏢 FEATURES DEL SISTEMA PRINCIPAL (CORE)
 export {
   AuditModule,
-  ConfigurationModule,
   UsersModule,
   PermissionsModule,
   RolesModule,
@@ -35,7 +34,7 @@ export const FEATURES_REGISTRY = {
   core: {
     name: 'Sistema Principal',
     path: '/features/core',
-    features: ['audit', 'configuration', 'users', 'permissions', 'roles', 'sessions', 'reports', 'modules', 'asistencia', 'yego-premiun']
+    features: ['audit', 'users', 'permissions', 'roles', 'sessions', 'reports', 'modules', 'asistencia', 'yego-premiun']
   },
   ticketera: {
     name: 'Ticketera',

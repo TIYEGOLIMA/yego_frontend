@@ -22,7 +22,7 @@ export const useSocket = (): UseSocketReturn => {
     connectionStatus,
     onTicketeraEvent,
     sendTicketeraEvent
-  } = useWebSocket({ debug: true })
+  } = useWebSocket({ debug: false })
 
   // Simular latencia (en una implementación real, esto vendría del servidor)
   useEffect(() => {
@@ -39,21 +39,19 @@ export const useSocket = (): UseSocketReturn => {
 
   // Métodos de conexión (no necesarios con STOMP, pero mantenemos compatibilidad)
   const connect = useCallback(() => {
-    console.log('🔌 [useSocket] Connect llamado - STOMP se conecta automáticamente')
+    // STOMP se conecta automáticamente
   }, [])
 
   const disconnect = useCallback(() => {
-    console.log('🔌 [useSocket] Disconnect llamado - STOMP se desconecta automáticamente')
+    // STOMP se desconecta automáticamente
   }, [])
 
   const reconnectWithAuth = useCallback(() => {
-    console.log('🔄 [useSocket] ReconnectWithAuth llamado - STOMP se reconecta automáticamente')
+    // STOMP se reconecta automáticamente
   }, [])
 
   // Función de suscripción que mapea topics a eventos de Ticketera
   const subscribe = useCallback((topic: string, callback: (message: any) => void): (() => void) | null => {
-    console.log('🔔 [useSocket] Suscribiendo a:', topic)
-    
     // Mapear topics específicos a eventos de Ticketera
     const topicMap: { [key: string]: string } = {
       '/topic/tickets': 'ticket_updated',
@@ -70,13 +68,12 @@ export const useSocket = (): UseSocketReturn => {
     
     // Si el topic está mapeado, suscribirse a eventos de Ticketera
     if (topicMap[topic]) {
-      console.log(`🔔 [useSocket] Mapeando ${topic} a evento Ticketera: ${topicMap[topic]}`)
-      
+      const expectedType = topicMap[topic];
       // Suscribirse a eventos de Ticketera y filtrar por tipo
       const unsubscribe = onTicketeraEvent((event: any) => {
-        // Para MODULOS_ACTUALIZADOS, el tipo puede venir directamente en el mensaje
-        if (event.type === topicMap[topic] || event.type === 'MODULOS_ACTUALIZADOS') {
-          console.log(`🎫 [useSocket] Evento recibido para ${topic}:`, event)
+        // Solo procesar si el tipo del evento coincide con el tipo esperado del topic
+        // NO incluir MODULOS_ACTUALIZADOS aquí, solo si el topic es específicamente /topic/modulos-atencion
+        if (event.type === expectedType) {
           callback(event.data || event)
         }
       })
@@ -85,7 +82,6 @@ export const useSocket = (): UseSocketReturn => {
     }
     
     // Para topics no mapeados, suscribirse directamente a eventos de Ticketera
-    console.log(`🔔 [useSocket] Suscribiéndose directamente a eventos Ticketera para: ${topic}`)
     return onTicketeraEvent(callback)
   }, [onTicketeraEvent])
 

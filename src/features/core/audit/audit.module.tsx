@@ -74,7 +74,7 @@ const AuditModule: React.FC = () => {
   ];
 
   const resources = [
-    'all', 'users', 'roles', 'permissions', 'modules', 'audit', 'configuration'
+    'all', 'users', 'roles', 'permissions', 'modules', 'audit'
   ];
 
   useEffect(() => {
@@ -133,7 +133,6 @@ const AuditModule: React.FC = () => {
       'permissions': 'Permisos',
       'modules': 'Módulos',
       'audit': 'Auditoría',
-      'configuration': 'Configuración'
     };
     
     return <Badge variant="outline">{resourceLabels[resource] || resource}</Badge>;

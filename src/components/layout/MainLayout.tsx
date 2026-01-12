@@ -16,7 +16,6 @@ export default function MainLayout() {
     { icon: BarChart3, label: 'Dashboard', path: '/dashboard' },
     { icon: Truck, label: 'Entregas', path: '/entregas' },
     { icon: Users, label: 'Usuarios', path: '/usuarios' },
-    { icon: Settings, label: 'Configuración', path: '/configuracion' },
   ]
 
   return (

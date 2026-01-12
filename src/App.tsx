@@ -21,7 +21,6 @@ import PermissionsModule from './features/core/permissions/permissions.module'
 import ModulesModule from './features/core/modules/modules.module'
 import AuditModule from './features/core/audit/audit.module'
 import SessionsModule from './features/core/sessions/sessions.module'
-import ConfigurationModule from './features/core/configuration/configuration.module'
 import { AsistenciaModule } from './features/core/asistencia'
 import { WelcomeModule } from './features/core/welcome'
 import YegoPremiunModule from './features/core/yego-premiun/yego-premiun.module'
@@ -63,7 +62,8 @@ const RoleRestrictedRoute = ({ children, allowedRoles }: { children: React.React
   
   const isAllowed = allowedRoles.includes(user.role.toUpperCase())
   if (!isAllowed) {
-    return <Navigate to={getRedirectPathForRole(user.role)} replace />
+    const { modules } = useAuthStore.getState();
+    return <Navigate to={getRedirectPathForRole(user.role, modules)} replace />
   }
   
   return <>{children}</>
@@ -95,20 +95,53 @@ const PermissionRoute = ({ children, module }: { children: React.ReactNode, modu
     )
   }
   
-    const moduleName = module.toLowerCase().trim();
-    
-  const hasPermission = modules?.some(m => {
+  const moduleName = module.toLowerCase().trim();
+  
+  // Si no hay módulos, permitir acceso (para desarrollo/testing)
+  if (!modules || modules.length === 0) {
+    console.warn(`⚠️ [PermissionRoute] No hay módulos disponibles para verificar acceso a '${module}'`);
+    return <>{children}</>
+  }
+  
+  const hasPermission = modules.some(m => {
     if (!m.activo) return false;
     
+    // Normalizar URL del módulo: quitar barras iniciales/finales y convertir a minúsculas
     const moduleUrl = (m.url || '').toLowerCase().replace(/^\/+|\/+$/g, '');
     const moduleNombre = (m.nombre || '').toLowerCase().trim();
     
-    return moduleUrl === moduleName || 
-           moduleUrl.includes(moduleName) || 
-           moduleNombre.includes(moduleName);
-  }) || false;
+    // Comparar de manera más flexible
+    const urlMatches = moduleUrl === moduleName || 
+                       moduleUrl.includes(moduleName) || 
+                       moduleName.includes(moduleUrl);
+    
+    const nameMatches = moduleNombre === moduleName ||
+                        moduleNombre.includes(moduleName) ||
+                        moduleName.includes(moduleNombre);
+    
+    if (urlMatches || nameMatches) {
+      console.log(`✅ [PermissionRoute] Acceso permitido a '${module}' - Módulo encontrado: ${m.nombre} (${m.url})`);
+    }
+    
+    return urlMatches || nameMatches;
+  });
   
-  if (!hasPermission) return <Navigate to="/" replace />
+  if (!hasPermission) {
+    console.warn(`⚠️ [PermissionRoute] Acceso denegado a '${module}'. Módulos disponibles:`, 
+      modules.filter(m => m.activo).map(m => `${m.nombre} (${m.url})`));
+    
+    // Intentar redirigir al primer módulo activo disponible
+    const firstActiveModule = modules.find(m => m.activo);
+    if (firstActiveModule) {
+      const redirectUrl = firstActiveModule.url?.startsWith('/') 
+        ? firstActiveModule.url 
+        : `/${firstActiveModule.url}`;
+      console.log(`🔄 [PermissionRoute] Redirigiendo a: ${redirectUrl}`);
+      return <Navigate to={redirectUrl} replace />
+    }
+    return <Navigate to="/" replace />
+  }
+  
   if (!children) return null;
 
   return <>{children}</>
@@ -208,9 +241,7 @@ function App() {
           } />
           <Route path="/" element={
             <ProtectedRoute>
-              <RoleRestrictedRoute allowedRoles={['SUPERADMIN', 'ADMIN', 'OPERADOR', 'SAC', 'PRINCIPAL', 'SUPERVISOR']}>
-                <MainLayout />
-              </RoleRestrictedRoute>
+              <MainLayout />
             </ProtectedRoute>
           }>
             <Route index element={<WelcomeModule />} />
@@ -247,11 +278,6 @@ function App() {
             <Route path="sessions" element={
               <PermissionRoute module="sessions">
                 <SessionsModule />
-              </PermissionRoute>
-            } />
-            <Route path="configuration" element={
-              <PermissionRoute module="configuration">
-                <ConfigurationModule />
               </PermissionRoute>
             } />
             <Route path="tickets" element={

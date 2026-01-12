@@ -8,7 +8,6 @@ export interface User {
   email: string;
   name: string;
   role: string;
-  moduleId?: string | null;  
   active: boolean;
   lastLogin: string;
 }
@@ -47,7 +46,6 @@ export interface AuthState {
   fetchProfile: () => Promise<void>;
   fetchModules: () => Promise<void>;
   clearError: () => void;
-  updateUser: (user: User) => void;
   triggerRefresh: () => void;
 }
 
@@ -139,7 +137,7 @@ export const useAuthStore = create<AuthState>()(
         const token = get().token
         if (!token) return
         
-        if (!authService.isTokenValid()) {
+        const tryRefreshToken = async () => {
           try {
             const refreshResponse = await authService.refreshToken()
             set({ 
@@ -147,12 +145,17 @@ export const useAuthStore = create<AuthState>()(
               token: refreshResponse.accessToken,
               loading: false 
             })
-            return
+            return true
           } catch {
             set({ user: null, token: null, loading: false });
             localStorage.removeItem('auth-storage');
-            return;
+            return false
           }
+        }
+        
+        if (!authService.isTokenValid()) {
+          await tryRefreshToken()
+          return
         }
         
         set({ loading: true })
@@ -161,35 +164,19 @@ export const useAuthStore = create<AuthState>()(
           set({ user, loading: false })
         } catch (error: any) {
           if (error.response?.status === 401 || error.message?.includes('JWT signature')) {
+            await tryRefreshToken()
+          } else {
+            set({ user: null, token: null, loading: false })
             try {
-              const refreshResponse = await authService.refreshToken()
-              set({ 
-                user: refreshResponse.user, 
-                token: refreshResponse.accessToken,
-                loading: false 
-              })
-              return
+              await authService.logout()
             } catch {
-              set({ user: null, token: null, loading: false });
-              localStorage.removeItem('auth-storage');
-              return;
+              // Ignorar error de logout
             }
-          }
-          
-          set({ user: null, token: null, loading: false })
-          try {
-            await authService.logout()
-          } catch {
-            // Ignorar error de logout
           }
         }
       },
       clearError: () => {
         set({ error: null })
-      },
-      updateUser: (user: User) => {
-        set({ user })
-        localStorage.removeItem("requiereCambioPassword")
       },
       triggerRefresh: () => {
         set((state) => ({ refreshTrigger: state.refreshTrigger + 1 }))

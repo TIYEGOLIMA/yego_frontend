@@ -9,17 +9,12 @@ const TicketeraWrapper: React.FC = () => {
   const location = useLocation();
   const { user } = useAuthStore();
   
-  console.log('🚀 [TicketeraWrapper] TicketeraWrapper iniciando...');
-  console.log('🔍 [TicketeraWrapper] Ruta actual:', location.pathname);
-  console.log('👤 [TicketeraWrapper] Usuario:', user?.role);
   
   // 🎯 OPERADOR solo puede ver Reports
   if (user?.role === 'OPERADOR') {
     if (location.pathname === '/reports') {
-      console.log('📊 [TicketeraWrapper] OPERADOR - Renderizando Reports...');
       return <Reports />;
     } else {
-      console.log('👋 [TicketeraWrapper] OPERADOR - Mostrando página de saludo...');
       return (
         <div className="min-h-screen bg-gradient-to-br from-red-50 to-white dark:from-slate-900 dark:to-slate-800 flex items-center justify-center p-6">
           <div className="text-center max-w-md mx-auto">
@@ -45,12 +40,10 @@ const TicketeraWrapper: React.FC = () => {
   
   // 🎯 SAC y otros roles - Lógica normal
   if (location.pathname === '/reports') {
-    console.log('📊 [TicketeraWrapper] SAC - Renderizando Reports...');
     return <Reports />;
   }
   
   // 🎯 Por defecto, renderizar AgentPanel para /tickets
-  console.log('🎫 [TicketeraWrapper] SAC - Renderizando AgentPanel...');
   return (
     <SocketProvider>
       <AgentPanel />

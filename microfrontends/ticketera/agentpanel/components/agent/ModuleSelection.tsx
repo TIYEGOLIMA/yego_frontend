@@ -5,9 +5,10 @@ import { Button } from '../ui/Button'
 import { Loader2, LogOut, Lock, Unlock, ChevronDown, ChevronUp } from 'lucide-react'
 import { ModuloAtencion, ModuloOcupado } from '../../services/moduloAtencionService'
 import { queueAgentService } from '../../services/queueAgentService'
-import { useSocket } from '../../contexts/SocketContext'
+// Ya no usamos useSocket del contexto, usamos SocketService directamente
 import { useToastNotifications } from '../../../../../src/hooks/useToastNotifications'
 import { NotificationContainer } from '../../../../../src/components/NotificationToast'
+import SocketService from '../../../../../src/services/socket-service'
 
 interface ModuleSelectionProps {
   onModuleSelected?: (moduleId: number) => void
@@ -125,10 +126,31 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
   const [showModalLiberacion, setShowModalLiberacion] = useState(false)
   
   const navigate = useNavigate()
-  const { subscribe, isConnected } = useSocket()
   const { notifications, removeNotification } = useToastNotifications()
   const modulosOcupadosAnterioresRef = useRef<ModuloOcupado[]>([])
   const hasLoadedInitialData = useRef(false)
+  const [isConnected, setIsConnected] = useState(false)
+
+  // Verificar estado de conexión directamente desde SocketService
+  useEffect(() => {
+    const checkConnection = () => {
+      setIsConnected(SocketService.getConnectionStatus() === 'connected')
+    }
+    
+    checkConnection()
+    const interval = setInterval(checkConnection, 1000)
+    
+    const handleStatusChange = (status: string) => {
+      setIsConnected(status === 'connected')
+    }
+    
+    SocketService.onStatusChange(handleStatusChange)
+    
+    return () => {
+      clearInterval(interval)
+      SocketService.offStatusChange(handleStatusChange)
+    }
+  }, [])
 
   useEffect(() => {
     const userData = getUserFromStorage()
@@ -197,22 +219,18 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
     userRef.current = user
   }, [onModulesUpdated, user])
 
+  // 🎯 Escuchar eventos de módulos actualizados directamente desde SocketService
   useEffect(() => {
-    if (!isConnected || !userRef.current?.id) return
-
-    let isSubscribed = true
-    const unsubscribe = subscribe('/topic/modulos-atencion', (message: any) => {
-      if (!isSubscribed) return
-      
-      const modulosData = message?.data || message
-      
-      if (modulosData.type === 'MODULOS_ACTUALIZADOS' || message?.type === 'MODULOS_ACTUALIZADOS') {
-        if (modulosData.modulosOcupados && Array.isArray(modulosData.modulosOcupados)) {
-          const nuevosOcupados = procesarModulosOcupados(
-            modulosData.modulosOcupados,
-            modulosData.modulosDisponibles
-          )
-          
+    const handleModulosActualizados = (data: any) => {
+      // Actualizar módulos ocupados (siempre, aunque no haya usuario)
+      if (data.modulosOcupados && Array.isArray(data.modulosOcupados)) {
+        const nuevosOcupados = procesarModulosOcupados(
+          data.modulosOcupados,
+          data.modulosDisponibles
+        )
+        
+        // Verificar si el usuario perdió su módulo (solo si hay usuario)
+        if (userRef.current?.id) {
           const moduloAnteriorDelUsuario = modulosOcupadosAnterioresRef.current.find(
             (mod: ModuloOcupado) => mod.userId === userRef.current?.id
           )
@@ -220,28 +238,27 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
           if (moduloAnteriorDelUsuario && !nuevosOcupados.some((mod: ModuloOcupado) => mod.userId === userRef.current?.id)) {
             setShowModalLiberacion(true)
           }
-          
-          modulosOcupadosAnterioresRef.current = nuevosOcupados
-          setModulosOcupadosData(nuevosOcupados)
         }
         
-        if (modulosData.modulosDisponibles && Array.isArray(modulosData.modulosDisponibles) && onModulesUpdatedRef.current) {
-          onModulesUpdatedRef.current(modulosData.modulosDisponibles.map(mapearModuloAtencion))
-        }
+        modulosOcupadosAnterioresRef.current = nuevosOcupados
+        setModulosOcupadosData(nuevosOcupados)
       }
-    })
+      
+      // Actualizar módulos disponibles directamente desde el evento (sin llamar a la API)
+      if (data.modulosDisponibles && Array.isArray(data.modulosDisponibles) && onModulesUpdatedRef.current) {
+        onModulesUpdatedRef.current(data.modulosDisponibles.map(mapearModuloAtencion))
+      }
+    }
+
+    SocketService.on('modulos-actualizados', handleModulosActualizados)
 
     return () => {
-      isSubscribed = false
-      if (unsubscribe) {
-        try {
-          unsubscribe()
-        } catch (error) {
-          // Silenciar error de desuscripción
-          }
-        }
-      }
-  }, [isConnected, subscribe]) // Solo isConnected y subscribe como dependencias
+      SocketService.off('modulos-actualizados', handleModulosActualizados)
+    }
+  }, []) // Sin dependencias, se ejecuta una vez al montar
+
+  // Ya no necesitamos la suscripción STOMP porque ahora usamos el evento directo 'modulos-actualizados'
+  // El evento se emite desde SocketService cuando llega a /topic/modulos-atencion o /topic/system
 
   const handleModuleSelect = async (moduleId: number) => {
     if (!user) return

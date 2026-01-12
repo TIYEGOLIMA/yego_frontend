@@ -49,43 +49,43 @@ const formatActivityTime = (seconds: number): string => {
   
   if (hours > 0) return `${hours}h ${minutes}m`
   if (minutes > 0) return `${minutes}m ${secs}s`
-  return `${secs}s`
-}
+    return `${secs}s`
+  }
 
 // Componentes
 const LoadingState = () => (
   <Card className="h-full bg-[#1A1A1A]">
-    <CardContent className="p-6">
+            <CardContent className="p-6">
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
+                <div className="text-center">
           <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-gray-400 text-lg">Cargando conductores en orden...</p>
-        </div>
-      </div>
-    </CardContent>
-  </Card>
+                  <p className="text-gray-400 text-lg">Cargando conductores en orden...</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 )
 
 const EmptyState = ({ searchQuery, isConnected }: { searchQuery: string; isConnected: boolean }) => (
   <Card className="h-full bg-[#1A1A1A]">
-    <CardContent className="p-6">
+            <CardContent className="p-6">
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-700 flex items-center justify-center">
-            <Activity className="w-8 h-8 text-gray-400" />
-          </div>
+                <div className="text-center">
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-700 flex items-center justify-center">
+                    <Activity className="w-8 h-8 text-gray-400" />
+                  </div>
           <p className="text-gray-400 text-lg">
             {searchQuery ? 'No se encontraron conductores' : 'No hay conductores en orden'}
-          </p>
+                  </p>
           {!isConnected && !searchQuery && (
-            <p className="text-red-400 text-xs mt-4">
-              ⚠️ Sin conexión WebSocket. Los datos se actualizarán cada 30 segundos.
-            </p>
-          )}
-        </div>
-      </div>
-    </CardContent>
-  </Card>
+                    <p className="text-red-400 text-xs mt-4">
+                      ⚠️ Sin conexión WebSocket. Los datos se actualizarán cada 30 segundos.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 )
 
 const StatsCard = ({ icon: Icon, label, value, iconColor }: { 
@@ -103,10 +103,10 @@ const StatsCard = ({ icon: Icon, label, value, iconColor }: {
         <div>
           <p className="text-sm text-gray-400">{label}</p>
           <p className="text-2xl font-bold text-white">{value}</p>
-        </div>
-      </div>
-    </CardContent>
-  </Card>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 )
 
 const ConductorCard = ({ conductor }: { conductor: ConductorEnOrden }) => {
@@ -114,61 +114,61 @@ const ConductorCard = ({ conductor }: { conductor: ConductorEnOrden }) => {
 
   return (
     <Card className="bg-[#2A2A2A] border-gray-700 hover:border-orange-500 transition-colors">
-      <CardContent className="p-3">
+                <CardContent className="p-3">
         {/* Header */}
-        <div className="flex items-start gap-2 mb-2">
-          <div className="relative">
-            {conductor.avatar_url ? (
-              <img
-                src={conductor.avatar_url}
-                alt={`${conductor.first_name} ${conductor.last_name}`}
-                className="w-12 h-12 rounded-lg object-cover border-2 border-orange-500"
-              />
-            ) : (
-              <div className="w-12 h-12 rounded-lg bg-gray-600 flex items-center justify-center border-2 border-orange-500">
-                <User className="w-6 h-6 text-gray-400" />
-              </div>
-            )}
-            <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-orange-500 rounded-full border-2 border-[#2A2A2A] flex items-center justify-center">
+                  <div className="flex items-start gap-2 mb-2">
+                    <div className="relative">
+                      {conductor.avatar_url ? (
+                        <img
+                          src={conductor.avatar_url}
+                          alt={`${conductor.first_name} ${conductor.last_name}`}
+                          className="w-12 h-12 rounded-lg object-cover border-2 border-orange-500"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded-lg bg-gray-600 flex items-center justify-center border-2 border-orange-500">
+                          <User className="w-6 h-6 text-gray-400" />
+                        </div>
+                      )}
+                      <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-orange-500 rounded-full border-2 border-[#2A2A2A] flex items-center justify-center">
               <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
-            </div>
-          </div>
+                      </div>
+                    </div>
           
-          <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-2 mb-1">
-              <h3 className="text-white font-bold text-sm line-clamp-1 flex-1 pt-0.5">
-                {conductor.first_name} {conductor.last_name}
-              </h3>
-              <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-                {conductor.completed_trips_total_price !== undefined && (
-                  <div className="px-1.5 py-0 rounded-md bg-green-500/10 border border-green-500/30">
-                    <span className="text-[10px] font-semibold text-green-300 leading-tight">
-                      {formatBalance(conductor.completed_trips_total_price)}
-                    </span>
-                  </div>
-                )}
-                {conductor.completed_trips_count !== undefined && (
-                  <div className="px-1.5 py-0 rounded-md bg-orange-500/10 border border-orange-500/30">
-                    <span className="text-[10px] font-semibold text-orange-300 leading-tight">
-                      {conductor.completed_trips_count} viajes
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <h3 className="text-white font-bold text-sm line-clamp-1 flex-1 pt-0.5">
+                          {conductor.first_name} {conductor.last_name}
+                        </h3>
+                        <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                          {conductor.completed_trips_total_price !== undefined && (
+                            <div className="px-1.5 py-0 rounded-md bg-green-500/10 border border-green-500/30">
+                              <span className="text-[10px] font-semibold text-green-300 leading-tight">
+                                {formatBalance(conductor.completed_trips_total_price)}
+                              </span>
+                            </div>
+                          )}
+                          {conductor.completed_trips_count !== undefined && (
+                            <div className="px-1.5 py-0 rounded-md bg-orange-500/10 border border-orange-500/30">
+                              <span className="text-[10px] font-semibold text-orange-300 leading-tight">
+                              {conductor.completed_trips_count} viajes
+                            </span>
+                              </div>
+                          )}
+                        </div>
+                      </div>
 
             {/* Badge de vehículo */}
             {conductor.vehicle_number && (
-              <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                <Badge variant="outline" className="text-[10px] border-gray-500/50 text-gray-200 px-2 py-1 bg-gray-700/30">
-                  <Car className="w-3 h-3 mr-1" />
-                  {conductor.vehicle_number}
-                </Badge>
+                      <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                          <Badge variant="outline" className="text-[10px] border-gray-500/50 text-gray-200 px-2 py-1 bg-gray-700/30">
+                            <Car className="w-3 h-3 mr-1" />
+                            {conductor.vehicle_number}
+                          </Badge>
               </div>
-            )}
+                        )}
 
             {/* Métricas */}
-            <div className="flex items-center gap-1.5 flex-wrap">
+                      <div className="flex items-center gap-1.5 flex-wrap">
               {conductor.summary_distance?.free !== undefined && conductor.summary_distance.free > 0 && (
                 <Badge variant="outline" className="text-[10px] border-yellow-500/40 text-yellow-300 px-2 py-1 bg-yellow-500/15">
                   <Navigation className="w-3 h-3 mr-1" />
@@ -183,58 +183,58 @@ const ConductorCard = ({ conductor }: { conductor: ConductorEnOrden }) => {
               )}
               {conductor.summary_distance?.active !== undefined && conductor.summary_distance.active > 0 && (
                 <Badge variant="outline" className="text-[10px] border-blue-500/40 text-blue-300 px-2 py-1 bg-blue-500/15">
-                  <Navigation className="w-3 h-3 mr-1" />
+                            <Navigation className="w-3 h-3 mr-1" />
                   {formatDistance(conductor.summary_distance.active)} km activo
-                </Badge>
-              )}
-              {conductor.total_activity_time !== undefined && conductor.total_activity_time !== null && (
+                          </Badge>
+                        )}
+                        {conductor.total_activity_time !== undefined && conductor.total_activity_time !== null && (
                 <Badge variant="outline" className="text-[10px] border-purple-500/40 text-purple-300 px-2 py-1 bg-purple-500/15">
-                  <Activity className="w-3 h-3 mr-1" />
-                  {formatActivityTime(conductor.total_activity_time)}
-                </Badge>
-              )}
-            </div>
-          </div>
-        </div>
+                            <Activity className="w-3 h-3 mr-1" />
+                            {formatActivityTime(conductor.total_activity_time)}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </div>
 
-        {/* Ruta */}
+                  {/* Ruta */}
         {hasRoute ? (
-          <div className="space-y-1 mt-2">
-            <div className="flex items-center gap-1.5 mb-1">
-              <MapPin className="w-3 h-3 text-orange-400" />
-              <span className="text-xs font-semibold text-gray-300">Ruta</span>
-            </div>
-            <div className="space-y-1">
+                    <div className="space-y-1 mt-2">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <MapPin className="w-3 h-3 text-orange-400" />
+                        <span className="text-xs font-semibold text-gray-300">Ruta</span>
+                      </div>
+                      <div className="space-y-1">
               {conductor.route!.map((punto, index) => (
-                <div key={index} className="flex items-start gap-2">
-                  <div className="flex flex-col items-center mt-0.5">
-                    <div className={cn(
-                      "w-2 h-2 rounded-full",
-                      index === 0 ? "bg-green-500" : "bg-blue-500"
+                          <div key={index} className="flex items-start gap-2">
+                            <div className="flex flex-col items-center mt-0.5">
+                              <div className={cn(
+                                "w-2 h-2 rounded-full",
+                                index === 0 ? "bg-green-500" : "bg-blue-500"
                     )} />
                     {index < conductor.route!.length - 1 && (
                       <div className="w-0.5 h-6 bg-gray-600 my-0.5" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[10px] text-gray-400 mb-0.5">
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[10px] text-gray-400 mb-0.5">
                       {index === 0 ? 'Origen' : index === conductor.route!.length - 1 ? 'Destino' : `Parada ${index + 1}`}
-                    </p>
-                    <p className="text-xs text-white break-words line-clamp-2">
-                      {punto.address}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+                              </p>
+                              <p className="text-xs text-white break-words line-clamp-2">
+                                {punto.address}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
         ) : (
           <div className="p-2 bg-[#1A1A1A] rounded-lg border border-gray-700 mt-2">
             <p className="text-xs text-gray-400 text-center">Sin ruta asignada</p>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
   )
 }
 
@@ -255,7 +255,7 @@ const InfiniteScrollObserver = ({
         <div className="flex items-center gap-2 text-gray-400">
           <div className="w-5 h-5 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
           <span className="text-sm">Cargando más conductores...</span>
-        </div>
+          </div>
       ) : (
         <div className="h-1" />
       )}
@@ -445,8 +445,8 @@ export function MonitoreoEnVivoView() {
       totalPlata: conductoresEnOrden.conductores.reduce((sum: number, c: ConductorEnOrden) => sum + (c.completed_trips_total_price || 0), 0)
     }
   }, [conductoresEnOrden])
-
-  return (
+                
+                return (
     <div className="relative">
       <NotificationContainer notifications={notifications} onRemove={removeNotification} />
       <div className="space-y-6">
@@ -474,8 +474,8 @@ export function MonitoreoEnVivoView() {
               <span>Última actualización: {formatTimestamp(conductoresEnOrden.timestamp)}</span>
             </div>
           )}
-        </div>
-
+            </div>
+            
         {/* Estadísticas */}
         {stats && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

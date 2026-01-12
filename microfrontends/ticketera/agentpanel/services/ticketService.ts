@@ -120,9 +120,7 @@ export const ticketService = {
 
   async getAllTickets(): Promise<Ticket[]> {
     try {
-      console.log('🎯 [ticketService] Obteniendo todos los tickets...')
       const response = await api.get('/tickets/all')
-      console.log('✅ [ticketService] Tickets obtenidos:', response.data.length)
       return response.data
     } catch (error: any) {
       if (error?.response?.status === 429) {

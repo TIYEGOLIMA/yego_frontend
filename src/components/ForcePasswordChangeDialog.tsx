@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -123,13 +123,10 @@ export const ForcePasswordChangeDialog: React.FC<ForcePasswordChangeDialogProps>
             <Shield className="h-5 w-5 text-warning-600" />
             Cambio de Contraseña Requerido
           </DialogTitle>
-        </DialogHeader>
-        
-        <div className="text-center mb-6">
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">
+          <DialogDescription>
             Por seguridad, debes cambiar tu contraseña antes de continuar.
-          </p>
-        </div>
+          </DialogDescription>
+        </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Contraseña actual */}
