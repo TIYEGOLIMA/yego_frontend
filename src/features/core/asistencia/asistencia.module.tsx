@@ -7,7 +7,8 @@ import {
   LogOut,
   Coffee,
   ArrowRight,
-  Building
+  Calendar,
+  Filter
 } from 'lucide-react';
 import socketService from '../../../services/socket-service';
 import { api } from '../../../services/core/api';
@@ -93,7 +94,6 @@ const ESTADISTICAS_INICIALES: EstadisticasAsistencia = {
   yaCompletoJornada: false
 };
 
-// Helper para verificar si un error es de cancelación (no debe mostrarse como error)
 const esErrorCancelado = (error: any): boolean => {
   return (
     error.code === 'ECONNABORTED' ||
@@ -107,7 +107,6 @@ const esErrorCancelado = (error: any): boolean => {
 
 
 
-// Componentes auxiliares
 const AlertModal: React.FC<{
   isOpen: boolean;
   tipo: string;
@@ -196,40 +195,58 @@ const RegistroItem: React.FC<{ registro: MarcacionData }> = ({ registro }) => {
     if (!time) return 'N/A';
     return new Date(`2000-01-01T${time}`).toLocaleTimeString('es-PE', {
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
+      hour12: true
     });
   };
   
-  const formatFecha = (fecha: string) => fecha.split('-').reverse().join('/');
-  
   return (
-    <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
-      <div className="flex items-center gap-3">
-        <div style={{ color }}>
-          {getIconoPequeño(registro.tipo)}
-        </div>
+    <div className="group relative flex flex-col p-6 bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200 dark:border-neutral-700 hover:border-primary-500/50 dark:hover:border-primary-500/50 hover:shadow-xl hover:shadow-primary-500/10 dark:hover:shadow-primary-500/20 transition-all duration-300 min-w-[240px] max-w-[280px]">
+      <div className="flex items-center justify-center mb-5">
         <div 
-          className="px-3 py-1 rounded-full text-xs font-bold text-white"
-          style={{ backgroundColor: color }}
+          className="flex items-center justify-center w-16 h-16 rounded-xl shadow-md"
+          style={{ 
+            backgroundColor: `${color}20`,
+            color: color
+          }}
+        >
+          <div className="scale-125">
+            {getIconoPequeño(registro.tipo)}
+          </div>
+        </div>
+      </div>
+      
+      <div className="mb-4">
+        <div 
+          className="px-4 py-2 rounded-lg text-sm font-bold text-white shadow-md text-center"
+          style={{ 
+            backgroundColor: color,
+            boxShadow: `0 4px 12px ${color}40`
+          }}
         >
           {config.texto}
         </div>
       </div>
-      <div className="text-right">
-        <div className="text-lg font-mono text-gray-900 dark:text-white">
+      
+      <div className="text-center mt-auto">
+        <div className="text-3xl font-bold font-mono text-neutral-900 dark:text-white">
           {formatTime(registro.hora)}
         </div>
-        <div className="text-xs text-gray-500 dark:text-gray-400">
-          {formatFecha(registro.fecha)}
-        </div>
       </div>
+      
+      <div className="absolute inset-0 rounded-xl bg-gradient-to-b from-primary-500/0 to-primary-500/0 group-hover:from-primary-500/5 group-hover:to-transparent transition-all duration-300 pointer-events-none"></div>
     </div>
   );
 };
 
 export const AsistenciaModule: React.FC = () => {
   const user = useAuthStore((state) => state.user);
-  const isSAC = user?.role?.toUpperCase() === 'SAC';
+  const userRole = user?.role?.toUpperCase();
+  const isSAC = userRole === 'SAC';
+  
+  // Roles permitidos para ver la lista de asistencias
+  const rolesPermitidosLista = ['ASISTENTE DE GERENCIA', 'GERENTE', 'SUPERADMIN', 'JEFE DE SISTEMAS', 'ADMIN'];
+  const puedeVerLista = userRole && rolesPermitidosLista.includes(userRole);
   
   const [empleado, setEmpleado] = useState<EmpleadoData | null>(null);
   const [estadisticas, setEstadisticas] = useState<EstadisticasAsistencia>(ESTADISTICAS_INICIALES);
@@ -251,10 +268,11 @@ export const AsistenciaModule: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'marcar' | 'lista'>('marcar');
   
   useEffect(() => {
-    if (isSAC && activeTab === 'lista') {
+    // Si el usuario no puede ver la lista o es SAC, forzar a la pestaña de marcar
+    if ((!puedeVerLista || isSAC) && activeTab === 'lista') {
       setActiveTab('marcar');
     }
-  }, [isSAC, activeTab]);
+  }, [puedeVerLista, isSAC, activeTab]);
 
 
   const cargarMarcacionesHoy = useCallback(async (signal?: AbortSignal) => {
@@ -497,6 +515,33 @@ export const AsistenciaModule: React.FC = () => {
     setFechaFin('');
   }, []);
 
+  const registrosAgrupadosPorDia = useMemo(() => {
+    const registrosPorDia = registrosFiltrados.reduce((acc, registro) => {
+      if (!acc[registro.fecha]) acc[registro.fecha] = [];
+      acc[registro.fecha].push(registro);
+      return acc;
+    }, {} as Record<string, MarcacionData[]>);
+
+    const diasOrdenados = Object.keys(registrosPorDia).sort((a, b) => {
+      const [añoA, mesA, diaA] = a.split('-').map(Number);
+      const [añoB, mesB, diaB] = b.split('-').map(Number);
+      return new Date(añoB, mesB - 1, diaB).getTime() - new Date(añoA, mesA - 1, diaA).getTime();
+    });
+
+    return diasOrdenados.map((fecha) => {
+      const registrosDelDia = registrosPorDia[fecha].sort((a, b) => {
+        const [hA, mA] = a.hora.split(':').map(Number);
+        const [hB, mB] = b.hora.split(':').map(Number);
+        return (hA * 60 + mA) - (hB * 60 + mB);
+      });
+
+      return {
+        fecha,
+        registros: registrosDelDia
+      };
+    });
+  }, [registrosFiltrados]);
+
   if (loading) {
       return (
       <div className="flex items-center justify-center min-h-screen">
@@ -526,12 +571,10 @@ export const AsistenciaModule: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header - Siempre visible */}
       <div className="yego-card">
         <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4">
               <div>
-            <h1 className="yego-heading-1 mb-2 flex items-center gap-3">
-              <Building className="h-6 w-6 lg:h-8 lg:w-8 text-primary-500" />
+            <h1 className="yego-heading-1 mb-2">
               Marcación de Asistencia
             </h1>
             <p className="yego-body">
@@ -539,8 +582,7 @@ export const AsistenciaModule: React.FC = () => {
                 </p>
               </div>
               
-              {/* Switch de Navegación responsive - Ocultar "Lista" para rol SAC */}
-              {!isSAC && (
+              {puedeVerLista && (
                 <div className="bg-gray-100 dark:bg-gray-700 rounded-lg p-1 flex w-full lg:w-auto">
                   <button
                     onClick={() => setActiveTab('marcar')}
@@ -569,7 +611,6 @@ export const AsistenciaModule: React.FC = () => {
               </div>
       </div>
 
-      {/* Contenido de las Pestañas */}
       {activeTab === 'marcar' && (
         <>
           <AlertModal
@@ -581,7 +622,6 @@ export const AsistenciaModule: React.FC = () => {
         onClose={() => setAlertData({ ...alertData, isOpen: false })}
       />
 
-      {/* Mensaje de Jornada Completada */}
       {estadisticas.yaCompletoJornada && (
         <div className="bg-gradient-to-r from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 border-2 border-green-500 rounded-xl p-6 text-center">
           <h3 className="text-2xl font-bold text-green-800 dark:text-green-200 mb-2">
@@ -595,7 +635,6 @@ export const AsistenciaModule: React.FC = () => {
             </div>
           )}
 
-      {/* Sección de Marcaciones */}
       <div className="yego-card">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {tiposMarcacion.map((tipo) => (
@@ -610,87 +649,116 @@ export const AsistenciaModule: React.FC = () => {
         </div>
       </div>
 
-      {/* Filtros de Registros */}
       <div className="yego-card">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-              Registros de Hoy
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 pb-4 border-b border-neutral-200 dark:border-neutral-700">
+            <div>
+              <h3 className="text-2xl font-bold text-neutral-900 dark:text-white mb-1">
+                Registros de Hoy
               </h3>
-              <button
-              onClick={() => setShowFiltros(!showFiltros)}
-              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-              >
-              {showFiltros ? 'Ocultar Filtros' : 'Mostrar Filtros'}
-              </button>
+              <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                Historial de tus marcaciones
+              </p>
             </div>
+            <Button
+              onClick={() => setShowFiltros(!showFiltros)}
+              variant={showFiltros ? "secondary" : "primary"}
+              size="sm"
+            >
+              {showFiltros ? 'Ocultar Filtros' : 'Mostrar Filtros'}
+            </Button>
+          </div>
 
           {showFiltros && (
-            <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 mb-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Filtrar por período
-                </label>
-                <select
-                    value={filtroFecha}
-                    onChange={(e) => setFiltroFecha(e.target.value as 'hoy' | 'rango')}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-600 dark:border-gray-500 dark:text-white"
-                  >
-                    <option value="hoy">Hoy</option>
-                    <option value="rango">Personalizado</option>
-                </select>
+            <div className="bg-gradient-to-br from-neutral-50 to-neutral-100 dark:from-neutral-800 dark:to-neutral-900 rounded-xl p-6 mb-6 border border-neutral-200 dark:border-neutral-700 shadow-lg">
+              <div className="flex items-center justify-between mb-5 pb-4 border-b border-neutral-200 dark:border-neutral-700">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-primary-500/10 dark:bg-primary-500/20 rounded-lg">
+                    <Filter className="h-5 w-5 text-primary-600 dark:text-primary-400" />
+                  </div>
+                  <div>
+                    <h4 className="text-lg font-bold text-neutral-900 dark:text-white">Filtros de Búsqueda</h4>
+                    <p className="text-xs text-neutral-500 dark:text-neutral-400">Selecciona el período a consultar</p>
+                  </div>
+                </div>
               </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-sm font-semibold text-neutral-700 dark:text-neutral-300">
+                    <Calendar className="h-4 w-4 text-primary-500" />
+                    Período
+                  </label>
+                  <div className="relative">
+                    <select
+                      value={filtroFecha}
+                      onChange={(e) => setFiltroFecha(e.target.value as 'hoy' | 'rango')}
+                      className="w-full px-4 py-3 bg-white dark:bg-neutral-800 border-2 border-neutral-300 dark:border-neutral-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:focus:border-primary-500 text-neutral-900 dark:text-neutral-100 transition-all shadow-sm hover:shadow-md hover:border-primary-400 dark:hover:border-primary-500 appearance-none cursor-pointer"
+                    >
+                      <option value="hoy">📅 Hoy</option>
+                      <option value="rango">📆 Personalizado</option>
+                    </select>
+                  </div>
+                </div>
 
                 {filtroFecha === 'rango' && (
                   <>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Fecha inicio
-                </label>
-                      <input
-                        type="date"
-                        value={fechaInicio}
-                        onChange={(e) => setFechaInicio(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-600 dark:border-gray-500 dark:text-white"
-                      />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Fecha fin
-                </label>
-                <input
-                        type="date"
-                        value={fechaFin}
-                        min={fechaInicio || undefined}
-                        onChange={(e) => setFechaFin(e.target.value)}
-                        className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-600 dark:text-white ${
-                          fechaInicio && fechaFin && fechaFin < fechaInicio 
-                            ? 'border-red-500 bg-red-50 dark:bg-red-900/20' 
-                            : 'border-gray-300 dark:border-gray-500'
-                        }`}
-                      />
-                      {fechaInicio && fechaFin && fechaFin < fechaInicio && (
-                        <p className="text-red-500 text-xs mt-1">
-                          La fecha fin no puede ser menor a la fecha inicio
-                        </p>
-                      )}
-              </div>
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2 text-sm font-semibold text-neutral-700 dark:text-neutral-300">
+                        <Calendar className="h-4 w-4 text-primary-500" />
+                        Fecha Inicio
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="date"
+                          value={fechaInicio}
+                          onChange={(e) => setFechaInicio(e.target.value)}
+                          className="w-full px-4 py-3 bg-white dark:bg-neutral-800 border-2 border-neutral-300 dark:border-neutral-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:focus:border-primary-500 text-neutral-900 dark:text-neutral-100 transition-all shadow-sm hover:shadow-md hover:border-primary-400 dark:hover:border-primary-500"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2 text-sm font-semibold text-neutral-700 dark:text-neutral-300">
+                        <Calendar className="h-4 w-4 text-primary-500" />
+                        Fecha Fin
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="date"
+                          value={fechaFin}
+                          min={fechaInicio || undefined}
+                          onChange={(e) => setFechaFin(e.target.value)}
+                          className={`w-full px-4 py-3 bg-white dark:bg-neutral-800 border-2 rounded-lg focus:outline-none focus:ring-2 dark:text-neutral-100 transition-all shadow-sm hover:shadow-md ${
+                            fechaInicio && fechaFin && fechaFin < fechaInicio 
+                              ? 'border-red-500 bg-red-50 dark:bg-red-900/20 focus:ring-red-500 focus:border-red-500 hover:border-red-600' 
+                              : 'border-neutral-300 dark:border-neutral-600 focus:ring-primary-500 focus:border-primary-500 dark:focus:border-primary-500 hover:border-primary-400 dark:hover:border-primary-500'
+                          }`}
+                        />
+                        {fechaInicio && fechaFin && fechaFin < fechaInicio && (
+                          <div className="flex items-center gap-1 mt-2 text-red-500 text-xs font-medium">
+                            <AlertCircle className="h-3 w-3" />
+                            <span>La fecha fin no puede ser menor a la fecha inicio</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </>
                 )}
                 
-                <div className="flex items-end">
-                  <button
-                    onClick={limpiarFiltros}
-                    className="w-full bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
-                  >
-                    Limpiar Filtros
-                  </button>
+                {filtroFecha !== 'hoy' && (
+                  <div className="flex items-end">
+                    <button
+                      onClick={limpiarFiltros}
+                      className="w-full px-3 py-2 text-xs border border-primary-500 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-500/10 rounded-lg transition-colors"
+                    >
+                      Limpiar Filtros
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          )}
 
-          {/* Lista de Registros */}
           {cargandoFiltros ? (
             <div className="text-center py-12">
               <div className="w-12 h-12 border-4 border-red-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
@@ -715,12 +783,22 @@ export const AsistenciaModule: React.FC = () => {
               </p>
           </div>
           ) : (
-            <div className="space-y-3">
-              <div className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                Mostrando {registrosFiltrados.length} registro(s) {filtroFecha === 'hoy' ? 'de hoy' : 'en el rango seleccionado'}
-            </div>
-              {registrosFiltrados.map((registro) => (
-                <RegistroItem key={registro.id} registro={registro} />
+            <div className="space-y-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-primary-500" />
+                  <span className="text-sm font-medium text-neutral-600 dark:text-neutral-400">
+                    Mostrando <span className="font-bold text-primary-600 dark:text-primary-400">{registrosFiltrados.length}</span> registro(s) {filtroFecha === 'hoy' ? 'de hoy' : 'en el rango seleccionado'}
+                  </span>
+                </div>
+              </div>
+              
+              {registrosAgrupadosPorDia.map(({ fecha, registros }) => (
+                <div key={fecha} className="flex gap-6 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-primary-500 scrollbar-track-transparent">
+                  {registros.map((registro) => (
+                    <RegistroItem key={registro.id} registro={registro} />
+                  ))}
+                </div>
               ))}
         </div>
       )}
@@ -728,7 +806,6 @@ export const AsistenciaModule: React.FC = () => {
         </>
       )}
 
-      {/* Pestaña Lista de Asistencia */}
       {activeTab === 'lista' && (
         <AsistenciaListaModule />
       )}
