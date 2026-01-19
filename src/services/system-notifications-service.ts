@@ -42,15 +42,18 @@ class SystemNotificationsService {
         return;
       }
 
-      // Usar variable de entorno para la URL del WebSocket
-      const wsUrl = import.meta.env.VITE_SYSTEM_WS_URL || import.meta.env.VITE_STOMP_URL || 'http://localhost:3030/ws'
-      // Deshabilitar transporte iframe para evitar errores con X-Frame-Options
-      // SockJS intentará usar solo estos transportes en orden
-      const socket = new SockJS(wsUrl, undefined, {
-        transports: ['websocket', 'xhr-streaming', 'xhr-polling']
-      })
-      this.client = new Client({
-        webSocketFactory: () => socket,
+      // Detectar si estamos en producción
+      const socketUrl = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3030';
+      const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:3030/ws';
+      const systemWsUrl = import.meta.env.VITE_SYSTEM_WS_URL || import.meta.env.VITE_STOMP_URL || 'http://localhost:3030/ws';
+      
+      const isProduction = import.meta.env.VITE_DEV_MODE === 'false' || 
+                           import.meta.env.MODE === 'production' ||
+                           socketUrl.includes('https://');
+
+      // En producción: usar WebSocket nativo (sin SockJS)
+      // En desarrollo: usar SockJS con fallback a polling
+      const clientConfig: any = {
         connectHeaders: {
           Authorization: `Bearer ${token}`
         },
@@ -85,8 +88,22 @@ class SystemNotificationsService {
         onDisconnect: () => {
           this.isConnected = false
         }
-      })
-
+      };
+      
+      if (isProduction) {
+        // Producción: usar WebSocket nativo directamente con brokerURL
+        clientConfig.brokerURL = wsUrl;
+      } else {
+        // Desarrollo: usar SockJS con webSocketFactory
+        clientConfig.webSocketFactory = () => {
+          const socket = new SockJS(systemWsUrl, undefined, {
+            transports: ['websocket', 'xhr-streaming', 'xhr-polling']
+          });
+          return socket;
+        };
+      }
+      
+      this.client = new Client(clientConfig);
       this.client.activate()
     } catch (error) {
       this.handleReconnect()

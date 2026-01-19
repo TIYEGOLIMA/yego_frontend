@@ -7,6 +7,12 @@ import { Client, IMessage } from '@stomp/stompjs'
 
 // URL del servidor de WebSockets desde variables de entorno
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3030';
+const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:3030/ws';
+
+// Detectar si estamos en producción
+const isProduction = import.meta.env.VITE_DEV_MODE === 'false' || 
+                     import.meta.env.MODE === 'production' ||
+                     SOCKET_URL.includes('https://');
 
 class SocketService {
   private static instance: SocketService;
@@ -104,17 +110,26 @@ class SocketService {
     }
     
     if (!this.stompClient) {
-      // Crear cliente STOMP con SockJS
-      // Deshabilitar transporte iframe para evitar errores con X-Frame-Options
-      // SockJS intentará usar solo estos transportes en orden
-      const socket = new SockJS(`${SOCKET_URL}/ws`, undefined, {
-        transports: ['websocket', 'xhr-streaming', 'xhr-polling']
-      });
-      this.stompClient = new Client({
-        webSocketFactory: () => socket,
-        connectHeaders: {
-          'Authorization': `Bearer ${token}`
-        },
+      // En producción: usar WebSocket nativo (sin SockJS)
+      // En desarrollo: usar SockJS con fallback a polling
+      const clientConfig: any = {
+      };
+      
+      if (isProduction) {
+        // Producción: usar WebSocket nativo directamente con brokerURL
+        clientConfig.brokerURL = WS_URL;
+      } else {
+        // Desarrollo: usar SockJS con webSocketFactory
+        clientConfig.webSocketFactory = () => {
+          const socket = new SockJS(`${SOCKET_URL}/ws`, undefined, {
+            transports: ['websocket', 'xhr-streaming', 'xhr-polling']
+          });
+          return socket;
+        };
+      }
+      
+      // Configuración común
+      Object.assign(clientConfig, {
         // Deshabilitar reconexión automática de STOMP - usamos nuestro propio sistema
         reconnectDelay: 0, // 0 = deshabilitado
         heartbeatIncoming: 0, // Deshabilitar heartbeat entrante
@@ -162,6 +177,8 @@ class SocketService {
           }
         }
       });
+      
+      this.stompClient = new Client(clientConfig);
       
       // Activar el cliente STOMP
       this.stompClient.activate();
