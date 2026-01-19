@@ -186,7 +186,8 @@ export interface ConductorResumenPagos {
   avatar_url?: string
   nombre?: string
   telefono?: string
-  monto_total_pagado: number
+  monto_total_pagar: number  // Campo que viene del backend
+  monto_total_pagado?: number  // Mantener por compatibilidad
   cantidad_turnos: number
   turnos: TurnoResumen[]
 }

@@ -334,7 +334,7 @@ export const DetalleView = () => {
   const [searchTermPendientes, setSearchTermPendientes] = useState('')
   const [searchTermLiquidados, setSearchTermLiquidados] = useState('')
   const [searchTermViajes, setSearchTermViajes] = useState('')
-  const [fechaSeleccionada, setFechaSeleccionada] = useState<string>(obtenerFechaHoy())
+  const [fechaSeleccionada, setFechaSeleccionada] = useState<string>(obtenerFechaAyer())
   const [selectedDriver, setSelectedDriver] = useState<DriverItem | null>(null)
   const [selectedConductorResumen, setSelectedConductorResumen] = useState<ConductorResumenPagos | null>(null)
   const [showModal, setShowModal] = useState(false)
@@ -793,7 +793,7 @@ export const DetalleView = () => {
       setActualizandoCierre(true)
 
       // Usar el monto total a pagar del conductor o el totalIngresos del cierre como fallback
-      const montoBase = selectedConductorResumen?.monto_total_pagado ?? cierreDetalle.totalIngresos
+      const montoBase = selectedConductorResumen?.monto_total_pagar ?? selectedConductorResumen?.monto_total_pagado ?? cierreDetalle.totalIngresos
       
       const valoresCalculados = calcularValoresCierre(
         montoBase,
@@ -841,7 +841,7 @@ export const DetalleView = () => {
 
   const valoresCierre = useMemo(() => {
     // Priorizar monto_total_pagado del conductor resumen si está disponible
-    const montoBase = selectedConductorResumen?.monto_total_pagado ?? metricas?.totalIngresos
+    const montoBase = selectedConductorResumen?.monto_total_pagar ?? selectedConductorResumen?.monto_total_pagado ?? metricas?.totalIngresos
     
     if (!montoBase || montoBase === 0) return null
     
@@ -902,7 +902,7 @@ export const DetalleView = () => {
         liquidaYape: parseNumber(liquidaYape),
         otrosGastos: valoresCierre.totalOtrosGastos,
         otrosGastosDescripcion: otrosGastosDescripcion.trim() || null,
-        totalIngresos: selectedConductorResumen?.monto_total_pagado ?? 0,
+        totalIngresos: selectedConductorResumen?.monto_total_pagar ?? selectedConductorResumen?.monto_total_pagado ?? 0,
         totalGastos: valoresCierre.totalGastos,
         resta: valoresCierre.montoRestante,
       })
@@ -1058,7 +1058,7 @@ export const DetalleView = () => {
                                       {conductor.cantidad_turnos} turno{conductor.cantidad_turnos !== 1 ? 's' : ''}
                                     </Badge>
                                     <span className="text-sm font-bold text-orange-600 dark:text-orange-400">
-                                      {formatBalance(conductor.monto_total_pagado)}
+                                      {formatBalance(conductor.monto_total_pagar ?? conductor.monto_total_pagado ?? 0)}
                                     </span>
                                   </div>
                                 </div>
@@ -1172,7 +1172,7 @@ export const DetalleView = () => {
                                       {conductor.cantidad_turnos} turno{conductor.cantidad_turnos !== 1 ? 's' : ''}
                                     </Badge>
                                     <span className="text-sm font-bold text-green-600 dark:text-green-400">
-                                      {formatBalance(conductor.monto_total_pagado)}
+                                      {formatBalance(conductor.monto_total_pagar ?? conductor.monto_total_pagado ?? 0)}
                                     </span>
                                   </div>
                                 </div>
@@ -2067,7 +2067,7 @@ export const DetalleView = () => {
             ) : (
               <div className={SECTION_CARD_CLASS}>
                 <div className="text-center py-4 text-sm text-gray-500 dark:text-gray-400">
-                  {selectedConductorResumen?.monto_total_pagado 
+                  {selectedConductorResumen?.monto_total_pagar ?? selectedConductorResumen?.monto_total_pagado 
                     ? 'Ingrese los datos para ver el cálculo' 
                     : 'No hay monto disponible para calcular'}
                 </div>
@@ -2357,7 +2357,7 @@ export const DetalleView = () => {
                 <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">Resumen</h4>
                 {(() => {
                   if (editandoCierre && valoresCierreEdicion) {
-                    const montoBase = selectedConductorResumen?.monto_total_pagado ?? cierreDetalle.totalIngresos
+                    const montoBase = selectedConductorResumen?.monto_total_pagar ?? selectedConductorResumen?.monto_total_pagado ?? cierreDetalle.totalIngresos
                     const valoresCalculados = valoresCierreEdicion
 
                     return (
@@ -2577,7 +2577,7 @@ export const DetalleView = () => {
                 <div className="text-right">
                   <p className="text-xs text-gray-500 dark:text-gray-400">Total a Pagar</p>
                   <p className="text-base font-bold text-blue-600 dark:text-blue-400">
-                    {formatBalance(conductorParaTurnos.monto_total_pagado)}
+                    {formatBalance(conductorParaTurnos.monto_total_pagar ?? conductorParaTurnos.monto_total_pagado ?? 0)}
                   </p>
                 </div>
               </div>
