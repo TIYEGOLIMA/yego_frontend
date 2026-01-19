@@ -69,7 +69,7 @@ class SystemNotificationsService {
             }
           }, 100)
         },
-        onStompError: (frame) => {
+        onStompError: (frame: any) => {
           // Ignorar errores de iframe silenciosamente
           const errorMessage = frame?.headers?.message || '';
           if (!errorMessage.includes('iframe') && !errorMessage.includes('X-Frame-Options')) {
@@ -77,7 +77,7 @@ class SystemNotificationsService {
           }
           this.handleReconnect()
         },
-        onWebSocketError: (error) => {
+        onWebSocketError: (error: any) => {
           // Ignorar errores de iframe silenciosamente
           const errorMessage = error?.message || error?.toString() || '';
           if (!errorMessage.includes('iframe') && !errorMessage.includes('X-Frame-Options')) {
@@ -91,8 +91,26 @@ class SystemNotificationsService {
       };
       
       if (isProduction) {
-        // Producción: usar WebSocket nativo directamente con brokerURL
-        clientConfig.brokerURL = wsUrl;
+        // Producción: usar WebSocket nativo con webSocketFactory
+        clientConfig.webSocketFactory = () => {
+          console.log('🔌 [SystemNotifications] Conectando WebSocket nativo a:', wsUrl);
+          const ws = new WebSocket(wsUrl);
+          
+          // Agregar listeners para debugging
+          ws.addEventListener('open', () => {
+            console.log('✅ [SystemNotifications] WebSocket abierto');
+          });
+          
+          ws.addEventListener('error', (error) => {
+            console.error('❌ [SystemNotifications] Error en WebSocket:', error);
+          });
+          
+          ws.addEventListener('close', (event) => {
+            console.log('🔌 [SystemNotifications] WebSocket cerrado:', event.code, event.reason);
+          });
+          
+          return ws as any;
+        };
       } else {
         // Desarrollo: usar SockJS con webSocketFactory
         clientConfig.webSocketFactory = () => {

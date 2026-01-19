@@ -116,8 +116,26 @@ class SocketService {
       };
       
       if (isProduction) {
-        // Producción: usar WebSocket nativo directamente con brokerURL
-        clientConfig.brokerURL = WS_URL;
+        // Producción: usar WebSocket nativo con webSocketFactory
+        clientConfig.webSocketFactory = () => {
+          console.log('🔌 [SocketService] Conectando WebSocket nativo a:', WS_URL);
+          const ws = new WebSocket(WS_URL);
+          
+          // Agregar listeners para debugging
+          ws.addEventListener('open', () => {
+            console.log('✅ [SocketService] WebSocket abierto');
+          });
+          
+          ws.addEventListener('error', (error) => {
+            console.error('❌ [SocketService] Error en WebSocket:', error);
+          });
+          
+          ws.addEventListener('close', (event) => {
+            console.log('🔌 [SocketService] WebSocket cerrado:', event.code, event.reason);
+          });
+          
+          return ws as any;
+        };
       } else {
         // Desarrollo: usar SockJS con webSocketFactory
         clientConfig.webSocketFactory = () => {
@@ -130,6 +148,9 @@ class SocketService {
       
       // Configuración común
       Object.assign(clientConfig, {
+        connectHeaders: {
+          'Authorization': `Bearer ${token}`
+        },
         // Deshabilitar reconexión automática de STOMP - usamos nuestro propio sistema
         reconnectDelay: 0, // 0 = deshabilitado
         heartbeatIncoming: 0, // Deshabilitar heartbeat entrante
