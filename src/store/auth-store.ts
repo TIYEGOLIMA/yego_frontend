@@ -170,7 +170,7 @@ export const useAuthStore = create<AuthState>()(
             try {
               await authService.logout()
             } catch {
-              // Ignorar error de logout
+            // Ignorar error de logout
             }
           }
         }

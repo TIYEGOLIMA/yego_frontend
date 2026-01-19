@@ -36,8 +36,8 @@ export const useConnectionStatus = () => {
         }
       }
       
-      setStatus(newStatus);
-      lastStatusRef.current = newStatus;
+        setStatus(newStatus);
+        lastStatusRef.current = newStatus;
     };
 
     socket.onStatusChange(handleStatusChange);

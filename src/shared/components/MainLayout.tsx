@@ -144,12 +144,12 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       const grupoIconName = grupoModules[0]?.grupo?.icono;
       const GrupoIcon = grupoIconName && ICON_MAP[grupoIconName] ? ICON_MAP[grupoIconName] : AppWindow;
       
-      navItems.push({
-        label: grupoName,
-        to: `dropdown-${grupoName.toLowerCase().replace(/\s+/g, '-')}`,
+        navItems.push({
+          label: grupoName,
+          to: `dropdown-${grupoName.toLowerCase().replace(/\s+/g, '-')}`,
         icon: <GrupoIcon className="h-5 w-5" />,
-        requiredPermission: null,
-        children: grupoModules.map(module => createNavItemFromModule(module))
+          requiredPermission: null,
+          children: grupoModules.map(module => createNavItemFromModule(module))
       });
     });
 

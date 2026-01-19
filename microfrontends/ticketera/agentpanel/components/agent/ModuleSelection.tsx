@@ -228,7 +228,7 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
           data.modulosOcupados,
           data.modulosDisponibles
         )
-        
+          
         // Verificar si el usuario perdió su módulo (solo si hay usuario)
         if (userRef.current?.id) {
           const moduloAnteriorDelUsuario = modulosOcupadosAnterioresRef.current.find(
@@ -238,12 +238,12 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
           if (moduloAnteriorDelUsuario && !nuevosOcupados.some((mod: ModuloOcupado) => mod.userId === userRef.current?.id)) {
             setShowModalLiberacion(true)
           }
+          }
+          
+          modulosOcupadosAnterioresRef.current = nuevosOcupados
+          setModulosOcupadosData(nuevosOcupados)
         }
         
-        modulosOcupadosAnterioresRef.current = nuevosOcupados
-        setModulosOcupadosData(nuevosOcupados)
-      }
-      
       // Actualizar módulos disponibles directamente desde el evento (sin llamar a la API)
       if (data.modulosDisponibles && Array.isArray(data.modulosDisponibles) && onModulesUpdatedRef.current) {
         onModulesUpdatedRef.current(data.modulosDisponibles.map(mapearModuloAtencion))
@@ -254,7 +254,7 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
 
     return () => {
       SocketService.off('modulos-actualizados', handleModulosActualizados)
-    }
+          }
   }, []) // Sin dependencias, se ejecuta una vez al montar
 
   // Ya no necesitamos la suscripción STOMP porque ahora usamos el evento directo 'modulos-actualizados'

@@ -36,7 +36,7 @@ class SocketService {
     if (this.reconnectInterval) {
       return; // Ya hay un intervalo de reconexión activo
     }
-    
+
     this.reconnectInterval = setInterval(() => {
       if (this.connectionStatus === 'connected') {
         this.stopReconnect();
@@ -421,7 +421,7 @@ class SocketService {
   private subscribeToGarantizadoEvents() {
     if (!this.stompClient || !this.stompClient.connected) {
       return;
-    }
+      }
 
     // 🎯 Topic específico: /topic/garantizado
     this.stompClient.subscribe('/topic/garantizado', (message: IMessage) => {
@@ -444,21 +444,21 @@ class SocketService {
       return;
     }
 
-    // 🎯 Topic específico: /topic/pro-ops/kpis
-    this.stompClient.subscribe('/topic/pro-ops/kpis', (message: IMessage) => {
-      try {
-        const kpis = JSON.parse(message.body);
-        this.emit('pro-ops-kpis', kpis);
-      } catch (error) {
-        // Error silencioso
-      }
-    });
-
     // 🎯 Topic específico: /topic/pro-ops/conductores-en-orden
     this.stompClient.subscribe('/topic/pro-ops/conductores-en-orden', (message: IMessage) => {
       try {
         const data = JSON.parse(message.body);
         this.emit('pro-ops-conductores-en-orden', data);
+      } catch (error) {
+        // Error silencioso
+      }
+    });
+
+    // 🎯 Topic específico: /topic/pro-ops/viajes-simplificados-en-curso
+    this.stompClient.subscribe('/topic/pro-ops/viajes-simplificados-en-curso', (message: IMessage) => {
+      try {
+        const data = JSON.parse(message.body);
+        this.emit('pro-ops-viajes-simplificados-en-curso', data);
       } catch (error) {
         // Error silencioso
       }

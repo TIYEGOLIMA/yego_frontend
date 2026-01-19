@@ -3,54 +3,6 @@ import { api } from './core/api'
 // Tipos e interfaces
 export type TipoTurno = 'diurno' | 'nocturno'
 
-export interface Vehiculo {
-  id: string
-  placa: string
-  marca: string
-  modelo: string
-  color: string
-  año: number
-  activo: boolean
-  enUso: boolean
-  fechaCreacion: string
-}
-
-export interface Conductor {
-  id: string
-  nombre: string
-  apellido: string
-  telefono: string
-  tipoTurno: TipoTurno
-  activo: boolean
-  fechaCreacion: string
-}
-
-export interface Turno {
-  id: string
-  conductorId: string
-  conductor?: Conductor
-  vehiculoId?: string
-  vehiculo?: Vehiculo
-  fecha: string
-  horaInicio: string
-  horaFin: string
-  tipoTurno: TipoTurno
-  estado: 'programado' | 'en_curso' | 'completado' | 'cancelado'
-  observaciones?: string
-  activo: boolean
-  fechaCreacion: string
-}
-
-export interface CrearTurnoDto {
-  driverId: string
-  vehiculoId?: string
-  fecha: string
-  horaInicio: string
-  horaFin: string
-  tipoTurno: TipoTurno
-  observaciones?: string
-}
-
 export interface DriverItem {
   driver_id: string
   full_name: string
@@ -70,52 +22,6 @@ export interface DriverItem {
   groups?: string[]
 }
 
-export interface ContractorDriver {
-  id: string
-  lead_id: string
-  avatar_url: string
-  balance: string
-  balance_limit: string
-  full_name: string
-  groups: string[]
-  hiring_segment: string
-  last_order_date: string
-  lifecycle_step: string
-  name: {
-    first: string
-    last: string
-    middle: string
-  }
-  orders_count: number
-  phone: string
-  status: 'online' | 'offline' | 'busy' | 'free' | 'in_order'
-  violations: string[]
-}
-
-export interface DriversResponse {
-  contractors: ContractorDriver[]
-}
-
-export interface WorkRule {
-  id: string
-  name: string
-}
-
-export interface WorkRulesResponse {
-  work_rules: WorkRule[]
-}
-
-export interface DriverKpiResponse {
-  viajeActivo: number
-  noDisponibles: number
-  disponibles: number
-  sinGPS: number
-  items: DriverItem[]
-}
-
-export interface RutaPunto {
-  address: string
-}
 
 export interface ConductorEnOrden {
   id: string
@@ -125,7 +31,7 @@ export interface ConductorEnOrden {
   last_name: string
   status: string
   vehicle_number: string | null
-  route: RutaPunto[]
+  viajes?: ViajePorFecha[] // Viajes del día de HOY
   summary_distance?: SummaryDistance
   total_activity_time?: number
   completed_trips_count?: number
@@ -171,9 +77,18 @@ export interface DriverTimelineResponse {
   orders: DriverTimelineOrder[]
 }
 
+export interface TripSimplificado {
+  status: string
+  id: string
+  ended_at: string | null
+  booked_at: string
+}
+
 export interface DriverViajesData {
   driver_id: string
-  trips: DriverTimelineOrder[]
+  driver_full_name: string
+  car_brand_model: string
+  trips: TripSimplificado[]
 }
 
 export interface ViajesSimplificadosResponse {
@@ -182,21 +97,21 @@ export interface ViajesSimplificadosResponse {
   drivers: DriverViajesData[]
 }
 
-export interface TurnoCalculado {
+export interface ViajePorFecha {
+  status: string
+  short_id: number
   id: string
-  hora_inicio: string
-  hora_fin: string | null
-  tipo_turno: 'diurno' | 'nocturno'
-  estado: 'activo' | 'finalizado'
-  duracion_minutos: number | null
+  ended_at: string | null
+  booked_at: string
+  // driver_id, driver_full_name y car_brand_model ya no vienen aquí
+  // porque son repetitivos (ya están a nivel de conductor)
 }
 
-export interface ObtenerTurnosCalculadosResponse {
-  driver_id: string
-  fecha: string
-  turnos: TurnoCalculado[]
+export interface ViajesPorFechaResponse {
+  date_from: string
+  date_to: string
+  trips: ViajePorFecha[]
 }
-
 
 export interface TipoTurnoFecha {
   id: number
@@ -250,6 +165,64 @@ export interface ViajeCompleto {
 }
 
 /**
+ * Turno de un conductor
+ */
+export interface TurnoResumen {
+  id: number
+  fecha: string
+  hora_inicio: string
+  hora_fin: string
+  tipo_turno: 'diurno' | 'nocturno'
+  duracion_minutos: number
+  monto_total: number
+  pagado: boolean
+}
+
+/**
+ * Conductor con resumen de pagos
+ */
+export interface ConductorResumenPagos {
+  driver_id: string
+  avatar_url?: string
+  nombre?: string
+  telefono?: string
+  monto_total_pagado: number
+  cantidad_turnos: number
+  turnos: TurnoResumen[]
+}
+
+/**
+ * Respuesta del resumen de pagos
+ */
+export interface ResumenPagosResponse {
+  total_conductores: number
+  conductores: ConductorResumenPagos[]
+}
+
+/**
+ * Turno pagado
+ */
+export interface TurnoPagado {
+  id: number
+  driver_id: string
+  fecha: string
+  hora_inicio: string
+  hora_fin: string
+  tipo_turno: 'diurno' | 'nocturno'
+  duracion_minutos: number
+  monto_total: number
+  pagado: boolean
+}
+
+/**
+ * Respuesta de turnos pagados
+ */
+export interface TurnosPagadosResponse {
+  total_turnos: number
+  turnos_pagados: TurnoPagado[]
+}
+
+/**
  * Registro de cierre de día
  */
 export interface RegistroCierre {
@@ -287,49 +260,6 @@ export type ViajesCompletosResponse = {
 }
 
 export const yegoProOpsService = {
-  obtenerTurnos: async (fecha?: string): Promise<Turno[]> => {
-    const params = fecha ? { fecha } : {}
-    const response = await api.get<Turno[]>('/pro-ops/shifts', { params })
-    return response.data
-  },
-
-  crearTurno: async (data: CrearTurnoDto): Promise<Turno> => {
-    const response = await api.post<Turno>('/pro-ops/shifts/manual', data)
-    return response.data
-  },
-
-  actualizarTurno: async (id: string, data: Partial<CrearTurnoDto>): Promise<Turno> => {
-    const response = await api.put<Turno>(`/pro-ops/shifts/${id}`, data)
-    return response.data
-  },
-
-  eliminarTurno: async (id: string): Promise<void> => {
-    await api.delete(`/pro-ops/shifts/${id}`)
-  },
-
-  obtenerKpis: async (): Promise<DriverKpiResponse> => {
-    const response = await api.get<DriverKpiResponse>('/pro-ops/kpis')
-    return response.data
-  },
-
-  /**
-   * Obtener lista de conductores desde el endpoint /pro-ops/drivers
-   * @param workRuleIds ID(s) de regla(s) de trabajo para filtrar (opcional)
-   */
-  obtenerDrivers: async (workRuleIds?: string): Promise<DriversResponse> => {
-    const params = workRuleIds ? { work_rule_ids: workRuleIds } : {}
-    const response = await api.get<DriversResponse>('/pro-ops/drivers', { params })
-    return response.data
-  },
-
-  /**
-   * Obtener reglas de trabajo (work rules) desde la API
-   */
-  obtenerReglasTrabajo: async (): Promise<WorkRulesResponse> => {
-    const response = await api.get<WorkRulesResponse>('/pro-ops/work-rules')
-    return response.data
-  },
-
   /**
    * Obtener conductores en orden desde la API
    */
@@ -359,37 +289,17 @@ export const yegoProOpsService = {
   },
 
   /**
-   * Obtener viajes simplificados para múltiples conductores
-   * @param driverIds Lista de IDs de conductores
-   * @param dateFrom Fecha inicial en formato ISO 8601 (ej: "2026-01-08T00:00:00-05:00")
-   * @param dateTo Fecha final en formato ISO 8601 (ej: "2026-01-09T23:59:59-05:00")
-   * @returns Respuesta con viajes simplificados agrupados por conductor
+   * Obtener viajes simplificados de un conductor por fecha específica
+   * @param driverId ID del conductor
+   * @param fecha Fecha en formato YYYY-MM-DD
+   * @returns Respuesta con viajes del conductor para esa fecha
    */
-  obtenerViajesSimplificados: async (driverIds: string[], dateFrom?: string, dateTo?: string): Promise<ViajesSimplificadosResponse> => {
-    const body: {
-      driver_ids: string[]
-      date_from?: string
-      date_to?: string
-    } = {
-      driver_ids: driverIds
-    }
-    
-    if (dateFrom) body.date_from = dateFrom
-    if (dateTo) body.date_to = dateTo
-    
-    const response = await api.post<ViajesSimplificadosResponse>('/pro-ops/drivers/viajes-simplificados', body)
-    return response.data
-  },
-
-  obtenerTurnosCalculados: async (driverId: string, fecha?: string): Promise<ObtenerTurnosCalculadosResponse> => {
-    // Si no se proporciona fecha, usar la fecha de hoy
-    const fechaHoy = fecha || new Date().toISOString().split('T')[0]
-    
-    const response = await api.get<ObtenerTurnosCalculadosResponse>('/pro-ops/shifts', {
+  obtenerViajesPorFecha: async (driverId: string, fecha: string): Promise<ViajesPorFechaResponse> => {
+    const response = await api.get<ViajesPorFechaResponse>('/pro-ops/driver/viajes-simplificados-por-fecha', {
       params: {
-        driver_id: driverId,
-        fecha: fechaHoy,
-      },
+        driverId,
+        fecha
+      }
     })
     return response.data
   },
@@ -507,6 +417,7 @@ export const yegoProOpsService = {
     driverId: string
     userId: number // ID del usuario que está actualizando
     fecha: string
+    turnoIds?: number[] // IDs de los turnos asociados a este cierre
     gnvM3: string | null
     gnvSoles: number
     gasolinaGalones: string | null
@@ -537,6 +448,7 @@ export const yegoProOpsService = {
     driverId: string
     userId: number // ID del usuario en sesión que registra el cierre
     fecha: string // Fecha del día único en formato YYYY-MM-DD (siempre un solo día)
+    turnoIds?: number[] // IDs de los turnos asociados a este cierre
     gnvM3: string | null
     gnvSoles: number
     gasolinaGalones: string | null
@@ -554,6 +466,7 @@ export const yegoProOpsService = {
         driverId: data.driverId,
         userId: data.userId, // ID del usuario en sesión
         fecha: data.fecha, // Fecha del día único (YYYY-MM-DD) - para identificar y buscar por fecha
+        turnoIds: data.turnoIds || [], // IDs de los turnos asociados a este cierre
         gnvM3: data.gnvM3,
         gnvSoles: data.gnvSoles,
         gasolinaGalones: data.gasolinaGalones,
@@ -570,6 +483,31 @@ export const yegoProOpsService = {
       console.error('❌ [yegoProOpsService] Error registrando cierre:', error)
       throw error
     }
+  },
+
+  /**
+   * Obtener resumen de pagos de conductores
+   * @param fecha Fecha en formato YYYY-MM-DD (requerido)
+   * @returns Resumen de conductores con sus turnos y montos a pagar
+   */
+  obtenerResumenPagos: async (fecha: string): Promise<ResumenPagosResponse> => {
+    const response = await api.get<ResumenPagosResponse>('/pro-ops/drivers/resumen-pagos', { 
+      params: { fecha } 
+    })
+    return response.data
+  },
+
+  /**
+   * Obtener lista de turnos pagados
+   * @param fecha Fecha en formato YYYY-MM-DD (opcional). Si no se proporciona, devuelve todos los turnos pagados
+   * @returns Lista de turnos pagados
+   */
+  obtenerTurnosPagados: async (fecha?: string): Promise<TurnosPagadosResponse> => {
+    const params = fecha ? { fecha } : {}
+    const response = await api.get<TurnosPagadosResponse>('/pro-ops/drivers/turnos-pagados', { 
+      params 
+    })
+    return response.data
   },
 }
 

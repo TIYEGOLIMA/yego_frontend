@@ -95,8 +95,8 @@ const PermissionRoute = ({ children, module }: { children: React.ReactNode, modu
     )
   }
   
-  const moduleName = module.toLowerCase().trim();
-  
+    const moduleName = module.toLowerCase().trim();
+    
   // Si no hay módulos, permitir acceso (para desarrollo/testing)
   if (!modules || modules.length === 0) {
     return <>{children}</>
@@ -111,7 +111,7 @@ const PermissionRoute = ({ children, module }: { children: React.ReactNode, modu
     
     // Comparar de manera más flexible
     const urlMatches = moduleUrl === moduleName || 
-                       moduleUrl.includes(moduleName) || 
+           moduleUrl.includes(moduleName) || 
                        moduleName.includes(moduleUrl);
     
     const nameMatches = moduleNombre === moduleName ||
@@ -232,7 +232,7 @@ function App() {
           } />
           <Route path="/" element={
             <ProtectedRoute>
-              <MainLayout />
+                <MainLayout />
             </ProtectedRoute>
           }>
             <Route index element={<WelcomeModule />} />
