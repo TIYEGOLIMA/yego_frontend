@@ -365,8 +365,93 @@ export const AsistenciaModule: React.FC = () => {
     }
   }, [user, cargarEstadisticas]);
 
+  // Función para validar horario
+  const validarHorario = useCallback((tipo: TipoMarcacion): { valido: boolean; mensaje?: string } => {
+    if (!empleado?.horario) {
+      return { valido: true }; // Si no hay horario definido, permitir
+    }
+
+    const ahora = new Date();
+    const horaActual = ahora.getHours();
+    const minutosActuales = ahora.getMinutes();
+    const horaActualMinutos = horaActual * 60 + minutosActuales;
+
+    const [horaEntrada, minutosEntrada] = empleado.horario.entrada.split(':').map(Number);
+    const horaEntradaMinutos = horaEntrada * 60 + minutosEntrada;
+
+    const [horaSalida, minutosSalida] = empleado.horario.salida.split(':').map(Number);
+    const horaSalidaMinutos = horaSalida * 60 + minutosSalida;
+
+    // Validaciones según el tipo de marcación
+    switch (tipo) {
+      case 'entrada':
+        // Permitir entrada desde 1 hora antes del horario hasta 2 horas después
+        const horaMinimaEntrada = horaEntradaMinutos - 60; // 1 hora antes
+        const horaMaximaEntrada = horaEntradaMinutos + 120; // 2 horas después
+        
+        if (horaActualMinutos < horaMinimaEntrada) {
+          return {
+            valido: false,
+            mensaje: `No puedes marcar entrada antes de las ${empleado.horario.entrada}. Horario permitido: desde 1 hora antes hasta 2 horas después.`
+          };
+        }
+        if (horaActualMinutos > horaMaximaEntrada) {
+          return {
+            valido: false,
+            mensaje: `Ya pasó el horario permitido para marcar entrada. Horario: hasta 2 horas después de las ${empleado.horario.entrada}.`
+          };
+        }
+        break;
+
+      case 'salida':
+        // Permitir salida desde 1 hora antes del horario hasta 2 horas después
+        const horaMinimaSalida = horaSalidaMinutos - 60; // 1 hora antes
+        const horaMaximaSalida = horaSalidaMinutos + 120; // 2 horas después
+        
+        if (horaActualMinutos < horaMinimaSalida) {
+          return {
+            valido: false,
+            mensaje: `No puedes marcar salida antes de las ${empleado.horario.salida}. Horario permitido: desde 1 hora antes hasta 2 horas después.`
+          };
+        }
+        if (horaActualMinutos > horaMaximaSalida) {
+          return {
+            valido: false,
+            mensaje: `Ya pasó el horario permitido para marcar salida. Horario: hasta 2 horas después de las ${empleado.horario.salida}.`
+          };
+        }
+        break;
+
+      case 'salida_refrigerio':
+      case 'regreso_refrigerio':
+        // Para refrigerio, validar que esté dentro del horario laboral
+        if (horaActualMinutos < horaEntradaMinutos || horaActualMinutos > horaSalidaMinutos + 120) {
+          return {
+            valido: false,
+            mensaje: `No puedes marcar ${tipo === 'salida_refrigerio' ? 'salida a refrigerio' : 'regreso de refrigerio'} fuera del horario laboral.`
+          };
+        }
+        break;
+    }
+
+    return { valido: true };
+  }, [empleado]);
+
   const manejarMarcacion = useCallback(async (tipo: TipoMarcacion) => {
     if (marcando) return;
+    
+    // Validar horario antes de enviar
+    const validacionHorario = validarHorario(tipo);
+    if (!validacionHorario.valido) {
+      setAlertData({
+        isOpen: true,
+        tipo: 'error',
+        hora: '',
+        mensajeMotivacional: validacionHorario.mensaje || 'Horario no permitido para esta marcación',
+        icono: '⏰'
+      });
+      return;
+    }
     
     try {
       setMarcando(true);

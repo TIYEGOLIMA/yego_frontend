@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { yegoProOpsService, type DriverItem, type ViajesCompletosResponse, type RegistroCierre, type FechasTurnosResponse, type ResumenPagosResponse, type ConductorResumenPagos, type TurnosPagadosResponse } from '../../../../services/yego-pro-ops-service'
+import { yegoProOpsService, type DriverItem, type ViajesCompletosResponse, type RegistroCierre, type FechasTurnosResponse, type ResumenPagosResponse, type ConductorResumenPagos, type TurnosPagadosResponse, type ListaConductoresResponse, type ViajeCompleto } from '../../../../services/yego-pro-ops-service'
 import { useAuth } from '../../../../shared/hooks/useAuth'
 import { useToastNotifications } from '../../../../hooks/useToastNotifications'
 import { NotificationContainer } from '../../../../components/NotificationToast'
@@ -330,10 +330,12 @@ const usePagination = <T,>(items: T[], itemsPerPage: number) => {
 
 export const DetalleView = () => {
   const { user } = useAuth()
-  const { showSuccess, showError, showWarning, notifications, removeNotification } = useToastNotifications()
+  const { showError, showWarning, notifications, removeNotification } = useToastNotifications()
   const [searchTermPendientes, setSearchTermPendientes] = useState('')
   const [searchTermLiquidados, setSearchTermLiquidados] = useState('')
   const [searchTermViajes, setSearchTermViajes] = useState('')
+  const [searchTermNombreActual, setSearchTermNombreActual] = useState('')
+  const [searchTermNombreActualParaBuscar, setSearchTermNombreActualParaBuscar] = useState('')
   const [fechaSeleccionada, setFechaSeleccionada] = useState<string>(obtenerFechaAyer())
   const [selectedDriver, setSelectedDriver] = useState<DriverItem | null>(null)
   const [selectedConductorResumen, setSelectedConductorResumen] = useState<ConductorResumenPagos | null>(null)
@@ -347,6 +349,15 @@ export const DetalleView = () => {
   const [cierreDetalle, setCierreDetalle] = useState<RegistroCierre | null>(null)
   const [cargandoCierre, setCargandoCierre] = useState(false)
   const [registrandoCierre, setRegistrandoCierre] = useState(false)
+  const [showModalCerrarTurnos, setShowModalCerrarTurnos] = useState(false)
+  const [cerrandoTurnos, setCerrandoTurnos] = useState(false)
+  const [respuestaCerrarTurnos, setRespuestaCerrarTurnos] = useState<{
+    message: string
+    driverId: string
+    fecha: string
+    cantidadTurnos?: number
+  } | null>(null)
+  const [conductorParaCerrarTurnos, setConductorParaCerrarTurnos] = useState<ConductorResumenPagos | null>(null)
   const [editandoCierre, setEditandoCierre] = useState(false)
   const [actualizandoCierre, setActualizandoCierre] = useState(false)
   const [editGnvM3, setEditGnvM3] = useState('')
@@ -357,6 +368,8 @@ export const DetalleView = () => {
   const [editLiquidaYape, setEditLiquidaYape] = useState('')
   const [editOtrosGastos, setEditOtrosGastos] = useState('')
   const [editOtrosGastosDescripcion, setEditOtrosGastosDescripcion] = useState('')
+  const [editOdometroInicial, setEditOdometroInicial] = useState('')
+  const [editOdometroFinal, setEditOdometroFinal] = useState('')
   const [gnvM3, setGnvM3] = useState('')
   const [gnvSoles, setGnvSoles] = useState('')
   const [gasolinaGalones, setGasolinaGalones] = useState('')
@@ -365,6 +378,8 @@ export const DetalleView = () => {
   const [liquidaYape, setLiquidaYape] = useState('')
   const [otrosGastos, setOtrosGastos] = useState('')
   const [otrosGastosDescripcion, setOtrosGastosDescripcion] = useState('')
+  const [odometroInicial, setOdometroInicial] = useState('')
+  const [odometroFinal, setOdometroFinal] = useState('')
   
   const [fechaInicio, setFechaInicio] = useState<string>(obtenerFechaAyer)
   const [fechaFin, setFechaFin] = useState<string>(obtenerFechaAyer)
@@ -510,14 +525,50 @@ export const DetalleView = () => {
   }
 
   // Query para obtener resumen de pagos (solo se actualiza cuando se registra o actualiza un cierre)
+  // Si la fecha seleccionada es la fecha actual, no envía el parámetro para listar todos los conductores
+  const fechaHoy = obtenerFechaHoy()
+  const esFechaActual = fechaSeleccionada === fechaHoy
+  
+  // Limpiar búsqueda cuando cambia la fecha y ya no es fecha actual
+  useEffect(() => {
+    if (!esFechaActual) {
+      setSearchTermNombreActual('')
+      setSearchTermNombreActualParaBuscar('')
+    }
+  }, [fechaSeleccionada, esFechaActual])
+  
+  // Función para ejecutar la búsqueda
+  const handleBuscarConductor = () => {
+    if (searchTermNombreActual.trim().length > 0) {
+      setSearchTermNombreActualParaBuscar(searchTermNombreActual.trim())
+    }
+  }
+
+  // Permitir buscar con Enter
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleBuscarConductor()
+    }
+  }
+  
+  // Query para obtener lista de conductores (solo cuando es fecha actual y hay término de búsqueda)
+  const { data: listaConductoresData, isLoading: loadingListaConductores } = useQuery<ListaConductoresResponse>({
+    queryKey: ['yego-pro-ops-lista-conductores', searchTermNombreActualParaBuscar, fechaSeleccionada],
+    queryFn: () => yegoProOpsService.obtenerListaConductores(searchTermNombreActualParaBuscar || undefined, fechaSeleccionada),
+    enabled: esFechaActual && searchTermNombreActualParaBuscar.length > 0,
+    refetchOnWindowFocus: false,
+  })
+
+  // Query para obtener resumen de pagos (siempre habilitado, pero se usa según la lógica)
   const { data: resumenPagosData, isLoading: loadingResumenPagos, refetch: refetchResumenPagos } = useQuery<ResumenPagosResponse>({
     queryKey: ['yego-pro-ops-resumen-pagos', fechaSeleccionada],
     queryFn: () => yegoProOpsService.obtenerResumenPagos(fechaSeleccionada),
+    enabled: true,
     refetchOnWindowFocus: false,
   })
 
   // Query para obtener turnos pagados (se actualiza solo cuando se registra o actualiza un cierre)
-  const { data: _turnosPagadosData, refetch: refetchTurnosPagados } = useQuery<TurnosPagadosResponse>({
+  const { refetch: refetchTurnosPagados } = useQuery<TurnosPagadosResponse>({
     queryKey: ['yego-pro-ops-turnos-pagados', fechaSeleccionada],
     queryFn: () => yegoProOpsService.obtenerTurnosPagados(fechaSeleccionada),
     refetchOnWindowFocus: false,
@@ -545,7 +596,7 @@ export const DetalleView = () => {
 
 
 
-  const { data: viajesData, isLoading: loadingViajes, isError: errorViajes, refetch: refetchViajes } = useQuery<ViajesCompletosResponse>({
+  const { data: viajesData, isLoading: loadingViajes, isError: errorViajes } = useQuery<ViajesCompletosResponse>({
     queryKey: ['yego-pro-ops-viajes', selectedDriver?.driver_id, fechaInicio, fechaFin],
     queryFn: () => {
       if (!selectedDriver || !fechaInicio || !fechaFin) {
@@ -557,14 +608,55 @@ export const DetalleView = () => {
     refetchOnWindowFocus: false,
   })
 
-  const datosParaMostrar = viajesData
-
   // Detectar si hay un registro de cierre (solo de los datos actuales, no de los anteriores)
   const cierreRegistrado = viajesData?.cierre_registrado ?? false
 
 
   // Separar conductores en pendientes (tienen turnos sin pagar) y liquidados (todos pagados)
+  // Si es fecha actual, priorizar resumen de pagos (después de cerrar turnos), sino usar lista de conductores
   const { conductoresPendientes, conductoresLiquidados } = useMemo(() => {
+    if (esFechaActual) {
+      // Si hay resumen de pagos (después de cerrar turnos), usarlo
+      if (resumenPagosData?.conductores && resumenPagosData.conductores.length > 0) {
+        const pendientes: ConductorResumenPagos[] = []
+        const liquidados: ConductorResumenPagos[] = []
+        
+        resumenPagosData.conductores.forEach(conductor => {
+          const tieneTurnosSinPagar = conductor.turnos.some(turno => !turno.pagado)
+          if (tieneTurnosSinPagar) {
+            pendientes.push(conductor)
+          } else {
+            liquidados.push(conductor)
+          }
+        })
+        
+        return { conductoresPendientes: pendientes, conductoresLiquidados: liquidados }
+      }
+      
+      // Si hay lista de conductores de búsqueda, usarla
+      if (listaConductoresData?.conductores && listaConductoresData.conductores.length > 0) {
+        // Convertir conductores simples a formato ConductorResumenPagos
+        const conductoresConvertidos: ConductorResumenPagos[] = listaConductoresData.conductores.map(conductor => ({
+          driver_id: conductor.driverId,
+          nombre: conductor.nombre,
+          telefono: conductor.telefono,
+          avatar_url: conductor.avatarUrl,
+          monto_total_pagar: 0,
+          cantidad_turnos: 0,
+          turnos: []
+        }))
+        
+        return { 
+          conductoresPendientes: conductoresConvertidos, 
+          conductoresLiquidados: [] 
+        }
+      }
+      
+      // Si no hay datos, retornar vacío (pero la sección se mostrará)
+      return { conductoresPendientes: [], conductoresLiquidados: [] }
+    }
+    
+    // Para fechas anteriores, usar resumen de pagos normal
     if (!resumenPagosData?.conductores) {
       return { conductoresPendientes: [], conductoresLiquidados: [] }
     }
@@ -573,7 +665,6 @@ export const DetalleView = () => {
     const liquidados: ConductorResumenPagos[] = []
     
     resumenPagosData.conductores.forEach(conductor => {
-      // Si tiene al menos un turno sin pagar, está pendiente
       const tieneTurnosSinPagar = conductor.turnos.some(turno => !turno.pagado)
       if (tieneTurnosSinPagar) {
         pendientes.push(conductor)
@@ -583,7 +674,7 @@ export const DetalleView = () => {
     })
     
     return { conductoresPendientes: pendientes, conductoresLiquidados: liquidados }
-  }, [resumenPagosData])
+  }, [esFechaActual, listaConductoresData, resumenPagosData])
 
   // Filtrar conductores pendientes por búsqueda
   const conductoresPendientesFiltrados = useMemo(() => {
@@ -610,15 +701,15 @@ export const DetalleView = () => {
   }, [conductoresLiquidados, searchTermLiquidados])
 
   const viajesArray = useMemo(() => {
-    return datosParaMostrar?.viajes ?? []
-  }, [datosParaMostrar])
+    return viajesData?.viajes ?? []
+  }, [viajesData])
 
   // Filtrar viajes por ID
   const filteredViajes = useMemo(() => {
     if (!searchTermViajes.trim()) return viajesArray
     
     const searchLower = searchTermViajes.toLowerCase().trim()
-    return viajesArray.filter(viaje => 
+    return viajesArray.filter((viaje: ViajeCompleto) => 
       viaje.short_id.toString().includes(searchLower) ||
       viaje.id.toLowerCase().includes(searchLower)
     )
@@ -628,7 +719,7 @@ export const DetalleView = () => {
     if (!viajesArray || viajesArray.length === 0) return null
 
     const { totalEfectivo, totalTarjeta, totalIngresos, totalDistancia, totalBonos, totalPromocion } = viajesArray.reduce(
-      (acc, viaje) => ({
+      (acc, viaje: ViajeCompleto) => ({
         totalEfectivo: acc.totalEfectivo + (viaje.cash ?? 0),
         totalTarjeta: acc.totalTarjeta + (viaje.card ?? 0),
         totalIngresos: acc.totalIngresos + (viaje.price ?? 0),
@@ -694,6 +785,8 @@ export const DetalleView = () => {
     setLiquidaYape('')
     setOtrosGastos('')
     setOtrosGastosDescripcion('')
+    setOdometroInicial('')
+    setOdometroFinal('')
     setShowModalCierre(true)
   }
 
@@ -728,6 +821,8 @@ export const DetalleView = () => {
     setEditLiquidaYape(cierre.liquidaYape.toString())
     setEditOtrosGastos(cierre.otrosGastos.toString())
     setEditOtrosGastosDescripcion(cierre.otrosGastosDescripcion || '')
+    setEditOdometroInicial(cierre.odometroInicial?.toString() || '')
+    setEditOdometroFinal(cierre.odometroFinal?.toString() || '')
   }
 
   const handleIniciarEdicion = () => {
@@ -760,12 +855,44 @@ export const DetalleView = () => {
     return true
   }
 
-  // Helper: Refrescar datos después de un cierre (solo resumen de pagos y turnos pagados)
+  // Helper: Refrescar datos después de un cierre
   const refrescarDatosDespuesCierre = async () => {
+    // Siempre actualizar turnos pagados y resumen de pagos
     await Promise.all([
-      refetchResumenPagos(),
-      refetchTurnosPagados()
+      refetchTurnosPagados(),
+      refetchResumenPagos()
     ])
+  }
+
+  // Función para cerrar turnos de un conductor
+  const handleCerrarTurnos = async (conductor: ConductorResumenPagos) => {
+    if (!conductor.driver_id || !fechaSeleccionada) return
+
+    try {
+      setCerrandoTurnos(true)
+      setConductorParaCerrarTurnos(conductor)
+      
+      const respuesta = await yegoProOpsService.calcularTurnos(conductor.driver_id, fechaSeleccionada)
+      
+      setRespuestaCerrarTurnos(respuesta)
+      setShowModalCerrarTurnos(true)
+      
+      // Refrescar ambos endpoints para que el conductor aparezca en Pendientes de Liquidar
+      await Promise.all([
+        refetchTurnosPagados(),
+        refetchResumenPagos()
+      ])
+    } catch (error: any) {
+      const mensajeError = error.response?.data?.message || 'Error al cerrar turnos. Por favor, intenta nuevamente.'
+      setRespuestaCerrarTurnos({
+        message: mensajeError,
+        driverId: conductor.driver_id,
+        fecha: fechaSeleccionada
+      })
+      setShowModalCerrarTurnos(true)
+    } finally {
+      setCerrandoTurnos(false)
+    }
   }
 
   // Validar formulario de cierre (compartido entre registro y actualización)
@@ -809,6 +936,12 @@ export const DetalleView = () => {
         return
       }
 
+      const editOdometroInicialNum = editOdometroInicial ? parseNumber(editOdometroInicial) : null
+      const editOdometroFinalNum = editOdometroFinal ? parseNumber(editOdometroFinal) : null
+      const editDiferenciaOdometro = (editOdometroInicialNum !== null && editOdometroFinalNum !== null && editOdometroFinalNum > editOdometroInicialNum) 
+        ? editOdometroFinalNum - editOdometroInicialNum 
+        : null
+
       await yegoProOpsService.actualizarCierre({
         id: cierreDetalle.id,
         driverId: selectedDriver.driver_id,
@@ -826,6 +959,9 @@ export const DetalleView = () => {
         totalIngresos: montoBase,
         totalGastos: valoresCalculados.totalGastos,
         resta: valoresCalculados.montoRestante,
+        odometroInicial: editOdometroInicialNum,
+        odometroFinal: editOdometroFinalNum,
+        diferenciaOdometro: editDiferenciaOdometro,
       })
 
       setEditandoCierre(false)
@@ -889,6 +1025,12 @@ export const DetalleView = () => {
     try {
       setRegistrandoCierre(true)
 
+      const odometroInicialNum = odometroInicial ? parseNumber(odometroInicial) : null
+      const odometroFinalNum = odometroFinal ? parseNumber(odometroFinal) : null
+      const diferenciaOdometro = (odometroInicialNum !== null && odometroFinalNum !== null && odometroFinalNum > odometroInicialNum) 
+        ? odometroFinalNum - odometroInicialNum 
+        : null
+
       await yegoProOpsService.registrarCierre({
         driverId: selectedDriver.driver_id,
         userId: user?.id ?? 0,
@@ -905,11 +1047,13 @@ export const DetalleView = () => {
         totalIngresos: selectedConductorResumen?.monto_total_pagar ?? selectedConductorResumen?.monto_total_pagado ?? 0,
         totalGastos: valoresCierre.totalGastos,
         resta: valoresCierre.montoRestante,
+        odometroInicial: odometroInicialNum,
+        odometroFinal: odometroFinalNum,
+        diferenciaOdometro: diferenciaOdometro,
       })
       
       await refrescarDatosDespuesCierre()
       setShowModalCierre(false)
-      showSuccess('Cierre registrado exitosamente')
     } catch (error) {
       showError('Error al registrar el cierre. Por favor, intenta nuevamente.')
     } finally {
@@ -948,23 +1092,55 @@ export const DetalleView = () => {
                   <Input
                     type="date"
                     value={fechaSeleccionada}
-                    onChange={(e) => setFechaSeleccionada(e.target.value)}
-                    className="w-40 h-10 text-sm border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                    onChange={(e) => {
+                      setFechaSeleccionada(e.target.value)
+                    }}
+                    className="w-40 h-10 text-sm border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-0 focus:ring-offset-0 focus:border-gray-300 dark:focus:border-gray-600 focus:outline-none focus-visible:outline-none"
+                    style={{ outline: 'none' }}
                   />
                 </div>
               </div>
             </div>
 
+            {/* Campo de búsqueda por nombre cuando es fecha actual */}
+            {esFechaActual && (
+              <div className="mb-6">
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 relative">
+                    <Input
+                      type="text"
+                      placeholder="Buscar conductor por nombre..."
+                      value={searchTermNombreActual}
+                      onChange={(e) => setSearchTermNombreActual(e.target.value)}
+                      onKeyPress={handleKeyPress}
+                      className="h-10 text-sm border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleBuscarConductor}
+                      disabled={loadingListaConductores || !searchTermNombreActual.trim()}
+                      className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      title="Buscar"
+                    >
+                      <Search className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                    </button>
+                  </div>
+                </div>
+                {listaConductoresData?.mensaje && (
+                  <div className="mt-3 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                    <p className="text-sm text-yellow-800 dark:text-yellow-300">
+                      {listaConductoresData.mensaje}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Vista de Liquidación: Pendientes y Liquidados */}
-            {loadingResumenPagos ? (
+            {(esFechaActual ? loadingListaConductores : loadingResumenPagos) ? (
               <div className="text-center py-12">
                 <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 dark:border-red-400"></div>
                 <p className="mt-4 text-gray-600 dark:text-gray-400">Cargando conductores...</p>
-              </div>
-            ) : (!resumenPagosData?.conductores || resumenPagosData.conductores.length === 0) ? (
-              <div className="text-center py-12">
-                <User className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-500" />
-                <p className="mt-4 text-gray-600 dark:text-gray-400">No se encontraron conductores</p>
               </div>
             ) : (
               <div className="space-y-6">
@@ -1063,17 +1239,39 @@ export const DetalleView = () => {
                                   </div>
                                 </div>
                               </div>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.preventDefault()
-                                  e.stopPropagation()
-                                  handleAbrirModalCierre(conductor)
-                                }}
-                                className="px-4 py-2 rounded-md bg-orange-600 hover:bg-orange-700 text-white font-medium text-sm transition-colors shadow-sm hover:shadow-md flex-shrink-0"
-                              >
-                                Liquidar
-                              </button>
+                              <div className="flex gap-2 flex-shrink-0">
+                                {/* Botón Cerrar Turno - Solo se muestra si no tiene turnos */}
+                                {(conductor.cantidad_turnos === 0 || !conductor.turnos || conductor.turnos.length === 0) && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.preventDefault()
+                                      e.stopPropagation()
+                                      handleCerrarTurnos(conductor)
+                                    }}
+                                    disabled={cerrandoTurnos}
+                                    className="px-4 py-2 rounded-md bg-gray-600 hover:bg-gray-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium text-sm transition-colors shadow-sm hover:shadow-md"
+                                  >
+                                    {cerrandoTurnos && conductorParaCerrarTurnos?.driver_id === conductor.driver_id 
+                                      ? 'Cerrando...' 
+                                      : 'Cerrar Turno'}
+                                  </button>
+                                )}
+                                {/* Botón Liquidar - Solo se muestra si tiene turnos */}
+                                {(conductor.cantidad_turnos > 0 && conductor.turnos && conductor.turnos.length > 0) && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.preventDefault()
+                                      e.stopPropagation()
+                                      handleAbrirModalCierre(conductor)
+                                    }}
+                                    className="px-4 py-2 rounded-md bg-orange-600 hover:bg-orange-700 text-white font-medium text-sm transition-colors shadow-sm hover:shadow-md"
+                                  >
+                                    Liquidar
+                                  </button>
+                                )}
+                              </div>
                             </div>
                           </div>
                         ))
@@ -1391,7 +1589,7 @@ export const DetalleView = () => {
                   <div className="text-center py-8 text-red-600 dark:text-red-400">
                     <p className="text-sm font-medium">Error al cargar los viajes</p>
                   </div>
-                ) : (datosParaMostrar !== undefined && metricas) ? (
+                ) : (viajesData !== undefined && metricas) ? (
                   <>
                     {/* Métricas compactas */}
                     {metricas && (
@@ -1949,6 +2147,69 @@ export const DetalleView = () => {
               </div>
             </div>
 
+            {/* Sección de Odómetro */}
+            <div className={SECTION_CARD_CLASS}>
+              <h3 className="text-xs font-semibold text-gray-900 dark:text-gray-100 mb-2 pb-1 border-b border-gray-200 dark:border-gray-700 flex items-center gap-1.5">
+                <Car className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                Odómetro
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                {/* Odómetro Inicial */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Odómetro Inicial (km)
+                  </label>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    value={odometroInicial}
+                    onChange={(e) => {
+                      const value = validarNumeroPositivo(e.target.value)
+                      setOdometroInicial(value)
+                    }}
+                    placeholder="0"
+                    className="w-full h-8 text-xs"
+                  />
+                </div>
+
+                {/* Odómetro Final */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Odómetro Final (km)
+                  </label>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    value={odometroFinal}
+                    onChange={(e) => {
+                      const value = validarNumeroPositivo(e.target.value)
+                      setOdometroFinal(value)
+                    }}
+                    placeholder="0"
+                    className="w-full h-8 text-xs"
+                  />
+                </div>
+
+                {/* Diferencia de Odómetro (calculada automáticamente) */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Diferencia (km)
+                  </label>
+                  <Input
+                    type="text"
+                    value={(() => {
+                      const inicial = parseNumber(odometroInicial)
+                      const final = parseNumber(odometroFinal)
+                      const diferencia = final - inicial
+                      return diferencia > 0 ? diferencia.toFixed(0) : '0'
+                    })()}
+                    disabled
+                    className="w-full h-8 text-xs bg-gray-100 dark:bg-gray-800"
+                  />
+                </div>
+              </div>
+            </div>
+
             {/* Cálculo dinámico intuitivo - Siempre visible */}
             {valoresCierre ? (
               <div className={SECTION_CARD_CLASS}>
@@ -2352,6 +2613,82 @@ export const DetalleView = () => {
                 </div>
               </div>
 
+              {/* Sección de Odómetro */}
+              <div className={SECTION_CARD_CLASS}>
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 pb-1.5 border-b border-gray-200 dark:border-gray-700 flex items-center gap-1.5">
+                  <Car className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                  Odómetro
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                      Odómetro Inicial (km)
+                    </label>
+                    {editandoCierre ? (
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        value={editOdometroInicial}
+                        onChange={(e) => {
+                          const value = validarNumeroPositivo(e.target.value)
+                          setEditOdometroInicial(value)
+                        }}
+                        placeholder="0"
+                        className="w-full h-9 text-sm"
+                      />
+                    ) : (
+                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                        {cierreDetalle.odometroInicial?.toLocaleString() || '-'}
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                      Odómetro Final (km)
+                    </label>
+                    {editandoCierre ? (
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        value={editOdometroFinal}
+                        onChange={(e) => {
+                          const value = validarNumeroPositivo(e.target.value)
+                          setEditOdometroFinal(value)
+                        }}
+                        placeholder="0"
+                        className="w-full h-9 text-sm"
+                      />
+                    ) : (
+                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                        {cierreDetalle.odometroFinal?.toLocaleString() || '-'}
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                      Diferencia (km)
+                    </label>
+                    {editandoCierre ? (
+                      <Input
+                        type="text"
+                        value={(() => {
+                          const inicial = parseNumber(editOdometroInicial)
+                          const final = parseNumber(editOdometroFinal)
+                          const diferencia = final - inicial
+                          return diferencia > 0 ? diferencia.toFixed(0) : '0'
+                        })()}
+                        disabled
+                        className="w-full h-9 text-sm bg-gray-100 dark:bg-gray-800"
+                      />
+                    ) : (
+                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                        {cierreDetalle.diferenciaOdometro?.toLocaleString() || '-'}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               {/* Resumen */}
               <div className={SECTION_CARD_CLASS}>
                 <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">Resumen</h4>
@@ -2662,6 +2999,26 @@ export const DetalleView = () => {
                                 </span>
                               </div>
                             )}
+
+                            {conductorParaTurnos.cantidad_viajes !== undefined && (
+                              <div className="flex items-center gap-1.5">
+                                <Car className="w-3 h-3 text-gray-400" />
+                                <span className="text-gray-500 dark:text-gray-400">Cantidad Viajes:</span>
+                                <span className="font-medium text-gray-900 dark:text-gray-100">
+                                  {conductorParaTurnos.cantidad_viajes}
+                                </span>
+                              </div>
+                            )}
+
+                            {conductorParaTurnos.viajes_por_hora !== undefined && (
+                              <div className="flex items-center gap-1.5">
+                                <TrendingUp className="w-3 h-3 text-gray-400" />
+                                <span className="text-gray-500 dark:text-gray-400">Viajes por Hora:</span>
+                                <span className="font-medium text-gray-900 dark:text-gray-100">
+                                  {conductorParaTurnos.viajes_por_hora.toFixed(1)}
+                                </span>
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -2691,6 +3048,91 @@ export const DetalleView = () => {
               className="px-4 h-8 text-xs"
             >
               Cerrar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Respuesta de Cerrar Turnos */}
+      <Dialog open={showModalCerrarTurnos} onOpenChange={setShowModalCerrarTurnos}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-gray-900 dark:text-gray-100">
+              {respuestaCerrarTurnos?.message?.includes('Error') || respuestaCerrarTurnos?.message?.includes('error') 
+                ? 'Error al Cerrar Turnos' 
+                : 'Turnos Cerrados Exitosamente'}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="mt-4 space-y-4">
+            {respuestaCerrarTurnos && (
+              <>
+                <div className={`p-4 rounded-lg ${
+                  respuestaCerrarTurnos.message?.includes('Error') || respuestaCerrarTurnos.message?.includes('error')
+                    ? 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'
+                    : 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
+                }`}>
+                  <div className="flex items-start gap-3">
+                    {respuestaCerrarTurnos.message?.includes('Error') || respuestaCerrarTurnos.message?.includes('error') ? (
+                      <AlertCircle className="w-6 h-6 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                    ) : (
+                      <CheckCircle2 className="w-6 h-6 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+                    )}
+                    <div className="flex-1">
+                      <p className={`text-sm font-medium ${
+                        respuestaCerrarTurnos.message?.includes('Error') || respuestaCerrarTurnos.message?.includes('error')
+                          ? 'text-red-800 dark:text-red-300'
+                          : 'text-green-800 dark:text-green-300'
+                      }`}>
+                        {respuestaCerrarTurnos.message}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {respuestaCerrarTurnos.cantidadTurnos !== undefined && (
+                  <div className="p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-600 dark:text-gray-400">Cantidad de Turnos:</span>
+                      <span className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                        {respuestaCerrarTurnos.cantidadTurnos} turno{respuestaCerrarTurnos.cantidadTurnos !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600 dark:text-gray-400">Conductor:</span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                      {conductorParaCerrarTurnos?.nombre || respuestaCerrarTurnos.driverId}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600 dark:text-gray-400">Fecha:</span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                      {formatearFechaLegible(respuestaCerrarTurnos.fecha)}
+                    </span>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="flex justify-end mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <Button
+              onClick={() => {
+                setShowModalCerrarTurnos(false)
+                setRespuestaCerrarTurnos(null)
+                setConductorParaCerrarTurnos(null)
+              }}
+              className={`px-6 ${
+                respuestaCerrarTurnos?.message?.includes('Error') || respuestaCerrarTurnos?.message?.includes('error')
+                  ? 'bg-red-600 hover:bg-red-700 text-white'
+                  : 'bg-green-600 hover:bg-green-700 text-white'
+              }`}
+            >
+              Aceptar
             </Button>
           </div>
         </DialogContent>

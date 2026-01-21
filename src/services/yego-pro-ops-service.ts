@@ -189,6 +189,8 @@ export interface ConductorResumenPagos {
   monto_total_pagar: number  // Campo que viene del backend
   monto_total_pagado?: number  // Mantener por compatibilidad
   cantidad_turnos: number
+  viajes_por_hora?: number
+  cantidad_viajes?: number
   turnos: TurnoResumen[]
 }
 
@@ -224,6 +226,24 @@ export interface TurnosPagadosResponse {
 }
 
 /**
+ * Conductor simple (para lista de conductores)
+ */
+export interface ConductorSimple {
+  driverId: string
+  nombre: string
+  telefono: string
+  avatarUrl: string
+}
+
+/**
+ * Respuesta de lista de conductores
+ */
+export interface ListaConductoresResponse {
+  conductores: ConductorSimple[]
+  mensaje?: string
+}
+
+/**
  * Registro de cierre de día
  */
 export interface RegistroCierre {
@@ -249,6 +269,9 @@ export interface RegistroCierre {
   resta: number
   calculatedShiftIds?: string // Mantener por compatibilidad (legacy)
   tiposTurno?: ('diurno' | 'nocturno')[] // Nuevo campo: Array de tipos de turno
+  odometroInicial?: number | null
+  odometroFinal?: number | null
+  diferenciaOdometro?: number | null
 }
 
 /**
@@ -430,9 +453,17 @@ export const yegoProOpsService = {
     totalIngresos: number
     totalGastos: number
     resta: number
+    odometroInicial?: number | null
+    odometroFinal?: number | null
+    diferenciaOdometro?: number | null
   }): Promise<RegistroCierre> => {
     try {
-      const response = await api.put<RegistroCierre>('/pro-ops/driver/cierre', data)
+      const response = await api.put<RegistroCierre>('/pro-ops/driver/cierre', {
+        ...data,
+        odometroInicial: data.odometroInicial ?? null,
+        odometroFinal: data.odometroFinal ?? null,
+        diferenciaOdometro: data.diferenciaOdometro ?? null,
+      })
       return response.data
     } catch (error) {
       console.error('❌ [yegoProOpsService] Error actualizando cierre:', error)
@@ -461,6 +492,9 @@ export const yegoProOpsService = {
     totalIngresos: number
     totalGastos: number
     resta: number
+    odometroInicial?: number | null
+    odometroFinal?: number | null
+    diferenciaOdometro?: number | null
   }): Promise<void> => {
     try {
       await api.post('/pro-ops/driver/registrar-cierre', {
@@ -479,6 +513,9 @@ export const yegoProOpsService = {
         totalIngresos: data.totalIngresos,
         totalGastos: data.totalGastos,
         resta: data.resta,
+        odometroInicial: data.odometroInicial ?? null,
+        odometroFinal: data.odometroFinal ?? null,
+        diferenciaOdometro: data.diferenciaOdometro ?? null,
       })
     } catch (error) {
       console.error('❌ [yegoProOpsService] Error registrando cierre:', error)
@@ -491,9 +528,13 @@ export const yegoProOpsService = {
    * @param fecha Fecha en formato YYYY-MM-DD (requerido)
    * @returns Resumen de conductores con sus turnos y montos a pagar
    */
-  obtenerResumenPagos: async (fecha: string): Promise<ResumenPagosResponse> => {
+  obtenerResumenPagos: async (fecha?: string | null): Promise<ResumenPagosResponse> => {
+    const params: { fecha?: string } = {}
+    if (fecha) {
+      params.fecha = fecha
+    }
     const response = await api.get<ResumenPagosResponse>('/pro-ops/drivers/resumen-pagos', { 
-      params: { fecha } 
+      params 
     })
     return response.data
   },
@@ -507,6 +548,59 @@ export const yegoProOpsService = {
     const params = fecha ? { fecha } : {}
     const response = await api.get<TurnosPagadosResponse>('/pro-ops/drivers/turnos-pagados', { 
       params 
+    })
+    return response.data
+  },
+
+  /**
+   * Obtener lista simple de conductores
+   * @param nombre Nombre del conductor para buscar (opcional)
+   * @param fecha Fecha en formato YYYY-MM-DD (opcional)
+   * @returns Lista de conductores con información básica
+   */
+  obtenerListaConductores: async (nombre?: string, fecha?: string): Promise<ListaConductoresResponse> => {
+    const params: { nombre?: string; fecha?: string } = {}
+    if (nombre) {
+      params.nombre = nombre
+    }
+    if (fecha) {
+      params.fecha = fecha
+    }
+    
+    try {
+      const response = await api.get<ListaConductoresResponse>('/pro-ops/drivers', { params })
+      return response.data
+    } catch (error: any) {
+      // Si es error 400, devolver la respuesta con el mensaje
+      if (error.response?.status === 400 && error.response?.data) {
+        return error.response.data
+      }
+      throw error
+    }
+  },
+
+  /**
+   * Calcular turnos para un conductor en una fecha específica
+   * @param driverId ID del conductor
+   * @param fecha Fecha en formato YYYY-MM-DD
+   * @returns Respuesta con información de los turnos calculados
+   */
+  calcularTurnos: async (driverId: string, fecha: string): Promise<{
+    message: string
+    driverId: string
+    fecha: string
+    cantidadTurnos?: number
+  }> => {
+    const response = await api.get<{
+      message: string
+      driverId: string
+      fecha: string
+      cantidadTurnos?: number
+    }>('/pro-ops/driver/calcular-turnos', {
+      params: {
+        driverId,
+        fecha
+      }
     })
     return response.data
   },
