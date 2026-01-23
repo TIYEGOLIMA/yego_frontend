@@ -298,7 +298,7 @@ class SocketService {
       return;
     }
 
-    // Leer token
+    // Leer token ANTES de intentar conectar
     let token: string | null = null;
     try {
       const authStorage = localStorage.getItem('auth-storage');
@@ -310,8 +310,10 @@ class SocketService {
       token = localStorage.getItem('token');
     }
     
+    // PROTECCIÓN CRÍTICA #3: NO intentar conectar sin token
     if (!token) {
       this.updateStatus('disconnected');
+      this.stopReconnect(); // Detener reconexiones si no hay token
       return;
     }
 
@@ -338,18 +340,27 @@ class SocketService {
       const wsUrl = getWebSocketUrl(token);
       
       if (isProduction) {
+        // WebSocket nativo: el token debe ir en la URL Y en los headers
+        // El backend JwtRequestFilter busca el token en el header Authorization
+        // IMPORTANTE: Con WebSocket nativo, el token en la URL es suficiente para el handshake HTTP
+        // Los connectHeaders se envían en el handshake STOMP después de la conexión WebSocket
         clientConfig.brokerURL = wsUrl;
+        clientConfig.connectHeaders = {
+          'Authorization': `Bearer ${token}`
+        };
       } else {
+        // Desarrollo: SockJS
         clientConfig.webSocketFactory = () => {
           return new SockJS(wsUrl, undefined, {
             transports: ['websocket', 'xhr-streaming', 'xhr-polling']
           });
         };
-      }
-      Object.assign(clientConfig, {
-        connectHeaders: {
+        clientConfig.connectHeaders = {
           'Authorization': `Bearer ${token}`
-        },
+        };
+      }
+      
+      Object.assign(clientConfig, {
         reconnectDelay: 0,
         heartbeatIncoming: 0,
         heartbeatOutgoing: 0,
