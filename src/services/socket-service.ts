@@ -5,8 +5,24 @@
 import SockJS from 'sockjs-client'
 import { Client, IMessage } from '@stomp/stompjs'
 
-// URL del servidor de WebSockets desde variables de entorno
+const WS_URL = import.meta.env.VITE_WS_URL;
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3030';
+
+const getSocketBaseUrl = () => {
+  if (WS_URL && WS_URL.startsWith('wss://')) {
+    return WS_URL.replace(/^wss:\/\//, 'https://').replace(/\/ws.*$/, '');
+  }
+  if (WS_URL && WS_URL.startsWith('ws://')) {
+    return WS_URL.replace(/^ws:\/\//, 'http://').replace(/\/ws.*$/, '');
+  }
+  const isProduction = import.meta.env.VITE_DEV_MODE === 'false' || 
+                       import.meta.env.MODE === 'production' ||
+                       SOCKET_URL.includes('https://');
+  if (isProduction && SOCKET_URL.startsWith('http://')) {
+    return SOCKET_URL.replace(/^http:\/\//, 'https://');
+  }
+  return SOCKET_URL;
+};
 
 class SocketService {
   private static instance: SocketService;
@@ -16,11 +32,14 @@ class SocketService {
   private statusListeners: ((status: string) => void)[] = [];
   private reconnectInterval: NodeJS.Timeout | null = null;
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 10;
-  private reconnectDelay = 5000; // 5 segundos (aumentado para reducir carga)
-  private isConnecting = false; // Flag para evitar múltiples conexiones simultáneas
-  private maxReconnectAttemptsReached = false; // Flag para indicar que se excedieron los intentos
-  private reconnectExceededListeners: (() => void)[] = []; // Listeners para cuando se exceden los intentos
+  private maxReconnectAttempts = 5;
+  private baseReconnectDelay = 2000;
+  private currentReconnectDelay = 2000;
+  private isConnecting = false;
+  private maxReconnectAttemptsReached = false;
+  private reconnectExceededListeners: (() => void)[] = [];
+  private connectionLimitReached = false;
+  private connectionLimitDelay = 30000;
 
   private constructor() {}
 
@@ -28,46 +47,78 @@ class SocketService {
     this.connectionStatus = status;
     this.statusListeners.forEach(listener => listener(status));
     
-    // Si se conecta exitosamente, resetear intentos de reconexión
     if (status === 'connected') {
       this.reconnectAttempts = 0;
       this.maxReconnectAttemptsReached = false;
+      this.currentReconnectDelay = this.baseReconnectDelay;
+      this.connectionLimitReached = false;
       this.stopReconnect();
     }
   }
 
+  private calculateReconnectDelay(): number {
+    const exponentialDelay = this.baseReconnectDelay * Math.pow(2, this.reconnectAttempts);
+    const maxDelay = 60000;
+    const delay = Math.min(exponentialDelay, maxDelay);
+    
+    if (this.connectionLimitReached) {
+      return delay + this.connectionLimitDelay;
+    }
+    
+    return delay;
+  }
+
+  private detectConnectionLimit(errorMessage: string): boolean {
+    const lowerMessage = errorMessage.toLowerCase();
+    return lowerMessage.includes('límite de conexiones') ||
+           lowerMessage.includes('limite de conexiones') ||
+           lowerMessage.includes('connection limit') ||
+           lowerMessage.includes('too many connections') ||
+           lowerMessage.includes('too many open files');
+  }
+
+  private handleConnectionError(errorMessage: string = '') {
+    this.isConnecting = false;
+    
+    if (errorMessage && this.detectConnectionLimit(errorMessage)) {
+      console.warn('⚠️ [SocketService] Límite de conexiones alcanzado. Esperando más tiempo antes de reconectar...');
+      this.connectionLimitReached = true;
+      this.reconnectAttempts = Math.max(0, this.reconnectAttempts - 1);
+    }
+    
+    this.updateStatus('error');
+    
+    if (this.reconnectAttempts < this.maxReconnectAttempts && !this.reconnectInterval) {
+      this.startReconnect();
+    }
+  }
+
   private startReconnect() {
-    // ✅ CRÍTICO: Detener cualquier intervalo existente primero
     this.stopReconnect();
     
-    // Si ya se excedieron los intentos, no intentar más
     if (this.maxReconnectAttemptsReached) {
       return;
     }
 
-    // ✅ CRÍTICO: Verificar si ya está conectado antes de iniciar reconexión
     if (this.connectionStatus === 'connected') {
       return;
     }
 
-    // ✅ CRÍTICO: Verificar si ya está intentando conectar
     if (this.isConnecting) {
       return;
     }
 
-    console.log('🔄 [SocketService] Iniciando proceso de reconexión automática...');
+    this.currentReconnectDelay = this.calculateReconnectDelay();
+    console.log(`🔄 [SocketService] Iniciando reconexión (delay: ${this.currentReconnectDelay}ms)`);
     
-    this.reconnectInterval = setInterval(() => {
-      // ✅ Verificar estado antes de cada intento
+    const attemptReconnect = () => {
       if (this.connectionStatus === 'connected') {
-        console.log('✅ [SocketService] Conectado exitosamente, deteniendo reconexión');
         this.stopReconnect();
         return;
       }
 
-      // ✅ Verificar si ya está intentando conectar
       if (this.isConnecting) {
-        console.log('⏳ [SocketService] Ya hay un intento de conexión en progreso, esperando...');
+        this.reconnectInterval = setTimeout(attemptReconnect, this.currentReconnectDelay);
         return;
       }
 
@@ -79,10 +130,7 @@ class SocketService {
         
         console.warn(`⚠️ [SocketService] Se excedieron los ${this.maxReconnectAttempts} intentos de reconexión. El servidor puede haber sido actualizado.`);
         
-        // Notificar a los listeners que se excedieron los intentos (solo log)
         this.reconnectExceededListeners.forEach(listener => listener());
-        
-        // Intentar refrescar el token y reconectar una vez más después de un delay
         console.log('🔄 [SocketService] Intentando refrescar token y reconectar en 10 segundos...');
         setTimeout(() => {
           this.attemptTokenRefreshAndReconnect();
@@ -92,9 +140,16 @@ class SocketService {
       }
 
       this.reconnectAttempts++;
-      console.log(`🔄 [SocketService] Intento de reconexión ${this.reconnectAttempts}/${this.maxReconnectAttempts}`);
+      const nextDelay = this.calculateReconnectDelay();
+      console.log(`🔄 [SocketService] Intento ${this.reconnectAttempts}/${this.maxReconnectAttempts} (delay: ${nextDelay}ms)`);
+      
       this.connect(`reconnect-${this.reconnectAttempts}`);
-    }, this.reconnectDelay);
+      this.currentReconnectDelay = nextDelay;
+      this.reconnectInterval = setTimeout(attemptReconnect, this.currentReconnectDelay);
+    };
+    
+    // Iniciar primer intento después del delay calculado
+    this.reconnectInterval = setTimeout(attemptReconnect, this.currentReconnectDelay);
   }
   
   /**
@@ -162,9 +217,9 @@ class SocketService {
 
   private stopReconnect() {
     if (this.reconnectInterval) {
-      clearInterval(this.reconnectInterval);
+      clearTimeout(this.reconnectInterval);
+      clearInterval(this.reconnectInterval as any);
       this.reconnectInterval = null;
-      console.log('🛑 [SocketService] Intervalo de reconexión detenido');
     }
   }
 
@@ -208,6 +263,8 @@ class SocketService {
   public forceReconnect() {
     this.reconnectAttempts = 0;
     this.maxReconnectAttemptsReached = false;
+    this.currentReconnectDelay = this.baseReconnectDelay;
+    this.connectionLimitReached = false;
     this.stopReconnect();
     
     // Leer token actualizado
@@ -250,57 +307,36 @@ class SocketService {
       return;
     }
 
-    // ✅ CRÍTICO: Verificar si ya está conectado ANTES de intentar conectar
     if (this.stompClient && this.stompClient.connected) {
-      console.log('✅ [SocketService] Ya está conectado, ignorando llamada a connect()');
       return;
     }
 
-    // ✅ CRÍTICO: Evitar múltiples intentos de conexión simultáneos
     if (this.isConnecting) {
-      console.log('⚠️ [SocketService] Ya hay una conexión en progreso, ignorando llamada duplicada');
       return;
     }
 
-    // ✅ CRÍTICO: Si hay un cliente existente pero desconectado, cerrarlo primero
     if (this.stompClient && !this.stompClient.connected) {
-      console.log('🧹 [SocketService] Cerrando conexión anterior antes de crear nueva');
       try {
-        // Detener reconexión automática antes de cerrar
         this.stopReconnect();
-        // Cerrar el cliente STOMP
         this.stompClient.deactivate();
       } catch (err) {
-        // Ignorar errores al cerrar
         console.warn('⚠️ [SocketService] Error al cerrar conexión anterior:', err);
       }
-      // Limpiar referencia inmediatamente
       this.stompClient = null;
-      // Esperar un momento para que el servidor cierre la conexión (evita "Too many open files")
       await new Promise(resolve => setTimeout(resolve, 300));
     }
 
     this.isConnecting = true;
     
     if (!this.stompClient) {
-      // En producción: usar WebSocket nativo (sin SockJS)
-      // En desarrollo: usar SockJS con fallback a polling
-      const clientConfig: any = {
-      };
+      const clientConfig: any = {};
+      const socketBaseUrl = getSocketBaseUrl();
+      const sockJsUrl = `${socketBaseUrl}/ws?token=${encodeURIComponent(token)}`;
       
-      // Usar SockJS tanto en producción como desarrollo
-      // ✅ OPTIMIZADO: Usar solo 'websocket' para evitar múltiples conexiones de fallback
-      // Enviar token como query parameter para que el backend lo lea en la conexión inicial
-      // También se envía en connectHeaders para el handshake STOMP
-      const sockJsUrl = `${SOCKET_URL}/ws?token=${encodeURIComponent(token)}`;
       clientConfig.webSocketFactory = () => {
-        // ✅ CRÍTICO: Usar solo 'websocket' para evitar múltiples conexiones simultáneas
-        // Si falla WebSocket, SockJS intentará automáticamente otros transportes
-        // pero solo si WebSocket falla completamente
-        const socket = new SockJS(sockJsUrl, undefined, {
-          transports: ['websocket'] // Solo WebSocket para evitar múltiples conexiones
+        return new SockJS(sockJsUrl, undefined, {
+          transports: ['websocket']
         });
-        return socket;
       };
       
       // Configuración común
@@ -308,10 +344,9 @@ class SocketService {
         connectHeaders: {
           'Authorization': `Bearer ${token}`
         },
-        // Deshabilitar reconexión automática de STOMP - usamos nuestro propio sistema
-        reconnectDelay: 0, // 0 = deshabilitado
-        heartbeatIncoming: 0, // Deshabilitar heartbeat entrante
-        heartbeatOutgoing: 0, // Deshabilitar heartbeat saliente
+        reconnectDelay: 0,
+        heartbeatIncoming: 0,
+        heartbeatOutgoing: 0,
         onConnect: () => {
           this.isConnecting = false;
           this.updateStatus('connected');
@@ -337,26 +372,17 @@ class SocketService {
           // Suscribirse a topics premium para SystemNotificationsService
           this.subscribeToPremiumTopics();
         },
-        onStompError: () => {
-          this.isConnecting = false;
-          this.updateStatus('error');
-          // ✅ Solo reconectar si no hemos excedido el máximo Y no hay un intervalo activo
-          if (this.reconnectAttempts < this.maxReconnectAttempts && !this.reconnectInterval) {
-            this.startReconnect();
-          }
+        onStompError: (frame: any) => {
+          const errorMessage = frame?.headers?.['message'] || frame?.body || '';
+          this.handleConnectionError(errorMessage);
         },
-        onWebSocketError: () => {
-          this.isConnecting = false;
-          this.updateStatus('error');
-          // ✅ Solo reconectar si no hemos excedido el máximo Y no hay un intervalo activo
-          if (this.reconnectAttempts < this.maxReconnectAttempts && !this.reconnectInterval) {
-            this.startReconnect();
-          }
+        onWebSocketError: (event: any) => {
+          const errorMessage = event?.message || event?.type || '';
+          this.handleConnectionError(errorMessage);
         },
         onDisconnect: () => {
           this.isConnecting = false;
           this.updateStatus('disconnected');
-          // ✅ Solo reconectar si no hemos excedido el máximo Y no hay un intervalo activo
           if (this.reconnectAttempts < this.maxReconnectAttempts && !this.reconnectInterval) {
             this.startReconnect();
           }
@@ -364,23 +390,11 @@ class SocketService {
       });
       
       this.stompClient = new Client(clientConfig);
-      
-      // Activar el cliente STOMP
-      console.log('🔄 [SocketService] Activando cliente STOMP...');
       this.stompClient.activate();
     } else {
-      // Si ya existe el cliente pero no está conectado, reactivarlo
-      if (!this.stompClient.connected) {
-        // ✅ Verificar que no esté ya intentando conectar
-        if (!this.isConnecting) {
-          console.log('🔄 [SocketService] Reactivando cliente STOMP existente');
-          this.stompClient.activate();
-        } else {
-          console.log('⏳ [SocketService] Ya hay una conexión en progreso, ignorando reactivación');
-          this.isConnecting = false;
-        }
+      if (!this.stompClient.connected && !this.isConnecting) {
+        this.stompClient.activate();
       } else {
-        console.log('✅ [SocketService] Cliente STOMP ya está conectado');
         this.isConnecting = false;
       }
     }
