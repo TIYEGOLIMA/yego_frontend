@@ -89,8 +89,10 @@ class SocketService {
   }
 
   private startReconnect() {
+    // PROTECCIÓN CRÍTICA: Detener cualquier reconexión anterior
     this.stopReconnect();
     
+    // PROTECCIÓN CRÍTICA: Verificar múltiples condiciones
     if (this.maxReconnectAttemptsReached) {
       return;
     }
@@ -103,9 +105,15 @@ class SocketService {
       return;
     }
 
+    // PROTECCIÓN CRÍTICA: Verificar que no haya cliente conectado
+    if (this.stompClient && this.stompClient.connected) {
+      return;
+    }
+
     this.currentReconnectDelay = this.calculateReconnectDelay();
     
     const attemptReconnect = () => {
+      // PROTECCIÓN: Verificar estado antes de cada intento
       if (this.connectionStatus === 'connected') {
         this.stopReconnect();
         return;
@@ -113,6 +121,12 @@ class SocketService {
 
       if (this.isConnecting) {
         this.reconnectInterval = setTimeout(attemptReconnect, this.currentReconnectDelay);
+        return;
+      }
+
+      // PROTECCIÓN: Verificar que no haya cliente conectado
+      if (this.stompClient && this.stompClient.connected) {
+        this.stopReconnect();
         return;
       }
 
@@ -274,7 +288,17 @@ class SocketService {
    * @param sessionId ID de sesión para identificar al cliente
    */
   public async connect(_sessionId: string) {
-    // Leer token desde auth-storage (Zustand persist)
+    // PROTECCIÓN CRÍTICA #1: Evitar múltiples conexiones simultáneas
+    if (this.isConnecting) {
+      return;
+    }
+
+    // PROTECCIÓN CRÍTICA #2: Si ya está conectado, no hacer nada
+    if (this.stompClient && this.stompClient.connected) {
+      return;
+    }
+
+    // Leer token
     let token: string | null = null;
     try {
       const authStorage = localStorage.getItem('auth-storage');
@@ -283,7 +307,6 @@ class SocketService {
         token = parsed?.state?.token || null;
       }
     } catch (err) {
-      // Fallback: intentar leer desde token directo (compatibilidad temporal)
       token = localStorage.getItem('token');
     }
     
@@ -292,25 +315,22 @@ class SocketService {
       return;
     }
 
-    if (this.stompClient && this.stompClient.connected) {
-      return;
-    }
-
-    if (this.isConnecting) {
-      return;
-    }
-
-    if (this.stompClient && !this.stompClient.connected) {
+    // PROTECCIÓN CRÍTICA #3: Cerrar conexión anterior ANTES de crear nueva
+    if (this.stompClient) {
       try {
         this.stopReconnect();
-        this.stompClient.deactivate();
+        if (this.stompClient.connected) {
+          this.stompClient.deactivate();
+        }
+        // Esperar a que se cierre completamente (evita "Too many open files")
+        await new Promise(resolve => setTimeout(resolve, 500));
       } catch (err) {
-        console.warn('⚠️ [SocketService] Error al cerrar conexión anterior:', err);
+        // Silencioso
       }
       this.stompClient = null;
-      await new Promise(resolve => setTimeout(resolve, 300));
     }
 
+    // PROTECCIÓN CRÍTICA #4: Marcar como conectando ANTES de crear cliente
     this.isConnecting = true;
     
     if (!this.stompClient) {
@@ -334,6 +354,10 @@ class SocketService {
         heartbeatIncoming: 0,
         heartbeatOutgoing: 0,
         onConnect: () => {
+          // PROTECCIÓN: Solo procesar si realmente se conectó
+          if (!this.stompClient || !this.stompClient.connected) {
+            return;
+          }
           this.isConnecting = false;
           this.updateStatus('connected');
           
@@ -346,17 +370,20 @@ class SocketService {
           this.subscribeToPremiumTopics();
         },
         onStompError: (frame: any) => {
+          this.isConnecting = false;
           const errorMessage = frame?.headers?.['message'] || frame?.body || '';
           this.handleConnectionError(errorMessage);
         },
         onWebSocketError: (event: any) => {
+          this.isConnecting = false;
           const errorMessage = event?.message || event?.type || '';
           this.handleConnectionError(errorMessage);
         },
         onDisconnect: () => {
           this.isConnecting = false;
           this.updateStatus('disconnected');
-          if (this.reconnectAttempts < this.maxReconnectAttempts && !this.reconnectInterval) {
+          // PROTECCIÓN: Solo reconectar si no hay una conexión activa
+          if (this.reconnectAttempts < this.maxReconnectAttempts && !this.reconnectInterval && !this.isConnecting) {
             this.startReconnect();
           }
         }
@@ -364,12 +391,6 @@ class SocketService {
       
       this.stompClient = new Client(clientConfig);
       this.stompClient.activate();
-    } else {
-      if (!this.stompClient.connected && !this.isConnecting) {
-        this.stompClient.activate();
-      } else {
-        this.isConnecting = false;
-      }
     }
   }
 
