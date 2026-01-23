@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from './store/auth-store'
@@ -192,13 +192,39 @@ function App() {
     authService.cleanupCorruptedToken();
   }, []);
 
+  // ✅ OPTIMIZADO: Conectar WebSocket solo cuando cambia el token o el ID del usuario
+  // Usar useRef para evitar reconexiones innecesarias
+  const lastUserIdRef = useRef<number | null>(null);
+  const lastTokenRef = useRef<string | null>(null);
+  
   useEffect(() => {
-    if (token && user) {
-      SocketService.connect(user.id + '-' + user.username);
+    const currentUserId = user?.id || null;
+    const currentToken = token || null;
+    
+    // Solo conectar si cambió el usuario o el token
+    if (currentToken && currentUserId && user?.username) {
+      if (lastUserIdRef.current !== currentUserId || lastTokenRef.current !== currentToken) {
+        // Verificar estado actual antes de conectar
+        const currentStatus = SocketService.getConnectionStatus();
+        if (currentStatus !== 'connected') {
+          console.log(`🔄 [App] Conectando WebSocket para usuario ${currentUserId}`);
+          SocketService.connect(`${currentUserId}-${user.username}`);
+        } else {
+          console.log('✅ [App] WebSocket ya está conectado, no se reconecta');
+        }
+        lastUserIdRef.current = currentUserId;
+        lastTokenRef.current = currentToken;
+      }
     } else {
-      SocketService.disconnect();
+      // Si no hay token o usuario, desconectar
+      if (lastUserIdRef.current !== null || lastTokenRef.current !== null) {
+        console.log('🔌 [App] Desconectando WebSocket (sin token/usuario)');
+        SocketService.disconnect();
+        lastUserIdRef.current = null;
+        lastTokenRef.current = null;
+      }
     }
-  }, [token, user]);
+  }, [token, user?.id, user?.username]);
 
   // Limpiar conexiones WebSocket al cerrar la pestaña o cuando la página pierde visibilidad
   useEffect(() => {
@@ -215,9 +241,13 @@ function App() {
           }
         }, 5 * 60 * 1000); // 5 minutos
       } else {
-        // Si la pestaña vuelve a ser visible y hay token, reconectar
-        if (token && user) {
-          SocketService.connect(user.id + '-' + user.username);
+        // ✅ OPTIMIZADO: Solo reconectar si no está ya conectado
+        if (token && user?.id && user?.username) {
+          const currentStatus = SocketService.getConnectionStatus();
+          if (currentStatus !== 'connected') {
+            console.log('🔄 [App] Reconectando WebSocket al volver a ser visible');
+            SocketService.connect(`${user.id}-${user.username}`);
+          }
         }
       }
     };

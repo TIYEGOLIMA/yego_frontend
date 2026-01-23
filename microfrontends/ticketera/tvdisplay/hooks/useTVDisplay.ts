@@ -74,11 +74,21 @@ export const useTVDisplay = () => {
   }, [])
 
   // 🎯 CONECTAR WEBSOCKET AUTOMÁTICAMENTE AL MONTAR EL COMPONENTE
+  // ✅ OPTIMIZADO: Solo conectar si no está ya conectado
   useEffect(() => {
     // Importar SocketService y conectar inmediatamente
     import('../../../../src/services/socket-service').then((module) => {
       const socketService = module.default
+      
+      // ✅ Verificar estado antes de conectar
+      const currentStatus = socketService.getConnectionStatus();
+      if (currentStatus === 'connected') {
+        console.log('✅ [TVDisplay] WebSocket ya está conectado, no se reconecta');
+        return;
+      }
+      
       const sessionId = `tvdisplay-${Date.now()}`
+      console.log('🔄 [TVDisplay] Conectando WebSocket...');
       socketService.connect(sessionId)
     }).catch(error => {
       console.error('❌ [TVDisplay] Error importando SocketService:', error)
@@ -103,11 +113,23 @@ export const useTVDisplay = () => {
       isReconnecting = true
       import('../../../../src/services/socket-service').then((module) => {
         const socketService = module.default
-        // Verificar si ya está conectado antes de intentar reconectar
-        if (socketService.getConnectionStatus() === 'connected') {
+        
+        // ✅ Verificar si ya está conectado ANTES de intentar reconectar
+        const currentStatus = socketService.getConnectionStatus();
+        if (currentStatus === 'connected') {
+          console.log('✅ [TVDisplay] WebSocket ya está conectado, cancelando reconexión');
           isReconnecting = false
           return
         }
+        
+        // ✅ Verificar si ya está intentando conectar
+        if (currentStatus === 'connecting') {
+          console.log('⏳ [TVDisplay] WebSocket ya está conectando, esperando...');
+          isReconnecting = false
+          return
+        }
+        
+        console.log('🔄 [TVDisplay] Intentando reconectar WebSocket...');
         const sessionId = `tvdisplay-reconnect-${Date.now()}`
         socketService.connect(sessionId)
         setTimeout(() => {
