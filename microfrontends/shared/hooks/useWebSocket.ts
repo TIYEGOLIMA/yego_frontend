@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef, useState } from 'react'
+import { useEffect, useCallback, useState } from 'react'
 import SocketService from '../../../src/services/socket-service'
 
 export interface UseWebSocketOptions {
@@ -32,7 +32,6 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
   } = options
 
   const socketService = SocketService
-  const cleanupRef = useRef<(() => void) | null>(null)
 
   // Log para debugging
   const log = useCallback((message: string, ...args: any[]) => {
@@ -79,7 +78,11 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
     
     const wrappedCallback = (event: any) => {
       log('Evento Ticketera recibido:', event)
-      callback(event)
+      try {
+        callback(event)
+      } catch (error) {
+        console.error('[useWebSocket] Error ejecutando callback:', error)
+      }
     }
 
     socketService.on('ticketera', wrappedCallback)
@@ -96,15 +99,6 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
     log('Enviando evento a Ticketera:', event)
     socketService.sendTicketeraEvent(event)
   }, [socketService, log])
-
-  // Cleanup al desmontar
-  useEffect(() => {
-    return () => {
-      if (cleanupRef.current) {
-        cleanupRef.current()
-      }
-    }
-  }, [])
 
   return {
     isConnected,

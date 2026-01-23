@@ -106,7 +106,6 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       // Verificar caché primero
       const cache = JSON.parse(localStorage.getItem('driver_names_cache') || '{}')
       if (cache[ticket.licenseNumber]?.name) {
-        console.log('📋 [AgentPanel] Nombre desde caché:', cache[ticket.licenseNumber].name, 'para', ticket.ticketNumber)
         // Actualizar el estado inmediatamente con el nombre del caché
         setTickets(prevTickets => 
           prevTickets.map(t => 
@@ -119,7 +118,6 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       }
 
       // Si no está en caché, consultar API
-      console.log('🔍 [AgentPanel] Consultando nombre para:', ticket.ticketNumber, ticket.licenseNumber)
       const { validationService } = await import('../services/validationService')
       const driverData = await validationService.getDriverByPhonePublic(ticket.licenseNumber)
       
@@ -140,14 +138,11 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
           )
         )
         
-        console.log('✅ [AgentPanel] Nombre encontrado y actualizado:', normalizedName, 'para', ticket.ticketNumber)
         return Promise.resolve()
       } else {
-        console.log('❌ [AgentPanel] No se encontró nombre para:', ticket.ticketNumber, ticket.licenseNumber)
         return Promise.resolve()
       }
     } catch (error) {
-      console.log('❌ [AgentPanel] Error obteniendo nombre para:', ticket.ticketNumber, error)
       return Promise.reject(error)
     }
   }, [])
@@ -171,15 +166,6 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       setTickets(prevTickets => {
         // Si es un nuevo ticket WAITING sin módulo (moduleId = null), agregarlo (visible para todos los módulos)
         if (message.status === 'WAITING' && (message.moduleId === null || message.moduleId === undefined) && !prevTickets.some(t => t.id === message.id)) {
-          console.log('🆕 [WebSocket] Agregando nuevo ticket WAITING:', message.ticketNumber)
-          console.log('🆕 [WebSocket] Datos del nuevo ticket:', {
-            ticketNumber: message.ticketNumber,
-            licenseNumber: message.licenseNumber,
-            driverName: message.driverName,
-            optionId: message.optionId,
-            status: message.status
-          })
-          
           // Conservar TODA la información del ticket nuevo
           const newTicket = {
             ...message, // Conservar toda la información del mensaje
@@ -391,30 +377,17 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       const ticketsRelevantes = todosLosTicketsBackend.filter(ticket => {
         // Mostrar tickets WAITING (sin módulo asignado - moduleId = null)
         if (ticket.status === 'WAITING' && (ticket.moduleId === null || ticket.moduleId === undefined)) {
-          if (!esConsultaAutomatica) {
-            console.log(`✅ [AgentPanel] Ticket ${ticket.ticketNumber} incluido: WAITING sin módulo (disponible para todos)`)
-          }
           return true
         }
         
         // Mostrar tickets asignados a este módulo específico
         if (ticket.moduleId === selectedModule && (ticket.status === 'CALLED' || ticket.status === 'IN_PROGRESS')) {
-          if (!esConsultaAutomatica) {
-            console.log(`✅ [AgentPanel] Ticket ${ticket.ticketNumber} incluido: ${ticket.status} del módulo ${selectedModule}`)
-          }
           return true
         }
         
         // Mostrar tickets CALLED/IN_PROGRESS asignados a este agente Y módulo
         if (currentAgentId && ticket.agentId === currentAgentId && ticket.moduleId === selectedModule && (ticket.status === 'CALLED' || ticket.status === 'IN_PROGRESS')) {
-          if (!esConsultaAutomatica) {
-            console.log(`✅ [AgentPanel] Ticket ${ticket.ticketNumber} incluido: ${ticket.status} asignado a agente ${currentAgentId} del módulo ${selectedModule}`)
-          }
           return true
-        }
-        
-        if (!esConsultaAutomatica) {
-          console.log(`❌ [AgentPanel] Ticket ${ticket.ticketNumber} excluido: status="${ticket.status}", moduleId=${ticket.moduleId}, agentId=${ticket.agentId} (no cumple criterios)`)
         }
         return false
       })
@@ -457,18 +430,15 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
                 cleanedCache[key] = value
               } else {
                 hasCorruption = true
-                console.log('🧹 [AgentPanel] Eliminando entrada corrupta de cache:', key, value)
               }
             }
             
             if (hasCorruption) {
               localStorage.setItem('driver_names_cache', JSON.stringify(cleanedCache))
-              console.log('🧹 [AgentPanel] Cache limpiado y reparado')
             }
             
             sessionStorage.setItem('cache_cleaned', 'true')
           } catch (error) {
-            console.log('🧹 [AgentPanel] Error limpiando cache, eliminando completamente:', error)
             localStorage.removeItem('driver_names_cache')
           }
         }
@@ -478,24 +448,14 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
         todosLosTickets.map(async (ticket) => {
           // Si ya tiene driverName, no hacer nada
           if (ticket.driverName) {
-            if (!esConsultaAutomatica) {
-              console.log('🔍 [AgentPanel] Ticket', ticket.ticketNumber, 'ya tiene driverName:', ticket.driverName)
-            }
             return ticket
           }
           
           if (!ticket.licenseNumber) {
-            if (!esConsultaAutomatica) {
-              console.log('⚠️ [AgentPanel] Ticket', ticket.ticketNumber, 'NO tiene licenseNumber')
-              console.log('⚠️ [AgentPanel] Datos del ticket sin licenseNumber:', ticket)
-            }
             return ticket
           }
           
           try {
-            if (!esConsultaAutomatica) {
-              console.log('🔍 [AgentPanel] Buscando nombre para ticket', ticket.ticketNumber, 'con licenseNumber:', ticket.licenseNumber)
-            }
 
             // 🎯 NUEVO: Primero verificar si ya está en el cache con diferentes formatos
             try {
@@ -511,24 +471,14 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
               
               for (const key of cacheKeys) {
                 if (cache[key] && cache[key].name) {
-                  if (!esConsultaAutomatica) {
-                    console.log('✅ [AgentPanel] Nombre encontrado en cache para', ticket.ticketNumber, 'con clave', key, ':', cache[key].name)
-                  }
                   return {
                     ...ticket,
                     driverName: cache[key].name
                   }
                 }
               }
-              
-              if (!esConsultaAutomatica) {
-                console.log('🔍 [AgentPanel] No se encontró en cache para', ticket.ticketNumber, 'probando claves:', cacheKeys)
-              }
             } catch (error) {
               // Ignorar errores de cache
-              if (!esConsultaAutomatica) {
-                console.log('⚠️ [AgentPanel] Error leyendo cache:', error)
-              }
             }
             
             // 🎯 NUEVO: Si no está en cache, consultar API
@@ -569,10 +519,6 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
             // Remover duplicados
             const uniqueVariants = [...new Set(phoneVariants)]
             
-            if (!esConsultaAutomatica) {
-              console.log('🔍 [AgentPanel] Variantes de teléfono para', ticket.ticketNumber, ':', uniqueVariants)
-            }
-            
             let driverData = null
             let successfulPhone = null
             
@@ -580,32 +526,19 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
             for (const phoneVariant of uniqueVariants) {
               if (!phoneVariant) continue
               
-              if (!esConsultaAutomatica) {
-                console.log('🔍 [AgentPanel] Probando teléfono', phoneVariant, 'para ticket', ticket.ticketNumber)
-              }
-              
               try {
                 driverData = await validationService.getDriverByPhonePublic(phoneVariant)
                 if (driverData?.full_name) {
                   successfulPhone = phoneVariant
-                  if (!esConsultaAutomatica) {
-                    console.log('✅ [AgentPanel] Nombre encontrado con teléfono', phoneVariant, 'para', ticket.ticketNumber, ':', driverData.full_name)
-                  }
                   break
                 }
               } catch (error) {
-                if (!esConsultaAutomatica) {
-                  console.log('❌ [AgentPanel] Error consultando', phoneVariant, 'para', ticket.ticketNumber, ':', error)
-                }
                 continue
               }
             }
             
             if (driverData?.full_name && successfulPhone) {
               const normalizedName = normalizeDriverName(driverData.full_name)
-              if (!esConsultaAutomatica) {
-                console.log('✅ [AgentPanel] Nombre normalizado para', ticket.ticketNumber, ':', normalizedName)
-              }
               
               // Guardar en cache con el teléfono que funcionó
               try {
@@ -623,16 +556,6 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
                 driverName: normalizedName
               }
             } else {
-              if (!esConsultaAutomatica) {
-                console.log('❌ [AgentPanel] No se encontró nombre para', ticket.ticketNumber, 'después de probar todas las variantes')
-                console.log('❌ [AgentPanel] Datos del ticket sin nombre:', {
-                  ticketNumber: ticket.ticketNumber,
-                  licenseNumber: ticket.licenseNumber,
-                  originalLicense: ticket.licenseNumber,
-                  variants: uniqueVariants
-                })
-              }
-              
               // 🎯 FALLBACK: Si no se encontró nombre, usar el teléfono como identificador temporal
               // Esto es mejor que no mostrar nada
               return {
@@ -641,9 +564,6 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
               }
             }
           } catch (error) {
-            if (!esConsultaAutomatica) {
-              console.error('❌ [AgentPanel] Error buscando nombre para', ticket.ticketNumber, ':', error)
-            }
           }
           
           return ticket
@@ -660,14 +580,10 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       )
       
       if (ticketsSinNombre.length > 0) {
-        console.log('🔍 [AgentPanel] Obteniendo nombres asincrónicamente para', ticketsSinNombre.length, 'tickets')
         // Procesar en paralelo todos los nombres
         Promise.all(
           ticketsSinNombre.map(ticket => obtenerNombreConductorAsync(ticket))
-        ).then(() => {
-          console.log('✅ [AgentPanel] Todos los nombres obtenidos')
-        }).catch(error => {
-          console.log('❌ [AgentPanel] Error obteniendo nombres:', error)
+        ).catch(() => {
         })
       }
       
@@ -676,11 +592,9 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       
       // 🎯 MANEJAR ERRORES DE AUTENTICACIÓN ESPECÍFICAMENTE
       if (error?.response?.status === 401) {
-        console.log('🔑 [useAgentPanel] Error de autenticación al cargar tickets')
         mostrarError('Error de autenticación. Por favor, inicie sesión nuevamente.')
         
         // 🎯 MICROFRONTEND: Solo limpiar datos locales (NO hacer logout completo)
-        console.log('🧹 [AgentPanel] Limpiando datos locales del microfrontend')
         safeSetItem('selectedModule', '')
         setTickets([])
         
@@ -695,16 +609,12 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
 
   // 🎯 FUNCIÓN SIMPLE: Llamar ticket
   const llamarTicket = useCallback(async (ticket: Ticket) => {
-    console.log('🎯 [AgentPanel] ===== INICIANDO LLAMAR TICKET =====')
-    
     if (!selectedModule) {
       mostrarError('Debe seleccionar un módulo primero')
       return
     }
     
     try {
-      console.log('🎯 [AgentPanel] Llamando ticket:', ticket.id)
-      
       // 🎯 Obtener el userId del usuario actual
       const currentUser = getCurrentUser()
       if (!currentUser?.id) {
@@ -715,8 +625,6 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       
       // Llamar ticket vía API
       const updatedTicket = await ticketService.callTicket(ticket.id, userId, selectedModule)
-      
-      console.log('✅ [AgentPanel] Ticket llamado exitosamente:', updatedTicket)
       
       // Actualizar el ticket en el estado local
       setTickets(prevTickets => {
@@ -733,7 +641,6 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
 
             // 🎯 SI NO TIENE NOMBRE, OBTENERLO ASINCRÓNICAMENTE
             if (!ticketActualizado.driverName && ticketActualizado.licenseNumber) {
-              console.log('🔍 [AgentPanel] Obteniendo nombre para ticket llamado:', ticketActualizado.ticketNumber)
               obtenerNombreConductorAsync(ticketActualizado)
             }
 
@@ -760,8 +667,6 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       // 🎯 NUEVO: Marcar ticket como en proceso
       marcarTicketEnProceso(ticket.id)
       
-      console.log('⚡ Atendiendo ticket:', ticket.ticketNumber)
-      
       // 🎯 OBTENER AGENT ID
       const currentUser = getCurrentUser()
       const agentId = ticket.userId || currentUser?.id
@@ -787,11 +692,8 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
           return t
         })
         
-        console.log('📊 [AgentPanel] Estado actualizado - Tickets IN_PROGRESS:', updatedTickets.filter(t => t.status === 'IN_PROGRESS').length)
         return updatedTickets
       })
-      
-      console.log('✅ Ticket atendido exitosamente:', ticket.ticketNumber)
       
     } catch (error: any) {
       console.error('❌ Error atendiendo ticket:', error)
@@ -817,8 +719,6 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
     }
     
     try {
-      console.log('🎯 [AgentPanel] Completando ticket:', ticket.id)
-      
       // 🎯 OBTENER AGENT ID
       const currentUser = getCurrentUser()
       const agentId = ticket.userId || currentUser?.id
@@ -829,16 +729,11 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       }
       
       // Completar ticket vía API
-      const updatedTicket = await ticketService.completeTicket(ticket.id, agentId, notes)
-      
-      console.log('✅ [AgentPanel] Ticket completado exitosamente:', updatedTicket)
+      await ticketService.completeTicket(ticket.id, agentId, notes)
       
       // 🎯 ACTUALIZAR ESTADO LOCAL INMEDIATAMENTE (sin recargar del backend)
       setTickets(prevTickets => {
         const updatedTickets = prevTickets.filter(t => t.id !== ticket.id) // Remover ticket completado
-        
-        console.log('📊 [AgentPanel] Ticket completado removido de la lista:', ticket.id)
-        console.log('📊 [AgentPanel] Tickets restantes:', updatedTickets.length)
         
         return updatedTickets
       })
@@ -858,8 +753,6 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
     }
     
     try {
-      console.log('🎯 [AgentPanel] Cancelando ticket:', ticket.id)
-      
       // 🎯 OBTENER AGENT ID
       const currentUser = getCurrentUser()
       const agentId = ticket.userId || currentUser?.id
@@ -870,9 +763,7 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       }
       
       // Cancelar ticket vía API
-      const updatedTicket = await ticketService.cancelTicket(ticket.id, agentId)
-      
-      console.log('✅ [AgentPanel] Ticket cancelado exitosamente:', updatedTicket)
+      await ticketService.cancelTicket(ticket.id, agentId)
       
       // Recargar tickets para reflejar el cambio
       await cargarTickets()

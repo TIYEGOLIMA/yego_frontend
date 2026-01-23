@@ -1210,23 +1210,20 @@ const UsersModule: React.FC = () => {
       <Dialog open={errorModal.open} onOpenChange={() => setErrorModal({open: false, message: '', title: ''})}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-error-600 dark:text-error-400">
+            <DialogTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
               <X className="h-5 w-5" />
-              {errorModal.title}
+              {errorModal.title || 'Error'}
             </DialogTitle>
-            <DialogDescription>
-              {errorModal.message}
-            </DialogDescription>
           </DialogHeader>
           <div className="py-4">
-            <p className="text-sm text-neutral-700 dark:text-neutral-300 whitespace-pre-line">
+            <p className="text-sm text-neutral-700 dark:text-neutral-300">
               {errorModal.message}
             </p>
           </div>
           <DialogFooter>
             <Button 
               onClick={() => setErrorModal({open: false, message: '', title: ''})}
-              className="w-full"
+              className="w-full bg-red-600 hover:bg-red-700 text-white"
             >
               Entendido
             </Button>

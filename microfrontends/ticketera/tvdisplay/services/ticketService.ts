@@ -44,13 +44,10 @@ export const ticketService = {
   // 🎯 NUEVO: Obtener todos los tickets combinando múltiples endpoints
   async getAllTickets(): Promise<Ticket[]> {
     try {
-      console.log('📋 [ticketService] Obteniendo todos los tickets desde /all...')
       const response = await api.get('/tickets/all')
-      console.log('📋 [ticketService] Tickets recibidos:', response.data.length)
       return response.data
     } catch (error: any) {
       if (error?.response?.status === 429) {
-        console.log('⏳ [ticketService] Rate limit, reintentando en 2 segundos...')
         await new Promise(resolve => setTimeout(resolve, 2000))
         const retryResponse = await api.get('/tickets/all')
         return retryResponse.data

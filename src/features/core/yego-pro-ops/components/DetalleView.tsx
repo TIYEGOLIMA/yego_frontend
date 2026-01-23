@@ -62,14 +62,11 @@ const obtenerFechaHoy = (): string => {
   return formatearFechaLocal(hoy.getFullYear(), hoy.getMonth(), hoy.getDate())
 }
 
-// Función para parsear fecha YYYY-MM-DD sin problemas de zona horaria
 const parsearFechaLocal = (fechaStr: string): Date => {
   const [year, month, day] = fechaStr.split('-').map(Number)
-  // month - 1 porque los meses en Date van de 0-11
   return new Date(year, month - 1, day)
 }
 
-// Función para formatear fecha YYYY-MM-DD a texto legible sin problemas de zona horaria
 const formatearFechaLegible = (fechaStr: string): string => {
   const fecha = parsearFechaLocal(fechaStr)
   return fecha.toLocaleDateString('es-PE', { 
@@ -79,7 +76,6 @@ const formatearFechaLegible = (fechaStr: string): string => {
   })
 }
 
-// Función para formatear fecha YYYY-MM-DD con día de la semana
 const formatearFechaConDia = (fechaStr: string): string => {
   const fecha = parsearFechaLocal(fechaStr)
   return fecha.toLocaleDateString('es-PE', { 
@@ -96,32 +92,24 @@ const parseNumber = (value: string | undefined | null, defaultValue = 0): number
   return isNaN(parsed) ? defaultValue : parsed
 }
 
-// Función para validar y filtrar solo números positivos (sin letras ni negativos)
 const validarNumeroPositivo = (value: string): string => {
-  // Permitir cadena vacía
   if (value === '') return ''
   
-  // Rechazar si contiene signo negativo
   if (value.includes('-')) return ''
   
-  // Remover cualquier carácter que no sea número o punto decimal
   let cleaned = value.replace(/[^0-9.]/g, '')
   
-  // Si después de limpiar está vacío, retornar vacío
   if (cleaned === '') return ''
   
-  // Permitir solo un punto decimal
   const parts = cleaned.split('.')
   if (parts.length > 2) {
     cleaned = parts[0] + '.' + parts.slice(1).join('')
   }
   
-  // Asegurar que no comience con punto
   if (cleaned.startsWith('.')) {
     cleaned = '0' + cleaned
   }
   
-  // Convertir a número y verificar que sea positivo o cero
   const num = parseFloat(cleaned)
   if (isNaN(num) || num < 0) {
     return ''
@@ -158,7 +146,6 @@ const calcularValoresCierre = (
   }
 }
 
-// Tipos
 interface PaginacionProps {
   currentPage: number
   totalPages: number
@@ -181,7 +168,6 @@ interface Metricas {
   promedioPorViaje: number
 }
 
-// Componente KPI reutilizable
 interface KPICardProps {
   icon: React.ReactNode
   label: string
@@ -217,7 +203,6 @@ const KPICard = ({
   )
 }
 
-// Componente de Paginación
 const Paginacion = ({
   currentPage,
   totalPages,
@@ -298,7 +283,6 @@ const Paginacion = ({
   )
 }
 
-// Hook personalizado para paginación
 const usePagination = <T,>(items: T[], itemsPerPage: number) => {
   const [currentPage, setCurrentPage] = useState(1)
 
@@ -388,7 +372,6 @@ export const DetalleView = () => {
   const datePickerRef = useRef<HTMLDivElement>(null)
   
 
-  // Resetear estado del calendario cuando se abre/cierra el modal
   useEffect(() => {
     if (showModal) {
       setShowDatePicker(false)
@@ -400,7 +383,6 @@ export const DetalleView = () => {
     }
   }, [showModal])
 
-  // Funciones del calendario
   const obtenerDiasDelMes = (fecha: Date) => {
     const año = fecha.getFullYear()
     const mes = fecha.getMonth()
@@ -431,30 +413,22 @@ export const DetalleView = () => {
     
     const fechaStr = obtenerFechaStr(dia)
     
-    // Si ya hay un rango completo seleccionado, resetear y empezar de nuevo
     if (fechaInicio && fechaFin) {
       setFechaInicio(fechaStr)
       setFechaFin('')
-      // NO cerrar el calendario, permitir seleccionar la segunda fecha
       return
     }
     
-    // Si no hay fechaInicio, establecerla (primera fecha)
     if (!fechaInicio) {
       setFechaInicio(fechaStr)
       setFechaFin('')
-      // NO cerrar el calendario, esperar a que se seleccione la segunda fecha
       return
     }
     
-    // Si hay fechaInicio pero no fechaFin (seleccionando la segunda fecha)
     if (fechaStr < fechaInicio) {
-      // Si la nueva fecha es menor, resetear y establecer como nueva fecha inicio
       setFechaInicio(fechaStr)
       setFechaFin('')
-      // NO cerrar el calendario, esperar a que se seleccione la segunda fecha
     } else {
-      // Establecer rango de fechas y cerrar el calendario
       setFechaFin(fechaStr)
       setShowDatePicker(false)
     }
@@ -463,7 +437,6 @@ export const DetalleView = () => {
   const formatearRangoFechas = () => {
     if (!fechaInicio && !fechaFin) return 'Seleccionar rango de fechas'
     if (!fechaFin) {
-      // Solo hay fecha inicio seleccionada
       const [, month, day] = fechaInicio.split('-').map(Number)
       return `${day} de ${MESES[month - 1].toLowerCase()}...`
     }
@@ -471,17 +444,14 @@ export const DetalleView = () => {
     const [, monthInicio, dayInicio] = fechaInicio.split('-').map(Number)
     const [, monthFin, dayFin] = fechaFin.split('-').map(Number)
     
-    // Si es la misma fecha, mostrar solo una fecha
     if (fechaInicio === fechaFin) {
       return `${dayInicio} de ${MESES[monthInicio - 1].toLowerCase()}`
     }
     
-    // Si es rango del mismo mes
     if (monthInicio === monthFin) {
       return `${dayInicio}-${dayFin} de ${MESES[monthInicio - 1].toLowerCase()}`
     }
     
-    // Rango de diferentes meses
     return `${dayInicio} ${MESES[monthInicio - 1].toLowerCase()} - ${dayFin} ${MESES[monthFin - 1].toLowerCase()}`
   }
 
@@ -524,12 +494,9 @@ export const DetalleView = () => {
     })
   }
 
-  // Query para obtener resumen de pagos (solo se actualiza cuando se registra o actualiza un cierre)
-  // Si la fecha seleccionada es la fecha actual, no envía el parámetro para listar todos los conductores
   const fechaHoy = obtenerFechaHoy()
   const esFechaActual = fechaSeleccionada === fechaHoy
   
-  // Limpiar búsqueda cuando cambia la fecha y ya no es fecha actual
   useEffect(() => {
     if (!esFechaActual) {
       setSearchTermNombreActual('')
@@ -537,21 +504,18 @@ export const DetalleView = () => {
     }
   }, [fechaSeleccionada, esFechaActual])
   
-  // Función para ejecutar la búsqueda
   const handleBuscarConductor = () => {
     if (searchTermNombreActual.trim().length > 0) {
       setSearchTermNombreActualParaBuscar(searchTermNombreActual.trim())
     }
   }
 
-  // Permitir buscar con Enter
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       handleBuscarConductor()
     }
   }
   
-  // Query para obtener lista de conductores (solo cuando es fecha actual y hay término de búsqueda)
   const { data: listaConductoresData, isLoading: loadingListaConductores } = useQuery<ListaConductoresResponse>({
     queryKey: ['yego-pro-ops-lista-conductores', searchTermNombreActualParaBuscar, fechaSeleccionada],
     queryFn: () => yegoProOpsService.obtenerListaConductores(searchTermNombreActualParaBuscar || undefined, fechaSeleccionada),
@@ -559,7 +523,6 @@ export const DetalleView = () => {
     refetchOnWindowFocus: false,
   })
 
-  // Query para obtener resumen de pagos (siempre habilitado, pero se usa según la lógica)
   const { data: resumenPagosData, isLoading: loadingResumenPagos, refetch: refetchResumenPagos } = useQuery<ResumenPagosResponse>({
     queryKey: ['yego-pro-ops-resumen-pagos', fechaSeleccionada],
     queryFn: () => yegoProOpsService.obtenerResumenPagos(fechaSeleccionada),
@@ -567,7 +530,6 @@ export const DetalleView = () => {
     refetchOnWindowFocus: false,
   })
 
-  // Query para obtener turnos pagados (se actualiza solo cuando se registra o actualiza un cierre)
   const { refetch: refetchTurnosPagados } = useQuery<TurnosPagadosResponse>({
     queryKey: ['yego-pro-ops-turnos-pagados', fechaSeleccionada],
     queryFn: () => yegoProOpsService.obtenerTurnosPagados(fechaSeleccionada),
@@ -575,7 +537,6 @@ export const DetalleView = () => {
   })
 
 
-  // Query para obtener fechas de turnos cuando se abre el modal de detalles
   const { data: fechasTurnosData } = useQuery<FechasTurnosResponse>({
     queryKey: ['yego-pro-ops-fechas-turnos', selectedDriver?.driver_id],
     queryFn: () => {
@@ -588,7 +549,6 @@ export const DetalleView = () => {
     refetchOnWindowFocus: false,
   })
 
-  // Crear un Set con las fechas que tienen turnos para fácil búsqueda
   const fechasConTurnos = useMemo(() => {
     if (!fechasTurnosData?.fechas) return new Set<string>()
     return new Set(fechasTurnosData.fechas.map(f => f.fecha))
@@ -608,15 +568,11 @@ export const DetalleView = () => {
     refetchOnWindowFocus: false,
   })
 
-  // Detectar si hay un registro de cierre (solo de los datos actuales, no de los anteriores)
   const cierreRegistrado = viajesData?.cierre_registrado ?? false
 
 
-  // Separar conductores en pendientes (tienen turnos sin pagar) y liquidados (todos pagados)
-  // Si es fecha actual, priorizar resumen de pagos (después de cerrar turnos), sino usar lista de conductores
   const { conductoresPendientes, conductoresLiquidados } = useMemo(() => {
     if (esFechaActual) {
-      // Si hay resumen de pagos (después de cerrar turnos), usarlo
       if (resumenPagosData?.conductores && resumenPagosData.conductores.length > 0) {
         const pendientes: ConductorResumenPagos[] = []
         const liquidados: ConductorResumenPagos[] = []
@@ -633,9 +589,7 @@ export const DetalleView = () => {
         return { conductoresPendientes: pendientes, conductoresLiquidados: liquidados }
       }
       
-      // Si hay lista de conductores de búsqueda, usarla
-      if (listaConductoresData?.conductores && listaConductoresData.conductores.length > 0) {
-        // Convertir conductores simples a formato ConductorResumenPagos
+        if (listaConductoresData?.conductores && listaConductoresData.conductores.length > 0) {
         const conductoresConvertidos: ConductorResumenPagos[] = listaConductoresData.conductores.map(conductor => ({
           driver_id: conductor.driverId,
           nombre: conductor.nombre,
@@ -652,11 +606,9 @@ export const DetalleView = () => {
         }
       }
       
-      // Si no hay datos, retornar vacío (pero la sección se mostrará)
       return { conductoresPendientes: [], conductoresLiquidados: [] }
     }
     
-    // Para fechas anteriores, usar resumen de pagos normal
     if (!resumenPagosData?.conductores) {
       return { conductoresPendientes: [], conductoresLiquidados: [] }
     }
@@ -676,7 +628,6 @@ export const DetalleView = () => {
     return { conductoresPendientes: pendientes, conductoresLiquidados: liquidados }
   }, [esFechaActual, listaConductoresData, resumenPagosData])
 
-  // Filtrar conductores pendientes por búsqueda
   const conductoresPendientesFiltrados = useMemo(() => {
     if (!searchTermPendientes.trim()) return conductoresPendientes
     
@@ -688,7 +639,6 @@ export const DetalleView = () => {
     )
   }, [conductoresPendientes, searchTermPendientes])
 
-  // Filtrar conductores liquidados por búsqueda
   const conductoresLiquidadosFiltrados = useMemo(() => {
     if (!searchTermLiquidados.trim()) return conductoresLiquidados
     
@@ -704,7 +654,6 @@ export const DetalleView = () => {
     return viajesData?.viajes ?? []
   }, [viajesData])
 
-  // Filtrar viajes por ID
   const filteredViajes = useMemo(() => {
     if (!searchTermViajes.trim()) return viajesArray
     
@@ -744,7 +693,6 @@ export const DetalleView = () => {
     }
   }, [viajesArray])
 
-  // Paginación (solo para viajes, ya no para conductores)
   const paginationViajes = usePagination(filteredViajes, itemsPerPage)
 
   const handleItemsPerPageChangeViajes = (value: string) => {
@@ -756,11 +704,9 @@ export const DetalleView = () => {
   const esUnSoloDia = fechaInicio && fechaFin && fechaInicio === fechaFin
 
   const handleAbrirModalCierre = (conductor?: ConductorResumenPagos) => {
-    // Si se pasa un conductor, usarlo; si no, usar el selectedDriver
     const conductorParaUsar = conductor || selectedConductorResumen
     if (!conductorParaUsar) return
     
-    // Crear un DriverItem temporal para el modal (necesario para compatibilidad)
     const driverItem: DriverItem = {
       driver_id: conductorParaUsar.driver_id,
       full_name: conductorParaUsar.nombre || conductorParaUsar.driver_id,
@@ -776,7 +722,6 @@ export const DetalleView = () => {
     setFechaInicio(fechaSeleccionada)
     setFechaFin(fechaSeleccionada)
     
-    // Resetear formulario
     setGnvM3('')
     setGnvSoles('')
     setGasolinaGalones('')
@@ -811,7 +756,6 @@ export const DetalleView = () => {
     }
   }
 
-  // Inicializar valores de edición desde el cierre
   const inicializarValoresEdicion = (cierre: RegistroCierre) => {
     setEditGnvM3(cierre.gnvM3 || '')
     setEditGnvSoles(cierre.gnvSoles.toString())
@@ -835,14 +779,12 @@ export const DetalleView = () => {
     setEditandoCierre(false)
   }
 
-  // Helper: Obtener IDs de turnos por fecha
   const obtenerTurnoIdsPorFecha = (fecha: string): number[] => {
     return selectedConductorResumen?.turnos
       ?.filter(turno => turno.fecha === fecha)
       ?.map(turno => turno.id) || []
   }
 
-  // Helper: Validar liquidación y mostrar mensaje si no calza
   const validarLiquidacion = (valoresCierre: ReturnType<typeof calcularValoresCierre>): boolean => {
     if (!valoresCierre.calza) {
       if (valoresCierre.diferencia > 0) {
@@ -855,16 +797,13 @@ export const DetalleView = () => {
     return true
   }
 
-  // Helper: Refrescar datos después de un cierre
   const refrescarDatosDespuesCierre = async () => {
-    // Siempre actualizar turnos pagados y resumen de pagos
     await Promise.all([
       refetchTurnosPagados(),
       refetchResumenPagos()
     ])
   }
 
-  // Función para cerrar turnos de un conductor
   const handleCerrarTurnos = async (conductor: ConductorResumenPagos) => {
     if (!conductor.driver_id || !fechaSeleccionada) return
 
@@ -877,7 +816,6 @@ export const DetalleView = () => {
       setRespuestaCerrarTurnos(respuesta)
       setShowModalCerrarTurnos(true)
       
-      // Refrescar ambos endpoints para que el conductor aparezca en Pendientes de Liquidar
       await Promise.all([
         refetchTurnosPagados(),
         refetchResumenPagos()
@@ -895,8 +833,6 @@ export const DetalleView = () => {
     }
   }
 
-  // Validar formulario de cierre (compartido entre registro y actualización)
-  // gasolinaSoles es opcional, puede ser 0 o vacío
   const validarFormularioCierre = (gnvSoles: string, _gasolinaSoles: string, liquidaEfectivo: string, liquidaYape: string, otrosGastos: string, otrosGastosDescripcion: string): string | null => {
     if (!gnvSoles || !liquidaEfectivo || !liquidaYape) {
       return 'Por favor, completa todos los campos obligatorios'
@@ -919,7 +855,6 @@ export const DetalleView = () => {
     try {
       setActualizandoCierre(true)
 
-      // Usar el monto total a pagar del conductor o el totalIngresos del cierre como fallback
       const montoBase = selectedConductorResumen?.monto_total_pagar ?? selectedConductorResumen?.monto_total_pagado ?? cierreDetalle.totalIngresos
       
       const valoresCalculados = calcularValoresCierre(
@@ -931,7 +866,6 @@ export const DetalleView = () => {
         editLiquidaYape
       )
 
-      // Validar que la liquidación calce
       if (!validarLiquidacion(valoresCalculados)) {
         return
       }
@@ -976,7 +910,6 @@ export const DetalleView = () => {
   const puedeEditar = user?.role?.toUpperCase() !== 'GESTOR'
 
   const valoresCierre = useMemo(() => {
-    // Priorizar monto_total_pagado del conductor resumen si está disponible
     const montoBase = selectedConductorResumen?.monto_total_pagar ?? selectedConductorResumen?.monto_total_pagado ?? metricas?.totalIngresos
     
     if (!montoBase || montoBase === 0) return null
@@ -991,7 +924,6 @@ export const DetalleView = () => {
     )
   }, [selectedConductorResumen, metricas, gnvSoles, gasolinaSoles, otrosGastos, liquidaEfectivo, liquidaYape])
 
-  // Valores calculados para el modo de edición (memoizado para evitar lag)
   const valoresCierreEdicion = useMemo(() => {
     if (!editandoCierre || !cierreDetalle) return null
     
@@ -1017,7 +949,6 @@ export const DetalleView = () => {
       return
     }
 
-    // Validar que la liquidación calce con el monto restante
     if (!validarLiquidacion(valoresCierre)) {
       return
     }
@@ -1071,7 +1002,6 @@ export const DetalleView = () => {
       <div>
         <Card>
           <CardContent className="p-6">
-            {/* Header con fecha */}
             <div className="mb-6">
               <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
                 <div className="flex items-center gap-3">
@@ -1102,7 +1032,6 @@ export const DetalleView = () => {
               </div>
             </div>
 
-            {/* Campo de búsqueda por nombre cuando es fecha actual */}
             {esFechaActual && (
               <div className="mb-6">
                 <div className="flex items-center gap-2">
@@ -1136,7 +1065,6 @@ export const DetalleView = () => {
               </div>
             )}
 
-            {/* Vista de Liquidación: Pendientes y Liquidados */}
             {(esFechaActual ? loadingListaConductores : loadingResumenPagos) ? (
               <div className="text-center py-12">
                 <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 dark:border-red-400"></div>
@@ -1144,9 +1072,7 @@ export const DetalleView = () => {
               </div>
             ) : (
               <div className="space-y-6">
-                {/* Dos columnas: Pendientes y Liquidados */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* Sección: Pendientes de Liquidar */}
                   <div className="space-y-4">
                     <div className="p-4 bg-orange-50 dark:bg-orange-900/20 border-2 border-orange-200 dark:border-orange-800 rounded-lg space-y-3">
                       <div className="flex items-center gap-3">
@@ -1240,7 +1166,6 @@ export const DetalleView = () => {
                                 </div>
                               </div>
                               <div className="flex gap-2 flex-shrink-0">
-                                {/* Botón Cerrar Turno - Solo se muestra si no tiene turnos */}
                                 {(conductor.cantidad_turnos === 0 || !conductor.turnos || conductor.turnos.length === 0) && (
                                   <button
                                     type="button"
@@ -1257,19 +1182,18 @@ export const DetalleView = () => {
                                       : 'Cerrar Turno'}
                                   </button>
                                 )}
-                                {/* Botón Liquidar - Solo se muestra si tiene turnos */}
                                 {(conductor.cantidad_turnos > 0 && conductor.turnos && conductor.turnos.length > 0) && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.preventDefault()
-                                      e.stopPropagation()
-                                      handleAbrirModalCierre(conductor)
-                                    }}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  handleAbrirModalCierre(conductor)
+                                }}
                                     className="px-4 py-2 rounded-md bg-orange-600 hover:bg-orange-700 text-white font-medium text-sm transition-colors shadow-sm hover:shadow-md"
-                                  >
-                                    Liquidar
-                                  </button>
+                              >
+                                Liquidar
+                              </button>
                                 )}
                               </div>
                             </div>
@@ -1279,7 +1203,6 @@ export const DetalleView = () => {
                     </div>
                   </div>
 
-                  {/* Sección: Ya Liquidados */}
                   <div className="space-y-4">
                     <div className="p-4 bg-green-50 dark:bg-green-900/20 border-2 border-green-200 dark:border-green-800 rounded-lg space-y-3">
                       <div className="flex items-center gap-3">
@@ -1379,7 +1302,6 @@ export const DetalleView = () => {
                                 onClick={async () => {
                                   try {
                                     setCargandoCierre(true)
-                                    // Crear un DriverItem temporal para compatibilidad
                                     const driverItem: DriverItem = {
                                       driver_id: conductor.driver_id,
                                       full_name: conductor.nombre || conductor.driver_id,
@@ -1394,7 +1316,6 @@ export const DetalleView = () => {
                                     setFechaInicio(fechaSeleccionada)
                                     setFechaFin(fechaSeleccionada)
                                     
-                                    // Obtener el cierre del conductor para la fecha seleccionada
                                     const cierre = await yegoProOpsService.obtenerCierre(conductor.driver_id, fechaSeleccionada)
                                     if (cierre) {
                                       setCierreDetalle(cierre)
@@ -1428,7 +1349,6 @@ export const DetalleView = () => {
         </Card>
       </div>
 
-      {/* Modal con resumen de viajes */}
       <Dialog 
         open={showModal} 
         onOpenChange={(open) => {
@@ -1461,7 +1381,6 @@ export const DetalleView = () => {
               </DialogHeader>
               
               <div className="relative flex-1 flex flex-col min-h-0 overflow-y-auto overflow-x-hidden">
-                {/* Filtro de rango de fechas con calendario */}
                 <div className="mb-4 relative z-50" ref={datePickerRef}>
                   <div className="flex items-center gap-2">
                     <label className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
@@ -1482,14 +1401,12 @@ export const DetalleView = () => {
                     </button>
                   </div>
                 
-                  {/* Calendario desplegable */}
                   {showDatePicker && (
                     <div 
                       className="absolute top-full left-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 p-3 z-[9999]"
                       onClick={(e) => e.stopPropagation()}
                       onMouseDown={(e) => e.stopPropagation()}
                     >
-                      {/* Header del calendario */}
                       <div className="flex items-center justify-between mb-3">
                         <button
                           onClick={(e) => {
@@ -1518,7 +1435,6 @@ export const DetalleView = () => {
                         </button>
                       </div>
                       
-                      {/* Días de la semana */}
                       <div className="grid grid-cols-7 gap-1 mb-2">
                         {DIAS_SEMANA.map((dia, index) => (
                           <div key={index} className="text-center text-xs font-medium text-gray-500 dark:text-gray-400 py-1">
@@ -1527,7 +1443,6 @@ export const DetalleView = () => {
                         ))}
                       </div>
                       
-                      {/* Días del mes */}
                       <div className="grid grid-cols-7 gap-1">
                         {obtenerDiasDelMes(currentMonth).map((dia, index) => {
                           if (dia === null) {
@@ -1579,7 +1494,6 @@ export const DetalleView = () => {
                   )}
                 </div>
 
-                {/* Métricas resumen */}
                 {loadingViajes ? (
                   <div className="text-center py-8">
                     <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-red-600 dark:border-red-400"></div>
@@ -1591,7 +1505,6 @@ export const DetalleView = () => {
                   </div>
                 ) : (viajesData !== undefined && metricas) ? (
                   <>
-                    {/* Métricas compactas */}
                     {metricas && (
                     <div className="grid grid-cols-3 md:grid-cols-6 gap-3 mb-4">
                       <KPICard
@@ -1658,14 +1571,12 @@ export const DetalleView = () => {
                     </div>
                     )}
 
-                    {/* Promedio por viaje */}
                     {metricas && (
                     <div className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 bg-gray-100 dark:bg-gray-800/50 px-3 py-2 rounded-md inline-block flex-shrink-0">
                       Promedio por viaje: <span className="text-red-600 dark:text-red-400">{formatBalance(metricas.promedioPorViaje)}</span>
                     </div>
                     )}
 
-                    {/* Tabla de viajes - Solo mostrar si hay viajes */}
                     {viajesArray.length > 0 && (
                     <div className="mt-4 flex-1 flex flex-col min-h-0">
                       <div className="flex items-center gap-4 mb-3 border-b border-gray-200 dark:border-gray-700 pb-2 flex-shrink-0">
@@ -1952,7 +1863,6 @@ export const DetalleView = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Registro de Cierre */}
       <Dialog open={showModalCierre} onOpenChange={setShowModalCierre}>
         <DialogContent className="max-w-xl max-h-[85vh] overflow-hidden flex flex-col">
           <DialogHeader className="pb-2 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
@@ -1976,14 +1886,12 @@ export const DetalleView = () => {
           </DialogHeader>
 
           <div className="space-y-2.5 mt-2.5 overflow-y-auto flex-1 pr-1">
-            {/* Sección de Combustible */}
             <div className={SECTION_CARD_CLASS}>
               <h3 className="text-xs font-semibold text-gray-900 dark:text-gray-100 mb-2 pb-1 border-b border-gray-200 dark:border-gray-700 flex items-center gap-1.5">
                 <Car className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                 Combustible
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                {/* GNV Combustible M3 - Opcional */}
                 <div>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                     GNV Combustible (M³)
@@ -2004,7 +1912,6 @@ export const DetalleView = () => {
                   />
                 </div>
 
-                {/* GNV Combustible en Soles - Obligatorio */}
                 <div>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                     GNV Combustible (S/.) <span className="text-red-600">*</span>
@@ -2023,7 +1930,6 @@ export const DetalleView = () => {
                   />
                 </div>
 
-                {/* Gasolina Combustible Galones - Opcional */}
                 <div>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Gasolina Combustible (Galones)
@@ -2044,7 +1950,6 @@ export const DetalleView = () => {
                   />
                 </div>
 
-                {/* Gasolina Combustible en Soles - Opcional */}
                 <div>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Gasolina Combustible (S/.) <span className="text-gray-500 text-xs font-normal">(Opcional)</span>
@@ -2064,14 +1969,12 @@ export const DetalleView = () => {
               </div>
             </div>
 
-            {/* Sección de Liquidación */}
             <div className={SECTION_CARD_CLASS}>
               <h3 className="text-xs font-semibold text-gray-900 dark:text-gray-100 mb-2 pb-1 border-b border-gray-200 dark:border-gray-700 flex items-center gap-1.5">
                 <DollarSign className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
                 Liquidación
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                {/* Cuanto liquida en Efectivo - Obligatorio */}
                 <div>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Cuanto Liquida en Efectivo (S/.) <span className="text-red-600">*</span>
@@ -2090,7 +1993,6 @@ export const DetalleView = () => {
                   />
                 </div>
 
-                {/* Cuanto liquida en Yape - Obligatorio */}
                 <div>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Cuanto Liquida en Yape (S/.) <span className="text-red-600">*</span>
@@ -2109,7 +2011,6 @@ export const DetalleView = () => {
                   />
                 </div>
 
-                {/* Otros Gastos - Opcional */}
                 <div className="md:col-span-2">
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Otros Gastos (S/.) <span className="text-gray-500 text-xs font-normal">(Opcional)</span>
@@ -2147,14 +2048,12 @@ export const DetalleView = () => {
               </div>
             </div>
 
-            {/* Sección de Odómetro */}
             <div className={SECTION_CARD_CLASS}>
               <h3 className="text-xs font-semibold text-gray-900 dark:text-gray-100 mb-2 pb-1 border-b border-gray-200 dark:border-gray-700 flex items-center gap-1.5">
                 <Car className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                 Odómetro
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                {/* Odómetro Inicial */}
                 <div>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Odómetro Inicial (km)
@@ -2172,7 +2071,6 @@ export const DetalleView = () => {
                   />
                 </div>
 
-                {/* Odómetro Final */}
                 <div>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Odómetro Final (km)
@@ -2190,7 +2088,6 @@ export const DetalleView = () => {
                   />
                 </div>
 
-                {/* Diferencia de Odómetro (calculada automáticamente) */}
                 <div>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Diferencia (km)
@@ -2210,7 +2107,6 @@ export const DetalleView = () => {
               </div>
             </div>
 
-            {/* Cálculo dinámico intuitivo - Siempre visible */}
             {valoresCierre ? (
               <div className={SECTION_CARD_CLASS}>
                 <h4 className="text-xs font-semibold text-gray-900 dark:text-gray-100 mb-2 flex items-center gap-1.5 pb-1 border-b border-gray-200 dark:border-gray-700">
@@ -2218,7 +2114,6 @@ export const DetalleView = () => {
                   Resumen de Cálculo
                 </h4>
                 <div className="space-y-1.5">
-                  {/* Monto Total a Pagar */}
                   <div className="flex justify-between items-center py-1.5 px-2.5 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-300 dark:border-blue-700">
                     <span className="text-xs font-semibold text-gray-900 dark:text-gray-100">Monto Total a Pagar:</span>
                     <span className="text-sm font-bold text-blue-600 dark:text-blue-400">
@@ -2226,7 +2121,6 @@ export const DetalleView = () => {
                     </span>
                   </div>
 
-                  {/* Gastos */}
                   <div className="space-y-1">
                     <div className="flex justify-between items-center">
                       <span className="text-xs text-gray-600 dark:text-gray-400">Gastos Combustible:</span>
@@ -2250,7 +2144,6 @@ export const DetalleView = () => {
                     </div>
                   </div>
 
-                  {/* Monto que debe liquidarse (después de restar gastos) */}
                   <div className={`py-1 px-2 rounded border ${
                     valoresCierre.montoRestante >= 0 
                       ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700' 
@@ -2273,7 +2166,6 @@ export const DetalleView = () => {
                     </div>
                   </div>
 
-                  {/* Liquidación */}
                   <div className="space-y-1">
                     <div className="flex justify-between items-center">
                       <span className="text-xs text-gray-600 dark:text-gray-400">Liquida en Efectivo:</span>
@@ -2295,7 +2187,6 @@ export const DetalleView = () => {
                     </div>
                   </div>
 
-                  {/* Diferencia Final - Estado */}
                   {valoresCierre.totalLiquidacion > 0 && (
                     <div className={`flex justify-between items-center py-1 px-2 rounded border ${
                       valoresCierre.calza 
@@ -2356,7 +2247,6 @@ export const DetalleView = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Ver Cierre */}
       <Dialog open={showModalVerCierre} onOpenChange={setShowModalVerCierre}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader>
@@ -2408,7 +2298,6 @@ export const DetalleView = () => {
             </div>
           ) : cierreDetalle ? (
             <div className="space-y-4 mt-4">
-              {/* Sección de Combustible */}
               <div className={SECTION_CARD_CLASS}>
                 <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 pb-1.5 border-b border-gray-200 dark:border-gray-700">
                   Combustible
@@ -2498,7 +2387,6 @@ export const DetalleView = () => {
                 </div>
               </div>
 
-              {/* Sección de Liquidación */}
               <div className={SECTION_CARD_CLASS}>
                 <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 pb-1.5 border-b border-gray-200 dark:border-gray-700">
                   Liquidación
@@ -2613,7 +2501,6 @@ export const DetalleView = () => {
                 </div>
               </div>
 
-              {/* Sección de Odómetro */}
               <div className={SECTION_CARD_CLASS}>
                 <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 pb-1.5 border-b border-gray-200 dark:border-gray-700 flex items-center gap-1.5">
                   <Car className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
@@ -2689,7 +2576,6 @@ export const DetalleView = () => {
                 </div>
               </div>
 
-              {/* Resumen */}
               <div className={SECTION_CARD_CLASS}>
                 <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">Resumen</h4>
                 {(() => {
@@ -2805,7 +2691,6 @@ export const DetalleView = () => {
                 })()}
               </div>
 
-              {/* Información del registro */}
               <div className="text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 p-3 rounded border border-gray-200 dark:border-gray-700">
                 <p>Registrado el {new Date(cierreDetalle.createdAt).toLocaleString('es-PE')} por {cierreDetalle.userName}</p>
                 {cierreDetalle.updatedAt !== cierreDetalle.createdAt && (
@@ -2883,7 +2768,6 @@ export const DetalleView = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Turnos del Conductor */}
       <Dialog open={showModalTurnos} onOpenChange={setShowModalTurnos}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader className="pb-2">
@@ -3053,7 +2937,6 @@ export const DetalleView = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Respuesta de Cerrar Turnos */}
       <Dialog open={showModalCerrarTurnos} onOpenChange={setShowModalCerrarTurnos}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -3138,7 +3021,6 @@ export const DetalleView = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Container de notificaciones toast */}
       <NotificationContainer 
         notifications={notifications}
         onRemove={removeNotification}

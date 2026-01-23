@@ -103,13 +103,11 @@ export const authService = {
    */
   async changePassword(data: ChangePasswordData): Promise<any> {
     try {
-      console.log('🔐 [authService] Iniciando cambio de contraseña...');
       const response = await api.post('/auth/change-password', {
         currentPassword: data.currentPassword,
         newPassword: data.newPassword,
         confirmPassword: data.confirmPassword
       });
-      console.log('✅ [authService] Contraseña cambiada exitosamente');
       return response.data;
     } catch (error: any) {
       console.error('❌ [authService] Error en cambio de contraseña:', error.response?.data || error.message);
@@ -154,9 +152,7 @@ export const authService = {
    */
   async refreshToken(): Promise<AuthResponse> {
     try {
-      console.log('🔄 [authService] Renovando token JWT...');
       const response = await api.post<AuthResponse>('/auth/refresh');
-      console.log('✅ [authService] Token renovado exitosamente');
       return response.data;
     } catch (error: any) {
       console.error('❌ [authService] Error renovando token:', error.response?.data || error.message);
@@ -170,9 +166,7 @@ export const authService = {
    */
   async verifyToken(): Promise<boolean> {
     try {
-      console.log('🔍 [authService] Verificando token JWT...');
       await api.get('/auth/verify');
-      console.log('✅ [authService] Token válido');
       return true;
     } catch (error: any) {
       console.warn('⚠️ [authService] Token inválido:', error.response?.data || error.message);
@@ -185,8 +179,6 @@ export const authService = {
    * Utiliza el endpoint /logout del backend que maneja la invalidación del token
    */
   async logout(): Promise<void> {
-    console.log('🔄 [authService] Iniciando proceso de logout...');
-    
     try {
       // Leer token desde auth-storage (Zustand persist)
       let token: string | null = null;
@@ -203,38 +195,14 @@ export const authService = {
       
       if (token) {
         try {
-          console.log('🔄 [authService] Notificando logout al backend...');
-          console.log('🔑 [authService] Token a enviar:', token.substring(0, 20) + '...');
-          
-          // Usar el endpoint correcto /auth/logout del backend
           await api.post('/auth/logout', {}, {
             headers: {
               'Authorization': `Bearer ${token}`
             }
           });
-          
-          console.log('✅ [authService] Logout exitoso en backend');
         } catch (error: any) {
           console.warn('⚠️ [authService] Error en logout del backend:', error);
-          
-          // Si es error de token inválido (401), continuar con logout local
-          if (error.response?.status === 401) {
-            console.log('🔧 [authService] Token inválido detectado - continuando con logout local');
-          }
-          
-          // Si el error contiene "JWT signature does not match", es token corrupto
-          if (error.response?.data?.message?.includes('JWT signature') || 
-              error.message?.includes('JWT signature')) {
-            console.log('🚨 [authService] Token JWT corrupto detectado - continuando con logout local');
-          }
-          
-          // Si hay error de red, continuar con logout local
-          if (error.message === 'Network Error') {
-            console.log('🌐 [authService] Error de red - continuando con logout local');
-          }
         }
-      } else {
-        console.log('⚠️ [authService] No hay token - procediendo solo con logout local');
       }
       
       // 🎯 Limpiar datos locales SIEMPRE (esto es lo más importante)
@@ -242,9 +210,7 @@ export const authService = {
       
     } catch (error) {
       console.error('❌ [authService] Error en logout:', error);
-      // En caso de error, al menos limpiar datos locales
       this.clearLocalStorage();
-      console.log('✅ [authService] Logout local completado por error');
     }
   },
 
@@ -304,7 +270,6 @@ export const authService = {
    */
   cleanupCorruptedToken(): void {
     if (!this.isTokenValid()) {
-      console.log('🧹 [authService] Limpiando token corrupto...');
       this.clearLocalStorage();
     }
   },
@@ -314,12 +279,9 @@ export const authService = {
    * Útil para resolver problemas de tokens corruptos
    */
   forceCleanup(): void {
-    console.log('🚨 [authService] FORZANDO limpieza completa...');
     this.clearLocalStorage();
     
-    // Limpiar también el store de Zustand
     if (typeof window !== 'undefined' && window.location) {
-      console.log('🔄 [authService] Recargando página para aplicar cambios...');
       window.location.reload();
     }
   },
@@ -328,9 +290,6 @@ export const authService = {
    * Diagnóstico completo del token actual
    */
   diagnoseToken(): void {
-    console.log('🔍 [authService] === DIAGNÓSTICO DE TOKEN ===');
-    
-    // Leer token desde auth-storage (Zustand persist)
     let token: string | null = null;
     let authStorageData: any = null;
     try {
@@ -340,44 +299,27 @@ export const authService = {
         token = authStorageData?.state?.token || null;
       }
     } catch (err) {
-      // Fallback: intentar leer desde token directo (compatibilidad temporal)
       token = localStorage.getItem('token');
     }
     
     const user = authStorageData?.state?.user || null;
     
-    console.log('🔑 Token presente:', !!token);
-    console.log('👤 Usuario presente:', !!user);
-    console.log('📦 Auth-storage presente:', !!localStorage.getItem('auth-storage'));
-    
     if (token) {
-      console.log('🔑 Token (primeros 30 chars):', token.substring(0, 30) + '...');
-      console.log('🔑 Longitud del token:', token.length);
-      console.log('🔑 Token válido (formato):', this.isTokenValid());
-      
       try {
         const parts = token.split('.');
         if (parts.length === 3) {
-          const payload = JSON.parse(atob(parts[1]));
-          console.log('📋 Payload del token:', payload);
-          console.log('⏰ Expira en:', new Date(payload.exp * 1000).toLocaleString());
-          console.log('⏰ Creado en:', new Date(payload.iat * 1000).toLocaleString());
+          JSON.parse(atob(parts[1]));
         }
       } catch (e) {
-        console.log('❌ Error decodificando token:', e);
       }
     }
     
     if (user) {
       try {
-        const userData = JSON.parse(user);
-        console.log('👤 Datos del usuario:', userData);
+        JSON.parse(user);
       } catch (e) {
-        console.log('❌ Error parseando usuario:', e);
       }
     }
-    
-    console.log('🔍 === FIN DIAGNÓSTICO ===');
   },
 
   /**
@@ -406,17 +348,11 @@ export const authService = {
    * Limpia todos los datos del localStorage
    */
   clearLocalStorage(): void {
-    console.log('🧹 [authService] Limpiando todos los datos locales...');
-    
-    // Limpiar auth-storage (Zustand persist)
-    // Pero NO limpiar otros datos del microfrontend que puedan ser necesarios
     localStorage.removeItem('auth-storage');
     
-    // Limpiar módulos seleccionados (para cualquier usuario)
     Object.keys(localStorage).forEach(key => {
       if (key.startsWith('selectedModule_') || key.startsWith('selectedModuleName_')) {
         localStorage.removeItem(key);
-        console.log('🗑️ Eliminada clave:', key);
       }
     });
     

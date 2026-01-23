@@ -18,8 +18,6 @@ const shakeAnimation = `
 `
 
 export const TVDisplay = () => {
-  console.log('📺 [TVDisplay] Componente iniciando...')
-  
   const {
     // Estados
     currentTime,
@@ -50,17 +48,12 @@ export const TVDisplay = () => {
   // 🎯 FUNCIÓN DE LOGOUT
   const handleLogout = async () => {
     try {
-      console.log('🔄 [TVDisplay] Cerrando sesión...')
-      
       // Limpiar datos locales
       localStorage.removeItem('user')
       localStorage.removeItem('token')
       localStorage.removeItem('auth-storage')
       
-      console.log('✅ [TVDisplay] Datos limpiados del localStorage')
-      
       // Forzar redirección a login usando window.location
-      console.log('🔄 [TVDisplay] Redirigiendo a /login...')
       window.location.href = '/login'
       
     } catch (error) {
@@ -75,12 +68,6 @@ export const TVDisplay = () => {
   const ticketsLlamadosValidos = ticketsLlamados.filter(ticket => ticket && typeof ticket === 'object')
   const ticketsEnAtencionValidos = ticketsEnAtencion.filter(ticket => ticket && typeof ticket === 'object')
 
-  // Log para debuggear tickets
-  console.log(`🎯 [TVDisplay] Renderizando con ${ticketsEnEsperaValidos.length} tickets en espera`)
-  console.log(`🎯 [TVDisplay] Tickets totales: ${ticketsEnEsperaValidos.length + ticketsLlamadosValidos.length + ticketsEnAtencionValidos.length}`)
-  console.log(`🎯 [TVDisplay] Tickets llamados: ${ticketsLlamadosValidos.length}`)
-  console.log(`🎯 [TVDisplay] Tickets en atención: ${ticketsEnAtencionValidos.length}`)
-
   // Componente memoizado para mostrar información del conductor
   const DriverInfo = useCallback(({ ticket }: { ticket: any }) => {
     // 🎯 VALIDACIÓN: Asegurarse de que el ticket sea válido
@@ -93,18 +80,8 @@ export const TVDisplay = () => {
       )
     }
     
-    // 🎯 DEBUG: Ver qué datos tiene el ticket
-    console.log('🔍 [TVDisplay] DriverInfo para ticket:', {
-      id: ticket.id,
-      phone: ticket.phone,
-      licenseNumber: ticket.licenseNumber,
-      driverName: ticket.driverName,
-      status: ticket.status
-    })
-    
     // 🎯 SIMPLE: Mostrar driverName si está disponible
     if (ticket.driverName && ticket.driverName.trim() !== '') {
-      console.log(`✅ [TVDisplay] Usando driverName: "${ticket.driverName}"`)
       return (
         <div className="text-xs font-semibold text-white leading-tight">
           <span className="break-words">{ticket.driverName}</span>
@@ -114,7 +91,6 @@ export const TVDisplay = () => {
     
     // 🎯 FALLBACK: Mostrar licenseNumber si no hay nombre
     if (ticket.licenseNumber) {
-      console.log(`📱 [TVDisplay] Mostrando licenseNumber: ${ticket.licenseNumber}`)
       return (
         <div className="text-xs text-slate-400">
           📱 {ticket.licenseNumber}
@@ -124,7 +100,6 @@ export const TVDisplay = () => {
     
     // 🎯 FALLBACK: Mostrar phone si no hay licenseNumber
     if (ticket.phone) {
-      console.log(`📱 [TVDisplay] Mostrando phone: ${ticket.phone}`)
       return (
         <div className="text-xs text-slate-400">
           📱 {ticket.phone}
@@ -133,7 +108,6 @@ export const TVDisplay = () => {
     }
     
     // 🎯 ÚLTIMO RECURSO: Sin información
-    console.log(`⚠️ [TVDisplay] Sin información de conductor para ticket ${ticket.id}`)
     return (
       <div className="text-xs text-slate-400">
         📱 Sin información

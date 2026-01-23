@@ -81,20 +81,19 @@ export const CompleteTicketModal = ({
               <p className="text-sm text-red-700 dark:text-red-300 mb-2">
                 <span className="font-bold">Ticket:</span> <span className="font-semibold">#{ticket.ticketNumber}</span>
               </p>
-              <p className="text-sm text-red-700 dark:text-red-300">
-                <span className="font-bold">Conductor:</span> {
-                  loadingDriver ? (
+              <div className="text-sm text-red-700 dark:text-red-300">
+                <span className="font-bold">Conductor:</span>{' '}
+                {loadingDriver ? (
                     <span className="inline-flex items-center">
-                      <div className="w-4 h-4 border-2 border-red-600 dark:border-red-400 border-t-transparent rounded-full animate-spin mr-2"></div>
+                    <span className="w-4 h-4 border-2 border-red-600 dark:border-red-400 border-t-transparent rounded-full animate-spin mr-2 inline-block"></span>
                       Cargando nombre...
                     </span>
                   ) : driverName ? (
                     <span className="font-semibold">{driverName}</span>
                   ) : (
                     <span className="text-red-500 dark:text-red-400">Nombre no disponible</span>
-                  )
-                }
-              </p>
+                )}
+              </div>
             </div>
             
             <label className="block text-sm font-bold text-red-800 dark:text-white mb-3">

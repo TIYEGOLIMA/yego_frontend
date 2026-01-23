@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '../shared/components/ui/Card'
 import { Button } from '../shared/components/ui/Button'
 import { Clock, CheckCircle, LogOut, Loader2, Send, Maximize, Minimize } from 'lucide-react'
-import { TICKET_STATUS } from '../shared/utils/constants'
-import { Rating, CreateRatingData, Ticket } from './types'
+import { Ticket } from './types'
 import { ratingService } from './services/ratingService'
 import { useRatingWebSocket } from './hooks/useWebSocket'
 import { useAuthStore } from '../../../src/store/auth-store'
@@ -20,18 +19,19 @@ const RatingTablet: React.FC = () => {
   
   const navigate = useNavigate()
   
-  // Obtener módulos y usuario del store de auth
-  const modules = useAuthStore((state) => state.modules)
+  // Obtener usuario del store de auth
   const authUser = useAuthStore((state) => state.user)
   
   // Obtener el moduleId del usuario (prioridad: store de auth > currentUser local)
+  // El moduleId puede estar en el objeto user aunque no esté en el tipo User
   const getUserModuleId = (): string | null => {
-    return authUser?.moduleId || currentUser?.moduleId || null
+    const moduleId = (authUser as any)?.moduleId || currentUser?.moduleId || null
+    return moduleId ? String(moduleId) : null
   }
 
   // 🎯 WEBSOCKET CENTRALIZADO para tiempo real
   const { 
-    isConnected, 
+    isConnected,
     connectionStatus,
     onTicketCompleted, 
     onRatingRequested,
@@ -47,7 +47,6 @@ const RatingTablet: React.FC = () => {
         const parsedData = JSON.parse(authStorageData)
         const user = parsedData?.state?.user || null
         if (user) {
-          console.log('👤 [RatingTablet] Usuario cargado:', user)
           setCurrentUser({
             id: user.id,
             name: user.name,
@@ -63,7 +62,6 @@ const RatingTablet: React.FC = () => {
       const userData = localStorage.getItem('user')
       if (userData) {
         const user = JSON.parse(userData)
-        console.log('👤 [RatingTablet] Usuario cargado (fallback):', user)
         setCurrentUser({
           id: user.id,
           name: user.name,
@@ -72,7 +70,6 @@ const RatingTablet: React.FC = () => {
           moduleId: user.moduleId || null
         })
       } else {
-        console.log('⚠️ [RatingTablet] No hay datos de usuario en localStorage')
         setCurrentUser({
           name: 'Usuario Rating',
           role: 'Calificador',
@@ -80,7 +77,6 @@ const RatingTablet: React.FC = () => {
         })
       }
     } catch (error) {
-      console.error('❌ [RatingTablet] Error cargando datos del usuario:', error)
       setCurrentUser({
         name: 'Usuario Rating',
         role: 'Calificador',
@@ -94,46 +90,21 @@ const RatingTablet: React.FC = () => {
     const moduleId = getUserModuleId()
     if (!moduleId) return 'No asignado'
     
-    // Buscar el módulo en el array de módulos
-    const module = modules.find((m: any) => 
-      m.id === parseInt(moduleId, 10) || 
-      m.id === moduleId || 
-      m.id?.toString() === moduleId?.toString()
-    )
-    
-    return module?.nombre || module?.name || `Módulo ${moduleId}`
+    // Para ticketera, los módulos son de atención (modulo_atencion), no del sistema principal
+    // Por lo tanto, simplemente mostrar "Módulo {id}" en lugar de buscar en el array de módulos del sistema
+    // que puede contener módulos de otros sistemas (Garantizado, Pro-Ops, etc.)
+    return `Módulo ${moduleId}`
   }
 
   // 🎯 WEBSOCKET: Suscripción a tickets completados
   useEffect(() => {
-    console.log('🔌 [RatingTablet] Configurando WebSocket para tickets completados...')
-    console.log('🔌 [RatingTablet] Estado conexión:', { isConnected, connectionStatus })
-    console.log('🔌 [RatingTablet] onTicketCompleted:', typeof onTicketCompleted)
-    console.log('🔌 [RatingTablet] onRatingRequested:', typeof onRatingRequested)
-    
     if (!isConnected) {
-      console.log('🚫 [RatingTablet] WebSocket no disponible')
       return
     }
 
-    console.log('✅ [RatingTablet] WebSocket conectado, suscribiendo a eventos...')
-
-    // Obtener el moduleId del usuario para filtrar eventos
     const userModuleId = getUserModuleId()
     
-    // Suscribirse a tickets completados que necesitan rating (con filtrado por módulo)
     const unsubscribeCompleted = onTicketCompleted((ticket: any) => {
-      // Callback para procesar tickets filtrados
-      console.log('🎫🎫🎫 [RatingTablet] TICKET COMPLETADO RECIBIDO POR WEBSOCKET!')
-      console.log('🎫 [RatingTablet] Ticket completo:', ticket)
-      console.log('🎫 [RatingTablet] Ticket Number:', ticket.ticketNumber || ticket.id)
-      console.log('🎫 [RatingTablet] Ticket Status:', ticket.status)
-      console.log('🎫 [RatingTablet] Ticket Rated:', ticket.rated)
-      console.log('🎫 [RatingTablet] Ticket ModuleId:', ticket.moduleId)
-      console.log('🎫 [RatingTablet] Current User ModuleId:', userModuleId)
-      
-      // El filtrado ya se hizo en el hook useRatingWebSocket, aquí solo procesamos
-      console.log('⭐⭐⭐ [RatingTablet] Mostrando modal de calificación para ticket del módulo correcto')
       setSelectedTicket({
         id: ticket.id,
         ticketNumber: ticket.ticketNumber || `TICKET-${ticket.id}`,
@@ -143,45 +114,33 @@ const RatingTablet: React.FC = () => {
       })
       setRating(0)
       setComment('')
-    }, userModuleId) // Pasar moduleId para filtrar en el hook
+    }, userModuleId)
 
     // Suscribirse a solicitudes específicas de rating (con filtrado por módulo)
     const unsubscribeRatingRequested = onRatingRequested((ratingRequest: any) => {
-      console.log('⭐⭐⭐ [RatingTablet] SOLICITUD DE RATING RECIBIDA!')
-      console.log('⭐ [RatingTablet] Rating request completo:', ratingRequest)
-      
       if (ratingRequest.ticket) {
         const ticket = ratingRequest.ticket
-        
-        // El filtrado ya se hizo en el hook useRatingWebSocket, aquí solo procesamos
-        console.log('✅ [RatingTablet] Rating request procesado correctamente')
         setSelectedTicket(ticket)
         setRating(0)
         setComment('')
       }
-    }, userModuleId) // Pasar moduleId para filtrar en el hook
-    
-    console.log('✅ [RatingTablet] Suscripciones configuradas correctamente')
+    }, userModuleId)
     
     return () => {
-      console.log('🧹 [RatingTablet] Limpiando suscripciones WebSocket')
       unsubscribeCompleted()
       unsubscribeRatingRequested()
     }
-    }, [isConnected, onTicketCompleted, onRatingRequested, currentUser, authUser, getUserModuleId])
+  }, [isConnected, onTicketCompleted, onRatingRequested, currentUser?.moduleId, authUser?.moduleId])
 
   // 🎯 HTTP Polling como fallback cuando WebSocket no esté disponible
   useEffect(() => {
     if (isConnected) {
-      console.log('🔌 [RatingTablet] WebSocket activo - HTTP polling deshabilitado')
       return
     }
-
-    console.log('🚫 [RatingTablet] WebSocket no disponible - usando HTTP polling cada 30 segundos')
     
     const interval = setInterval(() => {
       // Cargar tickets completados
-    }, 30000) // 30 segundos
+    }, 30000)
     
     return () => clearInterval(interval)
   }, [isConnected])
@@ -232,46 +191,33 @@ const RatingTablet: React.FC = () => {
 
   const handleLogout = async () => {
     try {
-      console.log('🔄 [RatingTablet] Cerrando sesión...')
       localStorage.removeItem('user')
       localStorage.removeItem('token')
       localStorage.removeItem('auth-storage')
       navigate('/login', { replace: true })
     } catch (error) {
-      console.error('❌ [RatingTablet] Error en logout:', error)
       window.location.href = '/login'
     }
   }
 
   const handleSubmit = async () => {
     if (rating === 0) {
-      console.error('Debe seleccionar una calificación')
       return
     }
 
     if (!selectedTicket) {
-      console.error('No hay ticket para calificar')
       return
     }
 
     setSubmitting(true)
 
     try {
-      console.log('📤 [RatingTablet] Enviando calificación:', {
-        ticketId: selectedTicket.id,
-        score: rating,
-        comment: comment.trim() || undefined
-      })
-      
       await ratingService.crearRating({
         ticketId: selectedTicket.id,
         score: rating,
         comment: comment.trim() || undefined
       })
 
-      console.log('✅ [RatingTablet] Calificación enviada exitosamente')
-
-      // 🎯 WEBSOCKET: Notificar que se envió una rating
       const ratingData = {
         ticketId: selectedTicket.id,
         ticketNumber: selectedTicket.ticketNumber,
@@ -281,24 +227,17 @@ const RatingTablet: React.FC = () => {
         userId: currentUser?.id
       }
       
-      const socketSent = emitRatingSubmitted(ratingData)
-      console.log('📡 [RatingTablet] Evento WebSocket enviado:', socketSent ? 'SÍ' : 'NO')
+      emitRatingSubmitted(ratingData)
       
-      // Mostrar pantalla de agradecimiento
       setShowThankYou(true)
       
-      // Limpiar formulario después de 3 segundos
       setTimeout(() => {
         setSelectedTicket(null)
         setRating(0)
         setComment('')
         setShowThankYou(false)
-        // Recargar tickets
       }, 3000)
     } catch (error: any) {
-      console.error('❌ [RatingTablet] Error enviando calificación:', error)
-      
-      // Mostrar mensaje de error más detallado
       if (error.message?.includes('404')) {
         alert('⚠️ El endpoint de calificaciones no está disponible en el backend.\n\nPor favor, verifica que el controlador de ratings esté creado en:\n/api/ticketera/ratings')
       } else {

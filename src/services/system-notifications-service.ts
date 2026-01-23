@@ -93,20 +93,10 @@ class SystemNotificationsService {
       if (isProduction) {
         // Producción: usar WebSocket nativo con webSocketFactory
         clientConfig.webSocketFactory = () => {
-          console.log('🔌 [SystemNotifications] Conectando WebSocket nativo a:', wsUrl);
           const ws = new WebSocket(wsUrl);
-          
-          // Agregar listeners para debugging
-          ws.addEventListener('open', () => {
-            console.log('✅ [SystemNotifications] WebSocket abierto');
-          });
           
           ws.addEventListener('error', (error) => {
             console.error('❌ [SystemNotifications] Error en WebSocket:', error);
-          });
-          
-          ws.addEventListener('close', (event) => {
-            console.log('🔌 [SystemNotifications] WebSocket cerrado:', event.code, event.reason);
           });
           
           return ws as any;
@@ -244,7 +234,6 @@ class SystemNotificationsService {
       try {
         const event: PremiumProcessAvailableEvent = JSON.parse(message.body)
         if (event.type === 'PREMIUN_PROCESS_AVAILABLE') {
-          console.log('🚦 [SystemNotifications] Evento PREMIIUN_PROCESS_AVAILABLE recibido:', event)
           this.onPremiumProcessAvailable?.(event)
         }
       } catch (error) {

@@ -378,8 +378,6 @@ export const yegoProOpsService = {
       if (dateTo) {
         params.dateTo = convertirFechaISO(dateTo, false)
       }
-
-      console.log('📊 [yegoProOpsService] Obteniendo viajes completos con parámetros:', params)
       
       const response = await api.get<any>('/pro-ops/driver/viajes-completos', {
         params
@@ -396,7 +394,6 @@ export const yegoProOpsService = {
         cierreRegistrado = (response.data as { cierre_registrado?: boolean }).cierre_registrado ?? false
       }
       
-      console.log('✅ [yegoProOpsService] Viajes completos obtenidos:', viajes.length, 'Cierre registrado:', cierreRegistrado)
       return {
         tipo: 'viajes',
         viajes,

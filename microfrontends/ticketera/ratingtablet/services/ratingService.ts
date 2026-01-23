@@ -7,7 +7,6 @@ const createApiInstance = () => {
   return {
     post: async <T>(endpoint: string, data: any): Promise<{ data: T }> => {
       const url = `${baseURL}${endpoint}`
-      console.log(`📤 [API] POST ${url}`, data)
       
       try {
         const response = await fetch(url, {
@@ -24,10 +23,8 @@ const createApiInstance = () => {
         }
         
         const result = await response.json()
-        console.log(`✅ [API] Respuesta de ${url}:`, result)
         return { data: result }
       } catch (error) {
-        console.error(`❌ [API] Error en ${url}:`, error)
         throw error
       }
     }
@@ -52,25 +49,19 @@ export interface QueueRating {
 
 export const ratingService = {
   async crearRating(data: CrearRatingRequest): Promise<QueueRating> {
-    console.log('📤 [ratingService] Enviando calificación:', data)
     try {
       const response = await api.post<QueueRating>('/ratings', data)
-      console.log('✅ [ratingService] Calificación enviada exitosamente:', response.data)
       return response.data
     } catch (error: any) {
-      console.error('❌ [ratingService] Error enviando calificación:', error)
       throw error
     }
   },
 
   async obtenerRatings(): Promise<QueueRating[]> {
-    console.log('📤 [ratingService] Obteniendo calificaciones')
     try {
       const response = await api.post<QueueRating[]>('/ratings/list', {})
-      console.log('✅ [ratingService] Calificaciones obtenidas:', response.data)
       return response.data
     } catch (error: any) {
-      console.error('❌ [ratingService] Error obteniendo calificaciones:', error)
       throw error
     }
   }

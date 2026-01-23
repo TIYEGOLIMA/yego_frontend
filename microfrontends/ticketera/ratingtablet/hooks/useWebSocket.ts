@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useCallback } from 'react'
 import { useWebSocket } from '../../../shared/hooks/useWebSocket'
 
 interface UseRatingWebSocketReturn {
@@ -20,14 +20,7 @@ export const useRatingWebSocket = (): UseRatingWebSocketReturn => {
     connectionStatus,
     onTicketeraEvent,
     sendTicketeraEvent
-  } = useWebSocket({
-    debug: true
-  })
-
-  console.log('🌟 [RatingTablet] Estado WebSocket:', {
-    isConnected,
-    connectionStatus
-  })
+  } = useWebSocket()
 
   // Función helper para verificar si un ticket pertenece al módulo
   const belongsToModule = (ticket: any, moduleId: string | null | undefined): boolean => {
@@ -35,48 +28,57 @@ export const useRatingWebSocket = (): UseRatingWebSocketReturn => {
       return false
     }
     
-    const ticketModuleId = parseInt(ticket.moduleId.toString())
-    const userModuleId = parseInt(moduleId.toString())
+    // Normalizar ambos valores a string y luego a número para comparación
+    const ticketModuleIdStr = String(ticket.moduleId).trim()
+    const userModuleIdStr = String(moduleId).trim()
     
-    return ticketModuleId === userModuleId
+    // Intentar comparar como números primero
+    const ticketModuleId = parseInt(ticketModuleIdStr, 10)
+    const userModuleId = parseInt(userModuleIdStr, 10)
+    
+    // Si ambos son números válidos, comparar numéricamente
+    if (!isNaN(ticketModuleId) && !isNaN(userModuleId)) {
+      return ticketModuleId === userModuleId
+    }
+    
+    // Si no, comparar como strings
+    return ticketModuleIdStr === userModuleIdStr
   }
 
   // Método para suscribirse a tickets completados (con filtrado por módulo)
   const onTicketCompleted = useCallback((callback: (ticket: any) => void, moduleId?: string | null): () => void => {
-    console.log('🔔 [RatingTablet Hook] Suscribiendo a ticket_completed', { moduleId })
-    
     return onTicketeraEvent((event: any) => {
-      console.log('📥 [RatingTablet Hook] EVENTO RECIBIDO:', event)
-      console.log('📥 [RatingTablet Hook] Tipo de evento:', event.type)
-      
-      // 🎯 CORRECTO: El socket-service envía 'ticket_completed' (con guión bajo)
-      if (event.type === 'ticket_completed' || event.type === 'TICKET_COMPLETED' || event.type === 'ticket-completed' || event.type === 'COMPLETED') {
+      if (event.type === 'ticket_completed') {
         const ticket = event.data || event.ticket || event
         
-        // 🎯 FILTRAR POR MÓDULO: Solo pasar tickets del módulo correcto
-        if (moduleId) {
-          if (!belongsToModule(ticket, moduleId)) {
-            console.log(`⚠️ [RatingTablet Hook] Ticket del módulo ${ticket.moduleId} no corresponde al módulo ${moduleId} - FILTRADO`)
-            return
-          }
-          console.log(`✅ [RatingTablet Hook] Ticket del módulo ${ticket.moduleId} corresponde al módulo ${moduleId} - PROCESANDO`)
-        } else {
-          console.warn('⚠️ [RatingTablet Hook] No hay moduleId - ignorando ticket')
+        if (!ticket) {
           return
         }
         
-        console.log('✅✅✅ [RatingTablet Hook] Ticket completado detectado y filtrado correctamente!')
+        if (moduleId) {
+          if (!ticket.moduleId) {
+            return
+          }
+          
+          const ticketModuleId = Number(ticket.moduleId)
+          const userModuleId = Number(moduleId)
+          
+          if (isNaN(ticketModuleId) || isNaN(userModuleId) || ticketModuleId !== userModuleId) {
+            return
+          }
+        } else {
+          if (ticket.moduleId) {
+            return
+          }
+        }
+        
         callback(ticket)
-      } else {
-        console.log('⚠️ [RatingTablet Hook] Tipo de evento no coincide:', event.type)
       }
     })
   }, [onTicketeraEvent])
 
   // Método para suscribirse a solicitudes de rating (con filtrado por módulo)
   const onRatingRequested = useCallback((callback: (ratingRequest: any) => void, moduleId?: string | null): () => void => {
-    console.log('🔔 [RatingTablet] Suscribiendo a rating-requested', { moduleId })
-    
     return onTicketeraEvent((event: any) => {
       if (event.type === 'RATING_REQUESTED' || event.type === 'rating-requested') {
         const ratingRequest = event
@@ -85,16 +87,12 @@ export const useRatingWebSocket = (): UseRatingWebSocketReturn => {
         // 🎯 FILTRAR POR MÓDULO: Solo pasar solicitudes del módulo correcto
         if (moduleId && ticket) {
           if (!belongsToModule(ticket, moduleId)) {
-            console.log(`⚠️ [RatingTablet Hook] Rating request del módulo ${ticket.moduleId} no corresponde al módulo ${moduleId} - FILTRADO`)
             return
           }
-          console.log(`✅ [RatingTablet Hook] Rating request del módulo ${ticket.moduleId} corresponde al módulo ${moduleId} - PROCESANDO`)
         } else if (!moduleId) {
-          console.warn('⚠️ [RatingTablet Hook] No hay moduleId - ignorando rating request')
           return
         }
         
-        console.log('⭐ [RatingTablet] Solicitud de rating recibida y filtrada correctamente:', event)
         callback(event)
       }
     })
@@ -102,7 +100,6 @@ export const useRatingWebSocket = (): UseRatingWebSocketReturn => {
 
   // Método para emitir rating enviado
   const emitRatingSubmitted = useCallback((ratingData: any): boolean => {
-    console.log('📤 [RatingTablet] Enviando rating:', ratingData)
     sendTicketeraEvent({
       type: 'RATING_SUBMITTED',
       data: ratingData,

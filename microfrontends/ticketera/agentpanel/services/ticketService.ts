@@ -39,8 +39,6 @@ api.interceptors.response.use(
   async (error) => {
     if (error.response?.status === 401) {
       try {
-        console.log('🔄 [ticketService] Token expirado, intentando renovar...')
-        
         // 🎯 LEER TOKEN DESDE auth-storage
         const authStorageData = localStorage.getItem('auth-storage')
         if (authStorageData) {
@@ -95,10 +93,7 @@ export const ticketService = {
 
   async createTicketPublic(data: CreateTicketData): Promise<Ticket> {
     try {
-      console.log('🎫 [ticketService] Creando ticket público con datos:', data)
-      
       const response = await api.post('/tickets/create', data)
-      console.log('✅ [ticketService] Ticket creado exitosamente:', response.data)
       
       return response.data
     } catch (error: any) {
@@ -135,9 +130,7 @@ export const ticketService = {
 
   async getTicketById(ticketId: number): Promise<Ticket> {
     try {
-      console.log(`🎯 [ticketService] Obteniendo ticket con ID: ${ticketId}`)
       const response = await api.get(`/tickets/${ticketId}`)
-      console.log('✅ [ticketService] Ticket obtenido:', response.data)
       return response.data
     } catch (error: any) {
       console.error(`❌ [ticketService] Error obteniendo ticket con ID ${ticketId}:`, error)
@@ -202,15 +195,12 @@ export const ticketService = {
 
   async callTicket(ticketId: number, userId: number, moduleId: number): Promise<Ticket> {
     try {
-      console.log('🎯 [ticketService] Llamando ticket:', { ticketId, userId, moduleId })
-      
       if (!moduleId) {
         throw new Error('moduleId es requerido para llamar un ticket')
       }
       
       // 🎯 Usar el endpoint correcto: POST /{ticketId}/call/{userId}?moduleId={moduleId}
       const response = await api.post(`/tickets/${ticketId}/call/${userId}?moduleId=${moduleId}`)
-      console.log('✅ [ticketService] Respuesta del backend:', response.data)
       
       return response.data
     } catch (error: any) {
@@ -240,11 +230,8 @@ export const ticketService = {
         notes: validNotes
       }
       
-      console.log('🎯 [ticketService] Completando ticket:', { ticketId, agentId, notes: validNotes })
-      
       // 🎯 Usar el endpoint correcto: POST /{ticketId}/complete
       const response = await api.post(`/tickets/${ticketId}/complete`, requestData)
-      console.log('✅ [ticketService] Respuesta del backend:', response.data)
       
       return response.data
     } catch (error: any) {
@@ -255,11 +242,8 @@ export const ticketService = {
 
   async cancelTicket(ticketId: number, agentId: number): Promise<Ticket> {
     try {
-      console.log('🎯 [ticketService] Cancelando ticket:', { ticketId, agentId })
-      
       // 🎯 Usar el endpoint correcto: POST /{ticketId}/cancel/{agentId}
       const response = await api.post(`/tickets/${ticketId}/cancel/${agentId}`)
-      console.log('✅ [ticketService] Respuesta del backend:', response.data)
       
       return response.data
     } catch (error: any) {
@@ -270,11 +254,8 @@ export const ticketService = {
 
   async startTicket(ticketId: number, agentId: number): Promise<Ticket> {
     try {
-      console.log('🎯 [ticketService] Iniciando atención de ticket:', { ticketId, agentId })
-      
       // 🎯 Usar el endpoint correcto: POST /{ticketId}/start/{agentId}
       const response = await api.post(`/tickets/${ticketId}/start/${agentId}`)
-      console.log('✅ [ticketService] Respuesta del backend:', response.data)
       
       return response.data
     } catch (error: any) {
@@ -300,13 +281,7 @@ export const ticketService = {
 
   async getTicketsByModule(moduleId: number): Promise<Ticket[]> {
     try {
-      console.log('🎯 [ticketService] Obteniendo tickets del módulo:', moduleId)
       const response = await api.get(`/tickets/modulo/${moduleId}/completos`)
-      
-      // 🎯 DEBUGGING: Ver qué estructura devuelve el endpoint
-      console.log('🔍 [ticketService] Tipo de response.data:', typeof response.data)
-      console.log('🔍 [ticketService] ¿Es array?', Array.isArray(response.data))
-      console.log('🔍 [ticketService] Estructura completa:', response.data)
       
       // 🎯 MANEJAR DIFERENTES ESTRUCTURAS DE RESPUESTA
       let tickets: any[] = []
@@ -324,13 +299,9 @@ export const ticketService = {
           tickets = response.data.content
         } else {
           // Si no hay estructura conocida, intentar convertir el objeto
-          console.log('⚠️ [ticketService] Estructura desconocida, intentando convertir...')
           tickets = Object.values(response.data).filter(item => Array.isArray(item)).flat()
         }
       }
-      
-      console.log('✅ [ticketService] Tickets extraídos:', tickets.length)
-      console.log('✅ [ticketService] Primer ticket:', tickets[0])
       
       // 🎯 MAPEAR LOS TICKETS
       return tickets.map(ticket => ({

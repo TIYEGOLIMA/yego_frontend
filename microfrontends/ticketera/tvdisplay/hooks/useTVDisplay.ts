@@ -61,14 +61,13 @@ export const useTVDisplay = () => {
       const driverData = await validationService.getDriverByPhonePublic(phoneToSearch)
       if (driverData?.full_name) {
         const normalizedName = normalizeDriverName(driverData.full_name)
-        console.log(`✅ [TVDisplay] Nombre cargado para nuevo ticket ${phoneToSearch}: ${normalizedName}`)
         return {
           ...ticket,
           driverName: normalizedName
         }
       }
     } catch (error) {
-      console.log(`❌ [TVDisplay] Error cargando nombre para nuevo ticket ${ticket.licenseNumber}:`, error)
+      // Error silencioso
     }
     
     return ticket
@@ -76,14 +75,10 @@ export const useTVDisplay = () => {
 
   // 🎯 CONECTAR WEBSOCKET AUTOMÁTICAMENTE AL MONTAR EL COMPONENTE
   useEffect(() => {
-    console.log('🔌 [TVDisplay] Montando componente - intentando conectar WebSocket...')
-    
     // Importar SocketService y conectar inmediatamente
     import('../../../../src/services/socket-service').then((module) => {
       const socketService = module.default
       const sessionId = `tvdisplay-${Date.now()}`
-      
-      console.log('🚀 [TVDisplay] Conectando WebSocket con sessionId:', sessionId)
       socketService.connect(sessionId)
     }).catch(error => {
       console.error('❌ [TVDisplay] Error importando SocketService:', error)
@@ -93,20 +88,13 @@ export const useTVDisplay = () => {
   // 🎯 RECONEXIÓN AUTOMÁTICA cada 3 segundos si está desconectado
   useEffect(() => {
     if (isConnected) {
-      console.log('✅ [TVDisplay] WebSocket conectado, no necesita reconexión')
       return
     }
 
-    console.log('🔄 [TVDisplay] Configurando reconexión automática cada 3 segundos...')
-    
     const reconexionInterval = setInterval(() => {
-      console.log('🔄 [TVDisplay] Intentando reconectar WebSocket...')
-      
       import('../../../../src/services/socket-service').then((module) => {
         const socketService = module.default
         const sessionId = `tvdisplay-reconnect-${Date.now()}`
-        
-        console.log('🚀 [TVDisplay] Reconectando WebSocket con sessionId:', sessionId)
         socketService.connect(sessionId)
       }).catch(error => {
         console.error('❌ [TVDisplay] Error en reconexión:', error)
@@ -114,26 +102,18 @@ export const useTVDisplay = () => {
     }, 2000) // Intentar reconectar cada 2 segundos (más agresivo)
 
     return () => {
-      console.log('🛑 [TVDisplay] Limpiando intervalo de reconexión...')
       clearInterval(reconexionInterval)
     }
   }, [isConnected])
 
   // 🎯 CONFIGURAR LISTENERS DEL WEBSOCKET
   useEffect(() => {
-    console.log('🔍 [TVDisplay] Estado WebSocket:', { isConnected, connectionStatus })
-    
     if (!isConnected) {
-      console.log('⏳ [TVDisplay] WebSocket no conectado, esperando conexión...')
       return
     }
 
-    console.log('🎧 [TVDisplay] Configurando listeners del WebSocket...')
-
     // Listener para tickets creados
     const unsubscribeTicketCreated = onTicketCreated(async (newTicket) => {
-      console.log('🆕 [TVDisplay] Nuevo ticket creado:', newTicket)
-      
       // Cargar nombre del conductor para el nuevo ticket
       const ticketConNombre = await cargarNombreConductor(newTicket)
       
@@ -141,10 +121,8 @@ export const useTVDisplay = () => {
         // Verificar si el ticket ya existe
         const exists = prev.some(t => t.id === newTicket.id)
         if (exists) {
-          console.log('🔄 [TVDisplay] Ticket ya existe, actualizando...')
           return prev.map(t => t.id === newTicket.id ? ticketConNombre : t)
         } else {
-          console.log('➕ [TVDisplay] Agregando nuevo ticket...')
           return [ticketConNombre, ...prev]
         }
       })
@@ -159,13 +137,9 @@ export const useTVDisplay = () => {
 
     // Listener para tickets actualizados
     const unsubscribeTicketUpdated = onTicketUpdated(async (updatedTicket) => {
-      console.log('🔄 [TVDisplay] Ticket actualizado:', updatedTicket)
-      
       // 🎯 Si el ticket está completado, removerlo de la lista
       if (updatedTicket.status === 'COMPLETED') {
-        console.log('✅ [TVDisplay] Ticket COMPLETED detectado en actualización:', updatedTicket.id)
         setTickets(prev => {
-          console.log('🗑️ [TVDisplay] Removiendo ticket completado...')
           return prev.filter(t => t.id !== updatedTicket.id)
         })
         setLastUpdate(new Date())
@@ -178,14 +152,10 @@ export const useTVDisplay = () => {
       setTickets(prev => {
         const exists = prev.some(t => t.id === updatedTicket.id)
         if (exists) {
-          console.log('🔄 [TVDisplay] Actualizando ticket existente...')
-          
           // 🎯 Detectar cambio de estado de WAITING a CALLED
           const ticketAnterior = prev.find(t => t.id === updatedTicket.id)
           if (ticketAnterior?.status === TICKET_STATUS.WAITING && 
               updatedTicket.status === TICKET_STATUS.CALLED) {
-            console.log('🔔 [TVDisplay] ¡Ticket cambió de ESPERA a LLAMADO!')
-            
             // 🎵 Reproducir sonido si está habilitado
             if (soundEnabled) {
               playNotificationSound()
@@ -201,16 +171,13 @@ export const useTVDisplay = () => {
                 return newSet
               })
             }, 3000)
-            console.log('📳 [TVDisplay] Animación de vibración activada para card')
             
             // 🎬 Agregar a la cola de visualización en pantalla completa
             setDisplayQueue(prev => [...prev, ticketConNombre])
-            console.log('🎬 [TVDisplay] Ticket agregado a cola de visualización')
           }
           
           return prev.map(t => t.id === updatedTicket.id ? ticketConNombre : t)
         } else {
-          console.log('➕ [TVDisplay] Agregando ticket actualizado...')
           return [ticketConNombre, ...prev]
         }
       })
@@ -220,18 +187,14 @@ export const useTVDisplay = () => {
 
     // Listener para tickets llamados
     const unsubscribeTicketCalled = onTicketCalled(async (calledTicket) => {
-      console.log('📢 [TVDisplay] Ticket llamado:', calledTicket)
-      
       // Cargar nombre del conductor para el ticket llamado
       const ticketConNombre = await cargarNombreConductor(calledTicket)
       
       setTickets(prev => {
         const exists = prev.some(t => t.id === calledTicket.id)
         if (exists) {
-          console.log('🔄 [TVDisplay] Actualizando ticket llamado...')
           return prev.map(t => t.id === calledTicket.id ? ticketConNombre : t)
         } else {
-          console.log('➕ [TVDisplay] Agregando ticket llamado...')
           return [ticketConNombre, ...prev]
         }
       })
@@ -254,19 +217,14 @@ export const useTVDisplay = () => {
           return newSet
         })
       }, 3000)
-      console.log('📳 [TVDisplay] Animación de vibración activada para card llamado')
       
       // 🎬 Agregar a la cola de visualización en pantalla completa
       setDisplayQueue(prev => [...prev, ticketConNombre])
-      console.log('🎬 [TVDisplay] Ticket agregado a cola de visualización')
     })
 
     // Listener para tickets completados
     const unsubscribeTicketCompleted = onTicketCompleted(async (completedTicket) => {
-      console.log('✅ [TVDisplay] Ticket completado:', completedTicket)
-      
       setTickets(prev => {
-        console.log('🗑️ [TVDisplay] Removiendo ticket completado...')
         return prev.filter(t => t.id !== completedTicket.id)
       })
       
@@ -275,10 +233,7 @@ export const useTVDisplay = () => {
 
     // Listener para tickets cancelados
     const unsubscribeTicketCancelled = onTicketCancelled(async (cancelledTicket) => {
-      console.log('❌ [TVDisplay] Ticket cancelado:', cancelledTicket)
-      
       setTickets(prev => {
-        console.log('🗑️ [TVDisplay] Removiendo ticket cancelado...')
         return prev.filter(t => t.id !== cancelledTicket.id)
       })
       
@@ -287,8 +242,6 @@ export const useTVDisplay = () => {
 
     // Listener para actualizaciones de display
     const unsubscribeDisplayUpdated = onDisplayUpdated((displayData) => {
-      console.log('📺 [TVDisplay] Display actualizado:', displayData)
-      
       if (displayData.tickets) {
         setTickets(displayData.tickets)
       }
@@ -302,7 +255,6 @@ export const useTVDisplay = () => {
 
     // Cleanup function
     return () => {
-      console.log('🧹 [TVDisplay] Limpiando listeners del WebSocket...')
       unsubscribeTicketCreated()
       unsubscribeTicketUpdated()
       unsubscribeTicketCalled()
@@ -316,12 +268,10 @@ export const useTVDisplay = () => {
   useEffect(() => {
     const cargarTicketsIniciales = async () => {
       try {
-        console.log('📋 [TVDisplay] Cargando todos los tickets iniciales...')
         setLoading(true)
         
         // 🎯 NUEVO: Usar getAllTickets() para obtener todos los tickets en una sola llamada
         const ticketsData = await ticketService.getAllTickets()
-        console.log('📋 [TVDisplay] Todos los tickets cargados:', ticketsData.length)
         
         // Cargar nombres de conductores para todos los tickets
         const ticketsConNombres = await Promise.all(
@@ -340,8 +290,6 @@ export const useTVDisplay = () => {
         }
         setStats(statsData)
         setLastStatsUpdate(new Date())
-        
-        console.log('📊 [TVDisplay] Estadísticas actualizadas:', statsData)
       } catch (error) {
         console.error('❌ [TVDisplay] Error cargando tickets iniciales:', error)
       } finally {
@@ -355,11 +303,8 @@ export const useTVDisplay = () => {
   // 🎯 POLLING COMO RESPALDO (si WebSocket no está conectado)
   useEffect(() => {
     if (!isConnected) {
-      console.log('🔄 [TVDisplay] WebSocket no conectado, iniciando polling...')
-      
       const interval = setInterval(async () => {
         try {
-          console.log('🔄 [TVDisplay] Polling para actualizar todos los tickets...')
           // 🎯 NUEVO: Usar getAllTickets() en el polling también
           const ticketsData = await ticketService.getAllTickets()
           
@@ -367,15 +312,12 @@ export const useTVDisplay = () => {
           setTickets(prev => {
             if (prev.length !== ticketsData.length || 
                 prev.some((t, i) => t.id !== ticketsData[i]?.id || t.status !== ticketsData[i]?.status)) {
-              console.log('🔄 [TVDisplay] Cambios detectados, actualizando tickets...')
               
               // 🎯 Detectar tickets que cambiaron de WAITING a CALLED
               ticketsData.forEach(ticketNuevo => {
                 const ticketAnterior = prev.find(t => t.id === ticketNuevo.id)
                 if (ticketAnterior?.status === TICKET_STATUS.WAITING && 
                     ticketNuevo.status === TICKET_STATUS.CALLED) {
-                  console.log('🔔 [TVDisplay Polling] ¡Ticket cambió de ESPERA a LLAMADO!')
-                  
                   // 🎵 Reproducir sonido si está habilitado
                   if (soundEnabled) {
                     playNotificationSound()
@@ -391,13 +333,11 @@ export const useTVDisplay = () => {
                       return newSet
                     })
                   }, 3000)
-                  console.log('📳 [TVDisplay Polling] Animación de vibración activada para card')
                   
                   // 🎬 Agregar a la cola de visualización en pantalla completa
                   // Cargar el ticket con nombre primero
                   cargarNombreConductor(ticketNuevo).then(ticketConNombre => {
                     setDisplayQueue(prev => [...prev, ticketConNombre])
-                    console.log('🎬 [TVDisplay Polling] Ticket agregado a cola de visualización')
                   })
                 }
               })
@@ -419,7 +359,6 @@ export const useTVDisplay = () => {
       }, 5000) // Polling cada 5 segundos
       
       return () => {
-        console.log('🛑 [TVDisplay] Deteniendo polling...')
         clearInterval(interval)
       }
     }
@@ -538,8 +477,6 @@ export const useTVDisplay = () => {
     if (currentDisplayTicket !== null || displayQueue.length === 0) {
       return
     }
-
-    console.log('🎬 [TVDisplay] Procesando cola de visualización, tickets en cola:', displayQueue.length)
     
     // Obtener el primer ticket de la cola
     const [nextTicket, ...remainingQueue] = displayQueue
@@ -548,7 +485,6 @@ export const useTVDisplay = () => {
     setCurrentDisplayTicket(nextTicket)
     setDisplayQueue(remainingQueue)
     
-    console.log('🎬 [TVDisplay] Mostrando ticket en pantalla completa:', nextTicket.ticketNumber)
   }, [displayQueue, currentDisplayTicket])
 
   // 🎬 EFECTO PARA OCULTAR EL TICKET DESPUÉS DE 5 SEGUNDOS
@@ -556,17 +492,13 @@ export const useTVDisplay = () => {
     if (currentDisplayTicket === null) {
       return
     }
-
-    console.log('⏱️ [TVDisplay] Iniciando contador de 5 segundos para ticket:', currentDisplayTicket.ticketNumber)
     
     // Ocultar después de 5 segundos
     const timeout = setTimeout(() => {
-      console.log('🎬 [TVDisplay] Ocultando ticket de pantalla completa')
       setCurrentDisplayTicket(null)
     }, 5000)
     
     return () => {
-      console.log('🧹 [TVDisplay] Limpiando timeout')
       clearTimeout(timeout)
     }
   }, [currentDisplayTicket])

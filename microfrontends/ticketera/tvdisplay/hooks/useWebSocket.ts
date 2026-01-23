@@ -23,14 +23,7 @@ export const useTVDisplayWebSocket = (): UseTVDisplayWebSocketReturn => {
     connectionStatus,
     onTicketeraEvent,
     sendTicketeraEvent
-  } = useWebSocket({
-    debug: true
-  })
-
-  console.log('📺 [TVDisplay] Estado WebSocket:', {
-    isConnected,
-    connectionStatus
-  })
+  } = useWebSocket()
 
   // Implementar métodos específicos usando onTicketeraEvent
   const onTicketCreated = (callback: (ticket: any) => void) => {
@@ -83,15 +76,12 @@ export const useTVDisplayWebSocket = (): UseTVDisplayWebSocketReturn => {
 
   // Método para emitir actualizaciones de pantalla
   const emitDisplayUpdate = (displayData: any): boolean => {
-    console.log('📤 [TVDisplay] Enviando actualización de pantalla:', displayData)
     sendTicketeraEvent({ type: 'display_updated', data: displayData })
     return true
   }
 
   // Método de suscripción compatible con la interfaz anterior del TVDisplay
   const subscribe = (topic: string, callback: (message: any) => void): () => void => {
-    console.log('🔔 [TVDisplay] Suscribiendo a:', topic)
-    
     // Mapear topics del SocketContext anterior a eventos del WebSocket centralizado
     const topicMap: { [key: string]: () => () => void } = {
       '/topic/new-ticket': () => onTicketCreated(callback),
@@ -109,7 +99,6 @@ export const useTVDisplayWebSocket = (): UseTVDisplayWebSocketReturn => {
     }
     
     // Para topics genéricos, usar onTicketeraEvent
-    console.log('🔔 [TVDisplay] Suscripción genérica a evento Ticketera')
     return onTicketeraEvent(callback)
   }
 

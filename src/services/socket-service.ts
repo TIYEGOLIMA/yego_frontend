@@ -118,20 +118,10 @@ class SocketService {
       if (isProduction) {
         // Producción: usar WebSocket nativo con webSocketFactory
         clientConfig.webSocketFactory = () => {
-          console.log('🔌 [SocketService] Conectando WebSocket nativo a:', WS_URL);
           const ws = new WebSocket(WS_URL);
-          
-          // Agregar listeners para debugging
-          ws.addEventListener('open', () => {
-            console.log('✅ [SocketService] WebSocket abierto');
-          });
           
           ws.addEventListener('error', (error) => {
             console.error('❌ [SocketService] Error en WebSocket:', error);
-          });
-          
-          ws.addEventListener('close', (event) => {
-            console.log('🔌 [SocketService] WebSocket cerrado:', event.code, event.reason);
           });
           
           return ws as any;
@@ -583,11 +573,11 @@ class SocketService {
    */
   private emit(event: string, data: any) {
     if (this.listeners[event]) {
-      this.listeners[event].forEach(callback => {
+      this.listeners[event].forEach((callback) => {
         try {
           callback(data);
         } catch (error) {
-          // Error silencioso
+          console.error(`[SocketService] Error ejecutando listener para '${event}':`, error);
         }
       });
     }
