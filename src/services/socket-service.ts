@@ -1,28 +1,23 @@
-/**
- * Servicio para gestionar la conexión WebSocket con el backend usando STOMP/SockJS o WebSocket nativo
- * Permite suscribirse a eventos y enviar mensajes con autenticación JWT
- * Cambia automáticamente a WebSocket nativo si el backend lo requiere (detecta error 404 con mensaje JSON)
- */
 import SockJS from 'sockjs-client'
 import { Client, IMessage } from '@stomp/stompjs'
+
+const isProduction = window.location.hostname !== 'localhost' && 
+                     !window.location.hostname.includes('127.0.0.1') &&
+                     (import.meta.env.VITE_DEV_MODE === 'false' || 
+                      import.meta.env.MODE === 'production' ||
+                      window.location.hostname.includes('yego.pro'));
 
 const WS_URL = import.meta.env.VITE_WS_URL;
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3030';
 
-const getSocketBaseUrl = () => {
-  if (WS_URL && WS_URL.startsWith('wss://')) {
-    return WS_URL.replace(/^wss:\/\//, 'https://').replace(/\/ws.*$/, '');
+const getWebSocketUrl = (token: string): string => {
+  if (isProduction) {
+    const prodUrl = WS_URL || 'wss://api-int.yego.pro/ws';
+    return `${prodUrl}?token=${encodeURIComponent(token)}`;
+  } else {
+    const devUrl = SOCKET_URL || 'http://localhost:3030';
+    return `${devUrl}/ws?token=${encodeURIComponent(token)}`;
   }
-  if (WS_URL && WS_URL.startsWith('ws://')) {
-    return WS_URL.replace(/^ws:\/\//, 'http://').replace(/\/ws.*$/, '');
-  }
-  const isProduction = import.meta.env.VITE_DEV_MODE === 'false' || 
-                       import.meta.env.MODE === 'production' ||
-                       SOCKET_URL.includes('https://');
-  if (isProduction && SOCKET_URL.startsWith('http://')) {
-    return SOCKET_URL.replace(/^http:\/\//, 'https://');
-  }
-  return SOCKET_URL;
 };
 
 class SocketService {
@@ -41,7 +36,6 @@ class SocketService {
   private reconnectExceededListeners: (() => void)[] = [];
   private connectionLimitReached = false;
   private connectionLimitDelay = 30000;
-  private useNativeWebSocket = false; // Cambiar a WebSocket nativo si el backend lo requiere
 
   private constructor() {}
 
@@ -82,26 +76,7 @@ class SocketService {
   private handleConnectionError(errorMessage: string = '') {
     this.isConnecting = false;
     
-    // Detectar si el backend requiere WebSocket nativo (error 404 con mensaje JSON)
-    if (errorMessage) {
-      try {
-        const errorJson = typeof errorMessage === 'string' ? JSON.parse(errorMessage) : errorMessage;
-        if (errorJson.message && (
-          errorJson.message.includes('WebSocket nativo') || 
-          errorJson.message.includes('websocket nativo') ||
-          errorJson.message.includes('native WebSocket')
-        )) {
-          console.warn('⚠️ [SocketService] Backend requiere WebSocket nativo. Cambiando...');
-          this.useNativeWebSocket = true;
-          this.reconnectAttempts = 0;
-        }
-      } catch (e) {
-        // No es JSON, continuar con detección normal
-      }
-    }
-    
     if (errorMessage && this.detectConnectionLimit(errorMessage)) {
-      console.warn('⚠️ [SocketService] Límite de conexiones alcanzado. Esperando más tiempo antes de reconectar...');
       this.connectionLimitReached = true;
       this.reconnectAttempts = Math.max(0, this.reconnectAttempts - 1);
     }
@@ -129,7 +104,6 @@ class SocketService {
     }
 
     this.currentReconnectDelay = this.calculateReconnectDelay();
-    console.log(`🔄 [SocketService] Iniciando reconexión (delay: ${this.currentReconnectDelay}ms)`);
     
     const attemptReconnect = () => {
       if (this.connectionStatus === 'connected') {
@@ -147,21 +121,15 @@ class SocketService {
         this.maxReconnectAttemptsReached = true;
         this.stopReconnect();
         this.updateStatus('error');
-        
-        console.warn(`⚠️ [SocketService] Se excedieron los ${this.maxReconnectAttempts} intentos de reconexión. El servidor puede haber sido actualizado.`);
-        
         this.reconnectExceededListeners.forEach(listener => listener());
-        console.log('🔄 [SocketService] Intentando refrescar token y reconectar en 10 segundos...');
         setTimeout(() => {
           this.attemptTokenRefreshAndReconnect();
-        }, 10000); // Esperar 10 segundos antes de intentar con token refrescado
-        
+        }, 10000);
         return;
       }
 
       this.reconnectAttempts++;
       const nextDelay = this.calculateReconnectDelay();
-      console.log(`🔄 [SocketService] Intento ${this.reconnectAttempts}/${this.maxReconnectAttempts} (delay: ${nextDelay}ms)`);
       
       this.connect(`reconnect-${this.reconnectAttempts}`);
       this.currentReconnectDelay = nextDelay;
@@ -177,7 +145,6 @@ class SocketService {
    */
   private async attemptTokenRefreshAndReconnect() {
     try {
-      // Leer token actual
       let token: string | null = null;
       try {
         const authStorage = localStorage.getItem('auth-storage');
@@ -212,7 +179,6 @@ class SocketService {
           const { useAuthStore } = await import('../store/auth-store');
           useAuthStore.setState({ token: newToken });
         } catch (err) {
-          // Fallback: actualizar localStorage directamente
           const authStorage = localStorage.getItem('auth-storage');
           if (authStorage) {
             const parsed = JSON.parse(authStorage);
@@ -287,7 +253,6 @@ class SocketService {
     this.connectionLimitReached = false;
     this.stopReconnect();
     
-    // Leer token actualizado
     let token: string | null = null;
     try {
       const authStorage = localStorage.getItem('auth-storage');
@@ -350,32 +315,17 @@ class SocketService {
     
     if (!this.stompClient) {
       const clientConfig: any = {};
+      const wsUrl = getWebSocketUrl(token);
       
-      // Usar WebSocket nativo si el backend lo requiere, sino usar SockJS
-      if (this.useNativeWebSocket) {
-        const wsUrl = WS_URL || (SOCKET_URL.startsWith('https://') 
-          ? SOCKET_URL.replace('https://', 'wss://') 
-          : SOCKET_URL.replace('http://', 'ws://')) + '/ws';
-        const nativeWsUrl = `${wsUrl}?token=${encodeURIComponent(token)}`;
-        
-        console.log('🔌 [SocketService] Usando WebSocket nativo:', nativeWsUrl.replace(/token=[^&]+/, 'token=***'));
-        
-        clientConfig.brokerURL = nativeWsUrl;
-        clientConfig.webSocketFactory = () => {
-          return new WebSocket(nativeWsUrl);
-        };
+      if (isProduction) {
+        clientConfig.brokerURL = wsUrl;
       } else {
-        const socketBaseUrl = getSocketBaseUrl();
-        const sockJsUrl = `${socketBaseUrl}/ws?token=${encodeURIComponent(token)}`;
-        
         clientConfig.webSocketFactory = () => {
-          return new SockJS(sockJsUrl, undefined, {
-            transports: ['websocket']
+          return new SockJS(wsUrl, undefined, {
+            transports: ['websocket', 'xhr-streaming', 'xhr-polling']
           });
         };
       }
-      
-      // Configuración común
       Object.assign(clientConfig, {
         connectHeaders: {
           'Authorization': `Bearer ${token}`
@@ -387,25 +337,12 @@ class SocketService {
           this.isConnecting = false;
           this.updateStatus('connected');
           
-          // Suscribirse a eventos de Ticketera
           this.subscribeToTicketeraEvents();
-          
-          // Suscribirse a eventos de Sistemas Externos
           this.subscribeToSistemasExternosEvents();
-          
-          // Suscribirse al topic general /topic/system (debe ir antes de los específicos)
           this.subscribeToSystemTopic();
-          
-          // Suscribirse a eventos de Garantizado (topics específicos)
           this.subscribeToGarantizadoEvents();
-          
-          // Suscribirse a eventos de Pro-Ops (topics específicos)
           this.subscribeToProOpsEvents();
-          
-          // Suscribirse a eventos específicos del usuario
           this.subscribeToUserEvents();
-          
-          // Suscribirse a topics premium para SystemNotificationsService
           this.subscribeToPremiumTopics();
         },
         onStompError: (frame: any) => {
@@ -455,81 +392,66 @@ class SocketService {
         };
         this.emit('ticketera', event);
       } catch (error) {
-        // Error silencioso
       }
     });
 
-    // 🎯 Topic para nuevos tickets
     this.stompClient.subscribe('/topic/new-ticket', (message: IMessage) => {
       try {
         const ticket = JSON.parse(message.body);
         const event = { type: 'ticket_created', data: ticket, timestamp: Date.now() };
         this.emit('ticketera', event);
       } catch (error) {
-        // Error silencioso
       }
     });
 
-    // 🎯 Topic para tickets llamados
     this.stompClient.subscribe('/topic/ticket-called', (message: IMessage) => {
       try {
         const ticket = JSON.parse(message.body);
         const event = { type: 'ticket_called', data: ticket, timestamp: Date.now() };
         this.emit('ticketera', event);
       } catch (error) {
-        // Error silencioso
       }
     });
 
-    // 🎯 Topic para tickets iniciados
     this.stompClient.subscribe('/topic/ticket-started', (message: IMessage) => {
       try {
         const ticket = JSON.parse(message.body);
         const event = { type: 'ticket_started', data: ticket, timestamp: Date.now() };
         this.emit('ticketera', event);
       } catch (error) {
-        // Error silencioso
       }
     });
 
-    // 🎯 Topic para tickets completados
     this.stompClient.subscribe('/topic/ticket-completed', (message: IMessage) => {
       try {
         const ticket = JSON.parse(message.body);
         const event = { type: 'ticket_completed', data: ticket, timestamp: Date.now() };
         this.emit('ticketera', event);
       } catch (error) {
-        // Error silencioso
       }
     });
 
-    // 🎯 Topic para tickets cancelados
     this.stompClient.subscribe('/topic/ticket-cancelled', (message: IMessage) => {
       try {
         const ticket = JSON.parse(message.body);
         const event = { type: 'ticket_cancelled', data: ticket, timestamp: Date.now() };
         this.emit('ticketera', event);
       } catch (error) {
-        // Error silencioso
       }
     });
 
-    // Suscribirse a pong del servidor
     this.stompClient.subscribe('/topic/pong', (message: IMessage) => {
       try {
         JSON.parse(message.body);
       } catch (error) {
-        // Error silencioso
       }
     });
 
-    // 🎯 Topic para actualizaciones de módulos de atención
     this.stompClient.subscribe('/topic/modulos-atencion', (message: IMessage) => {
       try {
         const modulosData = JSON.parse(message.body);
         this.emitModulosActualizados(modulosData);
       } catch (error) {
-        // Error silencioso
       }
     });
   }
@@ -548,27 +470,22 @@ class SocketService {
         const event = JSON.parse(message.body);
         this.emit('sistemas-externos', event);
       } catch (error) {
-        // Error silencioso
       }
     });
 
-    // 🎯 Topic para cambios de estado
     this.stompClient.subscribe('/topic/sistema-estado-cambiado', (message: IMessage) => {
       try {
         const event = JSON.parse(message.body);
         this.emit('sistema-estado-cambiado', event);
       } catch (error) {
-        // Error silencioso
       }
     });
 
-    // 🎯 Topic para verificaciones
     this.stompClient.subscribe('/topic/sistema-verificado', (message: IMessage) => {
       try {
         const event = JSON.parse(message.body);
         this.emit('sistema-verificado', event);
       } catch (error) {
-        // Error silencioso
       }
     });
   }
@@ -581,7 +498,6 @@ class SocketService {
       return;
     }
 
-    // Obtener el ID del usuario actual del token
     // Leer token desde auth-storage (Zustand persist)
     let token: string | null = null;
     try {
@@ -606,7 +522,6 @@ class SocketService {
         return;
       }
 
-      // Suscribirse al topic específico del usuario
       this.stompClient.subscribe(`/topic/user/${userId}`, (message: IMessage) => {
         try {
           const event = JSON.parse(message.body);
@@ -619,7 +534,6 @@ class SocketService {
             this.emit('system', event);
           }
         } catch (error) {
-          // Error silencioso
         }
       });
     } catch (error) {
@@ -648,7 +562,6 @@ class SocketService {
         if (event.type === 'ACCOUNT_BLOCKED' || event.type === 'FORCED_LOGOUT' || 
             event.type === 'USER_TABLE_UPDATE' || event.type === 'PREMIUN_PROCESS_AVAILABLE' || 
             event.type === 'ROLE_DEACTIVATED') {
-          // Ya se emitió arriba, continuar para que también se procese por otros listeners si es necesario
         }
         
         // 🎯 Si es un evento MODULOS_ACTUALIZADOS desde /topic/system, solo emitir como 'system'
@@ -658,7 +571,6 @@ class SocketService {
           return;
         }
         
-        // Filtrar eventos de garantizado desde /topic/system
         if (event.type === 'GARANTIZADO_TABLE_UPDATE' || event.event === 'GARANTIZADO_PROCESS_SUCCESS') {
           if (event.event && event.data) {
             const normalizedEvent = {
@@ -676,15 +588,12 @@ class SocketService {
           this.emit('garantizado', event);
           this.emit('system', event);
         } else if (event.type && event.type.startsWith('PRO_OPS_')) {
-          // Filtrar eventos de pro-ops desde /topic/system
           this.emit('pro-ops-kpis', event);
           this.emit('system', event);
         } else {
-          // Otros eventos del sistema
           this.emit('system', event);
         }
       } catch (error) {
-        // Error silencioso
       }
     });
   }
@@ -704,7 +613,6 @@ class SocketService {
         const event = JSON.parse(message.body);
         this.emit('garantizado', event);
       } catch (error) {
-        // Error silencioso
       }
     });
   }
@@ -725,7 +633,6 @@ class SocketService {
         const data = JSON.parse(message.body);
         this.emit('pro-ops-conductores-en-orden', data);
       } catch (error) {
-        // Error silencioso
       }
     });
 
@@ -735,7 +642,6 @@ class SocketService {
         const data = JSON.parse(message.body);
         this.emit('pro-ops-viajes-simplificados-en-curso', data);
       } catch (error) {
-        // Error silencioso
       }
     });
   }
@@ -751,14 +657,11 @@ class SocketService {
     const handlePremiumEvent = (message: IMessage) => {
       try {
         const event = JSON.parse(message.body);
-        // Emitir como evento del sistema para que SystemNotificationsService lo procese
         this.emit('system', event);
       } catch (error) {
-        // Error silencioso
       }
     };
 
-    // Suscribirse a topics premium
     this.stompClient.subscribe('/topic/yego-premiun', handlePremiumEvent);
     this.stompClient.subscribe('/topic/premium-driver', handlePremiumEvent);
   }
