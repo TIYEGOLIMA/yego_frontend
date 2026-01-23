@@ -74,8 +74,24 @@ export const useTVDisplay = () => {
   }, [])
 
   // 🎯 CONECTAR WEBSOCKET AUTOMÁTICAMENTE AL MONTAR EL COMPONENTE
-  // ✅ OPTIMIZADO: Solo conectar si no está ya conectado
+  // ✅ OPTIMIZADO: Solo conectar si no está ya conectado Y hay token
   useEffect(() => {
+    // Verificar token ANTES de intentar conectar
+    let token: string | null = null;
+    try {
+      const authStorage = localStorage.getItem('auth-storage');
+      if (authStorage) {
+        const parsed = JSON.parse(authStorage);
+        token = parsed?.state?.token || null;
+      }
+    } catch (err) {
+      token = localStorage.getItem('token');
+    }
+    
+    if (!token) {
+      return;
+    }
+    
     // Importar SocketService y conectar inmediatamente
     import('../../../../src/services/socket-service').then((module) => {
       const socketService = module.default
@@ -83,15 +99,13 @@ export const useTVDisplay = () => {
       // ✅ Verificar estado antes de conectar
       const currentStatus = socketService.getConnectionStatus();
       if (currentStatus === 'connected') {
-        console.log('✅ [TVDisplay] WebSocket ya está conectado, no se reconecta');
         return;
       }
       
       const sessionId = `tvdisplay-${Date.now()}`
-      console.log('🔄 [TVDisplay] Conectando WebSocket...');
       socketService.connect(sessionId)
     }).catch(error => {
-      console.error('❌ [TVDisplay] Error importando SocketService:', error)
+      // Silencioso
     })
   }, []) // Solo se ejecuta al montar el componente
 
@@ -110,6 +124,22 @@ export const useTVDisplay = () => {
         return
       }
       
+      // Verificar token ANTES de intentar reconectar
+      let token: string | null = null;
+      try {
+        const authStorage = localStorage.getItem('auth-storage');
+        if (authStorage) {
+          const parsed = JSON.parse(authStorage);
+          token = parsed?.state?.token || null;
+        }
+      } catch (err) {
+        token = localStorage.getItem('token');
+      }
+      
+      if (!token) {
+        return;
+      }
+      
       isReconnecting = true
       import('../../../../src/services/socket-service').then((module) => {
         const socketService = module.default
@@ -117,26 +147,22 @@ export const useTVDisplay = () => {
         // ✅ Verificar si ya está conectado ANTES de intentar reconectar
         const currentStatus = socketService.getConnectionStatus();
         if (currentStatus === 'connected') {
-          console.log('✅ [TVDisplay] WebSocket ya está conectado, cancelando reconexión');
           isReconnecting = false
           return
         }
         
         // ✅ Verificar si ya está intentando conectar
         if (currentStatus === 'connecting') {
-          console.log('⏳ [TVDisplay] WebSocket ya está conectando, esperando...');
           isReconnecting = false
           return
         }
         
-        console.log('🔄 [TVDisplay] Intentando reconectar WebSocket...');
         const sessionId = `tvdisplay-reconnect-${Date.now()}`
         socketService.connect(sessionId)
         setTimeout(() => {
           isReconnecting = false
-        }, 5000) // Dar tiempo para que la conexión se establezca
+        }, 5000)
       }).catch(error => {
-        console.error('❌ [TVDisplay] Error en reconexión:', error)
         isReconnecting = false
       })
     }

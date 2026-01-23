@@ -13,9 +13,15 @@ const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3030';
 const getWebSocketUrl = (token: string): string => {
   if (isProduction) {
     const prodUrl = WS_URL || 'wss://api-int.yego.pro/ws';
-    return `${prodUrl}?token=${encodeURIComponent(token)}`;
+    // CRÍTICO: Con WebSocket nativo, el token DEBE ir en la URL query parameter
+    // porque NO se pueden enviar headers HTTP personalizados durante el handshake.
+    // El backend JwtRequestFilter DEBE leer el token de la URL durante el handshake HTTP.
+    // Formato requerido: wss://api-int.yego.pro/ws?token={token_encoded}
+    const url = `${prodUrl}?token=${encodeURIComponent(token)}`;
+    return url;
   } else {
     const devUrl = SOCKET_URL || 'http://localhost:3030';
+    // Desarrollo: SockJS permite headers HTTP, pero también enviamos token en URL para consistencia
     return `${devUrl}/ws?token=${encodeURIComponent(token)}`;
   }
 };
@@ -76,6 +82,24 @@ class SocketService {
   private handleConnectionError(errorMessage: string = '') {
     this.isConnecting = false;
     
+    // Verificar token ANTES de intentar reconectar
+    let token: string | null = null;
+    try {
+      const authStorage = localStorage.getItem('auth-storage');
+      if (authStorage) {
+        const parsed = JSON.parse(authStorage);
+        token = parsed?.state?.token || null;
+      }
+    } catch (err) {
+      token = localStorage.getItem('token');
+    }
+    
+    if (!token) {
+      this.updateStatus('disconnected');
+      this.stopReconnect();
+      return;
+    }
+    
     if (errorMessage && this.detectConnectionLimit(errorMessage)) {
       this.connectionLimitReached = true;
       this.reconnectAttempts = Math.max(0, this.reconnectAttempts - 1);
@@ -91,6 +115,23 @@ class SocketService {
   private startReconnect() {
     // PROTECCIÓN CRÍTICA: Detener cualquier reconexión anterior
     this.stopReconnect();
+    
+    // PROTECCIÓN CRÍTICA: Verificar token ANTES de intentar reconectar
+    let token: string | null = null;
+    try {
+      const authStorage = localStorage.getItem('auth-storage');
+      if (authStorage) {
+        const parsed = JSON.parse(authStorage);
+        token = parsed?.state?.token || null;
+      }
+    } catch (err) {
+      token = localStorage.getItem('token');
+    }
+    
+    if (!token) {
+      this.updateStatus('disconnected');
+      return;
+    }
     
     // PROTECCIÓN CRÍTICA: Verificar múltiples condiciones
     if (this.maxReconnectAttemptsReached) {
@@ -113,6 +154,24 @@ class SocketService {
     this.currentReconnectDelay = this.calculateReconnectDelay();
     
     const attemptReconnect = () => {
+      // PROTECCIÓN: Verificar token en cada intento
+      let token: string | null = null;
+      try {
+        const authStorage = localStorage.getItem('auth-storage');
+        if (authStorage) {
+          const parsed = JSON.parse(authStorage);
+          token = parsed?.state?.token || null;
+        }
+      } catch (err) {
+        token = localStorage.getItem('token');
+      }
+      
+      if (!token) {
+        this.stopReconnect();
+        this.updateStatus('disconnected');
+        return;
+      }
+      
       // PROTECCIÓN: Verificar estado antes de cada intento
       if (this.connectionStatus === 'connected') {
         this.stopReconnect();
@@ -339,12 +398,25 @@ class SocketService {
       const clientConfig: any = {};
       const wsUrl = getWebSocketUrl(token);
       
+      // Log para verificar que el token se está enviando (solo en desarrollo)
+      if (!isProduction) {
+        console.log('🔌 [SocketService] URL WebSocket:', wsUrl.substring(0, 50) + '...');
+        console.log('🔌 [SocketService] Token presente:', !!token, 'Longitud:', token?.length);
+      }
+      
       if (isProduction) {
-        // WebSocket nativo: el token debe ir en la URL Y en los headers
-        // El backend JwtRequestFilter busca el token en el header Authorization
-        // IMPORTANTE: Con WebSocket nativo, el token en la URL es suficiente para el handshake HTTP
-        // Los connectHeaders se envían en el handshake STOMP después de la conexión WebSocket
-        clientConfig.brokerURL = wsUrl;
+        // WebSocket nativo en producción: el token DEBE ir en la URL query parameter
+        // IMPORTANTE: Con WebSocket nativo, NO se pueden enviar headers HTTP personalizados
+        // durante el handshake inicial. El backend DEBE leer el token de la URL.
+        // 
+        // El backend JwtRequestFilter debe buscar el token en:
+        // 1. Query parameter: ?token={token} (PRIMARIO para WebSocket nativo)
+        // 2. Header HTTP: Authorization: Bearer {token} (si está disponible, pero no funciona con WebSocket nativo)
+        //
+        // Los connectHeaders se envían en el frame STOMP CONNECT (después del handshake),
+        // pero el backend valida el token durante el handshake HTTP inicial.
+        clientConfig.brokerURL = wsUrl; // URL ya incluye ?token={token}
+        // Los connectHeaders se envían después del handshake, pero el backend ya validó el token de la URL
         clientConfig.connectHeaders = {
           'Authorization': `Bearer ${token}`
         };
@@ -392,6 +464,25 @@ class SocketService {
         },
         onDisconnect: () => {
           this.isConnecting = false;
+          
+          // Verificar token ANTES de intentar reconectar
+          let token: string | null = null;
+          try {
+            const authStorage = localStorage.getItem('auth-storage');
+            if (authStorage) {
+              const parsed = JSON.parse(authStorage);
+              token = parsed?.state?.token || null;
+            }
+          } catch (err) {
+            token = localStorage.getItem('token');
+          }
+          
+          if (!token) {
+            this.updateStatus('disconnected');
+            this.stopReconnect();
+            return;
+          }
+          
           this.updateStatus('disconnected');
           // PROTECCIÓN: Solo reconectar si no hay una conexión activa
           if (this.reconnectAttempts < this.maxReconnectAttempts && !this.reconnectInterval && !this.isConnecting) {
