@@ -138,7 +138,8 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
     }
     
     checkConnection()
-    const interval = setInterval(checkConnection, 1000)
+    // ✅ OPTIMIZADO: Intervalo aumentado a 10 segundos (antes 1s) para reducir carga
+    const interval = setInterval(checkConnection, 10000)
     
     const handleStatusChange = (status: string) => {
       setIsConnected(status === 'connected')

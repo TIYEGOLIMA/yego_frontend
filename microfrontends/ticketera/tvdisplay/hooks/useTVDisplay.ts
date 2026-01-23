@@ -324,8 +324,11 @@ export const useTVDisplay = () => {
   }, [])
 
   // 🎯 POLLING COMO RESPALDO (si WebSocket no está conectado)
+  // ⚠️ OPTIMIZADO: Intervalo aumentado a 15 segundos para reducir carga en servidor
   useEffect(() => {
     if (!isConnected) {
+      const controller = new AbortController()
+      
       const interval = setInterval(async () => {
         try {
           // 🎯 NUEVO: Usar getAllTickets() en el polling también
@@ -376,12 +379,16 @@ export const useTVDisplay = () => {
           })
           
           setLastUpdate(new Date())
-        } catch (error) {
-          console.error('❌ [TVDisplay] Error en polling:', error)
+        } catch (error: any) {
+          // Ignorar errores de cancelación
+          if (error?.name !== 'AbortError' && error?.code !== 'ERR_CANCELED') {
+            console.error('❌ [TVDisplay] Error en polling:', error)
+          }
         }
-      }, 5000) // Polling cada 5 segundos
+      }, 15000) // ✅ AUMENTADO: Polling cada 15 segundos (antes 5s)
       
       return () => {
+        controller.abort() // ✅ Cancelar requests pendientes
         clearInterval(interval)
       }
     }

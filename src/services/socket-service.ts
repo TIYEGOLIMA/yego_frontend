@@ -7,12 +7,6 @@ import { Client, IMessage } from '@stomp/stompjs'
 
 // URL del servidor de WebSockets desde variables de entorno
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3030';
-const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:3030/ws';
-
-// Detectar si estamos en producción
-const isProduction = import.meta.env.VITE_DEV_MODE === 'false' || 
-                     import.meta.env.MODE === 'production' ||
-                     SOCKET_URL.includes('https://');
 
 class SocketService {
   private static instance: SocketService;
@@ -25,6 +19,8 @@ class SocketService {
   private maxReconnectAttempts = 10;
   private reconnectDelay = 5000; // 5 segundos (aumentado para reducir carga)
   private isConnecting = false; // Flag para evitar múltiples conexiones simultáneas
+  private maxReconnectAttemptsReached = false; // Flag para indicar que se excedieron los intentos
+  private reconnectExceededListeners: (() => void)[] = []; // Listeners para cuando se exceden los intentos
 
   private constructor() {}
 
@@ -35,6 +31,7 @@ class SocketService {
     // Si se conecta exitosamente, resetear intentos de reconexión
     if (status === 'connected') {
       this.reconnectAttempts = 0;
+      this.maxReconnectAttemptsReached = false;
       this.stopReconnect();
     }
   }
@@ -44,15 +41,103 @@ class SocketService {
       return; // Ya hay un intervalo de reconexión activo
     }
 
+    // Si ya se excedieron los intentos, no intentar más
+    if (this.maxReconnectAttemptsReached) {
+      return;
+    }
+
     this.reconnectInterval = setInterval(() => {
       if (this.connectionStatus === 'connected') {
         this.stopReconnect();
         return;
       }
 
+      // Verificar si se excedieron los intentos
+      if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+        this.maxReconnectAttemptsReached = true;
+        this.stopReconnect();
+        this.updateStatus('error');
+        
+        console.warn(`⚠️ [SocketService] Se excedieron los ${this.maxReconnectAttempts} intentos de reconexión. El servidor puede haber sido actualizado.`);
+        
+        // Notificar a los listeners que se excedieron los intentos (solo log)
+        this.reconnectExceededListeners.forEach(listener => listener());
+        
+        // Intentar refrescar el token y reconectar una vez más después de un delay
+        console.log('🔄 [SocketService] Intentando refrescar token y reconectar en 10 segundos...');
+        setTimeout(() => {
+          this.attemptTokenRefreshAndReconnect();
+        }, 10000); // Esperar 10 segundos antes de intentar con token refrescado
+        
+        return;
+      }
+
       this.reconnectAttempts++;
       this.connect(`reconnect-${this.reconnectAttempts}`);
     }, this.reconnectDelay);
+  }
+  
+  /**
+   * Intentar refrescar el token y reconectar después de exceder intentos
+   */
+  private async attemptTokenRefreshAndReconnect() {
+    try {
+      // Leer token actual
+      let token: string | null = null;
+      try {
+        const authStorage = localStorage.getItem('auth-storage');
+        if (authStorage) {
+          const parsed = JSON.parse(authStorage);
+          token = parsed?.state?.token || null;
+        }
+      } catch (err) {
+        token = localStorage.getItem('token');
+      }
+      
+      if (!token) {
+        return;
+      }
+      
+      // Intentar refrescar el token
+      const { default: api } = await import('./core/api');
+      const refreshUrl = window.location.pathname.includes('/ticketera') 
+        ? '/ticketera/auth/refresh' 
+        : '/auth/refresh';
+      
+      try {
+        const refreshResponse = await api.post(refreshUrl, {}, {
+          headers: { 'Authorization': `Bearer ${token}` },
+          timeout: 5000
+        });
+        
+        const newToken = refreshResponse.data.accessToken;
+        
+        // Actualizar token en store
+        try {
+          const { useAuthStore } = await import('../store/auth-store');
+          useAuthStore.setState({ token: newToken });
+        } catch (err) {
+          // Fallback: actualizar localStorage directamente
+          const authStorage = localStorage.getItem('auth-storage');
+          if (authStorage) {
+            const parsed = JSON.parse(authStorage);
+            parsed.state.token = newToken;
+            localStorage.setItem('auth-storage', JSON.stringify(parsed));
+          }
+        }
+        
+        // Resetear intentos y reconectar
+        console.log('✅ [SocketService] Token refrescado exitosamente. Intentando reconectar...');
+        this.reconnectAttempts = 0;
+        this.maxReconnectAttemptsReached = false;
+        this.connect('refresh-reconnect');
+      } catch (refreshError) {
+        // Si falla el refresh, no hacer nada más
+        console.warn('⚠️ [SocketService] No se pudo refrescar token después de exceder intentos. El usuario debe refrescar la página manualmente.');
+      }
+    } catch (error) {
+      console.error('❌ [SocketService] Error en attemptTokenRefreshAndReconnect:', error);
+    }
   }
 
   private stopReconnect() {
@@ -80,6 +165,45 @@ class SocketService {
 
   public offStatusChange(callback: (status: string) => void) {
     this.statusListeners = this.statusListeners.filter(listener => listener !== callback);
+  }
+
+  /**
+   * Suscribirse a eventos cuando se exceden los intentos de reconexión
+   */
+  public onReconnectExceeded(callback: () => void) {
+    this.reconnectExceededListeners.push(callback);
+  }
+
+  /**
+   * Desuscribirse de eventos de exceso de intentos
+   */
+  public offReconnectExceeded(callback: () => void) {
+    this.reconnectExceededListeners = this.reconnectExceededListeners.filter(listener => listener !== callback);
+  }
+
+  /**
+   * Forzar reconexión manual (útil después de refrescar token o actualizar página)
+   */
+  public forceReconnect() {
+    this.reconnectAttempts = 0;
+    this.maxReconnectAttemptsReached = false;
+    this.stopReconnect();
+    
+    // Leer token actualizado
+    let token: string | null = null;
+    try {
+      const authStorage = localStorage.getItem('auth-storage');
+      if (authStorage) {
+        const parsed = JSON.parse(authStorage);
+        token = parsed?.state?.token || null;
+      }
+    } catch (err) {
+      token = localStorage.getItem('token');
+    }
+    
+    if (token) {
+      this.connect('force-reconnect');
+    }
   }
 
   /**
@@ -123,26 +247,16 @@ class SocketService {
       const clientConfig: any = {
       };
       
-      if (isProduction) {
-        // Producción: usar WebSocket nativo con webSocketFactory
-        clientConfig.webSocketFactory = () => {
-          const ws = new WebSocket(WS_URL);
-          
-          ws.addEventListener('error', (error) => {
-            console.error('❌ [SocketService] Error en WebSocket:', error);
-          });
-          
-          return ws as any;
-        };
-      } else {
-        // Desarrollo: usar SockJS con webSocketFactory
-        clientConfig.webSocketFactory = () => {
-          const socket = new SockJS(`${SOCKET_URL}/ws`, undefined, {
-            transports: ['websocket', 'xhr-streaming', 'xhr-polling']
-          });
-          return socket;
-        };
-      }
+      // Usar SockJS tanto en producción como desarrollo
+      // Enviar token como query parameter para que el backend lo lea en la conexión inicial
+      // También se envía en connectHeaders para el handshake STOMP
+      const sockJsUrl = `${SOCKET_URL}/ws?token=${encodeURIComponent(token)}`;
+      clientConfig.webSocketFactory = () => {
+        const socket = new SockJS(sockJsUrl, undefined, {
+          transports: ['websocket', 'xhr-streaming', 'xhr-polling']
+        });
+        return socket;
+      };
       
       // Configuración común
       Object.assign(clientConfig, {

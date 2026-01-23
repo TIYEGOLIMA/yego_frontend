@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '../shared/components/ui/Card'
 import { Button } from '../shared/components/ui/Button'
 import { BaseLoader } from '../../shared/components/ui'
@@ -178,6 +178,9 @@ export default function TabletInterface() {
     phone: ''
   })
   const [tipoDocumento, setTipoDocumento] = useState<'dni' | 'carnet' | null>(null)
+  
+  // ✅ Refs para almacenar timers y limpiarlos correctamente
+  const countdownTimerRef = useRef<NodeJS.Timeout | null>(null)
 
 
   // Estados para las opciones
@@ -321,6 +324,12 @@ export default function TabletInterface() {
 
 
   const resetearFormulario = useCallback(() => {
+    // ✅ Limpiar timer al resetear
+    if (countdownTimerRef.current) {
+      clearInterval(countdownTimerRef.current)
+      countdownTimerRef.current = null
+    }
+    
     setSelectedOption(null)
     setSelectedSubOption(null)
     setPhoneNumber('')
@@ -332,6 +341,16 @@ export default function TabletInterface() {
     setError('')
     console.log('🔄 [TabletInterface] Formulario reseteado')
   }, [setError])
+  
+  // ✅ Cleanup al desmontar componente
+  useEffect(() => {
+    return () => {
+      if (countdownTimerRef.current) {
+        clearInterval(countdownTimerRef.current)
+        countdownTimerRef.current = null
+      }
+    }
+  }, [])
 
 
   const guardarConductor = useCallback(async () => {
@@ -378,18 +397,26 @@ export default function TabletInterface() {
         setShowDriverModal(false)
         setShowTicketCreatedModal(true)
         
+        // ✅ Limpiar timer anterior si existe
+        if (countdownTimerRef.current) {
+          clearInterval(countdownTimerRef.current)
+        }
+        
         // Iniciar contador regresivo de 5 segundos
         let countdown = 5
         const countdownElement = document.getElementById('countdown')
         const progressBar = document.getElementById('progress-bar')
         
-        const timer = setInterval(() => {
+        countdownTimerRef.current = setInterval(() => {
           countdown--
           if (countdownElement) countdownElement.textContent = countdown.toString()
           if (progressBar) progressBar.style.width = `${(countdown / 5) * 100}%`
           
           if (countdown <= 0) {
-            clearInterval(timer)
+            if (countdownTimerRef.current) {
+              clearInterval(countdownTimerRef.current)
+              countdownTimerRef.current = null
+            }
             setShowTicketCreatedModal(false)
             resetearFormulario()
           }

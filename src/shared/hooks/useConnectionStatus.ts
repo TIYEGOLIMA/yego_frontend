@@ -40,10 +40,17 @@ export const useConnectionStatus = () => {
         lastStatusRef.current = newStatus;
     };
 
+    const handleReconnectExceeded = () => {
+      console.warn('⚠️ [ConnectionStatus] Se excedieron los intentos de reconexión. El servidor puede haber sido actualizado. Considera refrescar la página.');
+      setShowMaintenance(true);
+    };
+
     socket.onStatusChange(handleStatusChange);
+    socket.onReconnectExceeded(handleReconnectExceeded);
 
     return () => {
       socket.offStatusChange(handleStatusChange);
+      socket.offReconnectExceeded(handleReconnectExceeded);
     };
   }, []);
 
