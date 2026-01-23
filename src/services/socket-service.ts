@@ -79,8 +79,25 @@ class SocketService {
            lowerMessage.includes('too many open files');
   }
 
+  private detectUserNotFound(errorMessage: string): boolean {
+    const lowerMessage = errorMessage.toLowerCase();
+    return lowerMessage.includes('usuario no encontrado') ||
+           lowerMessage.includes('usuario no existe') ||
+           lowerMessage.includes('user not found') ||
+           lowerMessage.includes('usuario inactivo') ||
+           lowerMessage.includes('user inactive');
+  }
+
   private handleConnectionError(errorMessage: string = '') {
     this.isConnecting = false;
+    
+    // CRÍTICO: Si el usuario no existe, DETENER reconexiones definitivamente
+    if (errorMessage && this.detectUserNotFound(errorMessage)) {
+      this.updateStatus('disconnected');
+      this.stopReconnect();
+      this.maxReconnectAttemptsReached = true; // Bloquear reconexiones
+      return; // NO intentar reconectar
+    }
     
     // Verificar token ANTES de intentar reconectar
     let token: string | null = null;
@@ -415,6 +432,14 @@ class SocketService {
         //
         // Los connectHeaders se envían en el frame STOMP CONNECT (después del handshake),
         // pero el backend valida el token durante el handshake HTTP inicial.
+        
+        // VERIFICACIÓN: Asegurar que la URL incluye el token
+        if (!wsUrl.includes('token=')) {
+          console.error('❌ [SocketService] ERROR CRÍTICO: La URL WebSocket NO incluye el token!', wsUrl.substring(0, 100));
+        } else {
+          console.log('✅ [SocketService] URL WebSocket incluye token:', wsUrl.substring(0, 80) + '...');
+        }
+        
         clientConfig.brokerURL = wsUrl; // URL ya incluye ?token={token}
         // Los connectHeaders se envían después del handshake, pero el backend ya validó el token de la URL
         clientConfig.connectHeaders = {
