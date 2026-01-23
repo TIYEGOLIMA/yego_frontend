@@ -1,6 +1,7 @@
 /**
- * Servicio para gestionar la conexión WebSocket con el backend usando STOMP/SockJS
+ * Servicio para gestionar la conexión WebSocket con el backend usando STOMP/SockJS o WebSocket nativo
  * Permite suscribirse a eventos y enviar mensajes con autenticación JWT
+ * Cambia automáticamente a WebSocket nativo si el backend lo requiere (detecta error 404 con mensaje JSON)
  */
 import SockJS from 'sockjs-client'
 import { Client, IMessage } from '@stomp/stompjs'
@@ -40,6 +41,7 @@ class SocketService {
   private reconnectExceededListeners: (() => void)[] = [];
   private connectionLimitReached = false;
   private connectionLimitDelay = 30000;
+  private useNativeWebSocket = false; // Cambiar a WebSocket nativo si el backend lo requiere
 
   private constructor() {}
 
@@ -79,6 +81,24 @@ class SocketService {
 
   private handleConnectionError(errorMessage: string = '') {
     this.isConnecting = false;
+    
+    // Detectar si el backend requiere WebSocket nativo (error 404 con mensaje JSON)
+    if (errorMessage) {
+      try {
+        const errorJson = typeof errorMessage === 'string' ? JSON.parse(errorMessage) : errorMessage;
+        if (errorJson.message && (
+          errorJson.message.includes('WebSocket nativo') || 
+          errorJson.message.includes('websocket nativo') ||
+          errorJson.message.includes('native WebSocket')
+        )) {
+          console.warn('⚠️ [SocketService] Backend requiere WebSocket nativo. Cambiando...');
+          this.useNativeWebSocket = true;
+          this.reconnectAttempts = 0;
+        }
+      } catch (e) {
+        // No es JSON, continuar con detección normal
+      }
+    }
     
     if (errorMessage && this.detectConnectionLimit(errorMessage)) {
       console.warn('⚠️ [SocketService] Límite de conexiones alcanzado. Esperando más tiempo antes de reconectar...');
@@ -330,14 +350,30 @@ class SocketService {
     
     if (!this.stompClient) {
       const clientConfig: any = {};
-      const socketBaseUrl = getSocketBaseUrl();
-      const sockJsUrl = `${socketBaseUrl}/ws?token=${encodeURIComponent(token)}`;
       
-      clientConfig.webSocketFactory = () => {
-        return new SockJS(sockJsUrl, undefined, {
-          transports: ['websocket']
-        });
-      };
+      // Usar WebSocket nativo si el backend lo requiere, sino usar SockJS
+      if (this.useNativeWebSocket) {
+        const wsUrl = WS_URL || (SOCKET_URL.startsWith('https://') 
+          ? SOCKET_URL.replace('https://', 'wss://') 
+          : SOCKET_URL.replace('http://', 'ws://')) + '/ws';
+        const nativeWsUrl = `${wsUrl}?token=${encodeURIComponent(token)}`;
+        
+        console.log('🔌 [SocketService] Usando WebSocket nativo:', nativeWsUrl.replace(/token=[^&]+/, 'token=***'));
+        
+        clientConfig.brokerURL = nativeWsUrl;
+        clientConfig.webSocketFactory = () => {
+          return new WebSocket(nativeWsUrl);
+        };
+      } else {
+        const socketBaseUrl = getSocketBaseUrl();
+        const sockJsUrl = `${socketBaseUrl}/ws?token=${encodeURIComponent(token)}`;
+        
+        clientConfig.webSocketFactory = () => {
+          return new SockJS(sockJsUrl, undefined, {
+            transports: ['websocket']
+          });
+        };
+      }
       
       // Configuración común
       Object.assign(clientConfig, {
