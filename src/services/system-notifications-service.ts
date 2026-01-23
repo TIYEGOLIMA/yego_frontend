@@ -1,18 +1,15 @@
-import { Client } from '@stomp/stompjs'
-import SockJS from 'sockjs-client'
 import { SystemEvent, ForcedLogoutEvent, AccountBlockedEvent, UserTableUpdateEvent, PremiumProcessAvailableEvent, RoleDeactivatedEvent } from '../types/system-notifications'
+import socketService from './socket-service'
 
+/**
+ * Servicio para manejar notificaciones del sistema
+ * AHORA USA SocketService centralizado en lugar de crear su propia conexión WebSocket
+ * Esto elimina la conexión duplicada y reduce las conexiones a la mitad
+ */
 class SystemNotificationsService {
-  private client: Client | null = null
-  private isConnected = false
   private processedEvents = new Set<string>() // Para evitar procesar eventos duplicados
-
-  public get connectionStatus() {
-    return this.isConnected
-  }
-  private reconnectAttempts = 0
-  private maxReconnectAttempts = 5
-  private reconnectDelay = 3000
+  private unsubscribeSystem: (() => void) | null = null
+  private unsubscribeUser: (() => void) | null = null
   private onForcedLogout: ((event: ForcedLogoutEvent) => void) | null = null
   private onAccountBlocked: ((event: AccountBlockedEvent) => void) | null = null
   private onUserTableUpdate: ((event: UserTableUpdateEvent) => void) | null = null
@@ -20,238 +17,139 @@ class SystemNotificationsService {
   private onRoleDeactivated: ((event: RoleDeactivatedEvent) => void) | null = null
 
   constructor() {
-    this.connect()
+    this.setupSubscriptions()
   }
 
-  private connect() {
+  /**
+   * Configurar suscripciones a eventos del SocketService centralizado
+   */
+  private setupSubscriptions() {
+    // Limpiar suscripciones anteriores si existen
+    this.disconnect()
+
+    // Obtener el usuario actual del token
+    let token: string | null = null;
     try {
-      // Leer token desde auth-storage (Zustand persist) igual que SocketService
-      let token: string | null = null;
-      try {
-        const authStorage = localStorage.getItem('auth-storage');
-        if (authStorage) {
-          const parsed = JSON.parse(authStorage);
-          token = parsed?.state?.token || null;
-        }
-      } catch (err) {
-        // Fallback: intentar leer desde token directo (compatibilidad temporal)
-        token = localStorage.getItem('token');
+      const authStorage = localStorage.getItem('auth-storage');
+      if (authStorage) {
+        const parsed = JSON.parse(authStorage);
+        token = parsed?.state?.token || null;
       }
-      
-      if (!token) {
-        return;
-      }
-
-      // Detectar si estamos en producción
-      const socketUrl = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3030';
-      const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:3030/ws';
-      const systemWsUrl = import.meta.env.VITE_SYSTEM_WS_URL || import.meta.env.VITE_STOMP_URL || 'http://localhost:3030/ws';
-      
-      const isProduction = import.meta.env.VITE_DEV_MODE === 'false' || 
-                           import.meta.env.MODE === 'production' ||
-                           socketUrl.includes('https://');
-
-      // En producción: usar WebSocket nativo (sin SockJS)
-      // En desarrollo: usar SockJS con fallback a polling
-      const clientConfig: any = {
-        connectHeaders: {
-          Authorization: `Bearer ${token}`
-        },
-        onConnect: () => {
-          this.isConnected = true
-          this.reconnectAttempts = 0
-          this.processedEvents.clear() // Limpiar eventos procesados al reconectar
-          
-          setTimeout(() => {
-            if (this.client && this.client.connected) {
-              this.subscribe()
-              this.subscribePremiumTopics()
-            }
-          }, 100)
-        },
-        onStompError: (frame: any) => {
-          // Ignorar errores de iframe silenciosamente
-          const errorMessage = frame?.headers?.message || '';
-          if (!errorMessage.includes('iframe') && !errorMessage.includes('X-Frame-Options')) {
-            console.error('❌ [SystemNotifications] Error STOMP:', frame);
-          }
-          this.handleReconnect()
-        },
-        onWebSocketError: (error: any) => {
-          // Ignorar errores de iframe silenciosamente
-          const errorMessage = error?.message || error?.toString() || '';
-          if (!errorMessage.includes('iframe') && !errorMessage.includes('X-Frame-Options')) {
-            console.error('❌ [SystemNotifications] Error WebSocket:', error);
-          }
-          this.handleReconnect()
-        },
-        onDisconnect: () => {
-          this.isConnected = false
-        }
-      };
-      
-      if (isProduction) {
-        // Producción: usar WebSocket nativo con webSocketFactory
-        clientConfig.webSocketFactory = () => {
-          const ws = new WebSocket(wsUrl);
-          
-          ws.addEventListener('error', (error) => {
-            console.error('❌ [SystemNotifications] Error en WebSocket:', error);
-          });
-          
-          return ws as any;
-        };
-      } else {
-        // Desarrollo: usar SockJS con webSocketFactory
-        clientConfig.webSocketFactory = () => {
-          const socket = new SockJS(systemWsUrl, undefined, {
-            transports: ['websocket', 'xhr-streaming', 'xhr-polling']
-          });
-          return socket;
-        };
-      }
-      
-      this.client = new Client(clientConfig);
-      this.client.activate()
-    } catch (error) {
-      this.handleReconnect()
+    } catch (err) {
+      token = localStorage.getItem('token');
     }
-  }
-
-  private subscribe() {
-    if (!this.client || !this.client.connected) {
-      return
-    }
-    try {
-      // Obtener el usuario actual del token (leer desde auth-storage)
-      let token: string | null = null;
+    
+    let currentUserId: number | null = null
+    if (token) {
       try {
-        const authStorage = localStorage.getItem('auth-storage');
-        if (authStorage) {
-          const parsed = JSON.parse(authStorage);
-          token = parsed?.state?.token || null;
-        }
-      } catch (err) {
-        token = localStorage.getItem('token');
-      }
-      
-      let currentUserId: number | null = null
-      
-      if (token) {
-        try {
-          const payload = JSON.parse(atob(token.split('.')[1]))
-          currentUserId = payload.userId || payload.id
-        } catch (error) {
-          // Silencioso - no es crítico
-        }
-      }
-
-      // Suscribirse al topic global para eventos generales (USER_TABLE_UPDATE)
-      this.client.subscribe('/topic/system', (message) => {
-        try {
-          const event: SystemEvent = JSON.parse(message.body)
-          const eventKey = `${event.type}-${(event as any).userId || (event as any).timestamp || Date.now()}`
-
-          // Evitar procesar el mismo evento múltiples veces
-          if (this.processedEvents.has(eventKey)) {
-            return
-          }
-          this.processedEvents.add(eventKey)
-
-          // Limpiar eventos antiguos (mantener solo los últimos 100)
-          if (this.processedEvents.size > 100) {
-            const firstKey = this.processedEvents.values().next().value
-            if (firstKey) {
-              this.processedEvents.delete(firstKey)
-            }
-          }
-
-          // Filtrar eventos por usuario
-          if ('userId' in event && event.userId && currentUserId && event.userId !== currentUserId) {
-            return
-          }
-
-          switch (event.type) {
-            case 'FORCED_LOGOUT':
-              this.onForcedLogout?.(event as ForcedLogoutEvent)
-              break
-            case 'ACCOUNT_BLOCKED':
-              this.onAccountBlocked?.(event as AccountBlockedEvent)
-              break
-            case 'USER_TABLE_UPDATE':
-              this.onUserTableUpdate?.(event as UserTableUpdateEvent)
-              break
-            case 'PREMIUN_PROCESS_AVAILABLE':
-              this.onPremiumProcessAvailable?.(event as PremiumProcessAvailableEvent)
-              break
-            case 'ROLE_DEACTIVATED':
-              this.onRoleDeactivated?.(event as RoleDeactivatedEvent)
-              break
-          }
-        } catch (error) {
-          console.error('❌ [SystemNotifications] Error procesando evento:', error)
-        }
-      })
-
-      // Suscribirse al topic específico del usuario para eventos personales
-      if (currentUserId && this.client && this.client.connected) {
-        this.client.subscribe(`/topic/user/${currentUserId}`, (message) => {
-          try {
-            const event: SystemEvent = JSON.parse(message.body)
-            const eventKey = `${event.type}-${(event as any).userId || (event as any).timestamp || Date.now()}`
-
-            // Evitar procesar el mismo evento múltiples veces
-            if (this.processedEvents.has(eventKey)) {
-              return
-            }
-            this.processedEvents.add(eventKey)
-
-            switch (event.type) {
-              case 'FORCED_LOGOUT':
-                this.onForcedLogout?.(event as ForcedLogoutEvent)
-                break
-              case 'ACCOUNT_BLOCKED':
-                this.onAccountBlocked?.(event as AccountBlockedEvent)
-                break
-              case 'ROLE_DEACTIVATED':
-                this.onRoleDeactivated?.(event as RoleDeactivatedEvent)
-                break
-            }
-          } catch (error) {
-            console.error('❌ [SystemNotifications] Error procesando evento:', error)
-          }
-        })
-      }
-    } catch (error) {
-      console.error('❌ [SystemNotifications] Error suscribiéndose:', error)
-    }
-  }
-
-  private subscribePremiumTopics() {
-    if (!this.client || !this.isConnected) return
-
-    const handleEvent = (message: { body: string }) => {
-      try {
-        const event: PremiumProcessAvailableEvent = JSON.parse(message.body)
-        if (event.type === 'PREMIUN_PROCESS_AVAILABLE') {
-          this.onPremiumProcessAvailable?.(event)
-        }
+        const payload = JSON.parse(atob(token.split('.')[1]))
+        currentUserId = payload.userId || payload.id
       } catch (error) {
-        console.error('❌ [SystemNotifications] Error al procesar evento PREMIIUN_PROCESS_AVAILABLE:', error)
+        // Silencioso - no es crítico
       }
     }
 
-    this.client.subscribe('/topic/yego-premiun', handleEvent)
-    this.client.subscribe('/topic/premium-driver', handleEvent)
+    // Suscribirse a eventos del sistema desde SocketService
+    const systemHandler = (event: SystemEvent) => {
+      this.handleSystemEvent(event, currentUserId)
+    }
+    socketService.on('system', systemHandler)
+    this.unsubscribeSystem = () => {
+      socketService.off('system', systemHandler)
+    }
+
+    // Suscribirse a eventos del usuario desde SocketService
+    if (currentUserId) {
+      const userHandler = (event: SystemEvent) => {
+        this.handleUserEvent(event)
+      }
+      socketService.on('user-event', userHandler)
+      this.unsubscribeUser = () => {
+        socketService.off('user-event', userHandler)
+      }
+    }
   }
 
-  private handleReconnect() {
-    if (this.reconnectAttempts >= this.maxReconnectAttempts) return
+  /**
+   * Procesar eventos del sistema
+   */
+  private handleSystemEvent(event: SystemEvent, currentUserId: number | null) {
+    try {
+      const eventKey = `${event.type}-${(event as any).userId || (event as any).timestamp || Date.now()}`
 
-    this.reconnectAttempts++
-    setTimeout(() => {
-      this.connect()
-    }, this.reconnectDelay)
+      // Evitar procesar el mismo evento múltiples veces
+      if (this.processedEvents.has(eventKey)) {
+        return
+      }
+      this.processedEvents.add(eventKey)
+
+      // Limpiar eventos antiguos (mantener solo los últimos 100)
+      if (this.processedEvents.size > 100) {
+        const firstKey = this.processedEvents.values().next().value
+        if (firstKey) {
+          this.processedEvents.delete(firstKey)
+        }
+      }
+
+      // Filtrar eventos por usuario
+      if ('userId' in event && event.userId && currentUserId && event.userId !== currentUserId) {
+        return
+      }
+
+      switch (event.type) {
+        case 'FORCED_LOGOUT':
+          this.onForcedLogout?.(event as ForcedLogoutEvent)
+          break
+        case 'ACCOUNT_BLOCKED':
+          this.onAccountBlocked?.(event as AccountBlockedEvent)
+          break
+        case 'USER_TABLE_UPDATE':
+          this.onUserTableUpdate?.(event as UserTableUpdateEvent)
+          break
+        case 'PREMIUN_PROCESS_AVAILABLE':
+          this.onPremiumProcessAvailable?.(event as PremiumProcessAvailableEvent)
+          break
+        case 'ROLE_DEACTIVATED':
+          this.onRoleDeactivated?.(event as RoleDeactivatedEvent)
+          break
+      }
+    } catch (error) {
+      console.error('❌ [SystemNotifications] Error procesando evento del sistema:', error)
+    }
+  }
+
+  /**
+   * Procesar eventos del usuario
+   */
+  private handleUserEvent(event: SystemEvent) {
+    try {
+      const eventKey = `${event.type}-${(event as any).userId || (event as any).timestamp || Date.now()}`
+
+      // Evitar procesar el mismo evento múltiples veces
+      if (this.processedEvents.has(eventKey)) {
+        return
+      }
+      this.processedEvents.add(eventKey)
+
+      switch (event.type) {
+        case 'FORCED_LOGOUT':
+          this.onForcedLogout?.(event as ForcedLogoutEvent)
+          break
+        case 'ACCOUNT_BLOCKED':
+          this.onAccountBlocked?.(event as AccountBlockedEvent)
+          break
+        case 'ROLE_DEACTIVATED':
+          this.onRoleDeactivated?.(event as RoleDeactivatedEvent)
+          break
+      }
+    } catch (error) {
+      console.error('❌ [SystemNotifications] Error procesando evento del usuario:', error)
+    }
+  }
+
+  public get connectionStatus() {
+    // Usar el estado de conexión del SocketService centralizado
+    return socketService.getConnectionStatus() === 'connected'
   }
 
   public setOnForcedLogout(callback: ((event: ForcedLogoutEvent) => void) | null) {
@@ -274,33 +172,45 @@ class SystemNotificationsService {
     this.onRoleDeactivated = callback
   }
 
+  /**
+   * Reconectar - ahora solo reconfigura las suscripciones ya que usa SocketService
+   */
   public reconnect() {
     this.disconnect()
-    this.reconnectAttempts = 0
-    this.connect()
+    this.setupSubscriptions()
   }
 
+  /**
+   * Forzar reconexión - ahora solo reconfigura las suscripciones
+   */
   public forceReconnect() {
     this.disconnect()
     setTimeout(() => {
-      this.reconnectAttempts = 0
-      this.connect()
+      this.setupSubscriptions()
     }, 1000)
   }
 
+  /**
+   * Desconectar - ahora solo limpia las suscripciones
+   */
   public disconnect() {
-    if (this.client) {
-      this.client.deactivate()
-      this.client = null
+    if (this.unsubscribeSystem) {
+      this.unsubscribeSystem()
+      this.unsubscribeSystem = null
     }
-    this.isConnected = false
+    if (this.unsubscribeUser) {
+      this.unsubscribeUser()
+      this.unsubscribeUser = null
+    }
     this.processedEvents.clear()
   }
 
+  /**
+   * Obtener estado de conexión - ahora usa SocketService
+   */
   public getConnectionStatus() {
-    return this.isConnected
+    return socketService.getConnectionStatus() === 'connected'
   }
 }
 
 export default new SystemNotificationsService()
-

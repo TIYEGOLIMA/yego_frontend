@@ -23,7 +23,8 @@ class SocketService {
   private reconnectInterval: NodeJS.Timeout | null = null;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 10;
-  private reconnectDelay = 2000; // 2 segundos
+  private reconnectDelay = 5000; // 5 segundos (aumentado para reducir carga)
+  private isConnecting = false; // Flag para evitar múltiples conexiones simultáneas
 
   private constructor() {}
 
@@ -108,6 +109,13 @@ class SocketService {
     if (this.stompClient && this.stompClient.connected) {
       return;
     }
+
+    // Evitar múltiples intentos de conexión simultáneos
+    if (this.isConnecting) {
+      return;
+    }
+
+    this.isConnecting = true;
     
     if (!this.stompClient) {
       // En producción: usar WebSocket nativo (sin SockJS)
@@ -146,6 +154,7 @@ class SocketService {
         heartbeatIncoming: 0, // Deshabilitar heartbeat entrante
         heartbeatOutgoing: 0, // Deshabilitar heartbeat saliente
         onConnect: () => {
+          this.isConnecting = false;
           this.updateStatus('connected');
           
           // Suscribirse a eventos de Ticketera
@@ -165,8 +174,12 @@ class SocketService {
           
           // Suscribirse a eventos específicos del usuario
           this.subscribeToUserEvents();
+          
+          // Suscribirse a topics premium para SystemNotificationsService
+          this.subscribeToPremiumTopics();
         },
         onStompError: () => {
+          this.isConnecting = false;
           this.updateStatus('error');
           // Solo reconectar si no hemos excedido el máximo de intentos
           if (this.reconnectAttempts < this.maxReconnectAttempts) {
@@ -174,6 +187,7 @@ class SocketService {
           }
         },
         onWebSocketError: () => {
+          this.isConnecting = false;
           this.updateStatus('error');
           // Solo reconectar si no hemos excedido el máximo de intentos
           if (this.reconnectAttempts < this.maxReconnectAttempts) {
@@ -181,6 +195,7 @@ class SocketService {
           }
         },
         onDisconnect: () => {
+          this.isConnecting = false;
           this.updateStatus('disconnected');
           // Solo reconectar si no hemos excedido el máximo de intentos
           if (this.reconnectAttempts < this.maxReconnectAttempts) {
@@ -194,7 +209,12 @@ class SocketService {
       // Activar el cliente STOMP
       this.stompClient.activate();
     } else {
-      this.stompClient.activate();
+      // Si ya existe el cliente pero no está conectado, reactivarlo
+      if (!this.stompClient.connected) {
+        this.stompClient.activate();
+      } else {
+        this.isConnecting = false;
+      }
     }
   }
 
@@ -373,9 +393,12 @@ class SocketService {
         try {
           const event = JSON.parse(message.body);
           
-          // Los eventos ACCOUNT_BLOCKED, FORCED_LOGOUT y ROLE_DEACTIVATED son procesados por SystemNotificationsService
+          // Emitir todos los eventos del usuario (incluyendo los que SystemNotificationsService necesita)
+          this.emit('user-event', event);
+          
+          // También emitir eventos específicos para compatibilidad
           if (event.type === 'ACCOUNT_BLOCKED' || event.type === 'FORCED_LOGOUT' || event.type === 'ROLE_DEACTIVATED') {
-            return;
+            this.emit('system', event);
           }
         } catch (error) {
           // Error silencioso
@@ -399,9 +422,15 @@ class SocketService {
       try {
         const event = JSON.parse(message.body);
         
-        // Los eventos ACCOUNT_BLOCKED y FORCED_LOGOUT ahora llegan por /topic/user/{userId}
-        if (event.type === 'ACCOUNT_BLOCKED' || event.type === 'FORCED_LOGOUT') {
-          return;
+        // Emitir todos los eventos del sistema (SystemNotificationsService los procesará)
+        // Los eventos ACCOUNT_BLOCKED y FORCED_LOGOUT también pueden llegar por /topic/system
+        this.emit('system', event);
+        
+        // Si son eventos que también deben procesarse por SystemNotificationsService, no retornar
+        if (event.type === 'ACCOUNT_BLOCKED' || event.type === 'FORCED_LOGOUT' || 
+            event.type === 'USER_TABLE_UPDATE' || event.type === 'PREMIUN_PROCESS_AVAILABLE' || 
+            event.type === 'ROLE_DEACTIVATED') {
+          // Ya se emitió arriba, continuar para que también se procese por otros listeners si es necesario
         }
         
         // 🎯 Si es un evento MODULOS_ACTUALIZADOS desde /topic/system, solo emitir como 'system'
@@ -494,6 +523,29 @@ class SocketService {
   }
 
   /**
+   * Suscribirse a topics premium para SystemNotificationsService
+   */
+  private subscribeToPremiumTopics() {
+    if (!this.stompClient || !this.stompClient.connected) {
+      return;
+    }
+
+    const handlePremiumEvent = (message: IMessage) => {
+      try {
+        const event = JSON.parse(message.body);
+        // Emitir como evento del sistema para que SystemNotificationsService lo procese
+        this.emit('system', event);
+      } catch (error) {
+        // Error silencioso
+      }
+    };
+
+    // Suscribirse a topics premium
+    this.stompClient.subscribe('/topic/yego-premiun', handlePremiumEvent);
+    this.stompClient.subscribe('/topic/premium-driver', handlePremiumEvent);
+  }
+
+  /**
    * Helper para emitir eventos de módulos actualizados (evita código duplicado)
    */
   private emitModulosActualizados(modulosData: any) {
@@ -520,6 +572,7 @@ class SocketService {
    * Desconecta del servidor de WebSockets
    */
   public disconnect() {
+    this.isConnecting = false;
     this.stopReconnect();
     if (this.stompClient) {
       this.stompClient.deactivate();

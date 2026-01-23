@@ -200,6 +200,37 @@ function App() {
     }
   }, [token, user]);
 
+  // Limpiar conexiones WebSocket al cerrar la pestaña o cuando la página pierde visibilidad
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      SocketService.disconnect();
+    };
+
+    const handleVisibilityChange = () => {
+      // Si la pestaña se oculta por más de 5 minutos, desconectar para liberar recursos
+      if (document.hidden) {
+        setTimeout(() => {
+          if (document.hidden) {
+            SocketService.disconnect();
+          }
+        }, 5 * 60 * 1000); // 5 minutos
+      } else {
+        // Si la pestaña vuelve a ser visible y hay token, reconectar
+        if (token && user) {
+          SocketService.connect(user.id + '-' + user.username);
+        }
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [token, user]);
+
   return (
     <QueryClientProvider client={queryClient}>
       <Router>

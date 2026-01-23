@@ -85,24 +85,47 @@ export const useTVDisplay = () => {
     })
   }, []) // Solo se ejecuta al montar el componente
 
-  // 🎯 RECONEXIÓN AUTOMÁTICA cada 3 segundos si está desconectado
+  // 🎯 RECONEXIÓN AUTOMÁTICA cada 10 segundos si está desconectado (optimizado)
   useEffect(() => {
     if (isConnected) {
       return
     }
 
-    const reconexionInterval = setInterval(() => {
+    // Evitar múltiples intervalos simultáneos
+    let reconexionInterval: NodeJS.Timeout | null = null
+    let isReconnecting = false
+
+    const attemptReconnect = () => {
+      if (isReconnecting || isConnected) {
+        return
+      }
+      
+      isReconnecting = true
       import('../../../../src/services/socket-service').then((module) => {
         const socketService = module.default
+        // Verificar si ya está conectado antes de intentar reconectar
+        if (socketService.getConnectionStatus() === 'connected') {
+          isReconnecting = false
+          return
+        }
         const sessionId = `tvdisplay-reconnect-${Date.now()}`
         socketService.connect(sessionId)
+        setTimeout(() => {
+          isReconnecting = false
+        }, 5000) // Dar tiempo para que la conexión se establezca
       }).catch(error => {
         console.error('❌ [TVDisplay] Error en reconexión:', error)
+        isReconnecting = false
       })
-    }, 2000) // Intentar reconectar cada 2 segundos (más agresivo)
+    }
+
+    reconexionInterval = setInterval(attemptReconnect, 10000) // Reducido a 10 segundos
 
     return () => {
-      clearInterval(reconexionInterval)
+      if (reconexionInterval) {
+        clearInterval(reconexionInterval)
+      }
+      isReconnecting = false
     }
   }, [isConnected])
 
