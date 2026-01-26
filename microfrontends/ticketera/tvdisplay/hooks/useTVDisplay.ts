@@ -171,7 +171,7 @@ export const useTVDisplay = () => {
 
     return () => {
       if (reconexionInterval) {
-        clearInterval(reconexionInterval)
+      clearInterval(reconexionInterval)
       }
       isReconnecting = false
     }
@@ -430,7 +430,7 @@ export const useTVDisplay = () => {
         } catch (error: any) {
           // Ignorar errores de cancelación
           if (error?.name !== 'AbortError' && error?.code !== 'ERR_CANCELED') {
-            console.error('❌ [TVDisplay] Error en polling:', error)
+          console.error('❌ [TVDisplay] Error en polling:', error)
           }
         }
       }, 15000) // ✅ AUMENTADO: Polling cada 15 segundos (antes 5s)

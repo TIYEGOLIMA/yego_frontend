@@ -50,13 +50,6 @@ export default function Login() {
     }
   }
 
-  const handleDemoLogin = () => {
-    setCredentials({
-      username: 'superadmin',
-      password: 'superadmin123'
-    })
-    setIsDemoMode(true)
-  }
 
   const handleInputChange = (field: string, value: string) => {
     setCredentials(prev => ({ ...prev, [field]: value }))

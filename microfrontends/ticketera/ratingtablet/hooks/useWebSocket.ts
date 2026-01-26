@@ -38,7 +38,7 @@ export const useRatingWebSocket = (): UseRatingWebSocketReturn => {
     
     // Si ambos son números válidos, comparar numéricamente
     if (!isNaN(ticketModuleId) && !isNaN(userModuleId)) {
-      return ticketModuleId === userModuleId
+    return ticketModuleId === userModuleId
     }
     
     // Si no, comparar como strings
@@ -68,7 +68,7 @@ export const useRatingWebSocket = (): UseRatingWebSocketReturn => {
           }
         } else {
           if (ticket.moduleId) {
-            return
+          return
           }
         }
         

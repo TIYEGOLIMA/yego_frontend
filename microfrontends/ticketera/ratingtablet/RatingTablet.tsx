@@ -31,7 +31,7 @@ const RatingTablet: React.FC = () => {
 
   // 🎯 WEBSOCKET CENTRALIZADO para tiempo real
   const { 
-    isConnected,
+    isConnected, 
     connectionStatus,
     onTicketCompleted, 
     onRatingRequested,

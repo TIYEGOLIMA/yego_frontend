@@ -79,7 +79,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
     const wrappedCallback = (event: any) => {
       log('Evento Ticketera recibido:', event)
       try {
-        callback(event)
+      callback(event)
       } catch (error) {
         console.error('[useWebSocket] Error ejecutando callback:', error)
       }

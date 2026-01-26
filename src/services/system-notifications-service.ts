@@ -28,26 +28,26 @@ class SystemNotificationsService {
     this.disconnect()
 
     // Obtener el usuario actual del token
-    let token: string | null = null;
-    try {
-      const authStorage = localStorage.getItem('auth-storage');
-      if (authStorage) {
-        const parsed = JSON.parse(authStorage);
-        token = parsed?.state?.token || null;
-      }
-    } catch (err) {
-      token = localStorage.getItem('token');
-    }
-    
-    let currentUserId: number | null = null
-    if (token) {
+      let token: string | null = null;
       try {
-        const payload = JSON.parse(atob(token.split('.')[1]))
-        currentUserId = payload.userId || payload.id
-      } catch (error) {
-        // Silencioso - no es crítico
+        const authStorage = localStorage.getItem('auth-storage');
+        if (authStorage) {
+          const parsed = JSON.parse(authStorage);
+          token = parsed?.state?.token || null;
+        }
+      } catch (err) {
+        token = localStorage.getItem('token');
       }
-    }
+      
+      let currentUserId: number | null = null
+      if (token) {
+        try {
+          const payload = JSON.parse(atob(token.split('.')[1]))
+          currentUserId = payload.userId || payload.id
+        } catch (error) {
+          // Silencioso - no es crítico
+        }
+      }
 
     // Suscribirse a eventos del sistema desde SocketService
     const systemHandler = (event: SystemEvent) => {
@@ -75,47 +75,47 @@ class SystemNotificationsService {
    */
   private handleSystemEvent(event: SystemEvent, currentUserId: number | null) {
     try {
-      const eventKey = `${event.type}-${(event as any).userId || (event as any).timestamp || Date.now()}`
+          const eventKey = `${event.type}-${(event as any).userId || (event as any).timestamp || Date.now()}`
 
-      // Evitar procesar el mismo evento múltiples veces
-      if (this.processedEvents.has(eventKey)) {
-        return
-      }
-      this.processedEvents.add(eventKey)
+          // Evitar procesar el mismo evento múltiples veces
+          if (this.processedEvents.has(eventKey)) {
+            return
+          }
+          this.processedEvents.add(eventKey)
 
-      // Limpiar eventos antiguos (mantener solo los últimos 100)
-      if (this.processedEvents.size > 100) {
-        const firstKey = this.processedEvents.values().next().value
-        if (firstKey) {
-          this.processedEvents.delete(firstKey)
-        }
-      }
+          // Limpiar eventos antiguos (mantener solo los últimos 100)
+          if (this.processedEvents.size > 100) {
+            const firstKey = this.processedEvents.values().next().value
+            if (firstKey) {
+              this.processedEvents.delete(firstKey)
+            }
+          }
 
-      // Filtrar eventos por usuario
-      if ('userId' in event && event.userId && currentUserId && event.userId !== currentUserId) {
-        return
-      }
+          // Filtrar eventos por usuario
+          if ('userId' in event && event.userId && currentUserId && event.userId !== currentUserId) {
+            return
+          }
 
-      switch (event.type) {
-        case 'FORCED_LOGOUT':
-          this.onForcedLogout?.(event as ForcedLogoutEvent)
-          break
-        case 'ACCOUNT_BLOCKED':
-          this.onAccountBlocked?.(event as AccountBlockedEvent)
-          break
-        case 'USER_TABLE_UPDATE':
-          this.onUserTableUpdate?.(event as UserTableUpdateEvent)
-          break
-        case 'PREMIUN_PROCESS_AVAILABLE':
-          this.onPremiumProcessAvailable?.(event as PremiumProcessAvailableEvent)
-          break
-        case 'ROLE_DEACTIVATED':
-          this.onRoleDeactivated?.(event as RoleDeactivatedEvent)
-          break
-      }
-    } catch (error) {
+          switch (event.type) {
+            case 'FORCED_LOGOUT':
+              this.onForcedLogout?.(event as ForcedLogoutEvent)
+              break
+            case 'ACCOUNT_BLOCKED':
+              this.onAccountBlocked?.(event as AccountBlockedEvent)
+              break
+            case 'USER_TABLE_UPDATE':
+              this.onUserTableUpdate?.(event as UserTableUpdateEvent)
+              break
+            case 'PREMIUN_PROCESS_AVAILABLE':
+              this.onPremiumProcessAvailable?.(event as PremiumProcessAvailableEvent)
+              break
+            case 'ROLE_DEACTIVATED':
+              this.onRoleDeactivated?.(event as RoleDeactivatedEvent)
+              break
+          }
+        } catch (error) {
       console.error('❌ [SystemNotifications] Error procesando evento del sistema:', error)
-    }
+        }
   }
 
   /**
@@ -123,26 +123,26 @@ class SystemNotificationsService {
    */
   private handleUserEvent(event: SystemEvent) {
     try {
-      const eventKey = `${event.type}-${(event as any).userId || (event as any).timestamp || Date.now()}`
+            const eventKey = `${event.type}-${(event as any).userId || (event as any).timestamp || Date.now()}`
 
-      // Evitar procesar el mismo evento múltiples veces
-      if (this.processedEvents.has(eventKey)) {
-        return
-      }
-      this.processedEvents.add(eventKey)
+            // Evitar procesar el mismo evento múltiples veces
+            if (this.processedEvents.has(eventKey)) {
+              return
+            }
+            this.processedEvents.add(eventKey)
 
-      switch (event.type) {
-        case 'FORCED_LOGOUT':
-          this.onForcedLogout?.(event as ForcedLogoutEvent)
-          break
-        case 'ACCOUNT_BLOCKED':
-          this.onAccountBlocked?.(event as AccountBlockedEvent)
-          break
-        case 'ROLE_DEACTIVATED':
-          this.onRoleDeactivated?.(event as RoleDeactivatedEvent)
-          break
-      }
-    } catch (error) {
+            switch (event.type) {
+              case 'FORCED_LOGOUT':
+                this.onForcedLogout?.(event as ForcedLogoutEvent)
+                break
+              case 'ACCOUNT_BLOCKED':
+                this.onAccountBlocked?.(event as AccountBlockedEvent)
+                break
+              case 'ROLE_DEACTIVATED':
+                this.onRoleDeactivated?.(event as RoleDeactivatedEvent)
+                break
+            }
+          } catch (error) {
       console.error('❌ [SystemNotifications] Error procesando evento del usuario:', error)
     }
   }

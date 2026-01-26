@@ -196,7 +196,7 @@ function App() {
   // Usar useRef para evitar reconexiones innecesarias
   const lastUserIdRef = useRef<number | null>(null);
   const lastTokenRef = useRef<string | null>(null);
-  
+
   useEffect(() => {
     const currentUserId = user?.id || null;
     const currentToken = token || null;
