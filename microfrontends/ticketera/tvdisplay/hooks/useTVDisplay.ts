@@ -76,7 +76,7 @@ export const useTVDisplay = () => {
   // 🎯 CONECTAR WEBSOCKET AUTOMÁTICAMENTE AL MONTAR EL COMPONENTE
   // ✅ OPTIMIZADO: Solo conectar si no está ya conectado Y hay token
   useEffect(() => {
-    // Verificar token ANTES de intentar conectar
+    // ✅ VALIDACIÓN CRÍTICA: Verificar token válido ANTES de intentar conectar
     let token: string | null = null;
     try {
       const authStorage = localStorage.getItem('auth-storage');
@@ -88,7 +88,8 @@ export const useTVDisplay = () => {
       token = localStorage.getItem('token');
     }
     
-    if (!token) {
+    // Validar que el token exista y tenga formato JWT válido (3 partes separadas por punto)
+    if (!token || token.trim() === '' || token.split('.').length !== 3) {
       return;
     }
     
@@ -124,7 +125,7 @@ export const useTVDisplay = () => {
         return
       }
       
-      // Verificar token ANTES de intentar reconectar
+      // ✅ VALIDACIÓN CRÍTICA: Verificar token válido ANTES de intentar reconectar
       let token: string | null = null;
       try {
         const authStorage = localStorage.getItem('auth-storage');
@@ -136,7 +137,8 @@ export const useTVDisplay = () => {
         token = localStorage.getItem('token');
       }
       
-      if (!token) {
+      // Validar que el token exista y tenga formato JWT válido (3 partes separadas por punto)
+      if (!token || token.trim() === '' || token.split('.').length !== 3) {
         return;
       }
       

@@ -404,22 +404,7 @@ export const AsistenciaModule: React.FC = () => {
         break;
 
       case 'salida':
-        // Permitir salida desde 1 hora antes del horario hasta 2 horas después
-        const horaMinimaSalida = horaSalidaMinutos - 60; // 1 hora antes
-        const horaMaximaSalida = horaSalidaMinutos + 120; // 2 horas después
-        
-        if (horaActualMinutos < horaMinimaSalida) {
-          return {
-            valido: false,
-            mensaje: `No puedes marcar salida antes de las ${empleado.horario.salida}. Horario permitido: desde 1 hora antes hasta 2 horas después.`
-          };
-        }
-        if (horaActualMinutos > horaMaximaSalida) {
-          return {
-            valido: false,
-            mensaje: `Ya pasó el horario permitido para marcar salida. Horario: hasta 2 horas después de las ${empleado.horario.salida}.`
-          };
-        }
+        // Sin restricción de horario: se puede marcar salida en cualquier momento
         break;
 
       case 'salida_refrigerio':
