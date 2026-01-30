@@ -385,26 +385,8 @@ export const AsistenciaModule: React.FC = () => {
     // Validaciones según el tipo de marcación
     switch (tipo) {
       case 'entrada':
-        // Permitir entrada desde 1 hora antes del horario hasta 2 horas después
-        const horaMinimaEntrada = horaEntradaMinutos - 60; // 1 hora antes
-        const horaMaximaEntrada = horaEntradaMinutos + 120; // 2 horas después
-        
-        if (horaActualMinutos < horaMinimaEntrada) {
-          return {
-            valido: false,
-            mensaje: `No puedes marcar entrada antes de las ${empleado.horario.entrada}. Horario permitido: desde 1 hora antes hasta 2 horas después.`
-          };
-        }
-        if (horaActualMinutos > horaMaximaEntrada) {
-          return {
-            valido: false,
-            mensaje: `Ya pasó el horario permitido para marcar entrada. Horario: hasta 2 horas después de las ${empleado.horario.entrada}.`
-          };
-        }
-        break;
-
       case 'salida':
-        // Sin restricción de horario: se puede marcar salida en cualquier momento
+        // Sin restricción de horario: se puede marcar entrada y salida en cualquier momento
         break;
 
       case 'salida_refrigerio':
