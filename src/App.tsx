@@ -19,6 +19,7 @@ import UsersModule from './features/core/users/users.module'
 import RolesModule from './features/core/roles/roles.module'
 import PermissionsModule from './features/core/permissions/permissions.module'
 import ModulesModule from './features/core/modules/modules.module'
+import { AreasModule } from './features/core/areas'
 import AuditModule from './features/core/audit/audit.module'
 import SessionsModule from './features/core/sessions/sessions.module'
 import { AsistenciaModule } from './features/core/asistencia'
@@ -320,6 +321,11 @@ function App() {
             <Route path="modules" element={
               <PermissionRoute module="modules">
                 <ModulesModule />
+              </PermissionRoute>
+            } />
+            <Route path="areas" element={
+              <PermissionRoute module="areas">
+                <AreasModule />
               </PermissionRoute>
             } />
             <Route path="audit" element={

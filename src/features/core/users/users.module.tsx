@@ -42,6 +42,7 @@ import {
   List as ListIcon,
   Eye,
   EyeOff,
+  Building2,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
@@ -63,9 +64,18 @@ interface User {
   active: boolean;
   createdAt: string;
   lastLogin?: string;
+  areaId?: number | null;
+  areaNombre?: string | null;
+  /** true si el usuario es responsable (jefe) de ese área */
+  areaEsResponsable?: boolean;
 }
 
 interface Role {
+  id: number;
+  name: string;
+}
+
+interface AreaOption {
   id: number;
   name: string;
 }
@@ -79,6 +89,7 @@ interface CreateUserData {
   password: string;
   roleId: number;
   active?: boolean;
+  areaId?: number | null;
 }
 
 const UsersModule: React.FC = () => {
@@ -96,6 +107,7 @@ const UsersModule: React.FC = () => {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [availableRoles, setAvailableRoles] = useState<Role[]>([]);
+  const [areas, setAreas] = useState<AreaOption[]>([]);
   const [formData, setFormData] = useState<CreateUserData>({
     dni: '',
     username: '',
@@ -104,7 +116,8 @@ const UsersModule: React.FC = () => {
     email: '',
     password: '',
     roleId: 0,
-    active: true
+    active: true,
+    areaId: null
   });
 
   const [userStatus, setUserStatus] = useState<'true' | 'false' | 'all'>('all');
@@ -135,14 +148,26 @@ const UsersModule: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
-  const fetchAvailableRoles = async () => {
+  const fetchAvailableRoles = async (signal?: AbortSignal) => {
     try {
-      const response = await api.get('/roles/find-all-active');
+      const response = await api.get('/roles/find-all-active', { signal });
       const roles = Array.isArray(response.data) ? response.data : [];
       setAvailableRoles(roles);
     } catch (error: any) {
+      if (error?.name === 'AbortError' || error?.code === 'ERR_CANCELED') return;
       console.error('Error cargando roles:', error);
       setAvailableRoles([]);
+    }
+  };
+
+  const fetchAreas = async () => {
+    try {
+      const response = await api.get('/areas/find-all');
+      const list = Array.isArray(response.data) ? response.data : [];
+      setAreas(list.map((a: { id: number; name: string }) => ({ id: a.id, name: a.name })));
+    } catch (error: any) {
+      console.error('Error cargando áreas:', error);
+      setAreas([]);
     }
   };
 
@@ -161,13 +186,13 @@ const UsersModule: React.FC = () => {
     return 'Sin nombre';
   };
 
+  // Una sola carga inicial: roles + usuarios. AbortController evita duplicados con React Strict Mode.
   useEffect(() => {
-    fetchUsers();
+    const ac = new AbortController();
+    fetchAvailableRoles(ac.signal);
+    fetchUsers(ac.signal);
+    return () => ac.abort();
   }, [userStatus]);
-
-  useEffect(() => {
-    fetchAvailableRoles();
-  }, []);
 
   // Resetear página al cambiar búsqueda
   useEffect(() => {
@@ -270,27 +295,21 @@ const UsersModule: React.FC = () => {
     }
   }, [formData.name, formData.lastName, editingUser]);
 
-  const fetchUsers = async () => {
+  const fetchUsers = async (signal?: AbortSignal) => {
     try {
       setLoading(true);
       const params: any = {};
-      
-      if (userStatus !== 'all') {
-        params.active = userStatus === 'true';
-      }
-      
-      // Cargar todos los usuarios sin paginación del backend
+      if (userStatus !== 'all') params.active = userStatus === 'true';
       params.page = 1;
-      params.limit = 1000; // Cargar todos
-      
-      const response = await api.get('/users', { params });
-      
+      params.limit = 1000;
+      const response = await api.get('/users', { params, signal });
       if (response.data.users) {
         setUsers(response.data.users);
       } else {
         setUsers(Array.isArray(response.data) ? response.data : []);
       }
     } catch (error: any) {
+      if (error?.name === 'AbortError' || error?.code === 'ERR_CANCELED') return;
       setUsers([]);
     } finally {
       setLoading(false);
@@ -311,6 +330,7 @@ const UsersModule: React.FC = () => {
       user.email?.toLowerCase().includes(search) ||
       user.role?.toLowerCase().includes(search) ||
       user.dni?.toLowerCase().includes(search) ||
+      user.areaNombre?.toLowerCase().includes(search) ||
       // Buscar también en nombre completo
       `${user.name} ${user.lastName}`.toLowerCase().includes(search) ||
       getDisplayName(user).toLowerCase().includes(search)
@@ -441,7 +461,8 @@ const UsersModule: React.FC = () => {
         name: formData.name,
         lastName: formData.lastName || '',
         roleId: formData.roleId,
-        active: formData.active
+        active: formData.active,
+        areaId: formData.areaId != null ? formData.areaId : 0
       };
       
       // Solo incluir password si tiene contenido, sino enviar undefined
@@ -590,6 +611,10 @@ const UsersModule: React.FC = () => {
 
   const openEditDialog = (user: User) => {
     setEditingUser(user);
+    // Cargar áreas solo al abrir el diálogo de edición (no en carga inicial de la vista)
+    if (areas.length === 0) {
+      fetchAreas();
+    }
     // Buscar el ID del rol basado en el nombre
     const roleObj = availableRoles.find(role => role.name === user.role);
     setFormData({
@@ -600,7 +625,8 @@ const UsersModule: React.FC = () => {
       email: user.email,
       password: '', // Siempre vacío por seguridad
       roleId: roleObj?.id || 0,
-      active: user.active
+      active: user.active,
+      areaId: user.areaId ?? null
     });
   };
 
@@ -623,7 +649,8 @@ const UsersModule: React.FC = () => {
       email: '',
       password: '',
       roleId: 0,
-      active: true
+      active: true,
+      areaId: null
     });
   };
 
@@ -652,7 +679,10 @@ const UsersModule: React.FC = () => {
         </div>
         <Button 
           variant="primary"
-          onClick={() => setIsCreateDialogOpen(true)}
+          onClick={() => {
+            if (areas.length === 0) fetchAreas();
+            setIsCreateDialogOpen(true);
+          }}
           leftIcon={<Plus className="h-4 w-4" />}
         >
           Nuevo Usuario
@@ -772,6 +802,7 @@ const UsersModule: React.FC = () => {
                       <TableHead>Usuario</TableHead>
                       <TableHead>Email</TableHead>
                       <TableHead>Rol</TableHead>
+                      <TableHead>Área</TableHead>
                       <TableHead>Estado</TableHead>
                       <TableHead>Último Login</TableHead>
                       <TableHead>Acciones</TableHead>
@@ -807,6 +838,20 @@ const UsersModule: React.FC = () => {
                           <Badge variant="outline">
                             {user.role}
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5 text-sm text-neutral-700 dark:text-neutral-300">
+                            {user.areaNombre ? (
+                              <>
+                                <Building2 className="h-4 w-4 text-neutral-400 shrink-0" />
+                                <span>
+                                  {user.areaEsResponsable ? `Jefe de ${user.areaNombre}` : user.areaNombre}
+                                </span>
+                              </>
+                            ) : (
+                              <span className="text-neutral-400">Sin asignar</span>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-3">
@@ -881,6 +926,12 @@ const UsersModule: React.FC = () => {
                         {user.active ? 'Activo' : 'Inactivo'}
                       </Badge>
                       <Badge variant="outline">{user.role}</Badge>
+                    </div>
+                    <div className="text-xs text-neutral-500 flex items-center gap-1">
+                      <Building2 className="w-3 h-3 shrink-0" />{' '}
+                      {user.areaNombre
+                        ? (user.areaEsResponsable ? `Jefe de ${user.areaNombre}` : user.areaNombre)
+                        : 'Sin asignar'}
                     </div>
                     <div className="text-xs text-neutral-500 flex items-center gap-1">
                       <Mail className="w-3 h-3" /> {user.email}
@@ -1185,6 +1236,28 @@ const UsersModule: React.FC = () => {
               </Select>
             </div>
 
+            <div>
+              <label className="block text-sm font-medium mb-1">Área</label>
+              <Select
+                value={formData.areaId != null && formData.areaId !== 0 ? String(formData.areaId) : 'none'}
+                onValueChange={(value) => setFormData({ ...formData, areaId: value === 'none' ? null : Number(value) })}
+              >
+                <SelectTrigger className="focus:ring-0 focus:ring-offset-0 hover:bg-transparent">
+                  <SelectValue placeholder="Seleccionar área" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Sin asignar</SelectItem>
+                  {areas.map((area) => (
+                    <SelectItem key={area.id} value={String(area.id)}>
+                      {area.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-neutral-500 mt-1">
+                Asigna al usuario a un área para asistencia y reportes.
+              </p>
+            </div>
 
           </div>
           

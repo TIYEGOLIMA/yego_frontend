@@ -313,7 +313,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                       {user?.name?.split(' ')[0] || user?.username || 'Usuario'}
                     </span>
                     <span className="text-xs text-primary-600 dark:text-primary-400 font-medium truncate min-w-0">
-                      {user?.role || 'Nivel'}
+                      {user?.esJefe ? (user?.nombreArea ? `Jefe - ${user.nombreArea}` : 'Jefe') : (user?.role || 'Nivel')}
                     </span>
                   </div>
                 </div>

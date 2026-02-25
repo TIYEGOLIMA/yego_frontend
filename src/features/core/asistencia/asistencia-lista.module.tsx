@@ -276,42 +276,48 @@ export const AsistenciaListaModule: React.FC = () => {
   }, [fechaHistorial]);
 
 
-  // Función para cargar lista de usuarios
-  const cargarListaAsistencia = async () => {
-    try {
-      setLoading(true);
-
-      const response = await api.get('/usuarios/por-rol');
-      const data = response.data;
-
-      if (data.success) {
-        const usuariosArray = data.usuarios.map((usuario: any) => ({
-          id: usuario.id,
-          nombre: usuario.nombreCompleto,
-          cargo: '',
-          departamento: '',
-          email: usuario.email,
-          rol: usuario.rol,
-          totalMarcaciones: 0,
-          ultimaMarcacion: null,
-          marcaciones: []
-        }));
-        
-        setUsuarios(usuariosArray);
-      } else {
-        throw new Error(data.message || 'Error al cargar lista de usuarios');
-      }
-    } catch (error: any) {
-      console.error('❌ Error al cargar lista:', error);
-      setUsuarios([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Cargar datos iniciales
+  // Cargar datos iniciales (AbortController evita doble request en Strict Mode)
   useEffect(() => {
+    const controller = new AbortController();
+    let cancelled = false;
+
+    const cargarListaAsistencia = async () => {
+      try {
+        setLoading(true);
+        const response = await api.get('/asistencia/usuarios-por-rol', { signal: controller.signal });
+        const data = response.data;
+
+        if (cancelled) return;
+        if (data.success) {
+          const usuariosArray = data.usuarios.map((usuario: any) => ({
+            id: usuario.id,
+            nombre: usuario.nombreCompleto,
+            cargo: '',
+            departamento: '',
+            email: usuario.email,
+            rol: usuario.rol,
+            totalMarcaciones: 0,
+            ultimaMarcacion: null,
+            marcaciones: []
+          }));
+          setUsuarios(usuariosArray);
+        } else {
+          throw new Error(data.message || 'Error al cargar lista de usuarios');
+        }
+      } catch (error: any) {
+        if (cancelled || error?.name === 'AbortError' || error?.code === 'ERR_CANCELED') return;
+        console.error('❌ Error al cargar lista:', error);
+        setUsuarios([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
     cargarListaAsistencia();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, []);
 
   // Inicializar fechas cuando se abre el modal de exportación
@@ -358,7 +364,7 @@ export const AsistenciaListaModule: React.FC = () => {
       params.append('rol', rolFiltro === 'TODOS' ? 'TODOS' : rolFiltro);
 
       // Realizar petición al backend para exportar
-      const response = await api.get(`/marcaciones/exportar?${params.toString()}`, {
+      const response = await api.get(`/asistencia/marcaciones/exportar?${params.toString()}`, {
         responseType: 'blob' // Importante para recibir archivos binarios
       });
 

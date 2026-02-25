@@ -23,6 +23,8 @@ export interface AuthResponse {
     moduleId?: string | null;  // Backend devuelve string, no number
     active: boolean;
     lastLogin: string;         // Backend devuelve LocalDateTime como string ISO
+    esJefe?: boolean;          // Si es manager_id de un área (para localStorage y cuenta)
+    nombreArea?: string | null; // Nombre del área que gestiona (solo si esJefe)
   };
 }
 

@@ -10,6 +10,10 @@ export interface User {
   role: string;
   active: boolean;
   lastLogin: string;
+  /** Si el usuario es jefe de un área (manager_id). Se persiste en localStorage vía auth-storage. */
+  esJefe?: boolean;
+  /** Nombre del área que gestiona (solo si esJefe). */
+  nombreArea?: string | null;
 }
 
 export interface ModuleGrupo {

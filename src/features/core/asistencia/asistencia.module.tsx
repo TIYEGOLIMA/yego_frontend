@@ -94,6 +94,18 @@ const ESTADISTICAS_INICIALES: EstadisticasAsistencia = {
   yaCompletoJornada: false
 };
 
+/** Formatea timestamp ISO (ej. 2026-02-25T09:24:16.980859274) a hora legible "09:24" o "25/02/2026 09:24" */
+const formatearHoraMarcacion = (valor: string | undefined | null): string => {
+  if (valor == null || valor === '') return '';
+  const trimmed = String(valor).trim();
+  if (trimmed.includes('T')) {
+    const date = new Date(trimmed);
+    if (Number.isNaN(date.getTime())) return trimmed;
+    return date.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+  return trimmed;
+};
+
 const esErrorCancelado = (error: any): boolean => {
   return (
     error.code === 'ECONNABORTED' ||
@@ -244,9 +256,8 @@ export const AsistenciaModule: React.FC = () => {
   const userRole = user?.role?.toUpperCase();
   const isSAC = userRole === 'SAC';
   
-  // Roles permitidos para ver la lista de asistencias
-  const rolesPermitidosLista = ['ASISTENTE DE GERENCIA', 'GERENTE', 'SUPERADMIN', 'JEFE DE SISTEMAS', 'ADMIN'];
-  const puedeVerLista = userRole && rolesPermitidosLista.includes(userRole);
+  // Solo SUPERADMIN y ADMIN pueden ver la lista de asistencias (independiente de si tienen área o no)
+  const puedeVerLista = userRole === 'SUPERADMIN' || userRole === 'ADMIN';
   
   const [empleado, setEmpleado] = useState<EmpleadoData | null>(null);
   const [estadisticas, setEstadisticas] = useState<EstadisticasAsistencia>(ESTADISTICAS_INICIALES);
@@ -277,7 +288,7 @@ export const AsistenciaModule: React.FC = () => {
 
   const cargarMarcacionesHoy = useCallback(async (signal?: AbortSignal) => {
     try {
-      const response = await api.get('/marcaciones/hoy', { signal });
+      const response = await api.get('/asistencia/marcaciones/hoy', { signal });
       const data = response.data;
       
       if (data.success) {
@@ -310,7 +321,7 @@ export const AsistenciaModule: React.FC = () => {
 
   const cargarEstadisticas = useCallback(async (signal?: AbortSignal) => {
     try {
-      const response = await api.get('/empleado/estadisticas', { signal });
+      const response = await api.get('/asistencia/empleado/estadisticas', { signal });
       const data = response.data;
       
       if (data.success) {
@@ -423,42 +434,30 @@ export const AsistenciaModule: React.FC = () => {
     try {
       setMarcando(true);
       
-      const response = await api.post('/marcacion', { tipo });
+      const response = await api.post('/asistencia/marcacion', { tipo });
       const data = response.data;
       
       if (data.success) {
-        const horaMarcacion = data.marcacion?.hora || new Date().toLocaleTimeString('es-PE', {
+        const horaBruta = data.marcacion?.hora ?? data.timestamp ?? new Date().toISOString();
+        const horaMarcacion = formatearHoraMarcacion(horaBruta) || new Date().toLocaleTimeString('es-PE', {
           hour: '2-digit',
-          minute: '2-digit'
+          minute: '2-digit',
+          second: '2-digit'
         });
+        // El mensaje motivacional ya viene en la respuesta del POST
+        const mensaje = data.mensajeMotivacional ?? data.mensaje ?? '¡Excelente trabajo en Yego!';
         
         setAlertData({
           isOpen: true,
           tipo: tipo,
           hora: horaMarcacion,
-          mensajeMotivacional: data.mensaje || "¡Excelente trabajo en Yego!",
+          mensajeMotivacional: mensaje,
           icono: '💪'
         });
         
         setMarcando(false);
         
-        Promise.all([
-          cargarEstadisticas(),
-          api.get(`/mensaje-motivacional?tipo=${tipo}`).then(res => {
-            if (res.data.success) {
-              setAlertData(prev => ({
-                ...prev,
-                mensajeMotivacional: res.data.mensaje
-              }));
-            }
-          }).catch((error: any) => {
-            // Ignorar errores de solicitud cancelada/abortada
-            if (!esErrorCancelado(error)) {
-              // Silencioso - ya tenemos un mensaje por defecto
-            }
-          })
-        ]).catch((error: any) => {
-          // Ignorar errores de solicitud cancelada/abortada
+        cargarEstadisticas().catch((error: any) => {
           if (!esErrorCancelado(error)) {
             console.error('Error al actualizar datos después de marcar:', error);
           }
@@ -526,7 +525,7 @@ export const AsistenciaModule: React.FC = () => {
         
         setCargandoFiltros(true);
         try {
-          const response = await api.get(`/marcaciones/rango?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}`, {
+          const response = await api.get(`/asistencia/marcaciones/rango?fechaInicio=${fechaInicio}&fechaFin=${fechaFin}`, {
             signal: abortController.signal
           });
           if (response.data.success) {

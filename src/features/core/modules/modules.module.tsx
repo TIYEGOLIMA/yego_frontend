@@ -230,17 +230,21 @@ const SistemasExternosModule: React.FC = () => {
   };
 
 
+  // Una sola carga inicial; AbortController evita duplicados con React Strict Mode
   useEffect(() => {
-    fetchSistemas();
-    fetchGrupos();
+    const ac = new AbortController();
+    fetchSistemas(ac.signal);
+    fetchGrupos(ac.signal);
+    return () => ac.abort();
   }, []);
 
-  const fetchSistemas = async () => {
+  const fetchSistemas = async (signal?: AbortSignal) => {
     try {
       setLoading(true);
-      const response = await api.get('/modules');
+      const response = await api.get('/modules', { signal });
       setSistemas(response.data);
-    } catch (error) {
+    } catch (error: unknown) {
+      if ((error as { name?: string; code?: string })?.name === 'AbortError' || (error as { code?: string })?.code === 'ERR_CANCELED') return;
       console.error('Error fetching módulos internos:', error);
       showNotification('Error al cargar módulos internos', 'error');
     } finally {
@@ -248,14 +252,13 @@ const SistemasExternosModule: React.FC = () => {
     }
   };
 
-  // Cargar grupos disponibles (activos)
-  const fetchGrupos = async () => {
+  const fetchGrupos = async (signal?: AbortSignal) => {
     try {
-      const response = await api.get('/grupos/activos');
+      const response = await api.get('/grupos/activos', { signal });
       setGruposDisponibles(response.data || []);
-    } catch (error: any) {
-      console.warn('⚠️ No se pudieron cargar los grupos:', error?.response?.status || error.message);
-      // Si el endpoint no existe aún, usar lista vacía
+    } catch (error: unknown) {
+      if ((error as { name?: string; code?: string })?.name === 'AbortError' || (error as { code?: string })?.code === 'ERR_CANCELED') return;
+      console.warn('⚠️ No se pudieron cargar los grupos:', (error as { response?: { status?: number }; message?: string })?.response?.status || (error as { message?: string })?.message);
       setGruposDisponibles([]);
     }
   };
