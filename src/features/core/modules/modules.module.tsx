@@ -138,6 +138,14 @@ const SistemasExternosModule: React.FC = () => {
   const [nuevoGrupoNombre, setNuevoGrupoNombre] = useState('');
   const [nuevoGrupoIcono, setNuevoGrupoIcono] = useState('Server');
   const [creatingGrupo, setCreatingGrupo] = useState(false);
+  const [savingModule, setSavingModule] = useState(false);
+  const [deletingModule, setDeletingModule] = useState(false);
+
+  // Helper para mensaje de error del API
+  const getApiError = (error: unknown, fallback: string): string => {
+    const err = error as { response?: { data?: { message?: string } }; message?: string };
+    return err?.response?.data?.message || err?.message || fallback;
+  };
 
   // Función para formatear timestamp
   const formatTimestamp = (timestamp: string) => {
@@ -240,13 +248,14 @@ const SistemasExternosModule: React.FC = () => {
 
   const fetchSistemas = async (signal?: AbortSignal) => {
     try {
-      setLoading(true);
+      // Solo mostrar loader de pantalla completa en la carga inicial (cuando hay signal)
+      if (signal) setLoading(true);
       const response = await api.get('/modules', { signal });
       setSistemas(response.data);
     } catch (error: unknown) {
       if ((error as { name?: string; code?: string })?.name === 'AbortError' || (error as { code?: string })?.code === 'ERR_CANCELED') return;
       console.error('Error fetching módulos internos:', error);
-      showNotification('Error al cargar módulos internos', 'error');
+      showNotification(getApiError(error, 'Error al cargar módulos'), 'error');
     } finally {
       setLoading(false);
     }
@@ -254,7 +263,7 @@ const SistemasExternosModule: React.FC = () => {
 
   const fetchGrupos = async (signal?: AbortSignal) => {
     try {
-      const response = await api.get('/grupos/activos', { signal });
+      const response = await api.get('/modules/grupos/activos', { signal });
       setGruposDisponibles(response.data || []);
     } catch (error: unknown) {
       if ((error as { name?: string; code?: string })?.name === 'AbortError' || (error as { code?: string })?.code === 'ERR_CANCELED') return;
@@ -272,7 +281,7 @@ const SistemasExternosModule: React.FC = () => {
 
     try {
       setCreatingGrupo(true);
-      const response = await api.post('/grupos', {
+      const response = await api.post('/modules/grupos', {
         nombre: nuevoGrupoNombre.trim(),
         icono: nuevoGrupoIcono || 'Server'
       });
@@ -289,9 +298,9 @@ const SistemasExternosModule: React.FC = () => {
       setShowQuickCreateGrupo(false);
       
       showNotification('Grupo creado exitosamente', 'success');
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error creating grupo:', error);
-      showNotification(error.response?.data?.message || 'Error al crear grupo', 'error');
+      showNotification(getApiError(error, 'Error al crear grupo'), 'error');
     } finally {
       setCreatingGrupo(false);
     }
@@ -299,9 +308,8 @@ const SistemasExternosModule: React.FC = () => {
 
   const handleCreateSistema = async () => {
     try {
-      // Determinar el grupoId (null si es 'none')
+      setSavingModule(true);
       const grupoId = selectedGrupoId !== 'none' ? parseInt(selectedGrupoId) : null;
-      
       const dataToSend = {
         ...formData,
         grupoId: grupoId,
@@ -311,67 +319,40 @@ const SistemasExternosModule: React.FC = () => {
       };
       await api.post('/modules', dataToSend);
       setIsCreateDialogOpen(false);
-      setFormData({
-        nombre: '',
-        descripcion: '',
-        url: '',
-        grupo: undefined,
-        icono: 'AppWindow'
-      });
-      setSelectedGrupoId('none');
-      setShowQuickCreateGrupo(false);
-      setNuevoGrupoNombre('');
-      setNuevoGrupoIcono('Server');
-      
-      // Actualizar la lista local
+      resetFormAndGroup();
       await fetchSistemas();
-      
-      // Actualizar el store global para que aparezca inmediatamente en el sidebar
       await fetchModules();
-      
       showNotification('Módulo creado exitosamente', 'success');
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error creating sistema interno:', error);
-      showNotification(error.response?.data?.message || 'Error al crear sistema interno', 'error');
+      showNotification(getApiError(error, 'Error al crear módulo'), 'error');
+    } finally {
+      setSavingModule(false);
     }
   };
 
   const handleUpdateSistema = async (id: number) => {
     try {
-      // Determinar el grupoId (null si es 'none')
+      setSavingModule(true);
       const grupoId = selectedGrupoId !== 'none' ? parseInt(selectedGrupoId) : null;
-      
       const dataToSend = {
         ...formData,
         grupoId: grupoId,
         tipo: 'GARANTIZADO',
-        activo: true,
+        activo: editingSistema?.activo ?? true,
         icono: formData.icono || 'AppWindow'
       };
       await api.put(`/modules/${id}`, dataToSend);
       setEditingSistema(null);
-      setFormData({
-        nombre: '',
-        descripcion: '',
-        url: '',
-        grupo: undefined,
-        icono: 'AppWindow'
-      });
-      setSelectedGrupoId('none');
-      setShowQuickCreateGrupo(false);
-      setNuevoGrupoNombre('');
-      setNuevoGrupoIcono('Server');
-      
-      // Actualizar la lista local
+      resetFormAndGroup();
       await fetchSistemas();
-      
-      // Actualizar el store global para que se refleje en el sidebar
       await fetchModules();
-      
       showNotification('Módulo actualizado exitosamente', 'success');
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error updating sistema interno:', error);
-      showNotification(error.response?.data?.message || 'Error al actualizar sistema interno', 'error');
+      showNotification(getApiError(error, 'Error al actualizar módulo'), 'error');
+    } finally {
+      setSavingModule(false);
     }
   };
 
@@ -380,22 +361,19 @@ const SistemasExternosModule: React.FC = () => {
   };
 
   const confirmDeleteSistema = async () => {
-    if (deleteModal.sistema) {
-      try {
-        await api.delete(`/modules/${deleteModal.sistema.id}`);
-        setDeleteModal({ open: false, sistema: null });
-        
-        // Actualizar la lista local
-        await fetchSistemas();
-        
-        // Actualizar el store global para que se refleje en el sidebar
-        await fetchModules();
-        
-        showNotification('Módulo eliminado exitosamente', 'success');
-      } catch (error: any) {
-        console.error('Error deleting sistema interno:', error);
-        showNotification(error.response?.data?.message || 'Error al eliminar sistema interno', 'error');
-      }
+    if (!deleteModal.sistema) return;
+    try {
+      setDeletingModule(true);
+      await api.delete(`/modules/${deleteModal.sistema.id}`);
+      setDeleteModal({ open: false, sistema: null });
+      await fetchSistemas();
+      await fetchModules();
+      showNotification('Módulo eliminado exitosamente', 'success');
+    } catch (error) {
+      console.error('Error deleting sistema interno:', error);
+      showNotification(getApiError(error, 'Error al eliminar módulo'), 'error');
+    } finally {
+      setDeletingModule(false);
     }
   };
 
@@ -426,7 +404,7 @@ const SistemasExternosModule: React.FC = () => {
       
       // Cambio realizado exitosamente
       
-    } catch (error: any) {
+    } catch (error) {
       console.error('❌ Error cambiando estado del sistema:', error);
       
       // Revertir el cambio local si hay error
@@ -438,19 +416,21 @@ const SistemasExternosModule: React.FC = () => {
         )
       );
       
-      showNotification(error.response?.data?.message || 'Error al cambiar estado del sistema', 'error');
+      showNotification(getApiError(error, 'Error al cambiar estado del sistema'), 'error');
     }
   };
 
   const filteredSistemas = sistemas.filter(sistema => {
-    const matchesSearch = sistema.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         sistema.descripcion.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         sistema.url.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesStatus = statusFilter === 'all' || 
-                         (statusFilter === 'true' && sistema.activo) ||
-                         (statusFilter === 'false' && !sistema.activo);
-    
+    const term = searchTerm.toLowerCase();
+    const matchesSearch =
+      (sistema.nombre ?? '').toLowerCase().includes(term) ||
+      (sistema.descripcion ?? '').toLowerCase().includes(term) ||
+      (sistema.url ?? '').toLowerCase().includes(term);
+
+    const matchesStatus = statusFilter === 'all' ||
+      (statusFilter === 'true' && sistema.activo) ||
+      (statusFilter === 'false' && !sistema.activo);
+
     return matchesSearch && matchesStatus;
   });
 
@@ -482,20 +462,18 @@ const SistemasExternosModule: React.FC = () => {
     setSelectedGrupoId(sistema.grupo?.id ? sistema.grupo.id.toString() : 'none');
   };
 
-  const closeDialog = () => {
-    setIsCreateDialogOpen(false);
-    setEditingSistema(null);
-    setFormData({
-      nombre: '',
-      descripcion: '',
-      url: '',
-      grupo: undefined,
-      icono: 'AppWindow'
-    });
+  const resetFormAndGroup = () => {
+    setFormData({ nombre: '', descripcion: '', url: '', grupo: undefined, icono: 'AppWindow' });
     setSelectedGrupoId('none');
     setShowQuickCreateGrupo(false);
     setNuevoGrupoNombre('');
     setNuevoGrupoIcono('Server');
+  };
+
+  const closeDialog = () => {
+    setIsCreateDialogOpen(false);
+    setEditingSistema(null);
+    resetFormAndGroup();
   };
 
   if (!authState || !authState.isAuthenticated) {
@@ -617,7 +595,7 @@ const SistemasExternosModule: React.FC = () => {
             <div className="flex items-center justify-center py-12">
               <div className="flex flex-col items-center gap-4">
                 <div className="w-10 h-10 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
-                <p className="yego-body-sm">Cargando módulos internos...</p>
+                <p className="yego-body-sm">Cargando módulos...</p>
               </div>
             </div>
           ) : filteredSistemas.length === 0 ? (
@@ -636,6 +614,7 @@ const SistemasExternosModule: React.FC = () => {
                     <TableRow>
                       <TableHead>Nombre</TableHead>
                       <TableHead>Descripción</TableHead>
+                      <TableHead>Grupo</TableHead>
                       <TableHead>Path</TableHead>
                       <TableHead>Último Check</TableHead>
                       <TableHead>Activo</TableHead>
@@ -648,7 +627,12 @@ const SistemasExternosModule: React.FC = () => {
                       <TableCell className="font-medium text-neutral-900 dark:text-neutral-100">
                         {sistema.nombre}
                       </TableCell>
-                      <TableCell>{sistema.descripcion}</TableCell>
+                      <TableCell>{sistema.descripcion || '—'}</TableCell>
+                      <TableCell>
+                        <span className="text-sm text-neutral-600 dark:text-neutral-400">
+                          {sistema.grupo?.nombre ?? '—'}
+                        </span>
+                      </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <code className="text-xs bg-neutral-100 dark:bg-neutral-800 px-2 py-1 rounded font-mono">
@@ -971,6 +955,7 @@ const SistemasExternosModule: React.FC = () => {
               variant="secondary" 
               onClick={closeDialog}
               leftIcon={<X className="h-4 w-4" />}
+              disabled={savingModule}
             >
               Cancelar
             </Button>
@@ -978,8 +963,10 @@ const SistemasExternosModule: React.FC = () => {
               variant="primary"
               onClick={() => editingSistema ? handleUpdateSistema(editingSistema.id) : handleCreateSistema()}
               leftIcon={<Save className="h-4 w-4" />}
+              loading={savingModule}
+              disabled={savingModule}
             >
-              {editingSistema ? 'Actualizar' : 'Crear'}
+              {savingModule ? 'Guardando...' : (editingSistema ? 'Actualizar' : 'Crear')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1024,6 +1011,7 @@ const SistemasExternosModule: React.FC = () => {
               variant="outline" 
               onClick={() => setDeleteModal({open: false, sistema: null})}
               className="flex-1"
+              disabled={deletingModule}
             >
               Cancelar
             </Button>
@@ -1031,8 +1019,10 @@ const SistemasExternosModule: React.FC = () => {
               variant="danger"
               onClick={confirmDeleteSistema}
               className="flex-1"
+              loading={deletingModule}
+              disabled={deletingModule}
             >
-              Eliminar Módulo
+              {deletingModule ? 'Eliminando...' : 'Eliminar Módulo'}
             </Button>
           </DialogFooter>
         </DialogContent>

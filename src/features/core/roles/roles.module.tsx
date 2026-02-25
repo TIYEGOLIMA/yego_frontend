@@ -89,6 +89,30 @@ interface UpdateRoleData {
   active?: boolean;
 }
 
+const INITIAL_FORM_DATA: CreateRoleData = {
+  name: '',
+  description: '',
+  permissions: {},
+  active: true
+};
+
+const isAbortError = (err: unknown): boolean => {
+  const e = err as { name?: string; code?: string };
+  return e?.name === 'AbortError' || e?.code === 'ERR_CANCELED';
+};
+
+const normalizeModuleName = (nombre: string): string => {
+  return nombre.toLowerCase()
+    .trim()
+    .replace(/\s+/g, '')
+    .replace(/[áàäâ]/g, 'a')
+    .replace(/[éèëê]/g, 'e')
+    .replace(/[íìïî]/g, 'i')
+    .replace(/[óòöô]/g, 'o')
+    .replace(/[úùüû]/g, 'u')
+    .replace(/ñ/g, 'n');
+};
+
 const RolesModule: React.FC = () => {
   const authState = useAuth();
   const [roles, setRoles] = useState<Role[]>([]);
@@ -104,58 +128,54 @@ const RolesModule: React.FC = () => {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [roleToDelete, setRoleToDelete] = useState<Role | null>(null);
   const [hoveredRole, setHoveredRole] = useState<number | null>(null);
-  const initialFormData: CreateRoleData = {
-    name: '',
-    description: '',
-    permissions: {},
-    active: true
+  const [formData, setFormData] = useState<CreateRoleData>(INITIAL_FORM_DATA);
+
+  const fetchRoles = async (signal?: AbortSignal) => {
+    const isRefresh = signal === undefined;
+    if (isRefresh) setLoading(true);
+    try {
+      const response = await api.get('/roles/find-all', { signal });
+      setRoles(response.data);
+    } catch (error) {
+      if (isAbortError(error)) return;
+      console.error('Error fetching roles:', error);
+    } finally {
+      if (isRefresh) setLoading(false);
+    }
   };
 
-  const [formData, setFormData] = useState<CreateRoleData>(initialFormData);
-
-  // Normalizar nombre del módulo para usarlo como clave
-  const normalizeModuleName = (nombre: string): string => {
-    return nombre.toLowerCase()
-      .trim()
-      .replace(/\s+/g, '')
-      .replace(/[áàäâ]/g, 'a')
-      .replace(/[éèëê]/g, 'e')
-      .replace(/[íìïî]/g, 'i')
-      .replace(/[óòöô]/g, 'o')
-      .replace(/[úùüû]/g, 'u')
-      .replace(/ñ/g, 'n');
-  };
-
+  // Carga inicial: como en Sessions, el loader no se quita hasta que todo el contenido esté cargado (roles + módulos)
   useEffect(() => {
-    fetchRoles();
-    fetchModulesWithActions();
+    const ac = new AbortController();
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      try {
+        const [rolesRes, modulesRes] = await Promise.all([
+          api.get('/roles/find-all', { signal: ac.signal }),
+          api.get('/roles/modules-with-actions', { signal: ac.signal })
+        ]);
+        if (!cancelled) {
+          setRoles(rolesRes.data);
+          setModulesWithActions(modulesRes.data || []);
+        }
+      } catch (err) {
+        if (!cancelled && !isAbortError(err)) {
+          console.error('Error cargando roles o módulos:', err);
+        }
+      }
+      // Solo quitar el loader cuando hayamos terminado (éxito o error real). Si fue abort, no tocar loading.
+      if (!cancelled) setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+      ac.abort();
+    };
   }, []);
 
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, roleStatus, selectedRoleFilter]);
-
-  const fetchRoles = async () => {
-    try {
-      setLoading(true);
-      const response = await api.get('/roles/find-all');
-      setRoles(response.data);
-    } catch (error) {
-      console.error('Error fetching roles:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchModulesWithActions = async () => {
-    try {
-      const response = await api.get('/roles/modules-with-actions');
-      setModulesWithActions(response.data || []);
-    } catch (error) {
-      console.error('Error fetching modules with actions:', error);
-      setModulesWithActions([]);
-    }
-  };
 
   const cleanPermissions = (): Record<string, any> => {
     const clean: Record<string, any> = {};
@@ -170,7 +190,7 @@ const RolesModule: React.FC = () => {
   };
 
   const resetForm = () => {
-    setFormData(initialFormData);
+    setFormData(INITIAL_FORM_DATA);
     setEditingRole(null);
     setIsCreateDialogOpen(false);
   };
@@ -247,15 +267,10 @@ const RolesModule: React.FC = () => {
     );
 
     try {
-      const response = await api.put(`/roles/toggle-status/${id}`);
-      // Usar la respuesta del servidor para actualizar el estado
-      if (response.data) {
-        setRoles(prevRoles => 
-          prevRoles.map(role => 
-            role.id === id ? { ...role, ...response.data } : role
-          )
-        );
-      }
+      await api.put(`/roles/toggle-status/${id}`);
+      // Refrescar la lista para tener userCount y estado correctos (el backend no devuelve count en el toggle)
+      const rolesRes = await api.get('/roles/find-all');
+      setRoles(rolesRes.data);
     } catch (error) {
       console.error('Error toggling role status:', error);
       // Revertir al estado original si hay error
@@ -268,16 +283,16 @@ const RolesModule: React.FC = () => {
   };
 
   const filteredRoles = roles.filter(role => {
-    const matchesSearch = role.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      role.description.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesStatus = roleStatus === 'all' || 
+    const term = searchTerm.toLowerCase();
+    const matchesSearch =
+      (role.name ?? '').toLowerCase().includes(term) ||
+      (role.description ?? '').toLowerCase().includes(term);
+    const matchesStatus =
+      roleStatus === 'all' ||
       (roleStatus === 'true' && role.active) ||
       (roleStatus === 'false' && !role.active);
-    
-    const matchesRoleFilter = selectedRoleFilter === 'all' || 
-      role.id.toString() === selectedRoleFilter;
-    
+    const matchesRoleFilter =
+      selectedRoleFilter === 'all' || role.id.toString() === selectedRoleFilter;
     return matchesSearch && matchesStatus && matchesRoleFilter;
   });
 
@@ -397,7 +412,7 @@ const RolesModule: React.FC = () => {
         </div>
         <Button 
           variant="primary"
-          onClick={() => setIsCreateDialogOpen(true)}
+          onClick={() => { setEditingRole(null); setFormData(INITIAL_FORM_DATA); setIsCreateDialogOpen(true); }}
           leftIcon={<Plus className="h-4 w-4" />}
         >
           Nuevo Rol
@@ -482,10 +497,10 @@ const RolesModule: React.FC = () => {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="flex items-center justify-center py-12">
+            <div className="flex items-center justify-center py-16 min-h-[280px]">
               <div className="flex flex-col items-center gap-4">
-                <div className="w-10 h-10 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
-                <p className="yego-body-sm">Cargando roles...</p>
+                <div className="w-10 h-10 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
+                <p className="yego-body-sm text-neutral-600 dark:text-neutral-400">Cargando roles...</p>
               </div>
             </div>
           ) : filteredRoles.length === 0 ? (
@@ -721,7 +736,7 @@ const RolesModule: React.FC = () => {
       )}
 
       {/* Create/Edit Dialog */}
-      <Dialog open={isCreateDialogOpen || !!editingRole} onOpenChange={resetForm}>
+      <Dialog open={isCreateDialogOpen || !!editingRole} onOpenChange={(open) => { if (!open) resetForm(); }}>
         <DialogContent className="sm:max-w-[800px] max-h-[95vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">

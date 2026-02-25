@@ -27,17 +27,20 @@ import {
   Activity, 
   MapPin, 
   Monitor, 
-  Globe, 
-  Clock,
   LogOut,
   RefreshCw,
   History,
   User,
-  Shield,
   Laptop,
   Smartphone,
   Tablet,
   Calendar,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  Search,
+  X,
 } from 'lucide-react';
 import { useAuth } from "@/shared/hooks/useAuth";
 import { api } from '../../../services';
@@ -45,49 +48,100 @@ import AccessRestricted from '@/shared/components/AccessRestricted';
 
 interface Session {
   id: number;
-  user_id: number;
-  user: {
+  userId?: number;
+  user?: {
     username: string;
     nombre: string;
     email: string;
   };
-  ip_address: string;
-  device: string;
-  browser: string;
-  operating_system: string;
-  city: string;
-  region: string;
-  country: string;
-  country_code: string;
-  latitude: number;
-  longitude: number;
-  timezone: string;
-  isp: string;
-  organization: string;
-  is_active: boolean;
-  created_at: string;
-  expires_at: string;
+  ipAddress?: string;
+  ip_address?: string;
+  device?: string;
+  browser?: string;
+  operatingSystem?: string;
+  city?: string;
+  region?: string;
+  country?: string;
+  countryCode?: string;
+  is_active?: boolean;
+  active?: boolean;
+  createdAt?: string;
+  created_at?: string;
+  expires_at?: string;
 }
 
 interface ConnectionLog {
   id: number;
-  user_id: number;
-  user: {
+  userId?: number;
+  user?: {
     username: string;
     nombre: string;
+    email?: string;
   };
-  session_id: number;
-  action: 'login' | 'logout' | 'timeout' | 'forced_logout';
-  ip_address: string;
-  device: string;
-  browser: string;
-  operating_system: string;
-  city: string;
-  region: string;
-  country: string;
-  role_name: string;
-  session_duration: number;
-  created_at: string;
+  sessionId?: number;
+  action: string;
+  ipAddress?: string;
+  device?: string;
+  browser?: string;
+  operatingSystem?: string;
+  city?: string;
+  region?: string;
+  country?: string;
+  roleName?: string;
+  role_name?: string;
+  ip_address?: string;
+  sessionDuration?: number;
+  session_duration?: number;
+  createdAt?: string;
+  created_at?: string;
+}
+
+const DATE_RANGES = [
+  { value: '7', label: 'Últimos 7 días' },
+  { value: '30', label: 'Últimos 30 días' },
+  { value: '90', label: 'Últimos 90 días' }
+] as const;
+
+const SESSION_PAGE_SIZES = [5, 10, 20, 50] as const;
+
+function isAbortError(error: unknown): boolean {
+  const e = error as { name?: string; code?: string };
+  return e?.name === 'AbortError' || e?.code === 'ERR_CANCELED';
+}
+
+function getActionBadgeVariant(action: string): 'primary' | 'secondary' | 'error' | 'outline' {
+  const a = (action ?? '').toLowerCase();
+  if (a === 'login') return 'primary';
+  if (a === 'logout') return 'secondary';
+  if (a === 'timeout' || a === 'forced_logout') return 'error';
+  return 'outline';
+}
+
+function getActionLabel(action: string): string {
+  const a = (action ?? '').toLowerCase();
+  if (a === 'login') return 'Login';
+  if (a === 'logout') return 'Logout';
+  if (a === 'timeout') return 'Timeout';
+  if (a === 'forced_logout' || a === 'forced logout') return 'Forzado';
+  return action || '—';
+}
+
+function formatDuration(seconds: number): string {
+  if (!seconds) return 'N/A';
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  return `${hours}h ${minutes}m`;
+}
+
+function getDeviceIcon(device: string): React.ReactNode {
+  const deviceLower = device?.toLowerCase() || '';
+  if (deviceLower.includes('mobile') || deviceLower.includes('phone')) {
+    return <Smartphone className="h-4 w-4" />;
+  }
+  if (deviceLower.includes('tablet') || deviceLower.includes('ipad')) {
+    return <Tablet className="h-4 w-4" />;
+  }
+  return <Laptop className="h-4 w-4" />;
 }
 
 const SessionsModule: React.FC = () => {
@@ -95,102 +149,148 @@ const SessionsModule: React.FC = () => {
   const [activeSessions, setActiveSessions] = useState<Session[]>([]);
   const [connectionLogs, setConnectionLogs] = useState<ConnectionLog[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedFilter, setSelectedFilter] = useState<string>('all');
   const [dateRange, setDateRange] = useState<string>('30');
+  const [sessionsPage, setSessionsPage] = useState(1);
+  const [sessionsPageSize, setSessionsPageSize] = useState(10);
+  const [sessionSearch, setSessionSearch] = useState('');
+  const [sessionSearchInput, setSessionSearchInput] = useState('');
+  const [totalSessions, setTotalSessions] = useState(0);
+  const [totalPagesSessions, setTotalPagesSessions] = useState(0);
+  const [selectedSessionIds, setSelectedSessionIds] = useState<Set<number>>(new Set());
+  const [deletingBulk, setDeletingBulk] = useState(false);
 
-  const filters = [
-    { value: 'all', label: 'Todas las sesiones' },
-    { value: 'active', label: 'Sesiones activas' },
-    { value: 'expired', label: 'Sesiones expiradas' }
-  ];
+  const applySessionsResponse = (data: unknown) => {
+    if (data && typeof data === 'object' && 'content' in data && Array.isArray((data as { content: Session[] }).content)) {
+      const d = data as { content: Session[]; total: number; totalPages: number };
+      setActiveSessions(d.content);
+      setTotalSessions(d.total ?? d.content.length);
+      setTotalPagesSessions(d.totalPages ?? 1);
+    } else {
+      const list = Array.isArray(data) ? data as Session[] : [];
+      setActiveSessions(list);
+      setTotalSessions(list.length);
+      setTotalPagesSessions(1);
+    }
+  };
 
-  const dateRanges = [
-    { value: '7', label: 'Últimos 7 días' },
-    { value: '30', label: 'Últimos 30 días' },
-    { value: '90', label: 'Últimos 90 días' }
-  ];
-
+  // Carga: sesiones paginadas + historial en paralelo
   useEffect(() => {
-    fetchActiveSessions();
-    fetchConnectionLogs();
-  }, [selectedFilter, dateRange]);
+    let cancelled = false;
+    const ac = new AbortController();
+    const load = async () => {
+      setLoading(true);
+      try {
+        const [sessionsRes, logsRes] = await Promise.all([
+          api.get('/sessions', {
+            params: { page: sessionsPage, size: sessionsPageSize, ...(sessionSearch.trim() ? { search: sessionSearch.trim() } : {}) },
+            signal: ac.signal
+          }),
+          api.get('/sessions/connection-logs', {
+            params: { days: dateRange, limit: 100 },
+            signal: ac.signal
+          })
+        ]);
+        if (cancelled) return;
+        applySessionsResponse(sessionsRes.data);
+        setConnectionLogs(Array.isArray(logsRes.data) ? logsRes.data : []);
+      } catch (error: unknown) {
+        if (cancelled || isAbortError(error)) return;
+        console.error('Error cargando sesiones:', error);
+        setActiveSessions([]);
+        setTotalSessions(0);
+        setTotalPagesSessions(0);
+        setConnectionLogs([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+      ac.abort();
+    };
+  }, [sessionsPage, sessionsPageSize, sessionSearch, dateRange]);
 
-  const fetchActiveSessions = async () => {
+  // Limpiar selección al cambiar de página o tamaño
+  useEffect(() => {
+    setSelectedSessionIds(new Set());
+  }, [sessionsPage, sessionsPageSize]);
+
+  const applySessionSearch = () => {
+    setSessionSearch(sessionSearchInput.trim());
+    setSessionsPage(1);
+  };
+
+  const clearSessionSearch = () => {
+    setSessionSearchInput('');
+    setSessionSearch('');
+    setSessionsPage(1);
+  };
+
+  const refetchSessions = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/sessions', {
-        params: { 
-          filter: selectedFilter,
-          limit: 50 
-        }
-      });
-      setActiveSessions(response.data);
+      const [sessionsRes, logsRes] = await Promise.all([
+        api.get('/sessions', { params: { page: sessionsPage, size: sessionsPageSize, ...(sessionSearch.trim() ? { search: sessionSearch.trim() } : {}) } }),
+        api.get('/sessions/connection-logs', { params: { days: dateRange, limit: 100 } })
+      ]);
+      applySessionsResponse(sessionsRes.data);
+      setConnectionLogs(Array.isArray(logsRes.data) ? logsRes.data : []);
     } catch (error) {
-      console.error('Error fetching sessions:', error);
+      console.error('Error actualizando sesiones:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchConnectionLogs = async () => {
-    try {
-      const response = await api.get('/sessions/connection-logs', {
-        params: { 
-          days: dateRange,
-          limit: 50 
-        }
-      });
-      setConnectionLogs(response.data);
-    } catch (error) {
-      console.error('Error fetching connection logs:', error);
-    }
+  const handleSessionsPageChange = (page: number) => {
+    if (page >= 1 && page <= totalPagesSessions) setSessionsPage(page);
+  };
+
+  const handleSessionsPageSizeChange = (value: string) => {
+    setSessionsPageSize(parseInt(value, 10));
+    setSessionsPage(1);
   };
 
   const handleForceLogout = async (sessionId: number) => {
     try {
       await api.post(`/sessions/${sessionId}/force-logout`);
-      fetchActiveSessions(); // Refresh the list
+      await refetchSessions();
     } catch (error) {
       console.error('Error forcing logout:', error);
       alert('Error al cerrar la sesión');
     }
   };
 
-  const getActionBadgeVariant = (action: string) => {
-    switch (action) {
-      case 'login': return 'primary';
-      case 'logout': return 'secondary';
-      case 'timeout': return 'error';
-      case 'forced_logout': return 'error';
-      default: return 'outline';
-    }
+  const toggleSessionSelection = (id: number) => {
+    setSelectedSessionIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
-  const getActionLabel = (action: string) => {
-    switch (action) {
-      case 'login': return 'Login';
-      case 'logout': return 'Logout';
-      case 'timeout': return 'Timeout';
-      case 'forced_logout': return 'Forzado';
-      default: return action;
-    }
-  };
-
-  const formatDuration = (seconds: number) => {
-    if (!seconds) return 'N/A';
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    return `${hours}h ${minutes}m`;
-  };
-
-  const getDeviceIcon = (device: string) => {
-    const deviceLower = device?.toLowerCase() || '';
-    if (deviceLower.includes('mobile') || deviceLower.includes('phone')) {
-      return <Smartphone className="h-4 w-4" />;
-    } else if (deviceLower.includes('tablet') || deviceLower.includes('ipad')) {
-      return <Tablet className="h-4 w-4" />;
+  const toggleSelectAllSessions = () => {
+    if (selectedSessionIds.size === activeSessions.length) {
+      setSelectedSessionIds(new Set());
     } else {
-      return <Laptop className="h-4 w-4" />;
+      setSelectedSessionIds(new Set(activeSessions.map((s) => s.id)));
+    }
+  };
+
+  const handleBulkDeactivate = async () => {
+    if (selectedSessionIds.size === 0) return;
+    try {
+      setDeletingBulk(true);
+      await api.post('/sessions/bulk/deactivate', Array.from(selectedSessionIds));
+      setSelectedSessionIds(new Set());
+      await refetchSessions();
+    } catch (error) {
+      console.error('Error cerrando sesiones:', error);
+      alert('Error al cerrar las sesiones seleccionadas');
+    } finally {
+      setDeletingBulk(false);
     }
   };
 
@@ -213,7 +313,7 @@ const SessionsModule: React.FC = () => {
         <div className="flex gap-2">
           <Button 
             variant="secondary"
-            onClick={fetchActiveSessions}
+            onClick={refetchSessions}
             disabled={loading}
             leftIcon={loading ? undefined : <RefreshCw className="h-4 w-4" />}
             loading={loading}
@@ -250,22 +350,65 @@ const SessionsModule: React.FC = () => {
                 <CardTitle className="flex items-center gap-2">
                   <Activity className="h-5 w-5 text-primary-500" />
                   Sesiones Activas
+                  {!loading && (
+                    <span className="text-sm font-normal text-neutral-500 ml-1">
+                      ({totalSessions} total)
+                    </span>
+                  )}
                 </CardTitle>
                 
-                {/* Filters */}
-                <div>
-                  <Select value={selectedFilter} onValueChange={setSelectedFilter}>
-                    <SelectTrigger className="w-full sm:w-48">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {filters.map(filter => (
-                        <SelectItem key={filter.value} value={filter.value}>
-                          {filter.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-2 flex-1 min-w-[200px] max-w-sm">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-500" />
+                      <input
+                        type="text"
+                        placeholder="Buscar por usuario, email, IP, dispositivo..."
+                        value={sessionSearchInput}
+                        onChange={(e) => setSessionSearchInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && applySessionSearch()}
+                        className="w-full pl-9 pr-9 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-800 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      />
+                      {sessionSearchInput && (
+                        <button
+                          type="button"
+                          onClick={clearSessionSearch}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300"
+                          aria-label="Limpiar búsqueda"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                    <Button variant="secondary" size="sm" onClick={applySessionSearch}>
+                      Buscar
+                    </Button>
+                  </div>
+                  {selectedSessionIds.size > 0 && (
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      onClick={handleBulkDeactivate}
+                      disabled={deletingBulk}
+                      leftIcon={deletingBulk ? undefined : <LogOut className="h-4 w-4" />}
+                      loading={deletingBulk}
+                    >
+                      {deletingBulk ? 'Cerrando...' : `Eliminar seleccionadas (${selectedSessionIds.size})`}
+                    </Button>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-neutral-600 dark:text-neutral-400">Por página:</span>
+                    <Select value={String(sessionsPageSize)} onValueChange={handleSessionsPageSizeChange}>
+                      <SelectTrigger className="w-16">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {SESSION_PAGE_SIZES.map(size => (
+                          <SelectItem key={size} value={String(size)}>{size}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
             </CardHeader>
@@ -290,6 +433,16 @@ const SessionsModule: React.FC = () => {
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className="w-10 pr-0">
+                          <input
+                            type="checkbox"
+                            role="checkbox"
+                            aria-label="Seleccionar todas"
+                            checked={activeSessions.length > 0 && selectedSessionIds.size === activeSessions.length}
+                            onChange={toggleSelectAllSessions}
+                            className="h-4 w-4 rounded border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-primary-600 focus:ring-primary-500"
+                          />
+                        </TableHead>
                         <TableHead>Usuario</TableHead>
                         <TableHead>Dispositivo</TableHead>
                         <TableHead>Ubicación</TableHead>
@@ -300,27 +453,43 @@ const SessionsModule: React.FC = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {activeSessions.map((session) => (
+                      {activeSessions.map((session) => {
+                        const userName = session.user?.nombre ?? session.user?.username ?? 'Sin nombre';
+                        const userEmail = session.user?.email ?? '';
+                        const ip = session.ipAddress ?? session.ip_address ?? '—';
+                        const created = session.createdAt ?? session.created_at ?? '';
+                        const isActive = session.active ?? session.is_active ?? false;
+                        return (
                         <TableRow key={session.id} className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors">
+                          <TableCell className="pr-0">
+                            <input
+                              type="checkbox"
+                              role="checkbox"
+                              aria-label={`Seleccionar sesión ${session.id}`}
+                              checked={selectedSessionIds.has(session.id)}
+                              onChange={() => toggleSessionSelection(session.id)}
+                              className="h-4 w-4 rounded border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-primary-600 focus:ring-primary-500"
+                            />
+                          </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 bg-neutral-100 dark:bg-neutral-800 rounded-full flex items-center justify-center">
-                                <User className="h-4 w-4 text-neutral-500" />
+                              <div className="w-9 h-9 bg-primary-500/10 dark:bg-primary-500/20 rounded-full flex items-center justify-center shrink-0">
+                                <User className="h-4 w-4 text-primary-600 dark:text-primary-400" />
                               </div>
-                              <div>
-                                <div className="font-medium text-neutral-900 dark:text-neutral-100">{session.user.nombre}</div>
-                                <div className="text-xs text-neutral-500">{session.user.email}</div>
+                              <div className="min-w-0">
+                                <div className="font-medium text-neutral-900 dark:text-neutral-100 truncate">{userName}</div>
+                                <div className="text-xs text-neutral-500 truncate">{userEmail || `@${session.user?.username ?? ''}`}</div>
                               </div>
                             </div>
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <div className="w-7 h-7 bg-neutral-100 dark:bg-neutral-800 rounded-lg flex items-center justify-center">
-                                {getDeviceIcon(session.device)}
+                              <div className="w-8 h-8 bg-neutral-100 dark:bg-neutral-800 rounded-lg flex items-center justify-center shrink-0">
+                                {getDeviceIcon(session.device ?? '')}
                               </div>
-                              <div>
-                                <div className="text-sm font-medium">{session.device}</div>
-                                <div className="text-xs text-neutral-500">{session.browser}</div>
+                              <div className="min-w-0">
+                                <div className="text-sm font-medium truncate">{session.device || 'Desconocido'}</div>
+                                <div className="text-xs text-neutral-500 truncate">{session.browser ?? session.operatingSystem ?? ''}</div>
                               </div>
                             </div>
                           </TableCell>
@@ -328,54 +497,125 @@ const SessionsModule: React.FC = () => {
                             <div className="flex items-center gap-2">
                               <MapPin className="h-4 w-4 text-neutral-500 flex-shrink-0" />
                               <div>
-                                <div className="text-sm">{session.city || 'Desconocido'}, {session.country || 'Desconocido'}</div>
-                                <div className="text-xs text-neutral-500">{session.region || 'Región desconocida'}</div>
+                                <div className="text-sm">{[session.city, session.country].filter(Boolean).join(', ') || 'Desconocido'}</div>
+                                <div className="text-xs text-neutral-500">{session.region || ''}</div>
                               </div>
                             </div>
                           </TableCell>
                           <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Globe className="h-4 w-4 text-neutral-500 flex-shrink-0" />
-                              <code className="text-xs bg-neutral-100 dark:bg-neutral-800 px-2 py-1 rounded font-mono">
-                                {session.ip_address}
-                              </code>
-                            </div>
+                            <code className="text-xs bg-neutral-100 dark:bg-neutral-800 px-2 py-1 rounded font-mono block w-fit">
+                              {ip}
+                            </code>
                           </TableCell>
                           <TableCell>
-                            <Badge variant={session.is_active ? "success" : "error"}>
-                              {session.is_active ? "Activa" : "Inactiva"}
+                            <Badge variant={isActive ? "success" : "error"}>
+                              {isActive ? "Activa" : "Inactiva"}
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Calendar className="h-4 w-4 text-neutral-500 flex-shrink-0" />
-                              <div>
-                                <div className="text-sm">{new Date(session.created_at).toLocaleDateString()}</div>
-                                <div className="text-xs text-neutral-500">
-                                  {new Date(session.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                            {created ? (
+                              <div className="flex items-center gap-2">
+                                <Calendar className="h-4 w-4 text-neutral-500 flex-shrink-0" />
+                                <div>
+                                  <div className="text-sm">{new Date(created).toLocaleDateString()}</div>
+                                  <div className="text-xs text-neutral-500">
+                                    {new Date(created).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
+                            ) : '—'}
                           </TableCell>
                           <TableCell>
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => handleForceLogout(session.id)}
-                              disabled={!session.is_active}
+                              disabled={!isActive}
                               className="text-error-600 dark:text-error-400 hover:bg-error-50 dark:hover:bg-error-900/20"
+                              title="Cerrar sesión"
                             >
                               <LogOut className="h-4 w-4" />
                             </Button>
                           </TableCell>
                         </TableRow>
-                      ))}
+                      );})}
                     </TableBody>
                   </Table>
                 </div>
               )}
             </CardContent>
           </Card>
+
+          {/* Paginación sesiones */}
+          {!loading && totalSessions > 0 && (
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div className="text-sm text-neutral-600 dark:text-neutral-400">
+                    Mostrando {((sessionsPage - 1) * sessionsPageSize) + 1} a {Math.min(sessionsPage * sessionsPageSize, totalSessions)} de {totalSessions} sesiones
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleSessionsPageChange(1)}
+                      disabled={sessionsPage === 1}
+                      className="h-8 w-8 p-0"
+                    >
+                      <ChevronsLeft className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleSessionsPageChange(sessionsPage - 1)}
+                      disabled={sessionsPage === 1}
+                      className="h-8 w-8 p-0"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: Math.min(5, totalPagesSessions) }, (_, i) => {
+                        let pageNum: number;
+                        if (totalPagesSessions <= 5) pageNum = i + 1;
+                        else if (sessionsPage <= 3) pageNum = i + 1;
+                        else if (sessionsPage >= totalPagesSessions - 2) pageNum = totalPagesSessions - 4 + i;
+                        else pageNum = sessionsPage - 2 + i;
+                        return (
+                          <Button
+                            key={pageNum}
+                            variant={sessionsPage === pageNum ? 'primary' : 'outline'}
+                            size="sm"
+                            onClick={() => handleSessionsPageChange(pageNum)}
+                            className="h-8 w-8 p-0"
+                          >
+                            {pageNum}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleSessionsPageChange(sessionsPage + 1)}
+                      disabled={sessionsPage >= totalPagesSessions}
+                      className="h-8 w-8 p-0"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleSessionsPageChange(totalPagesSessions)}
+                      disabled={sessionsPage >= totalPagesSessions}
+                      className="h-8 w-8 p-0"
+                    >
+                      <ChevronsRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* Connection Logs Tab */}
@@ -386,6 +626,11 @@ const SessionsModule: React.FC = () => {
                 <CardTitle className="flex items-center gap-2">
                   <History className="h-5 w-5 text-primary-500" />
                   Historial de Conexiones
+                  {!loading && (
+                    <span className="text-sm font-normal text-neutral-500 ml-1">
+                      ({connectionLogs.length})
+                    </span>
+                  )}
                 </CardTitle>
                 
                 {/* Filters */}
@@ -395,7 +640,7 @@ const SessionsModule: React.FC = () => {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {dateRanges.map(range => (
+                      {DATE_RANGES.map(range => (
                         <SelectItem key={range.value} value={range.value}>
                           {range.label}
                         </SelectItem>
@@ -430,16 +675,22 @@ const SessionsModule: React.FC = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {connectionLogs.map((log) => (
+                      {connectionLogs.map((log) => {
+                        const logUser = log.user?.nombre ?? log.user?.username ?? '—';
+                        const logCreated = log.createdAt ?? log.created_at ?? '';
+                        const duration = log.sessionDuration ?? log.session_duration ?? 0;
+                        const roleName = log.roleName ?? log.role_name ?? '—';
+                        const ip = log.ipAddress ?? log.ip_address ?? '—';
+                        return (
                         <TableRow key={log.id} className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors">
                           <TableCell>
                             <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 bg-neutral-100 dark:bg-neutral-800 rounded-full flex items-center justify-center">
+                              <div className="w-9 h-9 bg-neutral-100 dark:bg-neutral-800 rounded-full flex items-center justify-center shrink-0">
                                 <User className="h-4 w-4 text-neutral-500" />
                               </div>
                               <div>
-                                <div className="font-medium text-neutral-900 dark:text-neutral-100">{log.user.nombre}</div>
-                                <div className="text-xs text-neutral-500">{log.user.username}</div>
+                                <div className="font-medium text-neutral-900 dark:text-neutral-100">{logUser}</div>
+                                <div className="text-xs text-neutral-500">{log.user?.username ?? ''}</div>
                               </div>
                             </div>
                           </TableCell>
@@ -450,59 +701,42 @@ const SessionsModule: React.FC = () => {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <div className="w-7 h-7 bg-neutral-100 dark:bg-neutral-800 rounded-lg flex items-center justify-center">
-                                {getDeviceIcon(log.device)}
+                              <div className="w-8 h-8 bg-neutral-100 dark:bg-neutral-800 rounded-lg flex items-center justify-center shrink-0">
+                                {getDeviceIcon(log.device ?? '')}
                               </div>
                               <div>
                                 <div className="text-sm font-medium">{log.device || 'Desconocido'}</div>
-                                <div className="text-xs text-neutral-500">{log.browser || 'Desconocido'}</div>
+                                <div className="text-xs text-neutral-500">{log.browser || '—'}</div>
                               </div>
                             </div>
                           </TableCell>
                           <TableCell>
-                            <div className="flex items-center gap-2">
-                              <MapPin className="h-4 w-4 text-neutral-500 flex-shrink-0" />
+                            <div className="text-sm">{[log.city, log.country].filter(Boolean).join(', ') || '—'}</div>
+                            <div className="text-xs text-neutral-500">{log.region || ''}</div>
+                          </TableCell>
+                          <TableCell>
+                            <code className="text-xs bg-neutral-100 dark:bg-neutral-800 px-2 py-1 rounded font-mono">
+                              {ip}
+                            </code>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{roleName}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-sm">{formatDuration(duration)}</span>
+                          </TableCell>
+                          <TableCell>
+                            {logCreated ? (
                               <div>
-                                <div className="text-sm">{log.city || 'Desconocido'}, {log.country || 'Desconocido'}</div>
-                                <div className="text-xs text-neutral-500">{log.region || 'Región desconocida'}</div>
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Globe className="h-4 w-4 text-neutral-500 flex-shrink-0" />
-                              <code className="text-xs bg-neutral-100 dark:bg-neutral-800 px-2 py-1 rounded font-mono">
-                                {log.ip_address}
-                              </code>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Shield className="h-4 w-4 text-neutral-500 flex-shrink-0" />
-                              <Badge variant="outline">
-                                {log.role_name || 'Sin rol'}
-                              </Badge>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Clock className="h-4 w-4 text-neutral-500 flex-shrink-0" />
-                              <span className="text-sm">{formatDuration(log.session_duration)}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Calendar className="h-4 w-4 text-neutral-500 flex-shrink-0" />
-                              <div>
-                                <div className="text-sm">{new Date(log.created_at).toLocaleDateString()}</div>
+                                <div className="text-sm">{new Date(logCreated).toLocaleDateString()}</div>
                                 <div className="text-xs text-neutral-500">
-                                  {new Date(log.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                  {new Date(logCreated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </div>
                               </div>
-                            </div>
+                            ) : '—'}
                           </TableCell>
                         </TableRow>
-                      ))}
+                      );})}
                     </TableBody>
                   </Table>
                 </div>

@@ -148,18 +148,6 @@ const UsersModule: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
-  const fetchAvailableRoles = async (signal?: AbortSignal) => {
-    try {
-      const response = await api.get('/roles/find-all-active', { signal });
-      const roles = Array.isArray(response.data) ? response.data : [];
-      setAvailableRoles(roles);
-    } catch (error: any) {
-      if (error?.name === 'AbortError' || error?.code === 'ERR_CANCELED') return;
-      console.error('Error cargando roles:', error);
-      setAvailableRoles([]);
-    }
-  };
-
   const fetchAreas = async () => {
     try {
       const response = await api.get('/areas/find-all');
@@ -186,12 +174,40 @@ const UsersModule: React.FC = () => {
     return 'Sin nombre';
   };
 
-  // Una sola carga inicial: roles + usuarios. AbortController evita duplicados con React Strict Mode.
+  // Carga inicial igual que Sessions: un efecto, loading true, Promise.all(roles + users), loading false cuando todo termina
   useEffect(() => {
+    let cancelled = false;
     const ac = new AbortController();
-    fetchAvailableRoles(ac.signal);
-    fetchUsers(ac.signal);
-    return () => ac.abort();
+    const load = async () => {
+      setLoading(true);
+      try {
+        const params: Record<string, unknown> = { page: 1, limit: 1000 };
+        if (userStatus !== 'all') params.active = userStatus === 'true';
+        const [rolesRes, usersRes] = await Promise.all([
+          api.get('/roles/find-all-active', { signal: ac.signal }),
+          api.get('/users', { params, signal: ac.signal })
+        ]);
+        if (cancelled) return;
+        setAvailableRoles(Array.isArray(rolesRes.data) ? rolesRes.data : []);
+        const userList = usersRes.data?.users ?? usersRes.data;
+        setUsers(Array.isArray(userList) ? userList : []);
+      } catch (error: unknown) {
+        if (cancelled) return;
+        const isAbort = (error as { name?: string; code?: string })?.name === 'AbortError' || (error as { name?: string; code?: string })?.code === 'ERR_CANCELED';
+        if (!isAbort) {
+          console.error('Error cargando usuarios:', error);
+          setUsers([]);
+          setAvailableRoles([]);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+      ac.abort();
+    };
   }, [userStatus]);
 
   // Resetear página al cambiar búsqueda
@@ -782,7 +798,7 @@ const UsersModule: React.FC = () => {
             <div className="flex items-center justify-center py-12">
               <div className="flex flex-col items-center gap-4">
                 <div className="w-10 h-10 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
-                <p className="text-sm">Cargando usuarios...</p>
+                <p className="yego-body-sm">Cargando usuarios...</p>
               </div>
             </div>
           ) : viewMode === 'list' ? (

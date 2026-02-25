@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -74,9 +74,22 @@ interface ActiveModule {
   activo: boolean;
 }
 
+// Normalizar nombre del módulo para usarlo como valor
+const normalizeModuleName = (nombre: string): string => {
+  return nombre.toLowerCase()
+    .trim()
+    .replace(/\s+/g, '')
+    .replace(/[áàäâ]/g, 'a')
+    .replace(/[éèëê]/g, 'e')
+    .replace(/[íìïî]/g, 'i')
+    .replace(/[óòöô]/g, 'o')
+    .replace(/[úùüû]/g, 'u')
+    .replace(/ñ/g, 'n');
+};
+
 const PermissionsModule: React.FC = () => {
   const authState = useAuth();
-  const [permissions, setPermissions] = useState<Permission[]>([]);
+  const [allPermissions, setAllPermissions] = useState<Permission[]>([]);
   const [activeModules, setActiveModules] = useState<ActiveModule[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -85,7 +98,6 @@ const PermissionsModule: React.FC = () => {
   const [permissionStatus, setPermissionStatus] = useState<'true' | 'false' | 'all'>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
-  const [totalPermissions, setTotalPermissions] = useState(0);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingPermission, setEditingPermission] = useState<Permission | null>(null);
   const [deleteModal, setDeleteModal] = useState<{open: boolean, permission: Permission | null}>({open: false, permission: null});
@@ -98,9 +110,7 @@ const PermissionsModule: React.FC = () => {
 
   const actions = ['create', 'read', 'update', 'delete'];
 
-  // Helpers
   const capitalize = (str: string) => str.charAt(0).toUpperCase() + str.slice(1);
-  
   const resetFormData = () => ({
     name: '',
     description: '',
@@ -108,89 +118,89 @@ const PermissionsModule: React.FC = () => {
     action: ''
   });
 
+  // Carga inicial única: módulos activos + permisos find-all en paralelo (sin duplicar llamadas)
   useEffect(() => {
-    fetchActiveModules();
-    fetchPermissions();
+    let cancelled = false;
+    const ac = new AbortController();
+    const load = async () => {
+      try {
+        const [modulesRes, permissionsRes] = await Promise.all([
+          api.get('/modules/activos', { signal: ac.signal }),
+          api.get('/permissions/find-all', { signal: ac.signal })
+        ]);
+        if (cancelled) return;
+        setActiveModules(Array.isArray(modulesRes.data) ? modulesRes.data : []);
+        setAllPermissions(Array.isArray(permissionsRes.data) ? permissionsRes.data : []);
+      } catch (error) {
+        if (cancelled) return;
+        console.error('Error loading permissions page:', error);
+        setActiveModules([]);
+        setAllPermissions([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+      ac.abort();
+    };
   }, []);
 
+  // Reset a página 1 cuando cambian filtros o búsqueda
   useEffect(() => {
-    fetchPermissions();
-  }, [permissionStatus, selectedModule, selectedAction, currentPage, itemsPerPage]);
+    setCurrentPage(1);
+  }, [searchTerm, selectedModule, selectedAction, permissionStatus]);
 
-  useEffect(() => {
-    const delaySearch = setTimeout(() => {
-      setCurrentPage(1);
-      fetchPermissions();
-    }, 500);
-    
-    return () => clearTimeout(delaySearch);
-  }, [searchTerm]);
+  // Filtrado y paginación en cliente (sin nuevas llamadas al API)
+  const filteredPermissions = useMemo(() => {
+    const searchLower = (searchTerm ?? '').trim().toLowerCase();
+    return allPermissions.filter(permission => {
+      const matchesSearch = !searchLower ||
+        (permission.name ?? '').toLowerCase().includes(searchLower) ||
+        (permission.description ?? '').toLowerCase().includes(searchLower) ||
+        (permission.module ?? '').toLowerCase().includes(searchLower) ||
+        (permission.action ?? '').toLowerCase().includes(searchLower);
+      const moduleMatches = selectedModule === 'all' ||
+        (permission.module ?? '').toLowerCase() === selectedModule ||
+        normalizeModuleName(permission.module ?? '') === selectedModule;
+      const matchesAction = selectedAction === 'all' || (permission.action === selectedAction);
+      const matchesStatus = permissionStatus === 'all' ||
+        permission.active === (permissionStatus === 'true');
+      return matchesSearch && moduleMatches && matchesAction && matchesStatus;
+    });
+  }, [allPermissions, searchTerm, selectedModule, selectedAction, permissionStatus]);
 
-  const fetchActiveModules = async () => {
+  const totalPermissions = filteredPermissions.length;
+  const permissions = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredPermissions.slice(start, start + itemsPerPage);
+  }, [filteredPermissions, currentPage, itemsPerPage]);
+
+  const refetchPermissions = async () => {
     try {
-      const response = await api.get('/modules/activos');
-      setActiveModules(response.data || []);
+      const response = await api.get('/permissions/find-all');
+      setAllPermissions(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
-      console.error('Error fetching active modules:', error);
-      setActiveModules([]);
+      console.error('Error refetching permissions:', error);
     }
   };
 
-  // Normalizar nombre del módulo para usarlo como valor
-  const normalizeModuleName = (nombre: string): string => {
-    return nombre.toLowerCase()
-      .trim()
-      .replace(/\s+/g, '')
-      .replace(/[áàäâ]/g, 'a')
-      .replace(/[éèëê]/g, 'e')
-      .replace(/[íìïî]/g, 'i')
-      .replace(/[óòöô]/g, 'o')
-      .replace(/[úùüû]/g, 'u')
-      .replace(/ñ/g, 'n');
-  };
-
-  const fetchPermissions = async () => {
+  const refetchModulesAndPermissions = async () => {
     try {
-      setLoading(true);
-      const response = await api.get('/permissions/find-all');
-      const allPermissions: Permission[] = Array.isArray(response.data) ? response.data : [];
-
-      // Aplicar filtros
-      const searchLower = searchTerm.trim().toLowerCase();
-      let filtered = allPermissions.filter(permission => {
-        const matchesSearch = !searchLower || 
-          permission.name.toLowerCase().includes(searchLower) ||
-          permission.description.toLowerCase().includes(searchLower) ||
-          permission.module.toLowerCase().includes(searchLower) ||
-          permission.action.toLowerCase().includes(searchLower);
-        
-        // Comparar módulo normalizado o exacto
-        const moduleMatches = selectedModule === 'all' || 
-          permission.module.toLowerCase() === selectedModule ||
-          normalizeModuleName(permission.module) === selectedModule;
-        const matchesAction = selectedAction === 'all' || permission.action === selectedAction;
-        const matchesStatus = permissionStatus === 'all' || 
-          permission.active === (permissionStatus === 'true');
-
-        return matchesSearch && moduleMatches && matchesAction && matchesStatus;
-      });
-
-      // Paginación
-      setTotalPermissions(filtered.length);
-      const startIndex = (currentPage - 1) * itemsPerPage;
-      setPermissions(filtered.slice(startIndex, startIndex + itemsPerPage));
+      const [modulesRes, permissionsRes] = await Promise.all([
+        api.get('/modules/activos'),
+        api.get('/permissions/find-all')
+      ]);
+      setActiveModules(Array.isArray(modulesRes.data) ? modulesRes.data : []);
+      setAllPermissions(Array.isArray(permissionsRes.data) ? permissionsRes.data : []);
     } catch (error) {
-      console.error('Error fetching permissions:', error);
-      setPermissions([]);
-      setTotalPermissions(0);
-    } finally {
-      setLoading(false);
+      console.error('Error refetching data:', error);
     }
   };
 
   const handleCreatePermission = async () => {
     try {
-      // Generar el nombre del permiso en formato: module.action
       const permissionData = {
         ...formData,
         name: `${formData.module}.${formData.action}`
@@ -198,8 +208,7 @@ const PermissionsModule: React.FC = () => {
       await api.post('/permissions', permissionData);
       setIsCreateDialogOpen(false);
       setFormData(resetFormData());
-      fetchPermissions();
-      fetchActiveModules(); // Refrescar módulos por si acaso
+      await refetchModulesAndPermissions();
     } catch (error) {
       console.error('Error creating permission:', error);
     }
@@ -210,7 +219,7 @@ const PermissionsModule: React.FC = () => {
       await api.put(`/permissions/${id}`, formData);
       setEditingPermission(null);
       setFormData(resetFormData());
-      fetchPermissions();
+      await refetchPermissions();
     } catch (error) {
       console.error('Error updating permission:', error);
     }
@@ -225,7 +234,7 @@ const PermissionsModule: React.FC = () => {
       try {
         await api.delete(`/permissions/${deleteModal.permission.id}`);
         setDeleteModal({ open: false, permission: null });
-        fetchPermissions();
+        await refetchPermissions();
       } catch (error) {
         console.error('Error deleting permission:', error);
       }
