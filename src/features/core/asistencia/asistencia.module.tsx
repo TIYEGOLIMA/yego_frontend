@@ -256,8 +256,8 @@ export const AsistenciaModule: React.FC = () => {
   const userRole = user?.role?.toUpperCase();
   const isSAC = userRole === 'SAC';
   
-  // Solo SUPERADMIN y ADMIN pueden ver la lista de asistencias (independiente de si tienen área o no)
-  const puedeVerLista = userRole === 'SUPERADMIN' || userRole === 'ADMIN';
+  // SUPERADMIN, ADMIN y jefes de área pueden ver la lista de asistencias (jefes ven solo su área)
+  const puedeVerLista = userRole === 'SUPERADMIN' || userRole === 'ADMIN' || user?.esJefe === true;
   
   const [empleado, setEmpleado] = useState<EmpleadoData | null>(null);
   const [estadisticas, setEstadisticas] = useState<EstadisticasAsistencia>(ESTADISTICAS_INICIALES);
@@ -386,7 +386,7 @@ export const AsistenciaModule: React.FC = () => {
     const horaActual = ahora.getHours();
     const minutosActuales = ahora.getMinutes();
     const horaActualMinutos = horaActual * 60 + minutosActuales;
-
+ 
     const [horaEntrada, minutosEntrada] = empleado.horario.entrada.split(':').map(Number);
     const horaEntradaMinutos = horaEntrada * 60 + minutosEntrada;
 
