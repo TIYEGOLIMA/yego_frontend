@@ -124,7 +124,7 @@ export const ForcePasswordChangeDialog: React.FC<ForcePasswordChangeDialogProps>
             Cambio de Contraseña Requerido
           </DialogTitle>
           <DialogDescription>
-            Por seguridad, debes cambiar tu contraseña antes de continuar.
+            Por política de seguridad, debes cambiar tu contraseña cada semana. Actualízala ahora para seguir usando Integral.
           </DialogDescription>
         </DialogHeader>
         

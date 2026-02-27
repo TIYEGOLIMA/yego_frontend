@@ -138,6 +138,17 @@ api.interceptors.response.use(
       }
     }
     
+    // Política semanal: 403 PASSWORD_EXPIRED → marcar que debe cambiar contraseña (modal en MainLayout)
+    if (error.response?.status === 403 && error.response?.data?.error === 'PASSWORD_EXPIRED') {
+      try {
+        const { useAuthStore } = await import('../../store/auth-store')
+        const state = useAuthStore.getState()
+        if (state.user) {
+          useAuthStore.setState({ user: { ...state.user, requirePasswordChange: true } })
+        }
+      } catch (_) {}
+    }
+
     // Manejar errores de conexión (ignorar errores cancelados)
     if (!error.response) {
       const esCancelado = error.code === 'ECONNABORTED' || 

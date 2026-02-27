@@ -10,10 +10,9 @@ export interface User {
   role: string;
   active: boolean;
   lastLogin: string;
-  /** Si el usuario es jefe de un área (manager_id). Se persiste en localStorage vía auth-storage. */
   esJefe?: boolean;
-  /** Nombre del área que gestiona (solo si esJefe). */
   nombreArea?: string | null;
+  requirePasswordChange?: boolean;
 }
 
 export interface ModuleGrupo {
@@ -79,11 +78,13 @@ export const useAuthStore = create<AuthState>()(
           })
           localStorage.removeItem("requiereCambioPassword")
           
-          // Cargar módulos después del login
-          try {
-            await get().fetchModules();
-          } catch {
-            // Continuar aunque falle la carga de módulos
+          // Cargar módulos solo si NO debe cambiar contraseña (si debe, no llamar my-modules)
+          if (!response.user?.requirePasswordChange) {
+            try {
+              await get().fetchModules();
+            } catch {
+              // Continuar aunque falle la carga de módulos
+            }
           }
           
           return response
@@ -126,6 +127,12 @@ export const useAuthStore = create<AuthState>()(
           const modules = await authService.getMyModules();
           set({ modules });
         } catch (error: any) {
+          // 403 PASSWORD_EXPIRED = debe cambiar contraseña (modal); no hacer logout ni redirigir
+          const isPasswordExpired = error.response?.status === 403 && error.response?.data?.error === 'PASSWORD_EXPIRED';
+          if (isPasswordExpired) {
+            set({ modules: [] });
+            return;
+          }
           if (error.message?.includes('Token inválido') || error.response?.status === 401 || error.response?.status === 403) {
             set({ user: null, token: null, modules: [], loading: false });
             localStorage.removeItem('auth-storage');
@@ -196,9 +203,12 @@ export const useAuthStore = create<AuthState>()(
       }),
       onRehydrateStorage: () => {
         return (state) => {
-            if (state?.token && (!state.modules || state.modules.length === 0)) {
-            state.fetchModules().catch(() => {});
-          }
+          if (!state?.token) return;
+          state.fetchProfile().catch(() => {}).then(() => {
+            const s = useAuthStore.getState();
+            if (!s.token || s.user?.requirePasswordChange) return;
+            if (!s.modules || s.modules.length === 0) s.fetchModules().catch(() => {});
+          });
         };
       },
     }

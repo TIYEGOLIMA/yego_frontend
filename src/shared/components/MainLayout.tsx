@@ -5,6 +5,7 @@ import { useConnectionStatus } from '../hooks/useConnectionStatus'
 import { ThemeToggle } from './ThemeToggle'
 import { Button } from '../../components/ui/button'
 import { ChangePasswordDialog } from '../../components/ChangePasswordDialog'
+import { ForcePasswordChangeDialog } from '../../components/ForcePasswordChangeDialog'
 import { 
   Menu, 
   User, 
@@ -37,10 +38,9 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [changePasswordOpen, setChangePasswordOpen] = useState(false)
   const [openDropdowns, setOpenDropdowns] = useState<Set<string>>(new Set())
-  const { user, logout, token, modules, fetchModules, refreshTrigger } = useAuthStore()
+  const { user, logout, token, modules, fetchModules, fetchProfile, triggerRefresh, refreshTrigger } = useAuthStore()
   const { status } = useConnectionStatus()
-  
-  
+
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -49,12 +49,18 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       navigate('/login')
       return
     }
-    
+    // No cargar my-modules si debe cambiar contraseña (esa API está bloqueada hasta que cambie)
+    if (user?.requirePasswordChange) return
+
     if (token && (!modules || modules.length === 0)) {
       const timeout = setTimeout(() => {
-        const currentModules = useAuthStore.getState().modules;
+        const state = useAuthStore.getState();
+        if (state.user?.requirePasswordChange) return
+        const currentModules = state.modules;
         if (!currentModules || currentModules.length === 0) {
           fetchModules().catch((error: any) => {
+            const isPasswordExpired = error.response?.status === 403 && error.response?.data?.error === 'PASSWORD_EXPIRED';
+            if (isPasswordExpired) return;
             if (error.message?.includes('Token inválido') || error.response?.status === 401 || error.response?.status === 403) {
               logout();
               navigate('/login');
@@ -62,24 +68,10 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           });
         }
       }, 2000);
-      
+
       return () => clearTimeout(timeout);
     }
-  }, [token])
-
-  if (!token) return null
-
-  if (token && !user) {
-    return (
-      <div className="min-h-screen bg-background-secondary dark:bg-background-dark flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-10 h-10 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-neutral-600 dark:text-neutral-400">Cargando perfil de usuario...</p>
-        </div>
-      </div>
-    )
-  }
-
+  }, [token, user?.requirePasswordChange, modules?.length])
 
   const handleLogout = async () => {
     try {
@@ -237,6 +229,36 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [openDropdowns, navItems])
+
+  // Retornos condicionales después de todos los hooks (Rules of Hooks)
+  if (!token) return null
+
+  if (token && user?.requirePasswordChange) {
+    return (
+      <div className="min-h-screen bg-background-secondary dark:bg-background-dark flex items-center justify-center">
+        <ForcePasswordChangeDialog
+          isOpen={true}
+          onSuccess={async () => {
+            // login() ya cargó módulos; solo refrescar perfil y navegar
+            await fetchProfile().catch(() => {})
+            triggerRefresh()
+            navigate('/', { replace: true })
+          }}
+        />
+      </div>
+    )
+  }
+
+  if (token && !user) {
+    return (
+      <div className="min-h-screen bg-background-secondary dark:bg-background-dark flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-10 h-10 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-neutral-600 dark:text-neutral-400">Cargando perfil de usuario...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-background-secondary dark:bg-background-dark">
@@ -515,13 +537,11 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         </main>
       </div>
       
-      {/* Diálogo de cambio de contraseña */}
+      {/* Diálogo de cambio de contraseña (desde menú usuario) */}
       <ChangePasswordDialog
         isOpen={changePasswordOpen}
         onClose={() => setChangePasswordOpen(false)}
-        onSuccess={() => {
-          // Opcional: mostrar mensaje de éxito o actualizar estado
-        }}
+        onSuccess={() => setChangePasswordOpen(false)}
       />
 
     </div>

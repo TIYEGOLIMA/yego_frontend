@@ -25,6 +25,8 @@ export interface AuthResponse {
     lastLogin: string;         // Backend devuelve LocalDateTime como string ISO
     esJefe?: boolean;          // Si es manager_id de un área (para localStorage y cuenta)
     nombreArea?: string | null; // Nombre del área que gestiona (solo si esJefe)
+    /** true si debe cambiar la contraseña (política semanal) para seguir usando Integral */
+    requirePasswordChange?: boolean;
   };
 }
 
@@ -335,13 +337,15 @@ export const authService = {
       return modules;
     } catch (error: any) {
       console.error('❌ [authService] Error obteniendo módulos:', error.response?.data || error.message);
-      
+      // 403 PASSWORD_EXPIRED = política semanal; reenviar el error para que el store no haga logout
+      if (error.response?.status === 403 && error.response?.data?.error === 'PASSWORD_EXPIRED') {
+        throw error;
+      }
       // Si es error de autorización, el token puede estar expirado
       if (error.response?.status === 401 || error.response?.status === 403) {
         console.warn('⚠️ [authService] Token inválido o expirado al obtener módulos');
         throw new Error('Token inválido o expirado');
       }
-      
       throw error;
     }
   },
