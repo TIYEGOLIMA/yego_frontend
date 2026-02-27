@@ -45,6 +45,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
   ChevronDown,
+  Loader2,
 } from 'lucide-react';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { api } from '../../../services';
@@ -118,6 +119,7 @@ const AreasModule: React.FC = () => {
   const [addingColab, setAddingColab] = useState(false);
   const [removingColabId, setRemovingColabId] = useState<number | null>(null);
   const [previewPopupArea, setPreviewPopupArea] = useState<Area | null>(null);
+  const [togglingAreaId, setTogglingAreaId] = useState<number | null>(null);
   const [previewPopupColabs, setPreviewPopupColabs] = useState<Colaborador[]>([]);
   const [previewPopupLoading, setPreviewPopupLoading] = useState(false);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -138,9 +140,10 @@ const AreasModule: React.FC = () => {
     }
   };
 
-  const fetchUsuarios = async (signal?: AbortSignal) => {
+  const fetchUsuarios = async (areaId?: number, signal?: AbortSignal) => {
     try {
-      const res = await api.get('/areas/usuarios-para-responsable', { signal });
+      const params = areaId != null ? { params: { areaId } } : { signal };
+      const res = await api.get('/areas/usuarios-para-responsable', params);
       setUsuarios(Array.isArray(res.data) ? res.data : []);
     } catch (e: unknown) {
       if ((e as { name?: string; code?: string })?.name === 'AbortError' || (e as { code?: string })?.code === 'ERR_CANCELED') return;
@@ -159,13 +162,13 @@ const AreasModule: React.FC = () => {
     }
   };
 
-  // Una sola carga inicial; loading hasta que terminen áreas y usuarios
+  // Una sola carga inicial; loading hasta que terminen áreas y usuarios (sin areaId = para crear)
   useEffect(() => {
     const ac = new AbortController();
     setLoading(true);
     (async () => {
       try {
-        await Promise.all([fetchAreas(ac.signal), fetchUsuarios(ac.signal)]);
+        await Promise.all([fetchAreas(ac.signal), fetchUsuarios(undefined, ac.signal)]);
       } finally {
         setLoading(false);
       }
@@ -202,6 +205,7 @@ const AreasModule: React.FC = () => {
     setEditingArea(null);
     setFormData(initialFormData);
     setIsDialogOpen(true);
+    fetchUsuarios(); // lista sin responsables de otras áreas
   };
 
   const openEdit = (area: Area) => {
@@ -213,6 +217,8 @@ const AreasModule: React.FC = () => {
       activo: area.activo,
     });
     setIsDialogOpen(true);
+    // Recargar usuarios incluyendo al responsable actual de esta área para que siga en el combo
+    fetchUsuarios(area.id);
   };
 
   const closeDialog = () => {
@@ -251,6 +257,7 @@ const AreasModule: React.FC = () => {
   };
 
   const handleToggleStatus = async (area: Area) => {
+    setTogglingAreaId(area.id);
     try {
       await api.put(`/areas/toggle-status/${area.id}`);
       setAreas((prev) =>
@@ -258,6 +265,9 @@ const AreasModule: React.FC = () => {
       );
     } catch (e) {
       console.error('Error cambiando estado:', e);
+      showApiError(e, 'Error al cambiar el estado del área');
+    } finally {
+      setTogglingAreaId(null);
     }
   };
 
@@ -471,11 +481,16 @@ const AreasModule: React.FC = () => {
                           <p className="text-sm text-neutral-500 dark:text-neutral-400 truncate mt-0.5">{area.description}</p>
                         )}
                       </div>
-                      <Switch
-                        checked={area.activo}
-                        onCheckedChange={() => handleToggleStatus(area)}
-                        className="shrink-0"
-                      />
+                      <div className="relative flex items-center gap-2 shrink-0">
+                        {togglingAreaId === area.id ? (
+                          <Loader2 className="h-5 w-5 animate-spin text-primary-500" />
+                        ) : (
+                          <Switch
+                            checked={area.activo}
+                            onCheckedChange={() => handleToggleStatus(area)}
+                          />
+                        )}
+                      </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2 mt-2 text-sm">
                       {area.managerName ? (
@@ -568,10 +583,14 @@ const AreasModule: React.FC = () => {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <Switch
-                            checked={area.activo}
-                            onCheckedChange={() => handleToggleStatus(area)}
-                          />
+                          {togglingAreaId === area.id ? (
+                            <Loader2 className="h-5 w-5 animate-spin text-primary-500" />
+                          ) : (
+                            <Switch
+                              checked={area.activo}
+                              onCheckedChange={() => handleToggleStatus(area)}
+                            />
+                          )}
                         </TableCell>
                         <TableCell className="py-2 px-4 text-center">
                           <div className="flex items-center justify-center gap-2">
