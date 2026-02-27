@@ -91,6 +91,8 @@ export const AsistenciaListaModule: React.FC = () => {
     const ultimoDiaMes = new Date(año, mes + 1, 0).getDate();
     const diasRestantesMes = ultimoDiaMes - dia;
     
+    // "2 días antes de fin de mes" = estamos en el rango (ej. 26 o 27 en mes de 28 días)
+    const esDosDiasAntesFinMes = diasRestantesMes >= 1 && diasRestantesMes <= 2;
     return {
       año,
       mes,
@@ -99,7 +101,7 @@ export const AsistenciaListaModule: React.FC = () => {
       diasRestantesMes,
       esDia15: dia === 15,
       esUltimoDia: dia === ultimoDiaMes,
-      esDosDiasAntesFinMes: diasRestantesMes === 2,
+      esDosDiasAntesFinMes,
       estaEnPrimeraQuincena: dia < 15
     };
   };
