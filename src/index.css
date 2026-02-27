@@ -240,10 +240,6 @@ body {
     @apply yego-nav-item bg-gradient-to-r from-primary-500 to-primary-400 text-white relative shadow-md;
   }
   
-  .yego-nav-item-active .yego-nav-indicator {
-    @apply absolute right-4 w-2 h-2 bg-primary-200 rounded-full block;
-  }
-  
   .yego-nav-item-inactive {
     @apply yego-nav-item text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800;
   }

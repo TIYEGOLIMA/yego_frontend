@@ -428,12 +428,6 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                         <ChevronDown className={`h-4 w-4 ml-2 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
                       </>
                     )}
-                    {(hasActiveOption || isDropdownOpen) && !sidebarCollapsed && (
-                      <span className="yego-nav-indicator" />
-                    )}
-                    {(hasActiveOption || isDropdownOpen) && sidebarCollapsed && (
-                      <span className="yego-nav-indicator" />
-                    )}
                   </button>
                   
                   {/* Submenú expandible dentro del sidebar */}
@@ -453,9 +447,6 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                               {child.icon}
                             </div>
                             <span className="ml-3 flex-1 text-left font-medium text-sm truncate">{child.label}</span>
-                            {isOptionActive && (
-                              <span className="yego-nav-indicator" />
-                            )}
                           </button>
                         );
                       })}
@@ -481,12 +472,6 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                 </div>
                 {!sidebarCollapsed && (
                   <span className="ml-3 flex-1 text-left font-medium text-sm truncate">{item.label}</span>
-                )}
-                {isActiveItem && !sidebarCollapsed && (
-                  <span className="yego-nav-indicator" />
-                )}
-                {isActiveItem && sidebarCollapsed && (
-                  <span className="yego-nav-indicator" />
                 )}
               </button>
             );

@@ -92,6 +92,48 @@ interface CreateUserData {
   areaId?: number | null;
 }
 
+/** Normaliza texto para username: minúsculas, sin acentos, sin espacios (ej. "García" -> "garcia") */
+function normalizarParaUsername(texto: string): string {
+  if (!texto || typeof texto !== 'string') return '';
+  return texto
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .trim();
+}
+
+/** Obtiene la última palabra de un texto (para apellidos compuestos: "De La Cruz" -> "Cruz") */
+function obtenerUltimaPalabra(texto: string): string {
+  if (!texto || typeof texto !== 'string') return '';
+  const palabras = texto.trim().split(/\s+/).filter(Boolean);
+  return palabras.length > 0 ? palabras[palabras.length - 1] : '';
+}
+
+/** Para "apellido paterno + materno" en un solo campo (ej. "De La Cruz Garcia"): devuelve la palabra a usar en username = última del paterno (Cruz). Si solo hay una palabra, la devuelve. */
+function obtenerPalabraApellidoParaUsername(apellidosCompletos: string): string {
+  const palabras = apellidosCompletos.trim().split(/\s+/).filter(Boolean);
+  if (palabras.length === 0) return '';
+  if (palabras.length === 1) return palabras[0];
+  const sinMaterno = palabras.slice(0, -1);
+  return sinMaterno[sinMaterno.length - 1];
+}
+
+/** Apellido paterno para mostrar: si hay 2+ palabras (paterno + materno), quita la última (materno). Ej. "De La Cruz Garcia" -> "De La Cruz". */
+function apellidoPaternoParaDisplay(apellidos: string | undefined): string {
+  if (!apellidos?.trim()) return '';
+  const palabras = apellidos.trim().split(/\s+/).filter(Boolean);
+  if (palabras.length <= 1) return apellidos.trim();
+  return palabras.slice(0, -1).join(' ');
+}
+
+/** Genera username: primera letra del nombre + última palabra del apellido (normalizado, sin acentos) */
+function generarUsernameDesdeNombreApellido(nombre: string, apellido: string): string {
+  const primeraLetra = nombre.trim().split(/\s+/)[0]?.charAt(0)?.toLowerCase() ?? '';
+  const ultimaPalabra = obtenerUltimaPalabra(apellido);
+  return normalizarParaUsername(primeraLetra + ultimaPalabra);
+}
+
 const UsersModule: React.FC = () => {
   const { user: currentUser } = useAuthStore();
   
@@ -159,18 +201,14 @@ const UsersModule: React.FC = () => {
     }
   };
 
-  // Función helper para mostrar nombre completo (primer nombre + primer apellido)
+  // Nombre para mostrar: solo primer nombre + apellido paterno (ej. "Ariana De La Cruz", sin segundo nombre)
   const getDisplayName = (user: User) => {
-    const firstName = user.name?.split(' ')[0] || '';
-    const firstLastName = user.lastName?.split(' ')[0] || '';
-    
-    if (firstName && firstLastName) {
-      return `${firstName} ${firstLastName}`;
-    } else if (firstName) {
-      return firstName;
-    } else if (user.name) {
-      return user.name;
-    }
+    const primerNombre = user.name?.trim().split(/\s+/)[0] || '';
+    const apellidoPaterno = apellidoPaternoParaDisplay(user.lastName);
+    if (primerNombre && apellidoPaterno) return `${primerNombre} ${apellidoPaterno}`.trim();
+    if (primerNombre) return primerNombre;
+    if (user.name) return user.name.trim().split(/\s+/)[0] || user.name.trim();
+    if (user.lastName) return user.lastName.trim();
     return 'Sin nombre';
   };
 
@@ -283,31 +321,15 @@ const UsersModule: React.FC = () => {
     return () => clearTimeout(delayTimer);
   }, [formData.dni, editingUser]);
 
-  // 🔍 Generar username y email automáticamente cuando se completen nombre y apellidos
+  // 🔍 Generar username y email automáticamente solo al CREAR (nombre + apellidos). Al editar no se toca: se guarda lo que el usuario escriba.
   useEffect(() => {
-    // Solo generar si no estamos editando o si el usuario es admin
-    if ((!editingUser || isAdminOrSuperAdmin()) && formData.name && formData.lastName) {
-      const firstName = formData.name.split(' ')[0];
-      const firstLastName = formData.lastName.split(' ')[0];
-      
-      if (firstName && firstLastName) {
-        // Generar username: primera inicial del nombre + apellido paterno
-        const inicialNombre = firstName.charAt(0).toLowerCase();
-        const apellidoPaterno = firstLastName.toLowerCase();
-        const username = `${inicialNombre}${apellidoPaterno}`;
-        
-        // Generar email: username + dominio yego
-        const email = `${username}@yego.com`;
-        
-        // Solo actualizar si los campos están vacíos o si el usuario es admin
-        if (!formData.username || isAdminOrSuperAdmin()) {
-          setFormData(prev => ({
-            ...prev,
-            username: username,
-            email: email
-          }));
-        }
-      }
+    if (editingUser) return;
+    if (!formData.name || !formData.lastName) return;
+    const apellidoParaUsername = obtenerPalabraApellidoParaUsername(formData.lastName);
+    const username = generarUsernameDesdeNombreApellido(formData.name, apellidoParaUsername);
+    if (username) {
+      const email = `${username}@yego.com`;
+      setFormData(prev => ({ ...prev, username, email }));
     }
   }, [formData.name, formData.lastName, editingUser]);
 
@@ -368,21 +390,18 @@ const UsersModule: React.FC = () => {
           .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
           .join(' ');
         
-        // Generar apellidos con formato correcto
+        // Generar apellidos con formato correcto (capitalizar cada palabra, respetar tildes en visualización)
         const apellidos = `${datos.apellidoPaterno} ${datos.apellidoMaterno}`
           .toLowerCase()
           .split(' ')
           .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
           .join(' ');
         
-        // Generar username: primera inicial del nombre + apellido paterno
-        const primerNombre = datos.nombres.split(' ')[0];
-        const inicialNombre = primerNombre.charAt(0).toLowerCase();
-        const apellidoPaterno = datos.apellidoPaterno.toLowerCase();
-        const username = `${inicialNombre}${apellidoPaterno}`;
+        // Username: primera letra del nombre + última palabra del apellido paterno (ej. "De La Cruz" -> "Cruz" -> acruz), sin acentos
+        const username = generarUsernameDesdeNombreApellido(datos.nombres, datos.apellidoPaterno);
         
         // Generar email: username + dominio yego
-        const email = `${username}@yego.com`;
+        const email = username ? `${username}@yego.com` : '';
         
         // Actualizar el formulario con los datos obtenidos
         setFormData(prev => ({
@@ -1140,7 +1159,6 @@ const UsersModule: React.FC = () => {
                 onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                 placeholder="usuario123"
                 disabled={!isAdminOrSuperAdmin()}
-                className="bg-gray-50 dark:bg-gray-800"
               />
               {!isAdminOrSuperAdmin() && (
                 <p className="text-xs text-gray-500 mt-1">
@@ -1157,7 +1175,6 @@ const UsersModule: React.FC = () => {
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 placeholder="juan.perez@empresa.com"
                 disabled={!isAdminOrSuperAdmin()}
-                className="bg-gray-50 dark:bg-gray-800"
               />
               {!isAdminOrSuperAdmin() && (
                 <p className="text-xs text-gray-500 mt-1">
