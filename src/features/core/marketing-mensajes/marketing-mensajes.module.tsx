@@ -36,6 +36,7 @@ import {
   Filter,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   ChevronsLeft,
   ChevronsRight,
   FileDown,
@@ -203,6 +204,53 @@ const CSS_CLASSES = {
   buttonSelected: 'bg-red-200 dark:bg-red-900/40 hover:bg-red-300 dark:hover:bg-red-900/60',
   buttonDefault: 'bg-white dark:bg-neutral-900 hover:bg-neutral-50 dark:hover:bg-neutral-800/50',
   badgeMinuto: 'text-xs px-1.5 py-1 bg-primary-600 text-white rounded font-medium'
+};
+
+// Calendario / filtro de fechas (estilo fleet)
+const MESES_CALENDAR = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const DIAS_SEMANA_CALENDAR = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+
+const formatearFechaLocal = (year: number, month: number, day: number): string => {
+  const mes = (month + 1).toString().padStart(2, '0');
+  const dia = day.toString().padStart(2, '0');
+  return `${year}-${mes}-${dia}`;
+};
+
+/** Inicio de semana (lunes) para una fecha */
+const getStartOfWeek = (d: Date): Date => {
+  const date = new Date(d);
+  const day = date.getDay();
+  const diff = (day === 0 ? -6 : 1) - day; // Lunes = 1
+  date.setDate(date.getDate() + diff);
+  date.setHours(0, 0, 0, 0);
+  return date;
+};
+
+/** Presets de rango: [desde, hasta] en YYYY-MM-DD */
+const getPresetEstaSemana = (): [string, string] => {
+  const start = getStartOfWeek(new Date());
+  const end = new Date(start);
+  end.setDate(end.getDate() + 6);
+  return [formatearFechaLocal(start.getFullYear(), start.getMonth(), start.getDate()), formatearFechaLocal(end.getFullYear(), end.getMonth(), end.getDate())];
+};
+const getPresetSemanaPasada = (): [string, string] => {
+  const start = getStartOfWeek(new Date());
+  start.setDate(start.getDate() - 7);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 6);
+  return [formatearFechaLocal(start.getFullYear(), start.getMonth(), start.getDate()), formatearFechaLocal(end.getFullYear(), end.getMonth(), end.getDate())];
+};
+const getPresetEsteMes = (): [string, string] => {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  return [formatearFechaLocal(start.getFullYear(), start.getMonth(), start.getDate()), formatearFechaLocal(end.getFullYear(), end.getMonth(), end.getDate())];
+};
+const getPresetMesPasado = (): [string, string] => {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const end = new Date(now.getFullYear(), now.getMonth(), 0);
+  return [formatearFechaLocal(start.getFullYear(), start.getMonth(), start.getDate()), formatearFechaLocal(end.getFullYear(), end.getMonth(), end.getDate())];
 };
 
 // Constantes para grid
@@ -681,6 +729,11 @@ const MarketingMensajesModule: React.FC = () => {
   const [filtroModo, setFiltroModo] = useState<string>('all');
   const [filtroTipo, setFiltroTipo] = useState<string>('all');
   const [filtroCanales, setFiltroCanales] = useState<string>('all'); // all | whatsapp | yandex | ambos
+  const [fechaDesde, setFechaDesde] = useState<string | null>(null);
+  const [fechaHasta, setFechaHasta] = useState<string | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [currentMonth, setCurrentMonth] = useState(() => new Date());
+  const datePickerRef = useRef<HTMLDivElement>(null);
   const [searchGrupos, setSearchGrupos] = useState('');
   const [searchFlotas, setSearchFlotas] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -1330,6 +1383,97 @@ const MarketingMensajesModule: React.FC = () => {
   const toggleGrupo = (grupoId: string) => toggleArrayItem('grupos', grupoId);
   const toggleFlota = (flotaId: string) => toggleArrayItem('flotas', flotaId);
 
+  // --- Filtro por fecha (calendario estilo fleet) ---
+  const obtenerDiasDelMes = (fecha: Date): (number | null)[] => {
+    const año = fecha.getFullYear();
+    const mes = fecha.getMonth();
+    const primerDia = new Date(año, mes, 1);
+    const diaInicioSemana = (primerDia.getDay() + 6) % 7; // Lunes = 0
+    const ultimoDia = new Date(año, mes + 1, 0);
+    const diasEnMes = ultimoDia.getDate();
+    const dias: (number | null)[] = [];
+    for (let i = 0; i < diaInicioSemana; i++) dias.push(null);
+    for (let i = 1; i <= diasEnMes; i++) dias.push(i);
+    return dias;
+  };
+
+  const obtenerFechaStrCal = (dia: number) =>
+    formatearFechaLocal(currentMonth.getFullYear(), currentMonth.getMonth(), dia);
+
+  const formatearRangoFechasDisplay = (): string => {
+    if (!fechaDesde && !fechaHasta) return 'Fecha de creación';
+    if (!fechaHasta) {
+      const [, month, day] = fechaDesde!.split('-').map(Number);
+      return `${day} de ${MESES_CALENDAR[month - 1].toLowerCase()}...`;
+    }
+    const [, mInicio, dInicio] = fechaDesde!.split('-').map(Number);
+    const [, mFin, dFin] = fechaHasta.split('-').map(Number);
+    if (fechaDesde === fechaHasta) return `${dInicio} de ${MESES_CALENDAR[mInicio - 1].toLowerCase()}`;
+    if (mInicio === mFin) return `${dInicio}-${dFin} de ${MESES_CALENDAR[mInicio - 1].toLowerCase()}`;
+    return `${dInicio} ${MESES_CALENDAR[mInicio - 1].toLowerCase()} - ${dFin} ${MESES_CALENDAR[mFin - 1].toLowerCase()}`;
+  };
+
+  const seleccionarFechaCal = (dia: number) => {
+    const fechaStr = obtenerFechaStrCal(dia);
+    if (fechaDesde && fechaHasta) {
+      setFechaDesde(fechaStr);
+      setFechaHasta(null);
+      return;
+    }
+    if (!fechaDesde) {
+      setFechaDesde(fechaStr);
+      setFechaHasta(null);
+      return;
+    }
+    if (fechaStr < fechaDesde) {
+      setFechaDesde(fechaStr);
+      setFechaHasta(null);
+    } else {
+      setFechaHasta(fechaStr);
+      setShowDatePicker(false);
+    }
+  };
+
+  const aplicarPresetFechas = (preset: 'estaSemana' | 'semanaPasada' | 'esteMes' | 'mesPasado') => {
+    const [desde, hasta] =
+      preset === 'estaSemana' ? getPresetEstaSemana() :
+      preset === 'semanaPasada' ? getPresetSemanaPasada() :
+      preset === 'esteMes' ? getPresetEsteMes() : getPresetMesPasado();
+    setFechaDesde(desde);
+    setFechaHasta(hasta);
+    setShowDatePicker(false);
+  };
+
+  const cambiarMesCal = (direccion: 'anterior' | 'siguiente') => {
+    setCurrentMonth(prev => {
+      const next = new Date(prev);
+      if (direccion === 'anterior') next.setMonth(prev.getMonth() - 1);
+      else next.setMonth(prev.getMonth() + 1);
+      return next;
+    });
+  };
+
+  const esFechaEnRangoCal = (dia: number) => {
+    if (!fechaDesde || !fechaHasta) return false;
+    const f = obtenerFechaStrCal(dia);
+    return f >= fechaDesde && f <= fechaHasta;
+  };
+  const esFechaInicioCal = (dia: number) => fechaDesde ? obtenerFechaStrCal(dia) === fechaDesde : false;
+  const esFechaFinCal = (dia: number) => fechaHasta ? obtenerFechaStrCal(dia) === fechaHasta : false;
+
+  // Cerrar date picker al hacer clic fuera
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (datePickerRef.current && !datePickerRef.current.contains(e.target as Node)) {
+        setShowDatePicker(false);
+      }
+    };
+    if (showDatePicker) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showDatePicker]);
+
   // Effects - Cargar datos al inicializar el módulo
   useEffect(() => {
     // Cargar todos los datos automáticamente al entrar al módulo
@@ -1391,6 +1535,18 @@ const MarketingMensajesModule: React.FC = () => {
       filtered = filtered.filter(m => m.whatsapp === true && m.yandex === true);
     }
 
+    // Filtro por rango de fechas (fecha de creación)
+    const getDateStr = (iso: string | undefined) => (iso ? new Date(iso).toISOString().slice(0, 10) : '');
+    if (fechaDesde || fechaHasta) {
+      filtered = filtered.filter(m => {
+        const d = getDateStr(m.createdAt);
+        if (!d) return false;
+        if (fechaDesde && d < fechaDesde) return false;
+        if (fechaHasta && d > fechaHasta) return false;
+        return true;
+      });
+    }
+
     // Ordenar por fecha (más recientes primero)
     filtered.sort((a, b) => {
       const dateA = new Date(a.createdAt || 0).getTime();
@@ -1400,7 +1556,7 @@ const MarketingMensajesModule: React.FC = () => {
 
     setMensajesFiltrados(filtered);
     setCurrentPage(1);
-  }, [mensajes, searchTerm, filtroModo, filtroTipo, filtroCanales]);
+  }, [mensajes, searchTerm, filtroModo, filtroTipo, filtroCanales, fechaDesde, fechaHasta]);
 
   // Early returns
   if (!authState?.isAuthenticated) {
@@ -1600,6 +1756,8 @@ const MarketingMensajesModule: React.FC = () => {
       if (filtroModo !== 'all') params.modo = filtroModo;
       if (filtroTipo !== 'all') params.tipo = filtroTipo;
       if (filtroCanales !== 'all') params.canales = filtroCanales;
+      if (fechaDesde) params.fechaDesde = fechaDesde;
+      if (fechaHasta) params.fechaHasta = fechaHasta;
       return params;
     };
 
@@ -1639,6 +1797,83 @@ const MarketingMensajesModule: React.FC = () => {
       {/* Filtros */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-4">
+          {/* Filtro por fecha (estilo fleet) */}
+          <div className="flex items-center gap-2 relative" ref={datePickerRef}>
+            <span className="text-sm text-neutral-700 dark:text-neutral-300">Fecha:</span>
+            <button
+              type="button"
+              onClick={() => setShowDatePicker(!showDatePicker)}
+              className="min-w-[200px] px-4 py-2 rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 flex items-center justify-between gap-2 text-sm hover:bg-neutral-50 dark:hover:bg-neutral-700/50 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-primary-600 dark:text-primary-400 flex-shrink-0" />
+                <span className={fechaDesde || fechaHasta ? 'font-medium' : 'text-neutral-500 dark:text-neutral-400'}>
+                  {formatearRangoFechasDisplay()}
+                </span>
+              </div>
+              <ChevronDown className={`w-4 h-4 text-neutral-500 dark:text-neutral-400 flex-shrink-0 transition-transform ${showDatePicker ? 'rotate-180' : ''}`} />
+            </button>
+            {showDatePicker && (
+              <div className="absolute top-full left-0 mt-2 w-64 bg-white dark:bg-neutral-800 rounded-lg shadow-xl border border-neutral-200 dark:border-neutral-700 p-3 z-[9999]">
+                <div className="flex items-center justify-between mb-3">
+                  <button type="button" onClick={() => cambiarMesCal('anterior')} className="p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded transition-colors">
+                    <ChevronLeft className="w-4 h-4 text-neutral-600 dark:text-neutral-400" />
+                  </button>
+                  <span className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">
+                    {MESES_CALENDAR[currentMonth.getMonth()]} {currentMonth.getFullYear()}
+                  </span>
+                  <button type="button" onClick={() => cambiarMesCal('siguiente')} className="p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded transition-colors">
+                    <ChevronRight className="w-4 h-4 text-neutral-600 dark:text-neutral-400" />
+                  </button>
+                </div>
+                <div className="grid grid-cols-7 gap-0.5 mb-2">
+                  {DIAS_SEMANA_CALENDAR.map((d, i) => (
+                    <div key={i} className="text-center text-xs font-medium text-neutral-500 dark:text-neutral-400 py-1">{d}</div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-7 gap-0.5 mb-3">
+                  {obtenerDiasDelMes(currentMonth).map((dia, index) => {
+                    if (dia === null) return <div key={index} className="py-1.5" />;
+                    const enRango = esFechaEnRangoCal(dia);
+                    const esInicio = esFechaInicioCal(dia);
+                    const esFin = esFechaFinCal(dia);
+                    return (
+                      <button
+                        key={index}
+                        type="button"
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); seleccionarFechaCal(dia); }}
+                        onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                        className={`py-1.5 rounded text-xs font-medium transition-colors ${
+                          esInicio || esFin
+                            ? 'bg-red-600 text-white'
+                            : enRango
+                            ? 'bg-red-100 dark:bg-red-900/30 text-red-900 dark:text-red-100'
+                            : 'hover:bg-neutral-100 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300'
+                        }`}
+                      >
+                        {dia}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  <button type="button" onClick={() => aplicarPresetFechas('estaSemana')} className="px-2 py-1.5 rounded text-xs bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600 text-neutral-700 dark:text-neutral-300">
+                    Esta semana
+                  </button>
+                  <button type="button" onClick={() => aplicarPresetFechas('semanaPasada')} className="px-2 py-1.5 rounded text-xs bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600 text-neutral-700 dark:text-neutral-300">
+                    La semana pasada
+                  </button>
+                  <button type="button" onClick={() => aplicarPresetFechas('esteMes')} className="px-2 py-1.5 rounded text-xs bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600 text-neutral-700 dark:text-neutral-300">
+                    Este mes
+                  </button>
+                  <button type="button" onClick={() => aplicarPresetFechas('mesPasado')} className="px-2 py-1.5 rounded text-xs bg-neutral-100 dark:bg-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-600 text-neutral-700 dark:text-neutral-300">
+                    El mes pasado
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="flex items-center gap-2">
             <Filter className="w-4 h-4 text-neutral-400" />
             <span className="text-sm text-neutral-700 dark:text-neutral-300">Modo:</span>
@@ -1965,13 +2200,16 @@ const MarketingMensajesModule: React.FC = () => {
                   Se exportarán <strong>{pluralizeMensajes(totalMensajes)}</strong> con los siguientes filtros:
                 </p>
                 <ul className="text-sm text-neutral-600 dark:text-neutral-400 list-disc list-inside space-y-0.5">
+                  {(fechaDesde || fechaHasta) && (
+                    <li>Fecha: {fechaDesde || '...'} {fechaHasta ? `- ${fechaHasta}` : ''}</li>
+                  )}
                   {searchTerm?.trim() && <li>Búsqueda: &quot;{searchTerm.trim()}&quot;</li>}
                   {filtroModo !== 'all' && <li>Modo: {filtroModo}</li>}
                   {filtroTipo !== 'all' && <li>Tipo: {filtroTipo}</li>}
                   {filtroCanales !== 'all' && (
                     <li>Canales: {filtroCanales === 'ambos' ? 'WhatsApp y Yandex' : filtroCanales === 'yandex' ? 'Yandex' : 'WhatsApp'}</li>
                   )}
-                  {!searchTerm?.trim() && filtroModo === 'all' && filtroTipo === 'all' && filtroCanales === 'all' && (
+                  {!searchTerm?.trim() && filtroModo === 'all' && filtroTipo === 'all' && filtroCanales === 'all' && !fechaDesde && !fechaHasta && (
                     <li className="text-neutral-500">Sin filtros (todos los mensajes)</li>
                   )}
                 </ul>
