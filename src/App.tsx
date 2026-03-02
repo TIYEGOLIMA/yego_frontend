@@ -201,11 +201,21 @@ function App() {
   useEffect(() => {
     const currentUserId = user?.id || null;
     const currentToken = token || null;
-    
+    const requirePasswordChange = user?.requirePasswordChange === true;
+
+    // No conectar WebSocket si debe cambiar contraseña (backend devuelve 403 PASSWORD_EXPIRED en /ws)
+    if (requirePasswordChange) {
+      if (lastUserIdRef.current !== null || lastTokenRef.current !== null) {
+        SocketService.disconnect();
+        lastUserIdRef.current = null;
+        lastTokenRef.current = null;
+      }
+      return;
+    }
+
     // Solo conectar si cambió el usuario o el token
     if (currentToken && currentUserId && user?.username) {
       if (lastUserIdRef.current !== currentUserId || lastTokenRef.current !== currentToken) {
-        // Verificar estado actual antes de conectar
         const currentStatus = SocketService.getConnectionStatus();
         if (currentStatus !== 'connected') {
           console.log(`🔄 [App] Conectando WebSocket para usuario ${currentUserId}`);
@@ -217,7 +227,6 @@ function App() {
         lastTokenRef.current = currentToken;
       }
     } else {
-      // Si no hay token o usuario, desconectar
       if (lastUserIdRef.current !== null || lastTokenRef.current !== null) {
         console.log('🔌 [App] Desconectando WebSocket (sin token/usuario)');
         SocketService.disconnect();
@@ -225,7 +234,7 @@ function App() {
         lastTokenRef.current = null;
       }
     }
-  }, [token, user?.id, user?.username]);
+  }, [token, user?.id, user?.username, user?.requirePasswordChange]);
 
   // Limpiar conexiones WebSocket al cerrar la pestaña o cuando la página pierde visibilidad
   useEffect(() => {
@@ -242,8 +251,8 @@ function App() {
           }
         }, 5 * 60 * 1000); // 5 minutos
       } else {
-        // ✅ OPTIMIZADO: Solo reconectar si no está ya conectado
-        if (token && user?.id && user?.username) {
+        // Solo reconectar si no debe cambiar contraseña (evita 403 en /ws)
+        if (token && user?.id && user?.username && !user?.requirePasswordChange) {
           const currentStatus = SocketService.getConnectionStatus();
           if (currentStatus !== 'connected') {
             console.log('🔄 [App] Reconectando WebSocket al volver a ser visible');

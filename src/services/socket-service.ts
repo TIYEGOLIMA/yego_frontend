@@ -32,10 +32,10 @@ const getAuthToken = (): string | null => {
 
 const getWebSocketUrl = (token: string): string => {
   if (isProduction) {
+    // En producción el proxy (nginx, etc.) debe hacer upgrade WebSocket; si no, ver 403.
     const prodUrl = WS_URL || 'wss://api-int.yego.pro/ws';
     return `${prodUrl}?token=${encodeURIComponent(token)}`;
   }
-  // Desarrollo: usar WebSocket nativo (ws://) en lugar de SockJS para evitar /ws/info
   const devUrl = WS_URL || 'ws://localhost:3030/ws';
   return `${devUrl}?token=${encodeURIComponent(token)}`;
 };

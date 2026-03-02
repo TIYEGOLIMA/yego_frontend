@@ -37,18 +37,22 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
-  ChevronsRight
+  ChevronsRight,
+  FileDown,
+  FileSpreadsheet
 } from 'lucide-react';
 import { useAuth } from "@/shared/hooks/useAuth";
 import AccessRestricted from '@/shared/components/AccessRestricted';
 import { api } from '@/services/core/api';
-import { useToastNotifications } from '@/hooks/useToastNotifications';
-import { NotificationContainer } from '@/components/NotificationToast';
 
 // Funciones auxiliares globales
 const truncateText = (text: string, maxLength: number): string => {
   return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
 };
+
+/** Texto "X mensaje(s)" para consistencia en lista y modal de exportación */
+const pluralizeMensajes = (n: number): string =>
+  `${n} mensaje${n !== 1 ? 's' : ''}`;
 
 // Interfaces
 interface MensajeMarketing {
@@ -95,7 +99,6 @@ type TabType = 'programacion' | 'lista';
 
 // Constantes
 const DIAS_SEMANA = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-const ORDEN_DIAS = DIAS_SEMANA; // Mismo orden que DIAS_SEMANA
 
 // Generar solo horas completas (00:00, 01:00, etc.)
 const HORAS = Array.from({ length: 24 }, (_, i) => {
@@ -217,8 +220,8 @@ const GRID_CONFIG = {
 // Función auxiliar para ordenar días según el orden de la semana (fuera del componente para reutilización)
 const ordenarDias = (dias: string[]): string[] => {
   return [...dias].sort((a, b) => {
-    const indexA = ORDEN_DIAS.indexOf(a);
-    const indexB = ORDEN_DIAS.indexOf(b);
+    const indexA = DIAS_SEMANA.indexOf(a);
+    const indexB = DIAS_SEMANA.indexOf(b);
     return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
   });
 };
@@ -302,8 +305,8 @@ const HorariosPopoverCell: React.FC<{
   }
   // Ordenar por día y luego por hora
   horariosLista.sort((a, b) => {
-    const diaA = ORDEN_DIAS.indexOf(a.dia);
-    const diaB = ORDEN_DIAS.indexOf(b.dia);
+    const diaA = DIAS_SEMANA.indexOf(a.dia);
+    const diaB = DIAS_SEMANA.indexOf(b.dia);
     if (diaA !== diaB) return diaA - diaB;
     return a.hora.localeCompare(b.hora);
   });
@@ -647,7 +650,6 @@ const Tabs = <T extends string>({
 
 const MarketingMensajesModule: React.FC = () => {
   const authState = useAuth();
-  const { showError, notifications, removeNotification } = useToastNotifications();
   const [mensajes, setMensajes] = useState<MensajeMarketing[]>([]);
   const [mensajesCalendario, setMensajesCalendario] = useState<MensajeCalendario[]>([]);
   const [grupos, setGrupos] = useState<Grupo[]>([]);
@@ -678,6 +680,7 @@ const MarketingMensajesModule: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filtroModo, setFiltroModo] = useState<string>('all');
   const [filtroTipo, setFiltroTipo] = useState<string>('all');
+  const [filtroCanales, setFiltroCanales] = useState<string>('all'); // all | whatsapp | yandex | ambos
   const [searchGrupos, setSearchGrupos] = useState('');
   const [searchFlotas, setSearchFlotas] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -686,6 +689,7 @@ const MarketingMensajesModule: React.FC = () => {
   const [mensajesCargados, setMensajesCargados] = useState(false); // Flag para evitar cargas duplicadas
   const [cargandoDatos, setCargandoDatos] = useState(false); // Flag para evitar llamadas simultáneas
   const datosCargadosRef = useRef(false); // Ref para rastrear si ya se cargaron los datos iniciales
+  const [exportModalType, setExportModalType] = useState<'excel' | 'pdf' | null>(null);
 
   // Helpers
   const resetForm = () => {
@@ -1126,7 +1130,6 @@ const MarketingMensajesModule: React.FC = () => {
       await reloadDataAfterOperation();
     } catch (error: any) {
       console.error('Error saving mensaje:', error);
-      showError(getErrorMessage(error, 'Error al guardar el mensaje'));
     } finally {
       setLoadingMensaje(false);
     }
@@ -1188,7 +1191,6 @@ const MarketingMensajesModule: React.FC = () => {
       setMensajeToDelete(null);
     } catch (error: any) {
       console.error('Error deleting mensaje:', error);
-      showError(getErrorMessage(error, 'Error al eliminar el mensaje'));
     } finally {
       setDeleting(false);
     }
@@ -1197,13 +1199,6 @@ const MarketingMensajesModule: React.FC = () => {
   const handleDeleteCancel = () => {
     setIsDeleteModalOpen(false);
     setMensajeToDelete(null);
-  };
-
-  // Función auxiliar para extraer mensaje de error de una respuesta
-  const getErrorMessage = (error: any, defaultMessage: string): string => {
-    return error.response?.data?.mensajeOperacion 
-      || error.response?.data?.message 
-      || defaultMessage;
   };
 
   // Función auxiliar para verificar si una respuesta tiene error
@@ -1237,7 +1232,6 @@ const MarketingMensajesModule: React.FC = () => {
   // Función auxiliar para manejar errores de fetch de manera genérica
   const handleFetchError = (error: any, defaultMessage: string, setter: () => void) => {
     console.error(`❌ [MarketingMensajes] ${defaultMessage}:`, error);
-    showError(getErrorMessage(error, defaultMessage));
     setter();
   };
 
@@ -1247,14 +1241,12 @@ const MarketingMensajesModule: React.FC = () => {
       const response = await api.get(`/marketing-mensajes/${id}`);
       
       if (hasResponseError(response)) {
-        showError(response.data?.mensajeOperacion || 'Error al cargar el mensaje');
         return null;
       }
       
       return mapMensajeResponse(response.data);
     } catch (error: any) {
       console.error('Error loading mensaje:', error);
-      showError(getErrorMessage(error, 'Error al cargar el mensaje'));
       return null;
     }
   };
@@ -1365,14 +1357,14 @@ const MarketingMensajesModule: React.FC = () => {
     }
   }, [isHorariosModalOpen, formData.horasEspecificas]);
 
-  // Filtrar mensajes cuando cambien los filtros
+  // Filtrar y ordenar mensajes cuando cambien los filtros
   useEffect(() => {
     let filtered = [...mensajes];
 
     // Filtro por búsqueda
     if (hasValue(searchTerm)) {
       const searchLower = searchTerm.toLowerCase();
-      filtered = filtered.filter(m => 
+      filtered = filtered.filter(m =>
         m.titulo.toLowerCase().includes(searchLower) ||
         m.mensaje.toLowerCase().includes(searchLower) ||
         m.modo.toLowerCase().includes(searchLower) ||
@@ -1390,9 +1382,25 @@ const MarketingMensajesModule: React.FC = () => {
       filtered = filtered.filter(m => m.tipo === filtroTipo);
     }
 
+    // Filtro por canales
+    if (filtroCanales === 'whatsapp') {
+      filtered = filtered.filter(m => m.whatsapp === true);
+    } else if (filtroCanales === 'yandex') {
+      filtered = filtered.filter(m => m.yandex === true);
+    } else if (filtroCanales === 'ambos') {
+      filtered = filtered.filter(m => m.whatsapp === true && m.yandex === true);
+    }
+
+    // Ordenar por fecha (más recientes primero)
+    filtered.sort((a, b) => {
+      const dateA = new Date(a.createdAt || 0).getTime();
+      const dateB = new Date(b.createdAt || 0).getTime();
+      return dateB - dateA;
+    });
+
     setMensajesFiltrados(filtered);
-    setCurrentPage(1); // Resetear a la primera página cuando cambien los filtros
-  }, [mensajes, searchTerm, filtroModo, filtroTipo]);
+    setCurrentPage(1);
+  }, [mensajes, searchTerm, filtroModo, filtroTipo, filtroCanales]);
 
   // Early returns
   if (!authState?.isAuthenticated) {
@@ -1545,6 +1553,29 @@ const MarketingMensajesModule: React.FC = () => {
   };
 
   const renderListaView = () => {
+    // Mientras se cargan los mensajes de la lista, mostrar load igual que en Usuarios
+    if (!mensajesCargados) {
+      return (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Lista de Mensajes
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-center py-12">
+              <div className="flex flex-col items-center gap-4">
+                <FileText className="h-12 w-12 text-primary-500 dark:text-primary-400" />
+                <div className="w-10 h-10 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
+                <p className="yego-body-sm">Cargando mensajes...</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
+
     // Calcular paginación
     const totalMensajes = mensajesFiltrados.length;
     const totalPages = Math.ceil(totalMensajes / itemsPerPage);
@@ -1561,6 +1592,31 @@ const MarketingMensajesModule: React.FC = () => {
     const handleItemsPerPageChange = (value: string) => {
       setItemsPerPage(parseInt(value));
       setCurrentPage(1);
+    };
+
+    const getExportParams = (): Record<string, string> => {
+      const params: Record<string, string> = {};
+      if (searchTerm?.trim()) params.searchTerm = searchTerm.trim();
+      if (filtroModo !== 'all') params.modo = filtroModo;
+      if (filtroTipo !== 'all') params.tipo = filtroTipo;
+      if (filtroCanales !== 'all') params.canales = filtroCanales;
+      return params;
+    };
+
+    const handleExport = async (format: 'excel' | 'pdf') => {
+      try {
+        const endpoint = format === 'excel' ? '/marketing-mensajes/export/excel' : '/marketing-mensajes/export/pdf';
+        const filename = format === 'excel' ? 'mensajes_marketing.xlsx' : 'mensajes_marketing.pdf';
+        const { data } = await api.get(endpoint, { responseType: 'blob', params: getExportParams() });
+        const url = window.URL.createObjectURL(new Blob([data]));
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        window.URL.revokeObjectURL(url);
+      } catch (e) {
+        console.error(e);
+      }
     };
 
     return (
@@ -1585,7 +1641,6 @@ const MarketingMensajesModule: React.FC = () => {
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
             <Filter className="w-4 h-4 text-neutral-400" />
-            <span className="text-sm text-neutral-700 dark:text-neutral-300">Modo:</span>
             <span className="text-sm text-neutral-700 dark:text-neutral-300">Modo:</span>
             <Select value={filtroModo} onValueChange={setFiltroModo}>
               <SelectTrigger className="w-32">
@@ -1616,6 +1671,21 @@ const MarketingMensajesModule: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2">
+            <span className="text-sm text-neutral-700 dark:text-neutral-300">Canales:</span>
+            <Select value={filtroCanales} onValueChange={setFiltroCanales}>
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                <SelectItem value="yandex">Yandex</SelectItem>
+                <SelectItem value="ambos">WhatsApp y Yandex</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex items-center gap-2">
             <span className="text-sm text-neutral-700 dark:text-neutral-300">Por página:</span>
             <Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}>
               <SelectTrigger className="w-20">
@@ -1635,16 +1705,26 @@ const MarketingMensajesModule: React.FC = () => {
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center justify-between">
+          <CardTitle className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2">
               <FileText className="h-5 w-5" />
               Lista de Mensajes
             </div>
-            {totalMensajes > 0 && (
-              <span className="text-sm font-normal text-neutral-500">
-                {totalMensajes} mensaje{totalMensajes !== 1 ? 's' : ''} encontrado{totalMensajes !== 1 ? 's' : ''}
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              {totalMensajes > 0 && (
+                <span className="text-sm font-normal text-neutral-500">
+                  {pluralizeMensajes(totalMensajes)} encontrado{totalMensajes !== 1 ? 's' : ''}
+                </span>
+              )}
+              <Button type="button" variant="outline" size="sm" onClick={() => setExportModalType('excel')} className="gap-1.5">
+                <FileSpreadsheet className="h-4 w-4" />
+                Exportar Excel
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => setExportModalType('pdf')} className="gap-1.5">
+                <FileDown className="h-4 w-4" />
+                Exportar PDF
+              </Button>
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -1871,6 +1951,64 @@ const MarketingMensajesModule: React.FC = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* Modal de confirmación para exportar */}
+      <Dialog open={exportModalType !== null} onOpenChange={(open) => !open && setExportModalType(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {exportModalType === 'excel' ? 'Exportar a Excel' : 'Exportar a PDF'}
+            </DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-2">
+                <p>
+                  Se exportarán <strong>{pluralizeMensajes(totalMensajes)}</strong> con los siguientes filtros:
+                </p>
+                <ul className="text-sm text-neutral-600 dark:text-neutral-400 list-disc list-inside space-y-0.5">
+                  {searchTerm?.trim() && <li>Búsqueda: &quot;{searchTerm.trim()}&quot;</li>}
+                  {filtroModo !== 'all' && <li>Modo: {filtroModo}</li>}
+                  {filtroTipo !== 'all' && <li>Tipo: {filtroTipo}</li>}
+                  {filtroCanales !== 'all' && (
+                    <li>Canales: {filtroCanales === 'ambos' ? 'WhatsApp y Yandex' : filtroCanales === 'yandex' ? 'Yandex' : 'WhatsApp'}</li>
+                  )}
+                  {!searchTerm?.trim() && filtroModo === 'all' && filtroTipo === 'all' && filtroCanales === 'all' && (
+                    <li className="text-neutral-500">Sin filtros (todos los mensajes)</li>
+                  )}
+                </ul>
+                <p className="pt-1">¿Continuar?</p>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => setExportModalType(null)}>
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              onClick={async () => {
+                if (exportModalType) {
+                  await handleExport(exportModalType);
+                  setExportModalType(null);
+                }
+              }}
+              className="gap-1.5"
+            >
+              {exportModalType === 'excel' ? (
+                <>
+                  <FileSpreadsheet className="h-4 w-4" />
+                  Exportar Excel
+                </>
+              ) : (
+                <>
+                  <FileDown className="h-4 w-4" />
+                  Exportar PDF
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
     );
   };
@@ -2946,12 +3084,6 @@ const MarketingMensajesModule: React.FC = () => {
       {renderHorariosModal()}
       {renderMinutosModal()}
       {renderArchivoModal()}
-      
-      {/* Contenedor de notificaciones toast */}
-      <NotificationContainer 
-        notifications={notifications} 
-        onRemove={removeNotification} 
-      />
     </div>
   );
 };
