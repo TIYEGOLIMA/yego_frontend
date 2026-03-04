@@ -188,6 +188,8 @@ export interface ConductorResumenPagos {
   telefono?: string
   monto_total_pagar: number  // Campo que viene del backend
   monto_total_pagado?: number  // Mantener por compatibilidad
+  produccion_total?: number   // Suma de producción total (todos los turnos)
+  comisiones_servicio?: number // Suma de comisiones del servicio (todos los turnos)
   cantidad_turnos: number
   viajes_por_hora?: number
   cantidad_viajes?: number

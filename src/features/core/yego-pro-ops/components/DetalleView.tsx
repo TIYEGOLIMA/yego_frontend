@@ -11,14 +11,14 @@ import { Button } from '../../../../components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../../../components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../../../components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../../components/ui/select'
-import { User, Search, DollarSign, CreditCard, MapPin, TrendingUp, Calendar, ChevronLeft, ChevronRight, ChevronDown, Car, ChevronsLeft, ChevronsRight, Table2, LayoutGrid, Eye, Pencil, Save, X, CheckCircle2, Clock, AlertCircle, Sunrise, Moon } from 'lucide-react'
+import { User, Search, DollarSign, CreditCard, MapPin, TrendingUp, Calendar, ChevronLeft, ChevronRight, ChevronDown, Car, ChevronsLeft, ChevronsRight, Table2, LayoutGrid, Eye, Pencil, Save, X, CheckCircle2, Clock, AlertCircle } from 'lucide-react'
 import { cn } from '../../../../utils/cn'
 
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 const DIAS_SEMANA = ['L', 'M', 'M', 'J', 'V', 'S', 'D']
 const ITEMS_PER_PAGE_OPTIONS = [5, 10] as const
 const DEFAULT_ITEMS_PER_PAGE = 10
-const SECTION_CARD_CLASS = "bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 border border-gray-200 dark:border-gray-700"
+const SECTION_CARD_CIERRE_CLASS = "rounded-lg p-3 border border-gray-200 dark:border-gray-700"
 const formatBalance = (balance: number): string => {
   const formatted = new Intl.NumberFormat('es-PE', {
     minimumFractionDigits: 2,
@@ -84,6 +84,20 @@ const formatearFechaConDia = (fechaStr: string): string => {
     month: 'long', 
     year: 'numeric' 
   })
+}
+
+/** Formatea hora en AM/PM (ej. "22:38" o "2026-03-02T22:38" → "10:38 p. m.") */
+const formatHoraAmPm = (horaStr: string | null | undefined): string => {
+  if (!horaStr) return '—'
+  const d = new Date(horaStr.includes('T') ? horaStr : `1970-01-01T${horaStr}`)
+  if (Number.isNaN(d.getTime())) return horaStr
+  return d.toLocaleTimeString('es-PE', { hour: 'numeric', minute: '2-digit', hour12: true })
+}
+
+/** Extrae solo la fecha YYYY-MM-DD de un ISO (para usar con formatearFechaLegible) */
+const fechaPart = (isoOrDateStr: string | null | undefined): string | null => {
+  if (!isoOrDateStr) return null
+  return isoOrDateStr.includes('T') ? isoOrDateStr.split('T')[0]! : isoOrDateStr
 }
 
 const parseNumber = (value: string | undefined | null, defaultValue = 0): number => {
@@ -365,11 +379,14 @@ export const DetalleView = () => {
   const [odometroInicial, setOdometroInicial] = useState('')
   const [odometroFinal, setOdometroFinal] = useState('')
   
-  const [fechaInicio, setFechaInicio] = useState<string>(obtenerFechaAyer)
-  const [fechaFin, setFechaFin] = useState<string>(obtenerFechaAyer)
+  const [fechaInicio, setFechaInicio] = useState<string>(obtenerFechaAyer())
+  const [fechaFin, setFechaFin] = useState<string>(obtenerFechaAyer())
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const datePickerRef = useRef<HTMLDivElement>(null)
+  const [showFechaLiquidacionPicker, setShowFechaLiquidacionPicker] = useState(false)
+  const [currentMonthLiquidacion, setCurrentMonthLiquidacion] = useState(new Date())
+  const fechaLiquidacionPickerRef = useRef<HTMLDivElement>(null)
   
 
   useEffect(() => {
@@ -382,6 +399,20 @@ export const DetalleView = () => {
       setCurrentMonth(new Date())
     }
   }, [showModal])
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (fechaLiquidacionPickerRef.current && !fechaLiquidacionPickerRef.current.contains(e.target as Node)) {
+        setShowFechaLiquidacionPicker(false)
+      }
+    }
+    if (showFechaLiquidacionPicker) {
+      const [y, m] = fechaSeleccionada.split('-').map(Number)
+      setCurrentMonthLiquidacion(new Date(y, m - 1, 1))
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showFechaLiquidacionPicker, fechaSeleccionada])
 
   const obtenerDiasDelMes = (fecha: Date) => {
     const año = fecha.getFullYear()
@@ -521,6 +552,7 @@ export const DetalleView = () => {
     queryFn: () => yegoProOpsService.obtenerListaConductores(searchTermNombreActualParaBuscar || undefined, fechaSeleccionada),
     enabled: esFechaActual && searchTermNombreActualParaBuscar.length > 0,
     refetchOnWindowFocus: false,
+    staleTime: 60 * 1000,
   })
 
   const { data: resumenPagosData, isLoading: loadingResumenPagos, refetch: refetchResumenPagos } = useQuery<ResumenPagosResponse>({
@@ -528,14 +560,16 @@ export const DetalleView = () => {
     queryFn: () => yegoProOpsService.obtenerResumenPagos(fechaSeleccionada),
     enabled: true,
     refetchOnWindowFocus: false,
+    staleTime: 90 * 1000,
   })
 
   const { refetch: refetchTurnosPagados } = useQuery<TurnosPagadosResponse>({
     queryKey: ['yego-pro-ops-turnos-pagados', fechaSeleccionada],
     queryFn: () => yegoProOpsService.obtenerTurnosPagados(fechaSeleccionada),
+    enabled: true,
     refetchOnWindowFocus: false,
+    staleTime: 90 * 1000,
   })
-
 
   const { data: fechasTurnosData } = useQuery<FechasTurnosResponse>({
     queryKey: ['yego-pro-ops-fechas-turnos', selectedDriver?.driver_id],
@@ -547,6 +581,7 @@ export const DetalleView = () => {
     },
     enabled: showModal && !!selectedDriver,
     refetchOnWindowFocus: false,
+    staleTime: 60 * 1000,
   })
 
   const fechasConTurnos = useMemo(() => {
@@ -556,6 +591,7 @@ export const DetalleView = () => {
 
 
 
+  const fechasValidas = typeof fechaInicio === 'string' && typeof fechaFin === 'string' && fechaInicio.length >= 10 && fechaFin.length >= 10
   const { data: viajesData, isLoading: loadingViajes, isError: errorViajes } = useQuery<ViajesCompletosResponse>({
     queryKey: ['yego-pro-ops-viajes', selectedDriver?.driver_id, fechaInicio, fechaFin],
     queryFn: () => {
@@ -564,8 +600,9 @@ export const DetalleView = () => {
       }
       return yegoProOpsService.obtenerViajesCompletos(selectedDriver.driver_id, fechaInicio, fechaFin)
     },
-    enabled: showModal && !!selectedDriver && !!fechaInicio && !!fechaFin,
+    enabled: showModal && !!selectedDriver && !!fechasValidas,
     refetchOnWindowFocus: false,
+    staleTime: 60 * 1000,
   })
 
   const cierreRegistrado = viajesData?.cierre_registrado ?? false
@@ -866,7 +903,13 @@ export const DetalleView = () => {
         editLiquidaYape
       )
 
-      if (!validarLiquidacion(valoresCalculados)) {
+      const soloCambioOdometro =
+        Math.abs(parseNumber(editGnvSoles) - (Number(cierreDetalle.gnvSoles) || 0)) < 0.01 &&
+        Math.abs(parseNumber(editGasolinaSoles) - (Number(cierreDetalle.gasolinaSoles) || 0)) < 0.01 &&
+        Math.abs(parseNumber(editLiquidaEfectivo) - (Number(cierreDetalle.liquidaEfectivo) || 0)) < 0.01 &&
+        Math.abs(parseNumber(editLiquidaYape) - (Number(cierreDetalle.liquidaYape) || 0)) < 0.01 &&
+        Math.abs(parseNumber(editOtrosGastos) - (Number(cierreDetalle.otrosGastos) || 0)) < 0.01
+      if (!soloCambioOdometro && !validarLiquidacion(valoresCalculados)) {
         return
       }
 
@@ -1003,11 +1046,9 @@ export const DetalleView = () => {
         <Card>
           <CardContent className="p-6">
             <div className="mb-6">
-              <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-between p-4 rounded-lg border border-gray-200 dark:border-gray-700">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-white dark:bg-gray-700 rounded-lg shadow-sm">
-                    <Calendar className="w-5 h-5 text-red-600 dark:text-red-400" />
-                  </div>
+                  <Calendar className="w-5 h-5 text-red-600 dark:text-red-400 shrink-0" />
                   <div>
                     <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Fecha de liquidación</p>
                     <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
@@ -1015,19 +1056,98 @@ export const DetalleView = () => {
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                    Cambiar fecha:
-                  </label>
-                  <Input
-                    type="date"
-                    value={fechaSeleccionada}
-                    onChange={(e) => {
-                      setFechaSeleccionada(e.target.value)
-                    }}
-                    className="w-40 h-10 text-sm border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-0 focus:ring-offset-0 focus:border-gray-300 dark:focus:border-gray-600 focus:outline-none focus-visible:outline-none"
-                    style={{ outline: 'none' }}
-                  />
+                <div className="relative flex items-center gap-2" ref={fechaLiquidacionPickerRef}>
+                  <span className="text-sm text-neutral-700 dark:text-neutral-300">Fecha:</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowFechaLiquidacionPicker(!showFechaLiquidacionPicker)}
+                    className="min-w-[200px] px-4 py-2 rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 flex items-center justify-between gap-2 text-sm hover:bg-neutral-50 dark:hover:bg-neutral-700/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-primary-600 dark:text-primary-400 flex-shrink-0" />
+                      <span className={fechaSeleccionada ? 'font-medium' : 'text-neutral-500 dark:text-neutral-400'}>
+                        {formatearFechaLegible(fechaSeleccionada)}
+                      </span>
+                    </div>
+                    <ChevronDown className={`w-4 h-4 text-neutral-500 dark:text-neutral-400 flex-shrink-0 transition-transform ${showFechaLiquidacionPicker ? 'rotate-180' : ''}`} />
+                  </button>
+                  {showFechaLiquidacionPicker && (
+                    <div
+                      className="absolute top-full left-0 mt-2 w-64 bg-white dark:bg-neutral-800 rounded-lg shadow-xl border border-neutral-200 dark:border-neutral-700 p-3 z-[9999]"
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setCurrentMonthLiquidacion(new Date(currentMonthLiquidacion.getFullYear(), currentMonthLiquidacion.getMonth() - 1, 1))
+                          }}
+                          className="p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded transition-colors"
+                        >
+                          <ChevronLeft className="w-4 h-4 text-neutral-600 dark:text-neutral-400" />
+                        </button>
+                        <span className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">
+                          {MESES[currentMonthLiquidacion.getMonth()]} {currentMonthLiquidacion.getFullYear()}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setCurrentMonthLiquidacion(new Date(currentMonthLiquidacion.getFullYear(), currentMonthLiquidacion.getMonth() + 1, 1))
+                          }}
+                          disabled={esMesFuturo(currentMonthLiquidacion.getFullYear(), currentMonthLiquidacion.getMonth() + 1)}
+                          className="p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-700 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          <ChevronRight className="w-4 h-4 text-neutral-600 dark:text-neutral-400" />
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-7 gap-0.5 mb-2">
+                        {DIAS_SEMANA.map((dia, index) => (
+                          <div key={index} className="text-center text-xs font-medium text-neutral-500 dark:text-neutral-400 py-1">
+                            {dia}
+                          </div>
+                        ))}
+                      </div>
+                      <div className="grid grid-cols-7 gap-0.5">
+                        {obtenerDiasDelMes(currentMonthLiquidacion).map((dia, index) => {
+                          if (dia === null) {
+                            return <div key={index} className="py-1.5" />
+                          }
+                          const fechaStr = formatearFechaLocal(currentMonthLiquidacion.getFullYear(), currentMonthLiquidacion.getMonth(), dia)
+                          const esFutura = new Date(currentMonthLiquidacion.getFullYear(), currentMonthLiquidacion.getMonth(), dia) > new Date()
+                          const seleccionada = fechaStr === fechaSeleccionada
+                          return (
+                            <button
+                              key={index}
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                if (!esFutura) {
+                                  setFechaSeleccionada(fechaStr)
+                                  setShowFechaLiquidacionPicker(false)
+                                }
+                              }}
+                              onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                              disabled={esFutura}
+                              className={cn(
+                                'py-1.5 rounded text-xs font-medium transition-colors',
+                                esFutura
+                                  ? 'opacity-30 cursor-not-allowed text-neutral-400 dark:text-neutral-500'
+                                  : seleccionada
+                                  ? 'bg-red-600 text-white'
+                                  : 'hover:bg-neutral-100 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300'
+                              )}
+                            >
+                              {dia}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1102,7 +1222,7 @@ export const DetalleView = () => {
 
                     <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
                       {conductoresPendientesFiltrados.length === 0 ? (
-                        <div className="text-center py-8 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
+                        <div className="text-center py-8 rounded-lg border border-gray-200 dark:border-gray-700">
                           {searchTermPendientes ? (
                             <>
                               <AlertCircle className="mx-auto h-10 w-10 text-orange-500 dark:text-orange-400 mb-2" />
@@ -1119,9 +1239,7 @@ export const DetalleView = () => {
                         conductoresPendientesFiltrados.map((conductor) => (
                           <div
                             key={conductor.driver_id}
-                            className={cn(
-                              "p-4 bg-white dark:bg-gray-800 rounded-lg border-2 border-orange-200 dark:border-orange-800 hover:border-orange-300 dark:hover:border-orange-700 transition-all shadow-sm hover:shadow-md"
-                            )}
+                            className="p-4 rounded-lg border border-gray-200 dark:border-gray-700 transition-all"
                           >
                             <div className="flex items-start justify-between gap-4">
                               <div className="flex items-start gap-3 flex-1">
@@ -1139,11 +1257,11 @@ export const DetalleView = () => {
                                 <div className={`w-12 h-12 rounded-full bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center flex-shrink-0 ${conductor.avatar_url ? 'hidden' : ''}`}>
                                   <User className="w-6 h-6 text-orange-600 dark:text-orange-400" />
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="font-semibold text-gray-900 dark:text-gray-100 truncate">
+                                <div className="flex-1 min-w-0 overflow-hidden">
+                                  <p className="font-semibold text-gray-900 dark:text-gray-100 truncate block min-w-0" title={conductor.nombre || conductor.driver_id}>
                                     {conductor.nombre || conductor.driver_id}
                                   </p>
-                                  <p className="text-xs text-gray-500 dark:text-gray-400 font-mono mt-1">
+                                  <p className="text-xs text-gray-500 dark:text-gray-400 font-mono mt-1 truncate" title={conductor.telefono || conductor.driver_id}>
                                     {conductor.telefono || conductor.driver_id}
                                   </p>
                                   <div className="flex items-center gap-3 mt-2">
@@ -1232,7 +1350,7 @@ export const DetalleView = () => {
 
                     <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
                       {conductoresLiquidadosFiltrados.length === 0 ? (
-                        <div className="text-center py-8 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
+                        <div className="text-center py-8 rounded-lg border border-gray-200 dark:border-gray-700">
                           {searchTermLiquidados ? (
                             <>
                               <AlertCircle className="mx-auto h-10 w-10 text-orange-500 dark:text-orange-400 mb-2" />
@@ -1269,14 +1387,14 @@ export const DetalleView = () => {
                                 <div className={`w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/40 flex items-center justify-center flex-shrink-0 ${conductor.avatar_url ? 'hidden' : ''}`}>
                                   <User className="w-6 h-6 text-green-600 dark:text-green-400" />
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <p className="font-semibold text-gray-900 dark:text-gray-100 truncate">
+                                <div className="flex-1 min-w-0 overflow-hidden">
+                                  <div className="flex items-center gap-2 mb-1 min-w-0">
+                                    <p className="font-semibold text-gray-900 dark:text-gray-100 truncate min-w-0 flex-1" title={conductor.nombre || conductor.driver_id}>
                                       {conductor.nombre || conductor.driver_id}
                                     </p>
                                     <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-400 flex-shrink-0" />
                                   </div>
-                                  <p className="text-xs text-gray-500 dark:text-gray-400 font-mono mt-1">
+                                  <p className="text-xs text-gray-500 dark:text-gray-400 font-mono mt-1 truncate" title={conductor.telefono || conductor.driver_id}>
                                     {conductor.telefono || conductor.driver_id}
                                   </p>
                                   <div className="flex items-center gap-3 mt-2">
@@ -1886,7 +2004,7 @@ export const DetalleView = () => {
           </DialogHeader>
 
           <div className="space-y-2.5 mt-2.5 overflow-y-auto flex-1 pr-1">
-            <div className={SECTION_CARD_CLASS}>
+            <div className={SECTION_CARD_CIERRE_CLASS}>
               <h3 className="text-xs font-semibold text-gray-900 dark:text-gray-100 mb-2 pb-1 border-b border-gray-200 dark:border-gray-700 flex items-center gap-1.5">
                 <Car className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                 Combustible
@@ -1969,7 +2087,7 @@ export const DetalleView = () => {
               </div>
             </div>
 
-            <div className={SECTION_CARD_CLASS}>
+            <div className={SECTION_CARD_CIERRE_CLASS}>
               <h3 className="text-xs font-semibold text-gray-900 dark:text-gray-100 mb-2 pb-1 border-b border-gray-200 dark:border-gray-700 flex items-center gap-1.5">
                 <DollarSign className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
                 Liquidación
@@ -2048,7 +2166,7 @@ export const DetalleView = () => {
               </div>
             </div>
 
-            <div className={SECTION_CARD_CLASS}>
+            <div className={SECTION_CARD_CIERRE_CLASS}>
               <h3 className="text-xs font-semibold text-gray-900 dark:text-gray-100 mb-2 pb-1 border-b border-gray-200 dark:border-gray-700 flex items-center gap-1.5">
                 <Car className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                 Odómetro
@@ -2101,14 +2219,14 @@ export const DetalleView = () => {
                       return diferencia > 0 ? diferencia.toFixed(0) : '0'
                     })()}
                     disabled
-                    className="w-full h-8 text-xs bg-gray-100 dark:bg-gray-800"
+                    className="w-full h-8 text-xs"
                   />
                 </div>
               </div>
             </div>
 
             {valoresCierre ? (
-              <div className={SECTION_CARD_CLASS}>
+              <div className={SECTION_CARD_CIERRE_CLASS}>
                 <h4 className="text-xs font-semibold text-gray-900 dark:text-gray-100 mb-2 flex items-center gap-1.5 pb-1 border-b border-gray-200 dark:border-gray-700">
                   <TrendingUp className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                   Resumen de Cálculo
@@ -2217,7 +2335,7 @@ export const DetalleView = () => {
                 </div>
               </div>
             ) : (
-              <div className={SECTION_CARD_CLASS}>
+              <div className={SECTION_CARD_CIERRE_CLASS}>
                 <div className="text-center py-4 text-sm text-gray-500 dark:text-gray-400">
                   {selectedConductorResumen?.monto_total_pagar ?? selectedConductorResumen?.monto_total_pagado 
                     ? 'Ingrese los datos para ver el cálculo' 
@@ -2248,38 +2366,28 @@ export const DetalleView = () => {
       </Dialog>
 
       <Dialog open={showModalVerCierre} onOpenChange={setShowModalVerCierre}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+        <DialogContent className="max-w-xl max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogHeader className="pb-2 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+            <DialogTitle className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-1.5">
               Detalles del Cierre de Día
             </DialogTitle>
-            <div className="mt-3 flex items-start gap-6">
-              <div>
-              <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Conductor:
-              </p>
-                <p className="text-base font-semibold text-gray-900 dark:text-gray-100 mt-1">
-                  {selectedDriver?.full_name || 'Conductor no disponible'}
-                </p>
+            <div className="flex flex-wrap items-center gap-3 text-xs">
+              <div className="flex items-center gap-1.5">
+                <User className="w-3 h-3 text-gray-500 dark:text-gray-400" />
+                <span className="text-gray-600 dark:text-gray-400">Conductor:</span>
+                <span className="font-semibold text-gray-900 dark:text-gray-100">{selectedDriver?.full_name || 'Conductor no disponible'}</span>
               </div>
               {cierreDetalle && (
                 <>
-                  <div>
-                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                      Fecha:
-                    </p>
-                    <p className="text-base font-semibold text-gray-900 dark:text-gray-100 mt-1">
-                      {formatearFechaConDia(cierreDetalle.fecha)}
-                </p>
+                  <div className="flex items-center gap-1.5">
+                    <Calendar className="w-3 h-3 text-gray-500 dark:text-gray-400" />
+                    <span className="text-gray-600 dark:text-gray-400">Fecha:</span>
+                    <span className="font-semibold text-gray-900 dark:text-gray-100">{formatearFechaConDia(cierreDetalle.fecha)}</span>
                   </div>
                   {cierreDetalle.tiposTurno && cierreDetalle.tiposTurno.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-1.5">
                       {cierreDetalle.tiposTurno.map((tipo, index) => (
-                        <Badge 
-                          key={index}
-                          variant="outline"
-                          className="capitalize bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800"
-                        >
+                        <Badge key={index} variant="outline" className="capitalize text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800">
                           {tipo}
                         </Badge>
                       ))}
@@ -2290,39 +2398,32 @@ export const DetalleView = () => {
             </div>
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto pr-1">
+          <div className="space-y-2.5 mt-2.5 overflow-y-auto flex-1 pr-1">
           {cargandoCierre ? (
             <div className="text-center py-8">
               <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-red-600 dark:border-red-400"></div>
-              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Cargando detalles del cierre...</p>
+              <p className="mt-2 text-xs text-gray-600 dark:text-gray-400">Cargando detalles del cierre...</p>
             </div>
           ) : cierreDetalle ? (
-            <div className="space-y-4 mt-4">
-              <div className={SECTION_CARD_CLASS}>
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 pb-1.5 border-b border-gray-200 dark:border-gray-700">
+            <div className="space-y-2.5">
+              <div className={SECTION_CARD_CIERRE_CLASS}>
+                <h3 className="text-xs font-semibold text-gray-900 dark:text-gray-100 mb-2 pb-1 border-b border-gray-200 dark:border-gray-700 flex items-center gap-1.5">
+                  <Car className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                   Combustible
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                       GNV Combustible (M³)
                     </label>
                     {editandoCierre ? (
-                      <Input
-                        type="text"
-                        value={editGnvM3}
-                        onChange={(e) => setEditGnvM3(e.target.value)}
-                        placeholder="0.00"
-                        className="w-full h-9 text-sm"
-                      />
+                      <Input type="text" value={editGnvM3} onChange={(e) => setEditGnvM3(e.target.value)} placeholder="0.00" className="w-full h-8 text-xs" />
                     ) : (
-                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                        {cierreDetalle.gnvM3 || '-'}
-                      </p>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{cierreDetalle.gnvM3 || '-'}</p>
                     )}
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                       GNV Combustible (S/.) <span className="text-red-600">*</span>
                     </label>
                     {editandoCierre ? (
@@ -2335,111 +2436,65 @@ export const DetalleView = () => {
                             setEditGnvSoles(value)
                         }}
                         placeholder="0.00"
-                        className="w-full h-9 text-sm"
+                        className="w-full h-8 text-xs"
                         required
                       />
                     ) : (
-                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                        {formatBalance(cierreDetalle.gnvSoles)}
-                      </p>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{formatBalance(cierreDetalle.gnvSoles)}</p>
                     )}
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Gasolina Combustible (Galones)
                     </label>
                     {editandoCierre ? (
-                      <Input
-                        type="text"
-                        value={editGasolinaGalones}
-                        onChange={(e) => setEditGasolinaGalones(e.target.value)}
-                        placeholder="0.00"
-                        className="w-full h-9 text-sm"
-                      />
+                      <Input type="text" value={editGasolinaGalones} onChange={(e) => setEditGasolinaGalones(e.target.value)} placeholder="0.00" className="w-full h-8 text-xs" />
                     ) : (
-                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                        {cierreDetalle.gasolinaGalones || '-'}
+                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{cierreDetalle.gasolinaGalones || '-'}
                       </p>
                     )}
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Gasolina Combustible (S/.) <span className="text-gray-500 text-xs font-normal">(Opcional)</span>
                     </label>
                     {editandoCierre ? (
-                      <Input
-                        type="text"
-                        inputMode="decimal"
-                        value={editGasolinaSoles}
-                        onChange={(e) => {
-                          const value = validarNumeroPositivo(e.target.value)
-                            setEditGasolinaSoles(value)
-                        }}
-                        placeholder="0.00"
-                        className="w-full h-9 text-sm"
-                      />
+                      <Input type="text" inputMode="decimal" value={editGasolinaSoles} onChange={(e) => { const v = validarNumeroPositivo(e.target.value); setEditGasolinaSoles(v); }} placeholder="0.00" className="w-full h-8 text-xs" />
                     ) : (
-                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                        {formatBalance(cierreDetalle.gasolinaSoles)}
-                      </p>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{formatBalance(cierreDetalle.gasolinaSoles)}</p>
                     )}
                   </div>
                 </div>
               </div>
 
-              <div className={SECTION_CARD_CLASS}>
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 pb-1.5 border-b border-gray-200 dark:border-gray-700">
+              <div className={SECTION_CARD_CIERRE_CLASS}>
+                <h3 className="text-xs font-semibold text-gray-900 dark:text-gray-100 mb-2 pb-1 border-b border-gray-200 dark:border-gray-700 flex items-center gap-1.5">
+                  <DollarSign className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
                   Liquidación
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Liquida en Efectivo (S/.) <span className="text-red-600">*</span>
                     </label>
                     {editandoCierre ? (
-                      <Input
-                        type="text"
-                        inputMode="decimal"
-                        value={editLiquidaEfectivo}
-                        onChange={(e) => {
-                          const value = validarNumeroPositivo(e.target.value)
-                            setEditLiquidaEfectivo(value)
-                        }}
-                        placeholder="0.00"
-                        className="w-full h-9 text-sm"
-                        required
-                      />
+                      <Input type="text" inputMode="decimal" value={editLiquidaEfectivo} onChange={(e) => setEditLiquidaEfectivo(validarNumeroPositivo(e.target.value))} placeholder="0.00" className="w-full h-8 text-xs" required />
                     ) : (
-                      <p className="text-sm font-semibold text-green-600 dark:text-green-400">
-                        {formatBalance(cierreDetalle.liquidaEfectivo)}
-                      </p>
+                      <p className="text-sm font-semibold text-green-600 dark:text-green-400">{formatBalance(cierreDetalle.liquidaEfectivo)}</p>
                     )}
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Liquida en Yape (S/.) <span className="text-red-600">*</span>
                     </label>
                     {editandoCierre ? (
-                      <Input
-                        type="text"
-                        inputMode="decimal"
-                        value={editLiquidaYape}
-                        onChange={(e) => {
-                          const value = validarNumeroPositivo(e.target.value)
-                            setEditLiquidaYape(value)
-                        }}
-                        placeholder="0.00"
-                        className="w-full h-9 text-sm"
-                        required
-                      />
+                      <Input type="text" inputMode="decimal" value={editLiquidaYape} onChange={(e) => setEditLiquidaYape(validarNumeroPositivo(e.target.value))} placeholder="0.00" className="w-full h-8 text-xs" required />
                     ) : (
-                      <p className="text-sm font-semibold text-green-600 dark:text-green-400">
-                        {formatBalance(cierreDetalle.liquidaYape)}
-                      </p>
+                      <p className="text-sm font-semibold text-green-600 dark:text-green-400">{formatBalance(cierreDetalle.liquidaYape)}</p>
                     )}
                   </div>
                   <div className="md:col-span-2">
-                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Otros Gastos (S/.) <span className="text-gray-400 text-xs">(Opcional)</span>
                     </label>
                     {editandoCierre ? (
@@ -2448,29 +2503,15 @@ export const DetalleView = () => {
                           type="number"
                           step="0.01"
                           min="0"
-                          value={editOtrosGastos}
-                          onChange={(e) => {
-                            const value = e.target.value
-                            if (value === '' || parseFloat(value) >= 0) {
-                              setEditOtrosGastos(value)
-                            }
-                          }}
-                          placeholder="0.00"
-                          className="w-full h-9 text-sm"
-                        />
+value={editOtrosGastos}
+                            onChange={(e) => { const v = e.target.value; if (v === '' || parseFloat(v) >= 0) setEditOtrosGastos(v); }}
+                            placeholder="0.00"
+                            className="w-full h-8 text-xs"
+                          />
                         {editOtrosGastos && parseNumber(editOtrosGastos) > 0 && (
-                          <div className="mt-2">
-                            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                              Descripción del Gasto <span className="text-red-600">*</span>
-                            </label>
-                            <Input
-                              type="text"
-                              value={editOtrosGastosDescripcion}
-                              onChange={(e) => setEditOtrosGastosDescripcion(e.target.value)}
-                              placeholder="Ej: Mantenimiento, Reparación, etc."
-                              className="w-full h-9 text-sm"
-                              required
-                            />
+                          <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-800">
+                            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">Descripción del Gasto <span className="text-red-600">*</span></label>
+                            <Input type="text" value={editOtrosGastosDescripcion} onChange={(e) => setEditOtrosGastosDescripcion(e.target.value)} placeholder="Ej: Mantenimiento, Reparación, etc." className="w-full h-8 text-xs bg-white dark:bg-gray-800" required />
                           </div>
                         )}
                       </>
@@ -2482,13 +2523,9 @@ export const DetalleView = () => {
                               {formatBalance(cierreDetalle.otrosGastos)}
                             </p>
                             {cierreDetalle.otrosGastosDescripcion && (
-                              <div className="mt-2">
-                                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                                  Descripción del Gasto
-                                </label>
-                                <p className="text-sm text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 p-2 rounded">
-                                  {cierreDetalle.otrosGastosDescripcion}
-                                </p>
+                              <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-800">
+                                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Descripción del Gasto</label>
+                                <p className="text-xs text-gray-700 dark:text-gray-300">{cierreDetalle.otrosGastosDescripcion}</p>
                               </div>
                             )}
                           </>
@@ -2501,83 +2538,50 @@ export const DetalleView = () => {
                 </div>
               </div>
 
-              <div className={SECTION_CARD_CLASS}>
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 pb-1.5 border-b border-gray-200 dark:border-gray-700 flex items-center gap-1.5">
+              <div className={SECTION_CARD_CIERRE_CLASS}>
+                <h3 className="text-xs font-semibold text-gray-900 dark:text-gray-100 mb-2 pb-1 border-b border-gray-200 dark:border-gray-700 flex items-center gap-1.5">
                   <Car className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                   Odómetro
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Odómetro Inicial (km)
                     </label>
                     {editandoCierre ? (
-                      <Input
-                        type="text"
-                        inputMode="numeric"
-                        value={editOdometroInicial}
-                        onChange={(e) => {
-                          const value = validarNumeroPositivo(e.target.value)
-                          setEditOdometroInicial(value)
-                        }}
-                        placeholder="0"
-                        className="w-full h-9 text-sm"
-                      />
+                      <Input type="text" inputMode="numeric" value={editOdometroInicial} onChange={(e) => setEditOdometroInicial(validarNumeroPositivo(e.target.value))} placeholder="0" className="w-full h-8 text-xs" />
                     ) : (
-                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                        {cierreDetalle.odometroInicial?.toLocaleString() || '-'}
-                      </p>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{cierreDetalle.odometroInicial?.toLocaleString() || '-'}</p>
                     )}
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Odómetro Final (km)
                     </label>
                     {editandoCierre ? (
-                      <Input
-                        type="text"
-                        inputMode="numeric"
-                        value={editOdometroFinal}
-                        onChange={(e) => {
-                          const value = validarNumeroPositivo(e.target.value)
-                          setEditOdometroFinal(value)
-                        }}
-                        placeholder="0"
-                        className="w-full h-9 text-sm"
-                      />
+                      <Input type="text" inputMode="numeric" value={editOdometroFinal} onChange={(e) => setEditOdometroFinal(validarNumeroPositivo(e.target.value))} placeholder="0" className="w-full h-8 text-xs" />
                     ) : (
-                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                        {cierreDetalle.odometroFinal?.toLocaleString() || '-'}
-                      </p>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{cierreDetalle.odometroFinal?.toLocaleString() || '-'}</p>
                     )}
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Diferencia (km)
                     </label>
                     {editandoCierre ? (
-                      <Input
-                        type="text"
-                        value={(() => {
-                          const inicial = parseNumber(editOdometroInicial)
-                          const final = parseNumber(editOdometroFinal)
-                          const diferencia = final - inicial
-                          return diferencia > 0 ? diferencia.toFixed(0) : '0'
-                        })()}
-                        disabled
-                        className="w-full h-9 text-sm bg-gray-100 dark:bg-gray-800"
-                      />
+                      <Input type="text" value={(() => { const i = parseNumber(editOdometroInicial); const f = parseNumber(editOdometroFinal); return (f - i) > 0 ? (f - i).toFixed(0) : '0'; })()} disabled className="w-full h-8 text-xs" />
                     ) : (
-                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                        {cierreDetalle.diferenciaOdometro?.toLocaleString() || '-'}
-                      </p>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{cierreDetalle.diferenciaOdometro?.toLocaleString() || '-'}</p>
                     )}
                   </div>
                 </div>
               </div>
 
-              <div className={SECTION_CARD_CLASS}>
-                <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">Resumen</h4>
+              <div className={SECTION_CARD_CIERRE_CLASS}>
+                <h3 className="text-xs font-semibold text-gray-900 dark:text-gray-100 mb-2 pb-1 border-b border-gray-200 dark:border-gray-700 flex items-center gap-1.5">
+                  <TrendingUp className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                  Resumen
+                </h3>
                 {(() => {
                   if (editandoCierre && valoresCierreEdicion) {
                     const montoBase = selectedConductorResumen?.monto_total_pagar ?? selectedConductorResumen?.monto_total_pagado ?? cierreDetalle.totalIngresos
@@ -2710,56 +2714,36 @@ export const DetalleView = () => {
           )}
           </div>
 
-          <div className="flex justify-between items-center mt-4 pt-3 border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
-            {puedeEditar && !editandoCierre && (
-              <Button
-                variant="outline"
-                onClick={handleIniciarEdicion}
-                className="flex items-center gap-2"
-              >
-                <Pencil className="h-4 w-4" />
+          <div className="flex justify-between items-center gap-2 mt-2 pt-2 border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
+            {puedeEditar && !editandoCierre ? (
+              <Button variant="outline" onClick={handleIniciarEdicion} className="flex items-center gap-1.5 text-xs px-4 h-8">
+                <Pencil className="h-3.5 w-3.5" />
                 Editar
               </Button>
-            )}
-            <div className="flex justify-end gap-3 ml-auto">
+            ) : <div />}
+            <div className="flex gap-2">
               {editandoCierre ? (
                 <>
-                  <Button
-                    variant="outline"
-                    onClick={handleCancelarEdicion}
-                    disabled={actualizandoCierre}
-                    className="px-6 flex items-center gap-2"
-                  >
-                    <X className="h-4 w-4" />
+                  <Button variant="outline" onClick={handleCancelarEdicion} disabled={actualizandoCierre} className="px-6 h-8 text-xs flex items-center gap-1.5">
+                    <X className="h-3.5 w-3.5" />
                     Cancelar
                   </Button>
-                  <Button
-                    onClick={handleActualizarCierre}
-                    disabled={actualizandoCierre}
-                    className="bg-red-600 text-white px-6 flex items-center gap-2"
-                  >
+                  <Button onClick={handleActualizarCierre} disabled={actualizandoCierre} className="bg-red-600 text-white px-6 h-8 text-xs flex items-center gap-1.5">
                     {actualizandoCierre ? (
                       <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                        <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent" />
                         Actualizando...
                       </>
                     ) : (
                       <>
-                        <Save className="h-4 w-4" />
+                        <Save className="h-3.5 w-3.5" />
                         Guardar
                       </>
                     )}
                   </Button>
                 </>
               ) : (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setShowModalVerCierre(false)
-                    setEditandoCierre(false)
-                  }}
-                  className="px-6"
-                >
+                <Button variant="outline" onClick={() => { setShowModalVerCierre(false); setEditandoCierre(false); }} className="px-6 h-8 text-xs">
                   Cerrar
                 </Button>
               )}
@@ -2774,32 +2758,54 @@ export const DetalleView = () => {
             <DialogTitle className="text-xl font-bold text-gray-900 dark:text-gray-100">
               Turnos del Conductor
             </DialogTitle>
+            <p className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 mt-1">
+              <Calendar className="w-4 h-4 shrink-0" />
+              Fecha de liquidación: {formatearFechaLegible(fechaSeleccionada)}
+            </p>
             {conductorParaTurnos && (
-              <div className="flex items-center justify-between gap-3 mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-                <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-4 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <div className="flex items-center gap-3 min-w-0 flex-1 overflow-hidden">
                   {conductorParaTurnos.avatar_url && (
                     <img 
                       src={conductorParaTurnos.avatar_url} 
                       alt={conductorParaTurnos.nombre || conductorParaTurnos.driver_id}
-                      className="w-14 h-14 rounded-full object-cover border-2 border-gray-200 dark:border-gray-700"
+                      className="w-12 h-12 rounded-full object-cover border-2 border-gray-200 dark:border-gray-700 shrink-0"
                     />
                   )}
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                  <div className="min-w-0 flex-1 overflow-hidden">
+                    <p className="text-base font-semibold text-gray-900 dark:text-gray-100 truncate block" title={conductorParaTurnos.nombre || conductorParaTurnos.driver_id}>
                       {conductorParaTurnos.nombre || conductorParaTurnos.driver_id}
                     </p>
                     {conductorParaTurnos.telefono && (
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate" title={conductorParaTurnos.telefono}>
                         {conductorParaTurnos.telefono}
                       </p>
                     )}
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Total a Pagar</p>
-                  <p className="text-base font-bold text-blue-600 dark:text-blue-400">
-                    {formatBalance(conductorParaTurnos.monto_total_pagar ?? conductorParaTurnos.monto_total_pagado ?? 0)}
-                  </p>
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <div className="flex flex-col items-center rounded-md bg-green-50 dark:bg-green-950/30 px-2.5 py-1.5 border border-green-200/60 dark:border-green-800/40 min-w-[4.5rem]">
+                    <p className="text-[10px] font-medium text-green-700 dark:text-green-400 uppercase tracking-wide">A pagar</p>
+                    <p className="text-sm font-bold tabular-nums text-green-700 dark:text-green-300 leading-tight">
+                      {formatBalance(conductorParaTurnos.monto_total_pagar ?? conductorParaTurnos.monto_total_pagado ?? 0)}
+                    </p>
+                  </div>
+                  {conductorParaTurnos.produccion_total != null && (
+                    <div className="flex flex-col items-center rounded-md bg-gray-50 dark:bg-gray-800/60 px-2.5 py-1.5 border border-gray-200 dark:border-gray-600 min-w-[4.5rem]">
+                      <p className="text-[10px] font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Producción</p>
+                      <p className="text-sm font-bold tabular-nums text-gray-800 dark:text-gray-200 leading-tight">
+                        {formatBalance(conductorParaTurnos.produccion_total)}
+                      </p>
+                    </div>
+                  )}
+                  {conductorParaTurnos.comisiones_servicio != null && (
+                    <div className="flex flex-col items-center rounded-md bg-gray-50 dark:bg-gray-800/60 px-2.5 py-1.5 border border-gray-200 dark:border-gray-600 min-w-[4.5rem]">
+                      <p className="text-[10px] font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Comis. servicio</p>
+                      <p className="text-sm font-bold tabular-nums text-gray-800 dark:text-gray-200 leading-tight">
+                        {formatBalance(conductorParaTurnos.comisiones_servicio)}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -2807,116 +2813,85 @@ export const DetalleView = () => {
 
           <div className="mt-2 space-y-2">
             {conductorParaTurnos?.turnos && conductorParaTurnos.turnos.length > 0 ? (
-              conductorParaTurnos.turnos.map((turno, index) => {
-                const fechaInicio = new Date(turno.hora_inicio)
-                const fechaFin = turno.hora_fin ? new Date(turno.hora_fin) : null
+              <>
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pb-0 mb-0 text-sm">
+                  {conductorParaTurnos.cantidad_viajes !== undefined && (
+                    <span className="inline-flex items-center gap-2 text-gray-600 dark:text-gray-400" title="Total de viajes del conductor (todos los turnos)">
+                      <Car className="w-4 h-4 text-gray-400 dark:text-gray-500" />
+                      <span>Total: <strong className="text-gray-900 dark:text-gray-100 font-semibold">{conductorParaTurnos.cantidad_viajes}</strong> viajes</span>
+                    </span>
+                  )}
+                  {conductorParaTurnos.viajes_por_hora !== undefined && (
+                    <span className="inline-flex items-center gap-2 text-gray-600 dark:text-gray-400" title="Promedio de viajes por hora (general del conductor)">
+                      <TrendingUp className="w-4 h-4 text-gray-400 dark:text-gray-500" />
+                      <span>Promedio: <strong className="text-gray-900 dark:text-gray-100 font-semibold">{conductorParaTurnos.viajes_por_hora.toFixed(1)}</strong>/h</span>
+                    </span>
+                  )}
+                </div>
+                {conductorParaTurnos.turnos.map((turno, index) => {
                 const duracionHoras = Math.floor(turno.duracion_minutos / 60)
                 const duracionMinutos = turno.duracion_minutos % 60
 
+                const isNocturno = turno.tipo_turno === 'nocturno'
+
                 return (
-                  <Card key={turno.id || index} className="border hover:border-blue-300 dark:hover:border-blue-700 transition-colors">
-                    <CardContent className="p-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1 space-y-1.5">
-                          <div className="flex items-center gap-2">
-                            <Badge 
-                              variant="outline" 
-                              className={`text-xs flex items-center gap-1 ${
-                                turno.tipo_turno === 'diurno' 
-                                  ? 'border-yellow-300 dark:border-yellow-700 text-yellow-700 dark:text-yellow-300' 
-                                  : 'border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300'
-                              }`}
-                            >
-                              {turno.tipo_turno === 'diurno' ? (
-                                <Sunrise className="w-3 h-3" />
-                              ) : (
-                                <Moon className="w-3 h-3" />
-                              )}
-                              <span className="capitalize">{turno.tipo_turno}</span>
-                            </Badge>
-                            <span className="text-xs text-gray-400 dark:text-gray-500">
-                              ID: {turno.id}
-                            </span>
+                  <Card key={turno.id || index} className="border overflow-hidden">
+                    <CardContent className="p-4 pt-2">
+                      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 mb-3">
+                        <span
+                          className={`text-sm font-medium capitalize shrink-0 px-2.5 py-1 rounded-md ${
+                            isNocturno
+                              ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/50'
+                              : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/50'
+                          }`}
+                        >
+                          {turno.tipo_turno}
+                        </span>
+                        <span className={`text-sm font-semibold tabular-nums shrink-0 ${isNocturno ? 'text-blue-600 dark:text-blue-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                          {formatBalance(turno.monto_total)}
+                        </span>
+                      </div>
+
+                      <div className="space-y-3 text-sm">
+                        <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Calendar className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 shrink-0" />
+                            <div>
+                              <p className="text-[11px] uppercase tracking-wide text-gray-400 dark:text-gray-500">Fecha de inicio</p>
+                              <p className="font-medium text-gray-900 dark:text-gray-100">
+                                {fechaPart(turno.hora_inicio)
+                                  ? `${formatearFechaLegible(fechaPart(turno.hora_inicio) ?? turno.fecha)} · ${formatHoraAmPm(turno.hora_inicio)}`
+                                  : formatHoraAmPm(turno.hora_inicio)}
+                              </p>
+                            </div>
                           </div>
-
-                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                            <div className="flex items-center gap-1.5">
-                              <Calendar className="w-3 h-3 text-gray-400" />
-                              <span className="text-gray-500 dark:text-gray-400">Fecha:</span>
-                              <span className="font-medium text-gray-900 dark:text-gray-100">
-                                {formatearFechaLegible(turno.fecha)}
-                              </span>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Calendar className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 shrink-0" />
+                            <div>
+                              <p className="text-[11px] uppercase tracking-wide text-gray-400 dark:text-gray-500">Fecha de fin</p>
+                              <p className="font-medium text-gray-900 dark:text-gray-100">
+                                {fechaPart(turno.hora_fin)
+                                  ? `${formatearFechaLegible(fechaPart(turno.hora_fin) ?? turno.fecha)} · ${formatHoraAmPm(turno.hora_fin)}`
+                                  : formatHoraAmPm(turno.hora_fin)}
+                              </p>
                             </div>
-
-                            <div className="flex items-center gap-1.5">
-                              <Clock className="w-3 h-3 text-gray-400" />
-                              <span className="text-gray-500 dark:text-gray-400">Duración:</span>
-                              <span className="font-medium text-gray-900 dark:text-gray-100">
-                                {duracionHoras > 0 && `${duracionHoras}h `}
-                                {duracionMinutos > 0 && `${duracionMinutos}min`}
-                                {turno.duracion_minutos === 0 && '0min'}
-                              </span>
-                            </div>
-
-                            <div className="flex items-center gap-1.5">
-                              <Clock className="w-3 h-3 text-gray-400" />
-                              <span className="text-gray-500 dark:text-gray-400">Inicio:</span>
-                              <span className="font-medium text-gray-900 dark:text-gray-100">
-                                {fechaInicio.toLocaleTimeString('es-PE', { 
-                                  hour: '2-digit', 
-                                  minute: '2-digit',
-                                  hour12: false 
-                                })}
-                              </span>
-                            </div>
-
-                            {fechaFin && (
-                              <div className="flex items-center gap-1.5">
-                                <Clock className="w-3 h-3 text-gray-400" />
-                                <span className="text-gray-500 dark:text-gray-400">Fin:</span>
-                                <span className="font-medium text-gray-900 dark:text-gray-100">
-                                  {fechaFin.toLocaleTimeString('es-PE', { 
-                                    hour: '2-digit', 
-                                    minute: '2-digit',
-                                    hour12: false 
-                                  })}
-                                </span>
-                              </div>
-                            )}
-
-                            {conductorParaTurnos.cantidad_viajes !== undefined && (
-                              <div className="flex items-center gap-1.5">
-                                <Car className="w-3 h-3 text-gray-400" />
-                                <span className="text-gray-500 dark:text-gray-400">Cantidad Viajes:</span>
-                                <span className="font-medium text-gray-900 dark:text-gray-100">
-                                  {conductorParaTurnos.cantidad_viajes}
-                                </span>
-                              </div>
-                            )}
-
-                            {conductorParaTurnos.viajes_por_hora !== undefined && (
-                              <div className="flex items-center gap-1.5">
-                                <TrendingUp className="w-3 h-3 text-gray-400" />
-                                <span className="text-gray-500 dark:text-gray-400">Viajes por Hora:</span>
-                                <span className="font-medium text-gray-900 dark:text-gray-100">
-                                  {conductorParaTurnos.viajes_por_hora.toFixed(1)}
-                                </span>
-                              </div>
-                            )}
                           </div>
                         </div>
 
-                        <div className="text-right min-w-[100px]">
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">Monto</p>
-                          <p className="text-base font-bold text-green-600 dark:text-green-400">
-                            {formatBalance(turno.monto_total)}
-                          </p>
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 border-t border-gray-100 dark:border-gray-700/70 text-xs text-gray-600 dark:text-gray-400">
+                          <span className="inline-flex items-center gap-1.5">
+                            <Clock className="w-3 h-3 text-gray-400" />
+                            {duracionHoras > 0 && `${duracionHoras}h `}
+                            {duracionMinutos > 0 && `${duracionMinutos}min`}
+                            {turno.duracion_minutos === 0 && '0min'}
+                          </span>
                         </div>
                       </div>
                     </CardContent>
                   </Card>
                 )
-              })
+              })}
+              </>
             ) : (
               <div className="text-center py-6 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
                 <AlertCircle className="mx-auto h-8 w-8 text-gray-400 mb-2" />

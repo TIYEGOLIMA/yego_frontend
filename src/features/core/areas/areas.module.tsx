@@ -162,18 +162,23 @@ const AreasModule: React.FC = () => {
     }
   };
 
-  // Una sola carga inicial; loading hasta que terminen áreas y usuarios (sin areaId = para crear)
   useEffect(() => {
     const ac = new AbortController();
+    let cancelled = false;
     setLoading(true);
     (async () => {
       try {
         await Promise.all([fetchAreas(ac.signal), fetchUsuarios(undefined, ac.signal)]);
+      } catch {
+        // Evitar setLoading(false) si el efecto fue abortado (ej. Strict Mode)
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     })();
-    return () => ac.abort();
+    return () => {
+      cancelled = true;
+      ac.abort();
+    };
   }, []);
 
   const filteredAreas = areas.filter((a) => {
@@ -441,9 +446,16 @@ const AreasModule: React.FC = () => {
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Building2 className="h-5 w-5 text-primary-500" />
-            Áreas del Sistema ({filteredAreas.length})
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Building2 className="h-5 w-5 text-primary-500" />
+              Áreas del Sistema
+            </div>
+            {!loading && (
+              <span className="text-sm font-normal text-neutral-500">
+                {filteredAreas.length} área{filteredAreas.length !== 1 ? 's' : ''}
+              </span>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -451,16 +463,20 @@ const AreasModule: React.FC = () => {
             <div className="flex items-center justify-center py-12">
               <div className="flex flex-col items-center gap-4">
                 <div className="w-10 h-10 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
-                <p className="yego-body-sm">Cargando áreas y usuarios...</p>
+                <p className="yego-body-sm">Cargando áreas...</p>
               </div>
+            </div>
+          ) : areas.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <Building2 className="h-12 w-12 text-neutral-300 dark:text-neutral-600 mb-4" />
+              <h3 className="yego-heading-4 mb-2">No se encontraron áreas</h3>
+              <p className="yego-body-sm">Crea una nueva área para comenzar.</p>
             </div>
           ) : filteredAreas.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Building2 className="h-12 w-12 text-neutral-300 dark:text-neutral-600 mb-4" />
-              <h3 className="yego-heading-4 mb-2">No se encontraron áreas</h3>
-              <p className="yego-body-sm">
-                Intenta con otros términos o crea una nueva área.
-              </p>
+              <h3 className="yego-heading-4 mb-2">Ningún área coincide</h3>
+              <p className="yego-body-sm">No hay áreas que coincidan con la búsqueda o el filtro. Prueba otros términos.</p>
             </div>
           ) : (
             <>
