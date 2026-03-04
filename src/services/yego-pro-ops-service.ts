@@ -553,29 +553,16 @@ export const yegoProOpsService = {
 
   /**
    * Obtener lista simple de conductores
-   * @param nombre Nombre del conductor para buscar (opcional)
    * @param fecha Fecha en formato YYYY-MM-DD (opcional)
    * @returns Lista de conductores con información básica
    */
-  obtenerListaConductores: async (nombre?: string, fecha?: string): Promise<ListaConductoresResponse> => {
-    const params: { nombre?: string; fecha?: string } = {}
-    if (nombre) {
-      params.nombre = nombre
-    }
+  obtenerListaConductores: async (fecha?: string): Promise<ListaConductoresResponse> => {
+    const params: { fecha?: string } = {}
     if (fecha) {
       params.fecha = fecha
     }
-    
-    try {
-      const response = await api.get<ListaConductoresResponse>('/pro-ops/drivers', { params })
-      return response.data
-    } catch (error: any) {
-      // Si es error 400, devolver la respuesta con el mensaje
-      if (error.response?.status === 400 && error.response?.data) {
-        return error.response.data
-      }
-      throw error
-    }
+    const response = await api.get<ListaConductoresResponse>('/pro-ops/drivers', { params })
+    return response.data
   },
 
   /**
@@ -603,5 +590,6 @@ export const yegoProOpsService = {
     })
     return response.data
   },
+
 }
 

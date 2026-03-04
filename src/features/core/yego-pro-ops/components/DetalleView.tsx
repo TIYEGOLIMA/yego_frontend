@@ -328,12 +328,10 @@ const usePagination = <T,>(items: T[], itemsPerPage: number) => {
 
 export const DetalleView = () => {
   const { user } = useAuth()
-  const { showError, showWarning, notifications, removeNotification } = useToastNotifications()
+  const { showError, showWarning, showSuccess, notifications, removeNotification } = useToastNotifications()
   const [searchTermPendientes, setSearchTermPendientes] = useState('')
   const [searchTermLiquidados, setSearchTermLiquidados] = useState('')
   const [searchTermViajes, setSearchTermViajes] = useState('')
-  const [searchTermNombreActual, setSearchTermNombreActual] = useState('')
-  const [searchTermNombreActualParaBuscar, setSearchTermNombreActualParaBuscar] = useState('')
   const [fechaSeleccionada, setFechaSeleccionada] = useState<string>(obtenerFechaAyer())
   const [selectedDriver, setSelectedDriver] = useState<DriverItem | null>(null)
   const [selectedConductorResumen, setSelectedConductorResumen] = useState<ConductorResumenPagos | null>(null)
@@ -528,29 +526,10 @@ export const DetalleView = () => {
   const fechaHoy = obtenerFechaHoy()
   const esFechaActual = fechaSeleccionada === fechaHoy
   
-  useEffect(() => {
-    if (!esFechaActual) {
-      setSearchTermNombreActual('')
-      setSearchTermNombreActualParaBuscar('')
-    }
-  }, [fechaSeleccionada, esFechaActual])
-  
-  const handleBuscarConductor = () => {
-    if (searchTermNombreActual.trim().length > 0) {
-      setSearchTermNombreActualParaBuscar(searchTermNombreActual.trim())
-    }
-  }
-
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      handleBuscarConductor()
-    }
-  }
-  
-  const { data: listaConductoresData, isLoading: loadingListaConductores } = useQuery<ListaConductoresResponse>({
-    queryKey: ['yego-pro-ops-lista-conductores', searchTermNombreActualParaBuscar, fechaSeleccionada],
-    queryFn: () => yegoProOpsService.obtenerListaConductores(searchTermNombreActualParaBuscar || undefined, fechaSeleccionada),
-    enabled: esFechaActual && searchTermNombreActualParaBuscar.length > 0,
+  const { data: listaConductoresData, isLoading: loadingListaConductores, refetch: refetchListaConductores } = useQuery<ListaConductoresResponse>({
+    queryKey: ['yego-pro-ops-lista-conductores', fechaSeleccionada],
+    queryFn: () => yegoProOpsService.obtenerListaConductores(fechaSeleccionada),
+    enabled: esFechaActual,
     refetchOnWindowFocus: false,
     staleTime: 60 * 1000,
   })
@@ -610,40 +589,50 @@ export const DetalleView = () => {
 
   const { conductoresPendientes, conductoresLiquidados } = useMemo(() => {
     if (esFechaActual) {
-      if (resumenPagosData?.conductores && resumenPagosData.conductores.length > 0) {
-        const pendientes: ConductorResumenPagos[] = []
-        const liquidados: ConductorResumenPagos[] = []
-        
-        resumenPagosData.conductores.forEach(conductor => {
-          const tieneTurnosSinPagar = conductor.turnos.some(turno => !turno.pagado)
-          if (tieneTurnosSinPagar) {
-            pendientes.push(conductor)
+      // Siempre usar la lista completa de conductores de la flota; mezclar con resumen si existe
+      const listaConductores = listaConductoresData?.conductores ?? []
+      const resumenConductores = resumenPagosData?.conductores ?? []
+      const resumenPorDriverId = new Map(resumenConductores.map(c => [c.driver_id, c]))
+
+      if (listaConductores.length === 0 && resumenConductores.length === 0) {
+        return { conductoresPendientes: [], conductoresLiquidados: [] }
+      }
+
+      const pendientes: ConductorResumenPagos[] = []
+      const liquidados: ConductorResumenPagos[] = []
+      const driverIdsVistos = new Set<string>()
+
+      if (listaConductores.length > 0) {
+        listaConductores.forEach(conductor => {
+          driverIdsVistos.add(conductor.driverId)
+          const delResumen = resumenPorDriverId.get(conductor.driverId)
+          if (delResumen) {
+            const tieneTurnosSinPagar = delResumen.turnos.some((t: { pagado?: boolean }) => !t.pagado)
+            if (tieneTurnosSinPagar) pendientes.push(delResumen)
+            else liquidados.push(delResumen)
           } else {
-            liquidados.push(conductor)
+            pendientes.push({
+              driver_id: conductor.driverId,
+              nombre: conductor.nombre,
+              telefono: conductor.telefono,
+              avatar_url: conductor.avatarUrl,
+              monto_total_pagar: 0,
+              cantidad_turnos: 0,
+              turnos: []
+            })
           }
         })
-        
-        return { conductoresPendientes: pendientes, conductoresLiquidados: liquidados }
       }
-      
-        if (listaConductoresData?.conductores && listaConductoresData.conductores.length > 0) {
-        const conductoresConvertidos: ConductorResumenPagos[] = listaConductoresData.conductores.map(conductor => ({
-          driver_id: conductor.driverId,
-          nombre: conductor.nombre,
-          telefono: conductor.telefono,
-          avatar_url: conductor.avatarUrl,
-          monto_total_pagar: 0,
-          cantidad_turnos: 0,
-          turnos: []
-        }))
-        
-        return { 
-          conductoresPendientes: conductoresConvertidos, 
-          conductoresLiquidados: [] 
-        }
-      }
-      
-      return { conductoresPendientes: [], conductoresLiquidados: [] }
+
+      resumenConductores.forEach(conductor => {
+        if (driverIdsVistos.has(conductor.driver_id)) return
+        driverIdsVistos.add(conductor.driver_id)
+        const tieneTurnosSinPagar = conductor.turnos.some((t: { pagado?: boolean }) => !t.pagado)
+        if (tieneTurnosSinPagar) pendientes.push(conductor)
+        else liquidados.push(conductor)
+      })
+
+      return { conductoresPendientes: pendientes, conductoresLiquidados: liquidados }
     }
     
     if (!resumenPagosData?.conductores) {
@@ -855,7 +844,8 @@ export const DetalleView = () => {
       
       await Promise.all([
         refetchTurnosPagados(),
-        refetchResumenPagos()
+        refetchResumenPagos(),
+        ...(esFechaActual ? [refetchListaConductores()] : [])
       ])
     } catch (error: any) {
       const mensajeError = error.response?.data?.message || 'Error al cerrar turnos. Por favor, intenta nuevamente.'
@@ -1152,39 +1142,6 @@ export const DetalleView = () => {
               </div>
             </div>
 
-            {esFechaActual && (
-              <div className="mb-6">
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 relative">
-                    <Input
-                      type="text"
-                      placeholder="Buscar conductor por nombre..."
-                      value={searchTermNombreActual}
-                      onChange={(e) => setSearchTermNombreActual(e.target.value)}
-                      onKeyPress={handleKeyPress}
-                      className="h-10 text-sm border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 pr-10"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleBuscarConductor}
-                      disabled={loadingListaConductores || !searchTermNombreActual.trim()}
-                      className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      title="Buscar"
-                    >
-                      <Search className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                    </button>
-                  </div>
-                </div>
-                {listaConductoresData?.mensaje && (
-                  <div className="mt-3 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-                    <p className="text-sm text-yellow-800 dark:text-yellow-300">
-                      {listaConductoresData.mensaje}
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-
             {(esFechaActual ? loadingListaConductores : loadingResumenPagos) ? (
               <div className="text-center py-12">
                 <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 dark:border-red-400"></div>
@@ -1296,8 +1253,8 @@ export const DetalleView = () => {
                                     className="px-4 py-2 rounded-md bg-gray-600 hover:bg-gray-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium text-sm transition-colors shadow-sm hover:shadow-md"
                                   >
                                     {cerrandoTurnos && conductorParaCerrarTurnos?.driver_id === conductor.driver_id 
-                                      ? 'Cerrando...' 
-                                      : 'Cerrar Turno'}
+                                      ? (esFechaActual ? 'Generando...' : 'Cerrando...') 
+                                      : (esFechaActual ? 'Generar liquidación' : 'Cerrar Turno')}
                                   </button>
                                 )}
                                 {(conductor.cantidad_turnos > 0 && conductor.turnos && conductor.turnos.length > 0) && (
@@ -2913,82 +2870,107 @@ value={editOtrosGastos}
       </Dialog>
 
       <Dialog open={showModalCerrarTurnos} onOpenChange={setShowModalCerrarTurnos}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold text-gray-900 dark:text-gray-100">
-              {respuestaCerrarTurnos?.message?.includes('Error') || respuestaCerrarTurnos?.message?.includes('error') 
-                ? 'Error al Cerrar Turnos' 
-                : 'Turnos Cerrados Exitosamente'}
-            </DialogTitle>
+        <DialogContent className="max-w-md rounded-2xl border border-gray-200 dark:border-gray-700 shadow-2xl bg-white dark:bg-gray-900 p-6 sm:p-7">
+          <DialogHeader className="space-y-1 text-center sm:text-left">
+            <div className="flex items-center justify-center sm:justify-start gap-3">
+              {respuestaCerrarTurnos && (
+                <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${
+                  respuestaCerrarTurnos.message?.includes('Error') || respuestaCerrarTurnos.message?.includes('error')
+                    ? 'bg-red-100 dark:bg-red-900/40'
+                    : 'bg-green-100 dark:bg-green-900/40'
+                }`}>
+                  {respuestaCerrarTurnos.message?.includes('Error') || respuestaCerrarTurnos.message?.includes('error') ? (
+                    <AlertCircle className="h-6 w-6 text-red-600 dark:text-red-400" />
+                  ) : (
+                    <CheckCircle2 className="h-6 w-6 text-green-600 dark:text-green-500" />
+                  )}
+                </div>
+              )}
+              <DialogTitle className="text-xl font-bold text-gray-900 dark:text-gray-100 leading-tight">
+                {respuestaCerrarTurnos?.message?.includes('Error') || respuestaCerrarTurnos?.message?.includes('error')
+                  ? (esFechaActual ? 'Error al generar liquidación' : 'Error al Cerrar Turnos')
+                  : (esFechaActual ? 'Liquidación generada' : 'Turnos Cerrados Exitosamente')}
+              </DialogTitle>
+            </div>
           </DialogHeader>
           
-          <div className="mt-4 space-y-4">
+          <div className="mt-5 space-y-4">
             {respuestaCerrarTurnos && (
               <>
-                <div className={`p-4 rounded-lg ${
-                  respuestaCerrarTurnos.message?.includes('Error') || respuestaCerrarTurnos.message?.includes('error')
-                    ? 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'
-                    : 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
-                }`}>
-                  <div className="flex items-start gap-3">
-                    {respuestaCerrarTurnos.message?.includes('Error') || respuestaCerrarTurnos.message?.includes('error') ? (
-                      <AlertCircle className="w-6 h-6 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                    ) : (
-                      <CheckCircle2 className="w-6 h-6 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
-                    )}
-                    <div className="flex-1">
-                      <p className={`text-sm font-medium ${
-                        respuestaCerrarTurnos.message?.includes('Error') || respuestaCerrarTurnos.message?.includes('error')
-                          ? 'text-red-800 dark:text-red-300'
-                          : 'text-green-800 dark:text-green-300'
-                      }`}>
-                        {respuestaCerrarTurnos.message}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {respuestaCerrarTurnos.cantidadTurnos !== undefined && (
-                  <div className="p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600 dark:text-gray-400">Cantidad de Turnos:</span>
-                      <span className="text-sm font-bold text-gray-900 dark:text-gray-100">
-                        {respuestaCerrarTurnos.cantidadTurnos} turno{respuestaCerrarTurnos.cantidadTurnos !== 1 ? 's' : ''}
-                      </span>
+                {esFechaActual && !respuestaCerrarTurnos.message?.includes('Error') && !respuestaCerrarTurnos.message?.includes('error') && (
+                  <div className="rounded-xl bg-amber-50 dark:bg-amber-900/25 border border-amber-200/80 dark:border-amber-700/50 p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-800/50">
+                        <User className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">
+                          Generado por el usuario en sesión
+                        </p>
+                        <p className="text-sm text-amber-700 dark:text-amber-300 mt-0.5 truncate">
+                          {user?.name || user?.username || user?.email || 'Usuario actual'}
+                        </p>
+                        <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                          {new Date().toLocaleString('es-PE', { dateStyle: 'medium', timeStyle: 'short' })}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 )}
 
-                <div className="p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">Conductor:</span>
-                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                      {conductorParaCerrarTurnos?.nombre || respuestaCerrarTurnos.driverId}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">Fecha:</span>
-                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                      {formatearFechaLegible(respuestaCerrarTurnos.fecha)}
-                    </span>
-                  </div>
+                <div className={`rounded-xl border p-4 ${
+                  respuestaCerrarTurnos.message?.includes('Error') || respuestaCerrarTurnos.message?.includes('error')
+                    ? 'bg-red-50/80 dark:bg-red-900/20 border-red-200 dark:border-red-800/60'
+                    : 'bg-green-50/80 dark:bg-green-900/20 border-green-200 dark:border-green-800/60'
+                }`}>
+                  <p className={`text-sm font-medium ${
+                    respuestaCerrarTurnos.message?.includes('Error') || respuestaCerrarTurnos.message?.includes('error')
+                      ? 'text-red-800 dark:text-red-200'
+                      : 'text-green-800 dark:text-green-200'
+                  }`}>
+                    {respuestaCerrarTurnos.message}
+                  </p>
                 </div>
+
+                {(respuestaCerrarTurnos.cantidadTurnos !== undefined || conductorParaCerrarTurnos || respuestaCerrarTurnos.fecha) && (
+                  <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 overflow-hidden">
+                    <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                      {respuestaCerrarTurnos.cantidadTurnos !== undefined && (
+                        <div className="flex items-center justify-between px-4 py-3">
+                          <span className="text-sm text-gray-500 dark:text-gray-400">Cantidad de turnos</span>
+                          <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                            {respuestaCerrarTurnos.cantidadTurnos} turno{respuestaCerrarTurnos.cantidadTurnos !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between px-4 py-3">
+                        <span className="text-sm text-gray-500 dark:text-gray-400">Conductor</span>
+                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100 text-right max-w-[60%] truncate" title={conductorParaCerrarTurnos?.nombre || respuestaCerrarTurnos.driverId}>
+                          {conductorParaCerrarTurnos?.nombre || respuestaCerrarTurnos.driverId}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between px-4 py-3">
+                        <span className="text-sm text-gray-500 dark:text-gray-400">Fecha</span>
+                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                          {formatearFechaLegible(respuestaCerrarTurnos.fecha)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </>
             )}
           </div>
 
-          <div className="flex justify-end mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex justify-end mt-6 pt-5 border-t border-gray-200 dark:border-gray-700">
             <Button
+              variant={respuestaCerrarTurnos?.message?.includes('Error') || respuestaCerrarTurnos?.message?.includes('error') ? 'danger' : 'primary'}
+              size="md"
               onClick={() => {
                 setShowModalCerrarTurnos(false)
                 setRespuestaCerrarTurnos(null)
                 setConductorParaCerrarTurnos(null)
               }}
-              className={`px-6 ${
-                respuestaCerrarTurnos?.message?.includes('Error') || respuestaCerrarTurnos?.message?.includes('error')
-                  ? 'bg-red-600 hover:bg-red-700 text-white'
-                  : 'bg-green-600 hover:bg-green-700 text-white'
-              }`}
             >
               Aceptar
             </Button>
