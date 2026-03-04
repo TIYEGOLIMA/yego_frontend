@@ -186,6 +186,7 @@ export interface ConductorResumenPagos {
   avatar_url?: string
   nombre?: string
   telefono?: string
+  placa?: string | null  // Placa del vehículo (de la liquidación)
   monto_total_pagar: number  // Campo que viene del backend
   monto_total_pagado?: number  // Mantener por compatibilidad
   produccion_total?: number   // Suma de producción total (todos los turnos)
@@ -271,6 +272,7 @@ export interface RegistroCierre {
   resta: number
   calculatedShiftIds?: string // Mantener por compatibilidad (legacy)
   tiposTurno?: ('diurno' | 'nocturno')[] // Nuevo campo: Array de tipos de turno
+  placa?: string | null
   odometroInicial?: number | null
   odometroFinal?: number | null
   diferenciaOdometro?: number | null
@@ -452,6 +454,7 @@ export const yegoProOpsService = {
     totalIngresos: number
     totalGastos: number
     resta: number
+    placa?: string | null
     odometroInicial?: number | null
     odometroFinal?: number | null
     diferenciaOdometro?: number | null
@@ -459,6 +462,7 @@ export const yegoProOpsService = {
     try {
       const response = await api.put<RegistroCierre>('/pro-ops/driver/cierre', {
         ...data,
+        placa: data.placa ?? null,
         odometroInicial: data.odometroInicial ?? null,
         odometroFinal: data.odometroFinal ?? null,
         diferenciaOdometro: data.diferenciaOdometro ?? null,
@@ -491,6 +495,7 @@ export const yegoProOpsService = {
     totalIngresos: number
     totalGastos: number
     resta: number
+    placa?: string | null
     odometroInicial?: number | null
     odometroFinal?: number | null
     diferenciaOdometro?: number | null
@@ -512,6 +517,7 @@ export const yegoProOpsService = {
         totalIngresos: data.totalIngresos,
         totalGastos: data.totalGastos,
         resta: data.resta,
+        placa: data.placa ?? null,
         odometroInicial: data.odometroInicial ?? null,
         odometroFinal: data.odometroFinal ?? null,
         diferenciaOdometro: data.diferenciaOdometro ?? null,

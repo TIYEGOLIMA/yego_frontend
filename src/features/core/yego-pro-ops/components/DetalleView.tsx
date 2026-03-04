@@ -132,6 +132,31 @@ const validarNumeroPositivo = (value: string): string => {
   return cleaned
 }
 
+/** Formato placa: 3 caracteres + guión + 3 caracteres (letras o números en ambos). Ej: ABC-123, A1B-X2Y */
+const PLACA_MAX_LENGTH = 7
+const validarPlaca = (value: string): string => {
+  const upper = value.toUpperCase().replace(/[^A-Z0-9-]/g, '')
+  const primerosTres: string[] = []
+  const ultimosTres: string[] = []
+  let fase: 'inicio' | 'final' = 'inicio'
+  for (const c of upper) {
+    if (c === '-') {
+      if (primerosTres.length === 3) fase = 'final'
+      continue
+    }
+    if (fase === 'inicio' && primerosTres.length < 3 && /[A-Z0-9]/.test(c)) {
+      primerosTres.push(c)
+      if (primerosTres.length === 3) fase = 'final'
+    } else if (fase === 'final' && ultimosTres.length < 3 && /[A-Z0-9]/.test(c)) {
+      ultimosTres.push(c)
+    }
+  }
+  const inicio = primerosTres.join('')
+  if (inicio.length < 3) return inicio
+  if (ultimosTres.length === 0) return inicio
+  return inicio + '-' + ultimosTres.join('')
+}
+
 const calcularValoresCierre = (
   montoTotalPagar: number,
   gnvSoles: string,
@@ -366,6 +391,7 @@ export const DetalleView = () => {
   const [editOtrosGastosDescripcion, setEditOtrosGastosDescripcion] = useState('')
   const [editOdometroInicial, setEditOdometroInicial] = useState('')
   const [editOdometroFinal, setEditOdometroFinal] = useState('')
+  const [editPlaca, setEditPlaca] = useState('')
   const [gnvM3, setGnvM3] = useState('')
   const [gnvSoles, setGnvSoles] = useState('')
   const [gasolinaGalones, setGasolinaGalones] = useState('')
@@ -376,6 +402,7 @@ export const DetalleView = () => {
   const [otrosGastosDescripcion, setOtrosGastosDescripcion] = useState('')
   const [odometroInicial, setOdometroInicial] = useState('')
   const [odometroFinal, setOdometroFinal] = useState('')
+  const [placa, setPlaca] = useState('')
   
   const [fechaInicio, setFechaInicio] = useState<string>(obtenerFechaAyer())
   const [fechaFin, setFechaFin] = useState<string>(obtenerFechaAyer())
@@ -793,6 +820,7 @@ export const DetalleView = () => {
     setEditOtrosGastosDescripcion(cierre.otrosGastosDescripcion || '')
     setEditOdometroInicial(cierre.odometroInicial?.toString() || '')
     setEditOdometroFinal(cierre.odometroFinal?.toString() || '')
+    setEditPlaca(cierre.placa || '')
   }
 
   const handleIniciarEdicion = () => {
@@ -926,6 +954,7 @@ export const DetalleView = () => {
         totalIngresos: montoBase,
         totalGastos: valoresCalculados.totalGastos,
         resta: valoresCalculados.montoRestante,
+        placa: editPlaca.trim() || null,
         odometroInicial: editOdometroInicialNum,
         odometroFinal: editOdometroFinalNum,
         diferenciaOdometro: editDiferenciaOdometro,
@@ -1011,6 +1040,7 @@ export const DetalleView = () => {
         totalIngresos: selectedConductorResumen?.monto_total_pagar ?? selectedConductorResumen?.monto_total_pagado ?? 0,
         totalGastos: valoresCierre.totalGastos,
         resta: valoresCierre.montoRestante,
+        placa: placa.trim() || null,
         odometroInicial: odometroInicialNum,
         odometroFinal: odometroFinalNum,
         diferenciaOdometro: diferenciaOdometro,
@@ -1354,6 +1384,11 @@ export const DetalleView = () => {
                                   <p className="text-xs text-gray-500 dark:text-gray-400 font-mono mt-1 truncate" title={conductor.telefono || conductor.driver_id}>
                                     {conductor.telefono || conductor.driver_id}
                                   </p>
+                                  {conductor.placa ? (
+                                    <p className="text-xs text-gray-600 dark:text-gray-300 font-medium mt-1">
+                                      Placa: <span className="font-mono">{conductor.placa}</span>
+                                    </p>
+                                  ) : null}
                                   <div className="flex items-center gap-3 mt-2">
                                     <Badge 
                                       variant="outline" 
@@ -2124,60 +2159,70 @@ export const DetalleView = () => {
             </div>
 
             <div className={SECTION_CARD_CIERRE_CLASS}>
-              <h3 className="text-xs font-semibold text-gray-900 dark:text-gray-100 mb-2 pb-1 border-b border-gray-200 dark:border-gray-700 flex items-center gap-1.5">
+              <h3 className="text-xs font-semibold text-gray-900 dark:text-gray-100 mb-3 pb-1 border-b border-gray-200 dark:border-gray-700 flex items-center gap-1.5">
                 <Car className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                Odómetro
+                Placa y Odómetro
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Odómetro Inicial (km)
+                    Placa del vehículo
                   </label>
                   <Input
                     type="text"
-                    inputMode="numeric"
-                    value={odometroInicial}
-                    onChange={(e) => {
-                      const value = validarNumeroPositivo(e.target.value)
-                      setOdometroInicial(value)
-                    }}
-                    placeholder="0"
-                    className="w-full h-8 text-xs"
+                    value={placa}
+                    onChange={(e) => setPlaca(validarPlaca(e.target.value))}
+                    placeholder="Ej. ABC-123"
+                    className="w-[180px] h-9 text-sm"
+                    maxLength={PLACA_MAX_LENGTH}
                   />
                 </div>
-
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Odómetro Final (km)
-                  </label>
-                  <Input
-                    type="text"
-                    inputMode="numeric"
-                    value={odometroFinal}
-                    onChange={(e) => {
-                      const value = validarNumeroPositivo(e.target.value)
-                      setOdometroFinal(value)
-                    }}
-                    placeholder="0"
-                    className="w-full h-8 text-xs"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Diferencia (km)
-                  </label>
-                  <Input
-                    type="text"
-                    value={(() => {
-                      const inicial = parseNumber(odometroInicial)
-                      const final = parseNumber(odometroFinal)
-                      const diferencia = final - inicial
-                      return diferencia > 0 ? diferencia.toFixed(0) : '0'
-                    })()}
-                    disabled
-                    className="w-full h-8 text-xs"
-                  />
+                  <span className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Odómetro (km)</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[11px] text-gray-500 dark:text-gray-400 mb-0.5">Inicial</label>
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        value={odometroInicial}
+                        onChange={(e) => {
+                          const value = validarNumeroPositivo(e.target.value)
+                          setOdometroInicial(value)
+                        }}
+                        placeholder="0"
+                        className="w-full h-9 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-gray-500 dark:text-gray-400 mb-0.5">Final</label>
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        value={odometroFinal}
+                        onChange={(e) => {
+                          const value = validarNumeroPositivo(e.target.value)
+                          setOdometroFinal(value)
+                        }}
+                        placeholder="0"
+                        className="w-full h-9 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-gray-500 dark:text-gray-400 mb-0.5">Diferencia</label>
+                      <Input
+                        type="text"
+                        value={(() => {
+                          const inicial = parseNumber(odometroInicial)
+                          const final = parseNumber(odometroFinal)
+                          const diferencia = final - inicial
+                          return diferencia > 0 ? diferencia.toFixed(0) : '0'
+                        })()}
+                        disabled
+                        className="w-full h-9 text-sm"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -2496,40 +2541,49 @@ value={editOtrosGastos}
               </div>
 
               <div className={SECTION_CARD_CIERRE_CLASS}>
-                <h3 className="text-xs font-semibold text-gray-900 dark:text-gray-100 mb-2 pb-1 border-b border-gray-200 dark:border-gray-700 flex items-center gap-1.5">
+                <h3 className="text-xs font-semibold text-gray-900 dark:text-gray-100 mb-3 pb-1 border-b border-gray-200 dark:border-gray-700 flex items-center gap-1.5">
                   <Car className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                  Odómetro
+                  Placa y Odómetro
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <div className="space-y-4">
                   <div>
                     <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Odómetro Inicial (km)
+                      Placa del vehículo
                     </label>
                     {editandoCierre ? (
-                      <Input type="text" inputMode="numeric" value={editOdometroInicial} onChange={(e) => setEditOdometroInicial(validarNumeroPositivo(e.target.value))} placeholder="0" className="w-full h-8 text-xs" />
+                      <Input type="text" value={editPlaca} onChange={(e) => setEditPlaca(validarPlaca(e.target.value))} placeholder="Ej. ABC-123" className="w-[180px] h-9 text-sm" maxLength={PLACA_MAX_LENGTH} />
                     ) : (
-                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{cierreDetalle.odometroInicial?.toLocaleString() || '-'}</p>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{cierreDetalle.placa || '-'}</p>
                     )}
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Odómetro Final (km)
-                    </label>
-                    {editandoCierre ? (
-                      <Input type="text" inputMode="numeric" value={editOdometroFinal} onChange={(e) => setEditOdometroFinal(validarNumeroPositivo(e.target.value))} placeholder="0" className="w-full h-8 text-xs" />
-                    ) : (
-                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{cierreDetalle.odometroFinal?.toLocaleString() || '-'}</p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Diferencia (km)
-                    </label>
-                    {editandoCierre ? (
-                      <Input type="text" value={(() => { const i = parseNumber(editOdometroInicial); const f = parseNumber(editOdometroFinal); return (f - i) > 0 ? (f - i).toFixed(0) : '0'; })()} disabled className="w-full h-8 text-xs" />
-                    ) : (
-                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{cierreDetalle.diferenciaOdometro?.toLocaleString() || '-'}</p>
-                    )}
+                    <span className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Odómetro (km)</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-[11px] text-gray-500 dark:text-gray-400 mb-0.5">Inicial</label>
+                        {editandoCierre ? (
+                          <Input type="text" inputMode="numeric" value={editOdometroInicial} onChange={(e) => setEditOdometroInicial(validarNumeroPositivo(e.target.value))} placeholder="0" className="w-full h-9 text-sm" />
+                        ) : (
+                          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 py-2">{cierreDetalle.odometroInicial?.toLocaleString() || '-'}</p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-gray-500 dark:text-gray-400 mb-0.5">Final</label>
+                        {editandoCierre ? (
+                          <Input type="text" inputMode="numeric" value={editOdometroFinal} onChange={(e) => setEditOdometroFinal(validarNumeroPositivo(e.target.value))} placeholder="0" className="w-full h-9 text-sm" />
+                        ) : (
+                          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 py-2">{cierreDetalle.odometroFinal?.toLocaleString() || '-'}</p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-gray-500 dark:text-gray-400 mb-0.5">Diferencia</label>
+                        {editandoCierre ? (
+                          <Input type="text" value={(() => { const i = parseNumber(editOdometroInicial); const f = parseNumber(editOdometroFinal); return (f - i) > 0 ? (f - i).toFixed(0) : '0'; })()} disabled className="w-full h-9 text-sm" />
+                        ) : (
+                          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 py-2">{cierreDetalle.diferenciaOdometro?.toLocaleString() || '-'}</p>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
