@@ -701,6 +701,19 @@ const AreasModule: React.FC = () => {
                 : 'Completa los datos del área. El responsable podrá ver la asistencia de su equipo.'}
             </DialogDescription>
           </DialogHeader>
+          {authState.user?.esJefe && authState.user?.nombreArea && (
+            <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 px-3 py-2.5 text-sm text-blue-800 dark:text-blue-200">
+              <p className="font-medium flex items-center gap-2">
+                <User className="h-4 w-4 flex-shrink-0" />
+                Eres el responsable de: {authState.user.nombreArea}
+              </p>
+              {editingArea && editingArea.managerId === authState.user.id && (
+                <p className="mt-1.5 text-blue-700 dark:text-blue-300">
+                  (Incluyendo esta área)
+                </p>
+              )}
+            </div>
+          )}
           <div className="grid gap-4 py-4 sm:py-2">
             <div>
               <label className="text-sm font-medium mb-2 block">Nombre *</label>

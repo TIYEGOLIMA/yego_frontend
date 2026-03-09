@@ -724,6 +724,15 @@ const UsersModule: React.FC = () => {
         </Button>
       </div>
 
+      {currentUser?.esJefe && currentUser?.nombreArea && (
+        <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 px-4 py-3 text-sm text-blue-800 dark:text-blue-200 flex items-center gap-2">
+          <User className="h-5 w-5 flex-shrink-0 text-blue-600 dark:text-blue-400" />
+          <span>
+            <strong>Eres el responsable de:</strong> {currentUser.nombreArea}
+          </span>
+        </div>
+      )}
+
       {/* Search */}
       <Card>
         <CardContent className="pt-6">
@@ -1271,25 +1280,33 @@ const UsersModule: React.FC = () => {
 
             <div>
               <label className="block text-sm font-medium mb-1">Área</label>
-              <Select
-                value={formData.areaId != null && formData.areaId !== 0 ? String(formData.areaId) : 'none'}
-                onValueChange={(value) => setFormData({ ...formData, areaId: value === 'none' ? null : Number(value) })}
-              >
-                <SelectTrigger className="focus:ring-0 focus:ring-offset-0 hover:bg-transparent">
-                  <SelectValue placeholder="Seleccionar área" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Sin asignar</SelectItem>
-                  {areas.map((area) => (
-                    <SelectItem key={area.id} value={String(area.id)}>
-                      {area.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-neutral-500 mt-1">
-                Asigna al usuario a un área para asistencia y reportes.
-              </p>
+              {editingUser && currentUser?.esJefe ? (
+                <p className="text-sm py-2 px-3 rounded-md bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-700">
+                  {editingUser.areaNombre?.trim() || 'Sin asignar'}
+                </p>
+              ) : (
+                <>
+                  <Select
+                    value={formData.areaId != null && formData.areaId !== 0 ? String(formData.areaId) : 'none'}
+                    onValueChange={(value) => setFormData({ ...formData, areaId: value === 'none' ? null : Number(value) })}
+                  >
+                    <SelectTrigger className="focus:ring-0 focus:ring-offset-0 hover:bg-transparent">
+                      <SelectValue placeholder="Seleccionar área" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Sin asignar</SelectItem>
+                      {areas.map((area) => (
+                        <SelectItem key={area.id} value={String(area.id)}>
+                          {area.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-neutral-500 mt-1">
+                    Asigna al usuario a un área para asistencia y reportes.
+                  </p>
+                </>
+              )}
             </div>
 
           </div>
