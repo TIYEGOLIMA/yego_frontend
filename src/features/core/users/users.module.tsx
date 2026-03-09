@@ -1110,10 +1110,11 @@ const UsersModule: React.FC = () => {
             </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-4 mt-4">
+          <form autoComplete="off" onSubmit={(e) => e.preventDefault()} className="space-y-4 mt-4">
             <div>
               <label className="block text-sm font-medium mb-1">Documento de Identidad</label>
               <Input
+                autoComplete="off"
                 value={formData.dni || ''}
                 onChange={(e) => setFormData({ ...formData, dni: e.target.value })}
                 placeholder="Ingresar DNI o CEE"
@@ -1125,6 +1126,7 @@ const UsersModule: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium mb-1">Nombre</label>
                 <Input
+                  autoComplete="off"
                   value={formData.name}
                   onChange={(e) => {
                     const value = e.target.value;
@@ -1144,6 +1146,7 @@ const UsersModule: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium mb-1">Apellidos</label>
                 <Input
+                  autoComplete="off"
                   value={formData.lastName || ''}
                   onChange={(e) => {
                     const value = e.target.value;
@@ -1164,6 +1167,7 @@ const UsersModule: React.FC = () => {
             <div>
               <label className="block text-sm font-medium mb-1">Username</label>
               <Input
+                autoComplete="off"
                 value={formData.username}
                 onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                 placeholder="usuario123"
@@ -1180,6 +1184,7 @@ const UsersModule: React.FC = () => {
               <label className="block text-sm font-medium mb-1">Email</label>
               <Input
                 type="email"
+                autoComplete="off"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 placeholder="juan.perez@empresa.com"
@@ -1199,6 +1204,7 @@ const UsersModule: React.FC = () => {
               <div className="relative">
                 <Input
                   type={showPassword ? "text" : "password"}
+                  autoComplete="new-password"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   placeholder="••••••••"
@@ -1280,9 +1286,9 @@ const UsersModule: React.FC = () => {
 
             <div>
               <label className="block text-sm font-medium mb-1">Área</label>
-              {editingUser && currentUser?.esJefe ? (
+              {editingUser ? (
                 <p className="text-sm py-2 px-3 rounded-md bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-700">
-                  {editingUser.areaNombre?.trim() || 'Sin asignar'}
+                  Jefe de {editingUser.areaNombre?.trim() || 'Sin asignar'}
                 </p>
               ) : (
                 <>
@@ -1309,7 +1315,7 @@ const UsersModule: React.FC = () => {
               )}
             </div>
 
-          </div>
+          </form>
           
           <DialogFooter className="mt-6">
             <Button 
