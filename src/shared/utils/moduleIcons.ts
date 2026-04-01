@@ -32,6 +32,7 @@ import {
   Folder,
   MapPin,
   Phone,
+  GanttChart,
   type LucideIcon
 } from 'lucide-react';
 
@@ -77,6 +78,7 @@ export const AVAILABLE_ICONS: ModuleIconConfig[] = [
   { name: 'Folder', icon: Folder, label: 'Carpeta' },
   { name: 'MapPin', icon: MapPin, label: 'Ubicación' },
   { name: 'Phone', icon: Phone, label: 'Teléfono' },
+  { name: 'GanttChart', icon: GanttChart, label: 'Gantt' },
 ];
 
 // Mapa de iconos por nombre para acceso rápido

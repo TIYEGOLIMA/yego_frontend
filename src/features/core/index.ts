@@ -17,6 +17,7 @@ export { default as YegoPremiunModule } from './yego-premiun/yego-premiun.module
 export { default as YegoProOpsModule } from './yego-pro-ops/yego-pro-ops.module';
 export { WelcomeModule } from './welcome';
 export { MarketingMensajesModule } from './marketing-mensajes';
+export { YegoGanttModule } from './yego-gantt';
 
 // 🎯 CONFIGURACIÓN DE FEATURES CORE
 export const CORE_FEATURES_CONFIG = {
@@ -25,6 +26,6 @@ export const CORE_FEATURES_CONFIG = {
   version: '1.0.0',
   features: [
     'audit', 'users', 'permissions', 'roles', 
-    'sessions', 'reports', 'modules', 'asistencia', 'yego-premiun', 'yego-pro-ops'
+    'sessions', 'reports', 'modules', 'asistencia', 'yego-premiun', 'yego-pro-ops', 'yego-gantt'
   ]
 } as const;
