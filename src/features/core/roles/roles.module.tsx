@@ -737,8 +737,8 @@ const RolesModule: React.FC = () => {
 
       {/* Create/Edit Dialog */}
       <Dialog open={isCreateDialogOpen || !!editingRole} onOpenChange={(open) => { if (!open) resetForm(); }}>
-        <DialogContent className="sm:max-w-[800px] max-h-[95vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-[750px] max-h-[90vh] overflow-y-auto !gap-0">
+          <DialogHeader className="mb-5">
             <DialogTitle className="flex items-center gap-2">
               <Shield className="h-5 w-5 text-primary-500" />
               {editingRole ? 'Editar Rol' : 'Crear Nuevo Rol'}
@@ -746,11 +746,11 @@ const RolesModule: React.FC = () => {
             <DialogDescription>
               {editingRole
                 ? 'Edita los datos y permisos del rol seleccionado.'
-                : 'Completa el formulario para crear un nuevo rol en el sistema.'}
+                : 'Define nombre, descripción y permisos del rol'}
             </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-6 mt-4">
+          <div className="space-y-5">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">Nombre</label>
@@ -765,96 +765,93 @@ const RolesModule: React.FC = () => {
                 <Input
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Rol con acceso completo al sistema"
+                  placeholder="Rol con acceso completo"
                 />
               </div>
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-4">
+              <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-3">
                 Permisos por Módulo
               </label>
-              <div className="max-h-80 overflow-y-auto pr-2">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {modulesWithActions.map((moduleWithActions) => {
-                    const moduleKey = normalizeModuleName(moduleWithActions.nombre);
-                    const allActions = moduleWithActions.actions.map(a => a.action);
-                    const isFullySelected = isModuleFullySelected(moduleKey, allActions);
-                    const selectedCount = formData.permissions[moduleKey]?.length || 0;
-                    
-                    return (
-                      <Card key={moduleWithActions.id} className="border hover:border-primary-200 dark:hover:border-primary-700 transition-all duration-200 h-64 flex flex-col bg-white dark:bg-neutral-900">
-                        <CardHeader className="pb-2 flex-shrink-0 bg-neutral-50 dark:bg-neutral-800 rounded-t-lg">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-2">
-                              <div className="w-6 h-6 bg-primary-500 rounded-md flex items-center justify-center">
-                                <Shield className="h-3 w-3 text-white" />
-                              </div>
-                              <CardTitle className="text-sm font-medium text-neutral-900 dark:text-neutral-100">
-                                {moduleWithActions.nombre}
-                              </CardTitle>
-                            </div>
-                            <Badge 
-                              variant={selectedCount > 0 ? "primary" : "secondary"} 
-                              className="text-xs"
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {modulesWithActions.map((moduleWithActions) => {
+                  const moduleKey = normalizeModuleName(moduleWithActions.nombre);
+                  const allActions = moduleWithActions.actions.map(a => a.action);
+                  const isFullySelected = isModuleFullySelected(moduleKey, allActions);
+                  const selectedCount = formData.permissions[moduleKey]?.length || 0;
+                  
+                  return (
+                    <div key={moduleWithActions.id} className="border border-neutral-200 dark:border-neutral-700 rounded-lg p-3 hover:border-primary-300 dark:hover:border-primary-700 transition-colors bg-white dark:bg-neutral-900">
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${selectedCount > 0 ? 'bg-primary-500' : 'bg-primary-500'}`} />
+                          <span className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+                            {moduleWithActions.nombre}
+                          </span>
+                        </div>
+                        <span className="text-xs text-neutral-500 dark:text-neutral-400 font-medium">
+                          {selectedCount}/{allActions.length}
+                        </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSelectAllModule(moduleKey, allActions)}
+                        className={`w-full text-xs py-1.5 rounded-md mb-2 border transition-colors font-medium ${
+                          isFullySelected
+                            ? 'bg-primary-500 text-white border-primary-500 hover:bg-primary-600'
+                            : 'bg-transparent text-neutral-600 dark:text-neutral-400 border-neutral-300 dark:border-neutral-600 hover:border-neutral-400 dark:hover:border-neutral-500'
+                        }`}
+                      >
+                        {isFullySelected ? 'Deseleccionar todo' : 'Seleccionar todo'}
+                      </button>
+
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                        {moduleWithActions.actions.map((action) => {
+                          const actionId = `${moduleWithActions.id}-${action.action}`;
+                          const isChecked = formData.permissions[moduleKey]?.includes(action.action) || false;
+                          return (
+                            <label
+                              key={actionId}
+                              htmlFor={`permission-${actionId}`}
+                              className="flex items-center gap-2 py-1 cursor-pointer group"
                             >
-                              {selectedCount}/{allActions.length}
-                            </Badge>
-                          </div>
-                          {moduleWithActions.descripcion && (
-                            <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
-                              {moduleWithActions.descripcion}
-                            </p>
-                          )}
-                        </CardHeader>
-                        
-                        <CardContent className="pt-2 pb-2 flex-1 flex flex-col overflow-hidden">
-                          <div className="space-y-2 flex-1 flex flex-col min-h-0">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleSelectAllModule(moduleKey, allActions)}
-                              className="w-full text-xs h-6 flex-shrink-0 flex items-center justify-center hover:bg-transparent hover:border-neutral-300 dark:hover:bg-transparent dark:hover:border-neutral-600"
-                            >
-                              {isFullySelected ? 'Deseleccionar' : 'Seleccionar todo'}
-                            </Button>
-                            
-                            <div className="flex-1 overflow-y-auto min-h-0 pr-1 mt-3 pt-3">
-                              <div className="grid grid-cols-2 gap-2">
-                                {moduleWithActions.actions.map((action) => {
-                                  const actionId = `${moduleWithActions.id}-${action.action}`;
-                                  return (
-                                    <div key={actionId} className="flex items-center space-x-2 p-1.5 rounded hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors">
-                                      <input
-                                        type="checkbox"
-                                        id={`permission-${actionId}`}
-                                        checked={formData.permissions[moduleKey]?.includes(action.action) || false}
-                                        onChange={() => handlePermissionToggle(moduleKey, action.action)}
-                                        className="w-3.5 h-3.5 rounded border-neutral-300 dark:border-neutral-600 text-primary-500 focus:ring-1 focus:ring-primary-500 dark:bg-neutral-700"
-                                      />
-                                      <label 
-                                        htmlFor={`permission-${actionId}`}
-                                        className="text-xs text-neutral-700 dark:text-neutral-300 cursor-pointer flex-1 leading-tight"
-                                      >
-                                        {action.description || action.name}
-                                      </label>
-                                    </div>
-                                  );
-                                })}
+                              <div className="relative flex-shrink-0">
+                                <input
+                                  type="checkbox"
+                                  id={`permission-${actionId}`}
+                                  checked={isChecked}
+                                  onChange={() => handlePermissionToggle(moduleKey, action.action)}
+                                  className="sr-only peer"
+                                />
+                                <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
+                                  isChecked
+                                    ? 'bg-primary-500 border-primary-500'
+                                    : 'border-neutral-400 dark:border-neutral-600 group-hover:border-neutral-500 dark:group-hover:border-neutral-500'
+                                }`}>
+                                  {isChecked && (
+                                    <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3.5}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                    </svg>
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                </div>
+                              <span className="text-xs text-neutral-700 dark:text-neutral-300 leading-tight">
+                                {action.action}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
           
-          <DialogFooter className="mt-6">
+          <DialogFooter className="mt-5">
             <Button 
               variant="secondary" 
               onClick={resetForm}
@@ -865,9 +862,9 @@ const RolesModule: React.FC = () => {
             <Button 
               variant="primary"
               onClick={editingRole ? handleUpdateRole : handleCreateRole}
-              leftIcon={<Save className="h-4 w-4" />}
+              leftIcon={<Shield className="h-4 w-4" />}
             >
-              {editingRole ? 'Actualizar' : 'Crear'}
+              {editingRole ? 'Actualizar Rol' : 'Crear Rol'}
             </Button>
           </DialogFooter>
         </DialogContent>

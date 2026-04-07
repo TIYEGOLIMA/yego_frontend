@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import {
   AlertCircle,
   Calendar,
@@ -9,6 +9,7 @@ import {
   Pencil,
   Trash2,
 } from 'lucide-react'
+import type { ColaboradorDto } from '../yego-gantt.module'
 
 type AreaTaskStatus = 'PENDING' | 'IN_PROGRESS' | 'DONE' | 'BLOCKED' | 'AT_RISK'
 type TaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'
@@ -25,6 +26,7 @@ interface TaskRow {
   priority?: TaskPriority | null
   progressPercent: number
   assignedUserId?: number | null
+  assignedUserIds?: number[]
 }
 
 const PRIO_LABEL: Record<TaskPriority, string> = { LOW: 'Baja', MEDIUM: 'Media', HIGH: 'Alta', URGENT: 'Urgente' }
@@ -74,16 +76,48 @@ const COLUMNS: Column[] = [
   { status: 'DONE', title: 'Completado', icon: CheckCircle2, gradient: 'from-emerald-500/15 to-emerald-500/5' },
 ]
 
+function avatarInitials(name: string): string {
+  const parts = name.trim().split(/\s+/)
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase()
+  return name.slice(0, 2).toUpperCase()
+}
+
 export interface TodoBoardTabProps {
   tasks: TaskRow[]
   loading: boolean
   manage: boolean
+  allCollaborators?: ColaboradorDto[]
   onEdit: (t: TaskRow) => void
   onDelete: (t: TaskRow) => void
+  onStatusChange?: (taskId: number, newStatus: AreaTaskStatus) => Promise<void>
 }
 
-export function TodoBoardTab({ tasks, loading, manage, onEdit, onDelete }: TodoBoardTabProps) {
+export function TodoBoardTab({ tasks, loading, manage, allCollaborators = [], onEdit, onDelete, onStatusChange }: TodoBoardTabProps) {
   const [dragTaskId, setDragTaskId] = useState<number | null>(null)
+  const [dropTarget, setDropTarget] = useState<AreaTaskStatus | null>(null)
+  const [updatingId, setUpdatingId] = useState<number | null>(null)
+  const dragSourceStatus = useRef<AreaTaskStatus | null>(null)
+
+  const collabMap = useMemo(() => {
+    const m = new Map<number, ColaboradorDto>()
+    for (const c of allCollaborators) m.set(c.id, c)
+    return m
+  }, [allCollaborators])
+
+  const getAssignees = useCallback(
+    (t: TaskRow): { id: number; name: string }[] => {
+      const ids = t.assignedUserIds?.length
+        ? t.assignedUserIds
+        : t.assignedUserId != null
+          ? [t.assignedUserId]
+          : []
+      return ids.map((uid) => {
+        const c = collabMap.get(uid)
+        return { id: uid, name: c?.nombreCompleto || `#${uid}` }
+      })
+    },
+    [collabMap],
+  )
 
   const columnData = useMemo(
     () =>
@@ -94,26 +128,73 @@ export function TodoBoardTab({ tasks, loading, manage, onEdit, onDelete }: TodoB
     [tasks],
   )
 
+  const handleDragStart = useCallback((task: TaskRow) => {
+    setDragTaskId(task.id)
+    dragSourceStatus.current = task.status
+  }, [])
+
+  const handleDragEnd = useCallback(() => {
+    setDragTaskId(null)
+    setDropTarget(null)
+    dragSourceStatus.current = null
+  }, [])
+
+  const handleDragOver = useCallback((e: React.DragEvent, colStatus: AreaTaskStatus) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setDropTarget(colStatus)
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent, colStatus: AreaTaskStatus) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const { clientX, clientY } = e
+    if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
+      setDropTarget((prev) => (prev === colStatus ? null : prev))
+    }
+  }, [])
+
+  const handleDrop = useCallback(async (colStatus: AreaTaskStatus) => {
+    const taskId = dragTaskId
+    const sourceStatus = dragSourceStatus.current
+    setDragTaskId(null)
+    setDropTarget(null)
+    dragSourceStatus.current = null
+
+    if (taskId == null || !onStatusChange || sourceStatus === colStatus) return
+
+    setUpdatingId(taskId)
+    try {
+      await onStatusChange(taskId, colStatus)
+    } finally {
+      setUpdatingId(null)
+    }
+  }, [dragTaskId, onStatusChange])
+
   if (loading) return <p className="text-sm text-muted-foreground p-6">Cargando tablero…</p>
 
   return (
     <div className="flex-1 overflow-auto p-4 sm:p-5">
       <div className="flex gap-3" style={{ minWidth: COLUMNS.length * 280 }}>
-        {columnData.map((col) => {
+        {columnData.map((col, colIdx) => {
           const Icon = col.icon
+          const isOver = dropTarget === col.status && dragSourceStatus.current !== col.status
           return (
             <div
               key={col.status}
-              className={`flex-1 min-w-[260px] flex flex-col rounded-xl border border-border/60 overflow-hidden transition-shadow ${
-                dragTaskId != null ? 'ring-1 ring-red-500/20 shadow-lg' : 'shadow-sm'
+              style={{ animationDelay: `${colIdx * 0.07}s` }}
+              className={`flex-1 min-w-[260px] flex flex-col rounded-xl border overflow-hidden transition-all duration-300 gantt-fade-in ${
+                isOver
+                  ? 'ring-2 ring-red-500/40 border-red-500/50 shadow-lg shadow-red-500/10 scale-[1.01]'
+                  : dragTaskId != null
+                    ? 'ring-1 ring-red-500/10 border-border/60 shadow-md'
+                    : 'border-border/60 shadow-sm'
               }`}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={() => {
-                setDragTaskId(null)
-              }}
+              onDragOver={(e) => handleDragOver(e, col.status)}
+              onDragLeave={(e) => handleDragLeave(e, col.status)}
+              onDrop={() => handleDrop(col.status)}
             >
               {/* column header */}
-              <div className={`px-4 py-3 bg-gradient-to-b ${col.gradient} border-b border-border/40`}>
+              <div className={`px-4 py-3 bg-gradient-to-b ${col.gradient} border-b border-border/40 transition-colors ${isOver ? 'brightness-110' : ''}`}>
                 <div className="flex items-center gap-2">
                   <Icon className="w-3.5 h-3.5 text-muted-foreground" />
                   <span className="text-xs font-semibold text-foreground">{col.title}</span>
@@ -124,18 +205,20 @@ export function TodoBoardTab({ tasks, loading, manage, onEdit, onDelete }: TodoB
               </div>
 
               {/* cards */}
-              <div className="flex-1 p-2 space-y-2 bg-gradient-to-b from-background/60 to-muted/20 min-h-[200px]">
-                {col.tasks.map((t) => {
+              <div className={`flex-1 p-2 space-y-2 min-h-[200px] transition-colors duration-200 ${isOver ? 'bg-red-500/[0.03]' : 'bg-gradient-to-b from-background/60 to-muted/20'}`}>
+                {col.tasks.map((t, tIdx) => {
                   const pr = norm(t.priority)
+                  const isUpdating = updatingId === t.id
                   return (
                     <div
                       key={t.id}
-                      draggable
-                      onDragStart={() => setDragTaskId(t.id)}
-                      onDragEnd={() => setDragTaskId(null)}
-                      className={`group rounded-xl border border-border/80 bg-card hover:bg-card/90 p-3 cursor-grab active:cursor-grabbing transition-all hover:shadow-lg hover:shadow-red-500/[0.04] border-l-[3px] ${PRIO_BORDER[pr]} ${
-                        dragTaskId === t.id ? 'opacity-50 scale-95' : ''
-                      }`}
+                      draggable={manage && !isUpdating}
+                      onDragStart={() => handleDragStart(t)}
+                      onDragEnd={handleDragEnd}
+                      style={{ animationDelay: `${tIdx * 0.05}s` }}
+                      className={`group rounded-xl border border-border/80 bg-card hover:bg-card/90 p-3 transition-all duration-200 hover:shadow-lg hover:shadow-red-500/[0.04] hover:-translate-y-0.5 border-l-[3px] gantt-scale-in ${manage && !isUpdating ? 'cursor-grab active:cursor-grabbing' : ''} ${PRIO_BORDER[pr]} ${
+                        dragTaskId === t.id ? 'opacity-40 scale-95 rotate-1' : ''
+                      } ${isUpdating ? 'opacity-60 animate-pulse pointer-events-none' : ''}`}
                     >
                       {/* top: area + priority */}
                       <div className="flex items-center gap-1.5 mb-2">
@@ -159,7 +242,7 @@ export function TodoBoardTab({ tasks, loading, manage, onEdit, onDelete }: TodoB
                       <div className="flex items-center gap-2 mb-2">
                         <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden">
                           <div
-                            className="h-full rounded-full bg-red-500 transition-all"
+                            className="h-full rounded-full bg-red-500 gantt-progress-fill"
                             style={{ width: `${t.progressPercent}%` }}
                           />
                         </div>
@@ -168,16 +251,24 @@ export function TodoBoardTab({ tasks, loading, manage, onEdit, onDelete }: TodoB
 
                       {/* footer */}
                       <div className="flex items-center gap-1.5 mt-1">
-                        {t.assignedUserId != null ? (
-                          <div className="flex items-center gap-1">
-                            <div className="w-5 h-5 rounded-full bg-muted border border-border flex items-center justify-center text-[8px] font-bold text-muted-foreground">
-                              U{t.assignedUserId}
+                        {(() => {
+                          const assignees = getAssignees(t)
+                          return assignees.length > 0 ? (
+                            <div className="flex items-center -space-x-1.5">
+                              {assignees.map((a) => (
+                                <div
+                                  key={a.id}
+                                  className="w-5 h-5 rounded-full bg-red-100 dark:bg-red-900/30 border-2 border-white dark:border-neutral-800 flex items-center justify-center text-[7px] font-bold text-red-600 dark:text-red-400"
+                                  title={a.name}
+                                >
+                                  {avatarInitials(a.name)}
+                                </div>
+                              ))}
                             </div>
-                            <span className="text-[10px] text-muted-foreground">#{t.assignedUserId}</span>
-                          </div>
-                        ) : (
-                          <span className="text-[10px] text-muted-foreground/50 italic">Sin asignar</span>
-                        )}
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground/50 italic">Sin asignar</span>
+                          )
+                        })()}
 
                         <span className="text-[10px] text-muted-foreground flex items-center gap-0.5 ml-auto mr-1 shrink-0">
                           <Calendar className="w-2.5 h-2.5" />
@@ -208,8 +299,14 @@ export function TodoBoardTab({ tasks, loading, manage, onEdit, onDelete }: TodoB
                 })}
 
                 {col.tasks.length === 0 && (
-                  <div className="flex items-center justify-center py-10">
-                    <p className="text-[11px] text-muted-foreground/40">Sin tareas</p>
+                  <div className={`flex items-center justify-center py-10 rounded-lg border-2 border-dashed transition-colors ${isOver ? 'border-red-500/30 bg-red-500/[0.04]' : 'border-transparent'}`}>
+                    <p className="text-[11px] text-muted-foreground/40">{isOver ? 'Soltar aquí' : 'Sin tareas'}</p>
+                  </div>
+                )}
+
+                {col.tasks.length > 0 && isOver && (
+                  <div className="flex items-center justify-center py-3 rounded-lg border-2 border-dashed border-red-500/30 bg-red-500/[0.04] transition-all gantt-fade-in">
+                    <p className="text-[11px] text-red-500/60 font-medium">Soltar aquí</p>
                   </div>
                 )}
               </div>

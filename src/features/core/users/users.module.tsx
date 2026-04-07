@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
@@ -127,22 +127,30 @@ function apellidoPaternoParaDisplay(apellidos: string | undefined): string {
   return palabras.slice(0, -1).join(' ');
 }
 
-/** Genera username: primera letra del nombre + última palabra del apellido (normalizado, sin acentos) */
+/** Genera username: primera letra del nombre + ultima palabra del apellido (normalizado, sin acentos) */
 function generarUsernameDesdeNombreApellido(nombre: string, apellido: string): string {
   const primeraLetra = nombre.trim().split(/\s+/)[0]?.charAt(0)?.toLowerCase() ?? '';
   const ultimaPalabra = obtenerUltimaPalabra(apellido);
   return normalizarParaUsername(primeraLetra + ultimaPalabra);
 }
 
+/** Capitaliza la primera letra de cada palabra */
+function capitalizarPalabras(texto: string): string {
+  return texto
+    .toLowerCase()
+    .split(' ')
+    .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+const EXCLUDED_ROLES = ['tablet1', 'tablet2', 'principal', 'tv', 'tablet', 'television'];
+
 const UsersModule: React.FC = () => {
   const { user: currentUser } = useAuthStore();
   
-  // Función para verificar si el usuario actual es SUPERADMIN o ADMIN
-  const isAdminOrSuperAdmin = () => {
-    if (!currentUser) return false;
-    const role = currentUser.role.toUpperCase();
-    return role === 'SUPERADMIN' || role === 'ADMIN';
-  };
+  const isAdminOrSuperAdmin = currentUser
+    ? ['SUPERADMIN', 'ADMIN'].includes(currentUser.role.toUpperCase())
+    : false;
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -168,6 +176,7 @@ const UsersModule: React.FC = () => {
   const [errorModal, setErrorModal] = useState<{open: boolean, message: string, title: string}>({open: false, message: '', title: ''});
   const [deleteModal, setDeleteModal] = useState<{open: boolean, user: User | null}>({open: false, user: null});
   const [forcedLogoutModal, setForcedLogoutModal] = useState<{open: boolean, message: string}>({open: false, message: ''});
+  const [saving, setSaving] = useState(false);
   
   // Función para validar requisitos de contraseña
   const validatePassword = (password: string) => {
@@ -196,19 +205,19 @@ const UsersModule: React.FC = () => {
       const list = Array.isArray(response.data) ? response.data : [];
       setAreas(list.map((a: { id: number; name: string }) => ({ id: a.id, name: a.name })));
     } catch (error: any) {
-      console.error('Error cargando áreas:', error);
+      console.error('[UsersModule] Error cargando areas:', error);
       setAreas([]);
     }
   };
 
   // Nombre para mostrar: solo primer nombre + apellido paterno (ej. "Ariana De La Cruz", sin segundo nombre)
   const getDisplayName = (user: User) => {
-    const primerNombre = user.name?.trim().split(/\s+/)[0] || '';
-    const apellidoPaterno = apellidoPaternoParaDisplay(user.lastName);
+    const primerNombre = capitalizarPalabras(user.name?.trim().split(/\s+/)[0] || '');
+    const apellidoPaterno = capitalizarPalabras(apellidoPaternoParaDisplay(user.lastName));
     if (primerNombre && apellidoPaterno) return `${primerNombre} ${apellidoPaterno}`.trim();
     if (primerNombre) return primerNombre;
-    if (user.name) return user.name.trim().split(/\s+/)[0] || user.name.trim();
-    if (user.lastName) return user.lastName.trim();
+    if (user.name) return capitalizarPalabras(user.name.trim().split(/\s+/)[0] || user.name.trim());
+    if (user.lastName) return capitalizarPalabras(user.lastName.trim());
     return 'Sin nombre';
   };
 
@@ -233,7 +242,7 @@ const UsersModule: React.FC = () => {
         if (cancelled) return;
         const isAbort = (error as { name?: string; code?: string })?.name === 'AbortError' || (error as { name?: string; code?: string })?.code === 'ERR_CANCELED';
         if (!isAbort) {
-          console.error('Error cargando usuarios:', error);
+          console.error('[UsersModule] Error cargando usuarios:', error);
           setUsers([]);
           setAvailableRoles([]);
         }
@@ -253,57 +262,20 @@ const UsersModule: React.FC = () => {
       setCurrentPage(1);
   }, [searchTerm]);
 
-  // 🔔 WebSocket listener para actualizaciones en tiempo real
   useEffect(() => {
     const setupWebSocket = async () => {
       try {
         const SystemNotificationsService = (await import('../../../services/system-notifications-service')).default;
-        
-        const handleUserTableUpdate = (event: any) => {
-          console.log('🔔 [UsersModule] Evento USER_TABLE_UPDATE recibido:', event);
-          
-          switch (event.action) {
-            case 'USER_CREATED':
-              console.log('✅ [UsersModule] Usuario creado:', event.username);
-              fetchUsers(); // Recargar la lista completa
-              break;
-              
-            case 'USER_UPDATED':
-              console.log('🔄 [UsersModule] Usuario actualizado:', event.username);
-              fetchUsers(); // Recargar la lista completa
-              break;
-              
-            case 'USER_DELETED':
-              console.log('🗑️ [UsersModule] Usuario eliminado:', event.username);
-              fetchUsers(); // Recargar la lista completa
-              break;
-              
-            case 'USER_STATUS_CHANGED':
-              console.log('🔄 [UsersModule] Estado cambiado:', event.username);
-              fetchUsers(); // Recargar la lista completa
-              break;
-              
-            default:
-              console.warn('⚠️ [UsersModule] Acción desconocida:', event.action);
-          }
-        };
-        
-        // Suscribirse al evento
-        SystemNotificationsService.setOnUserTableUpdate(handleUserTableUpdate);
-        
-        // Cleanup
-        return () => {
-          SystemNotificationsService.setOnUserTableUpdate(null);
-        };
+        SystemNotificationsService.setOnUserTableUpdate(() => fetchUsers());
+        return () => SystemNotificationsService.setOnUserTableUpdate(null);
       } catch (error) {
-        console.error('❌ [UsersModule] Error configurando WebSocket:', error);
+        console.error('[UsersModule] Error configurando WebSocket:', error);
       }
     };
-    
     setupWebSocket();
   }, []);
 
-  // 🔍 Consultar datos por DNI cuando cambie el valor (con delay para evitar consultas innecesarias)
+  // Consultar datos por DNI con delay
   useEffect(() => {
     const delayTimer = setTimeout(() => {
       // Al crear usuario nuevo: consultar DNI automáticamente
@@ -321,7 +293,7 @@ const UsersModule: React.FC = () => {
     return () => clearTimeout(delayTimer);
   }, [formData.dni, editingUser]);
 
-  // 🔍 Generar username y email automáticamente solo al CREAR (nombre + apellidos). Al editar no se toca: se guarda lo que el usuario escriba.
+  // Generar username y email al crear (no al editar)
   useEffect(() => {
     if (editingUser) return;
     if (!formData.name || !formData.lastName) return;
@@ -333,24 +305,20 @@ const UsersModule: React.FC = () => {
     }
   }, [formData.name, formData.lastName, editingUser]);
 
+  const lastFetchRef = useRef(0);
+
   const fetchUsers = async (signal?: AbortSignal) => {
+    const now = Date.now();
+    if (now - lastFetchRef.current < 1000) return;
+    lastFetchRef.current = now;
     try {
-      setLoading(true);
-      const params: any = {};
+      const params: Record<string, unknown> = { page: 1, limit: 1000 };
       if (userStatus !== 'all') params.active = userStatus === 'true';
-      params.page = 1;
-      params.limit = 1000;
       const response = await api.get('/users', { params, signal });
-      if (response.data.users) {
-        setUsers(response.data.users);
-      } else {
-        setUsers(Array.isArray(response.data) ? response.data : []);
-      }
+      const userList = response.data?.users ?? response.data;
+      setUsers(Array.isArray(userList) ? userList : []);
     } catch (error: any) {
       if (error?.name === 'AbortError' || error?.code === 'ERR_CANCELED') return;
-      setUsers([]);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -381,40 +349,15 @@ const UsersModule: React.FC = () => {
       const data = response.data;
       
       if (data && data.success) {
-        const datos = data;
-        
-        // Generar nombre con formato correcto
-        const nombres = datos.nombres
-          .toLowerCase()
-          .split(' ')
-          .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
-          .join(' ');
-        
-        // Generar apellidos con formato correcto (capitalizar cada palabra, respetar tildes en visualización)
-        const apellidos = `${datos.apellidoPaterno} ${datos.apellidoMaterno}`
-          .toLowerCase()
-          .split(' ')
-          .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
-          .join(' ');
-        
-        // Username: primera letra del nombre + última palabra del apellido paterno (ej. "De La Cruz" -> "Cruz" -> acruz), sin acentos
-        const username = generarUsernameDesdeNombreApellido(datos.nombres, datos.apellidoPaterno);
-        
-        // Generar email: username + dominio yego
+        const nombres = capitalizarPalabras(data.nombres);
+        const apellidos = capitalizarPalabras(`${data.apellidoPaterno} ${data.apellidoMaterno}`);
+        const username = generarUsernameDesdeNombreApellido(data.nombres, data.apellidoPaterno);
         const email = username ? `${username}@yego.com` : '';
-        
-        // Actualizar el formulario con los datos obtenidos
-        setFormData(prev => ({
-          ...prev,
-          name: nombres,
-          lastName: apellidos,
-          username: username,
-          email: email
-        }));
 
+        setFormData(prev => ({ ...prev, name: nombres, lastName: apellidos, username, email }));
       }
     } catch (error: any) {
-      console.error('Error al consultar DNI:', error);
+      console.error('[UsersModule] Error al consultar DNI:', error);
       clearUserFields();
       setErrorModal({
         open: true,
@@ -425,18 +368,68 @@ const UsersModule: React.FC = () => {
   };
 
   const handleCreateUser = async () => {
+    if (!formData.username.trim() || !formData.email.trim() || !formData.password.trim() || !formData.name.trim()) {
+      setErrorModal({ open: true, title: 'Error de Validación', message: 'Todos los campos son obligatorios' });
+      return;
+    }
+
+    const passwordValidation = validatePassword(formData.password);
+    if (!passwordValidation.isValid) {
+      setErrorModal({
+        open: true,
+        title: 'Error de Validación de Contraseña',
+        message: 'La contraseña no cumple con los requisitos de seguridad. Debe tener al menos una letra mayúscula, una minúscula, un número, un carácter especial y mínimo 8 caracteres.'
+      });
+      return;
+    }
+
+    setSaving(true);
     try {
-      // Validar campos requeridos
-      if (!formData.username.trim() || !formData.email.trim() || !formData.password.trim() || !formData.name.trim()) {
-        setErrorModal({
-          open: true,
-          title: 'Error de Validación',
-          message: 'Todos los campos son obligatorios'
-        });
-        return;
+      await api.post('/users/create', {
+        dni: formData.dni?.trim() || null,
+        username: formData.username.trim(),
+        email: formData.email.trim(),
+        password: formData.password,
+        name: formData.name.trim(),
+        lastName: formData.lastName?.trim() || '',
+        roleId: formData.roleId,
+        active: formData.active !== undefined ? formData.active : true
+      });
+
+      setIsCreateDialogOpen(false);
+      resetForm();
+      fetchUsers();
+    } catch (error: any) {
+      console.error('[UsersModule] Error al crear usuario:', error);
+
+      let errorMessage = 'Error al crear usuario';
+      if (error.response?.status === 400) {
+        errorMessage = error.response?.data?.message || 'Datos inválidos. Verifica que todos los campos estén correctos.';
+      } else if (error.response?.status === 409) {
+        errorMessage = 'El usuario ya existe (username o email duplicado)';
+      } else if (error.response?.status === 403) {
+        errorMessage = 'No tienes permisos para crear usuarios';
       }
 
-      // Validar requisitos de contraseña
+      setErrorModal({ open: true, title: 'Error al Crear Usuario', message: errorMessage });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleUpdateUser = async (id: number) => {
+    const updateData: Record<string, unknown> = {
+      dni: formData.dni?.trim() || null,
+      username: formData.username,
+      email: formData.email,
+      name: formData.name,
+      lastName: formData.lastName || '',
+      roleId: formData.roleId,
+      active: formData.active,
+      areaId: formData.areaId != null ? formData.areaId : 0
+    };
+
+    if (formData.password && formData.password.trim() !== '') {
       const passwordValidation = validatePassword(formData.password);
       if (!passwordValidation.isValid) {
         setErrorModal({
@@ -446,88 +439,20 @@ const UsersModule: React.FC = () => {
         });
         return;
       }
-
-      const userData = {
-        dni: formData.dni?.trim() || null,
-        username: formData.username.trim(),
-        email: formData.email.trim(),
-        password: formData.password,
-        name: formData.name.trim(),
-        lastName: formData.lastName?.trim() || '',
-        roleId: formData.roleId,
-        active: formData.active !== undefined ? formData.active : true
-      };
-      
-      await api.post('/users/create', userData);
-      
-      setIsCreateDialogOpen(false);
-      resetForm();
-      fetchUsers();
-    } catch (error: any) {
-      console.error('❌ Error creating user:', error);
-      
-      let errorMessage = 'Error al crear usuario';
-      
-      if (error.response?.status === 400) {
-        errorMessage = 'Datos inválidos. Verifica que todos los campos estén correctos.';
-        if (error.response?.data?.message) {
-          errorMessage = error.response.data.message;
-        }
-      } else if (error.response?.status === 409) {
-        errorMessage = 'El usuario ya existe (username o email duplicado)';
-      } else if (error.response?.status === 403) {
-        errorMessage = 'No tienes permisos para crear usuarios';
-      }
-      
-      setErrorModal({
-        open: true,
-        title: 'Error al Crear Usuario',
-        message: errorMessage
-      });
+      updateData.password = formData.password;
+    } else {
+      updateData.password = null;
     }
-  };
 
-  const handleUpdateUser = async (id: number) => {
+    const isUpdatingSelf = currentUser && currentUser.id === id;
+
+    setSaving(true);
     try {
-      const updateData: any = {
-        dni: formData.dni?.trim() || null,
-        username: formData.username,
-        email: formData.email,
-        name: formData.name,
-        lastName: formData.lastName || '',
-        roleId: formData.roleId,
-        active: formData.active,
-        areaId: formData.areaId != null ? formData.areaId : 0
-      };
-      
-      // Solo incluir password si tiene contenido, sino enviar undefined
-      if (formData.password && formData.password.trim() !== '') {
-        // Validar requisitos de contraseña solo si se está actualizando
-        const passwordValidation = validatePassword(formData.password);
-        if (!passwordValidation.isValid) {
-          setErrorModal({
-            open: true,
-            title: 'Error de Validación de Contraseña',
-            message: 'La contraseña no cumple con los requisitos de seguridad. Debe tener al menos una letra mayúscula, una minúscula, un número, un carácter especial y mínimo 8 caracteres.'
-          });
-          return;
-        }
-        updateData.password = formData.password;
-      } else {
-        updateData.password = null;
-      }
-      
-      console.log('Actualizando usuario con datos:', updateData);
-      
-      // 🎯 Verificar si el usuario se está actualizando a sí mismo
-      const isUpdatingSelf = currentUser && currentUser.id === id;
-      
       await api.put(`/users/${id}`, updateData);
       setEditingUser(null);
       resetForm();
       fetchUsers();
-      
-      // 🚪 Si el usuario se actualizó a sí mismo, mostrar modal de logout
+
       if (isUpdatingSelf) {
         setForcedLogoutModal({
           open: true,
@@ -535,39 +460,24 @@ const UsersModule: React.FC = () => {
         });
       }
     } catch (error: any) {
-      console.error('Error actualizando usuario:', error);
-      
-      const errorMessage = error.response?.data?.message || '';
-      
-      if (errorMessage.includes('users_username_key')) {
-        setErrorModal({
-          open: true,
-          title: 'Usuario Duplicado',
-          message: 'El nombre de usuario ya existe. Por favor, elige otro.'
-        });
-      } else if (errorMessage.includes('users_email_key')) {
-        setErrorModal({
-          open: true,
-          title: 'Email Duplicado',
-          message: 'El email ya está registrado. Por favor, usa otro email.'
-        });
-      } else if (error.response?.data?.message) {
-        setErrorModal({
-          open: true,
-          title: 'Error',
-          message: error.response.data.message
-        });
+      console.error('[UsersModule] Error al actualizar usuario:', error);
+
+      const msg = error.response?.data?.message || '';
+      if (msg.includes('users_username_key')) {
+        setErrorModal({ open: true, title: 'Usuario Duplicado', message: 'El nombre de usuario ya existe. Por favor, elige otro.' });
+      } else if (msg.includes('users_email_key')) {
+        setErrorModal({ open: true, title: 'Email Duplicado', message: 'El email ya está registrado. Por favor, usa otro email.' });
+      } else if (msg) {
+        setErrorModal({ open: true, title: 'Error', message: msg });
       } else {
-        setErrorModal({
-          open: true,
-          title: 'Error',
-          message: 'Error al actualizar el usuario. Por favor, verifica los datos.'
-        });
+        setErrorModal({ open: true, title: 'Error', message: 'Error al actualizar el usuario. Por favor, verifica los datos.' });
       }
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleDeleteUser = async (id: number) => {
+  const handleDeleteUser = (id: number) => {
     const userToDelete = users.find(user => user.id === id);
     if (userToDelete) {
       setDeleteModal({ open: true, user: userToDelete });
@@ -581,7 +491,7 @@ const UsersModule: React.FC = () => {
         setDeleteModal({ open: false, user: null });
         fetchUsers();
       } catch (error: any) {
-        console.error('Error deleting user:', error);
+        console.error('[UsersModule] Error al eliminar usuario:', error);
         setErrorModal({
           open: true,
           title: 'Error al Eliminar',
@@ -609,7 +519,7 @@ const UsersModule: React.FC = () => {
         await fetchUsers();
       }
     } catch (error: any) {
-      console.error('Error actualizando estado del usuario:', error);
+      console.error('[UsersModule] Error al cambiar estado:', error);
       
       // Revertir el cambio si falla la petición
       setUsers(prevUsers => 
@@ -655,10 +565,10 @@ const UsersModule: React.FC = () => {
     setFormData({
       dni: user.dni || '',
       username: user.username,
-      name: user.name,
-      lastName: user.lastName || '',
+      name: capitalizarPalabras(user.name || ''),
+      lastName: capitalizarPalabras(user.lastName || ''),
       email: user.email,
-      password: '', // Siempre vacío por seguridad
+      password: '',
       roleId: roleObj?.id || 0,
       active: user.active,
       areaId: user.areaId ?? null
@@ -742,10 +652,8 @@ const UsersModule: React.FC = () => {
                placeholder="Buscar usuarios por nombre, email, username o rol..."
                value={searchTerm}
                onChange={(e) => {
-                 const value = e.target.value;
-                 // Convertir primera letra a mayúscula
-                 const formattedValue = value.charAt(0).toUpperCase() + value.slice(1);
-                 setSearchTerm(formattedValue);
+                 const v = e.target.value;
+                 setSearchTerm(v.charAt(0).toUpperCase() + v.slice(1));
                }}
                className="pl-12"
              />
@@ -1096,7 +1004,7 @@ const UsersModule: React.FC = () => {
       )}
 
       {/* Create/Edit Dialog */}
-      <Dialog open={isCreateDialogOpen || !!editingUser} onOpenChange={closeDialog}>
+      <Dialog open={isCreateDialogOpen || !!editingUser} onOpenChange={(open) => { if (!open && !saving) closeDialog(); }}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1118,7 +1026,7 @@ const UsersModule: React.FC = () => {
                 value={formData.dni || ''}
                 onChange={(e) => setFormData({ ...formData, dni: e.target.value })}
                 placeholder="Ingresar DNI o CEE"
-                disabled={!isAdminOrSuperAdmin() && !!editingUser}
+                disabled={!isAdminOrSuperAdmin && !!editingUser}
               />
             </div>
 
@@ -1128,18 +1036,9 @@ const UsersModule: React.FC = () => {
                 <Input
                   autoComplete="off"
                   value={formData.name}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    // Convertir primera letra de cada palabra a mayúscula y el resto a minúscula
-                    const formattedValue = value
-                      .toLowerCase()
-                      .split(' ')
-                      .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
-                      .join(' ');
-                    setFormData({ ...formData, name: formattedValue });
-                  }}
+                  onChange={(e) => setFormData({ ...formData, name: capitalizarPalabras(e.target.value) })}
                   placeholder="Juan Carlos"
-                  disabled={!isAdminOrSuperAdmin() && (!formData.dni || formData.dni.length <= 8)}
+                  disabled={!isAdminOrSuperAdmin && (!formData.dni || formData.dni.length <= 8)}
                 />
               </div>
               
@@ -1148,18 +1047,9 @@ const UsersModule: React.FC = () => {
                 <Input
                   autoComplete="off"
                   value={formData.lastName || ''}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    // Convertir primera letra de cada palabra a mayúscula y el resto a minúscula
-                    const formattedValue = value
-                      .toLowerCase()
-                      .split(' ')
-                      .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
-                      .join(' ');
-                    setFormData({ ...formData, lastName: formattedValue });
-                  }}
+                  onChange={(e) => setFormData({ ...formData, lastName: capitalizarPalabras(e.target.value) })}
                   placeholder="Pérez Rodríguez"
-                  disabled={!isAdminOrSuperAdmin() && (!formData.dni || formData.dni.length <= 8)}
+                  disabled={!isAdminOrSuperAdmin && (!formData.dni || formData.dni.length <= 8)}
                 />
               </div>
             </div>
@@ -1171,9 +1061,9 @@ const UsersModule: React.FC = () => {
                 value={formData.username}
                 onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                 placeholder="usuario123"
-                disabled={!isAdminOrSuperAdmin()}
+                disabled={!isAdminOrSuperAdmin}
               />
-              {!isAdminOrSuperAdmin() && (
+              {!isAdminOrSuperAdmin && (
                 <p className="text-xs text-gray-500 mt-1">
                   Se genera automáticamente basado en el nombre y apellidos
                 </p>
@@ -1188,9 +1078,9 @@ const UsersModule: React.FC = () => {
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 placeholder="juan.perez@empresa.com"
-                disabled={!isAdminOrSuperAdmin()}
+                disabled={!isAdminOrSuperAdmin}
               />
-              {!isAdminOrSuperAdmin() && (
+              {!isAdminOrSuperAdmin && (
                 <p className="text-xs text-gray-500 mt-1">
                   Se genera automáticamente basado en el username
                 </p>
@@ -1224,36 +1114,31 @@ const UsersModule: React.FC = () => {
                 </button>
               </div>
               
-              {/* Validación de contraseña */}
-              {formData.password && (
-                <div className="mt-2 space-y-1">
-                  <div className="text-xs text-neutral-600 dark:text-neutral-400 mb-2">
-                    La contraseña debe cumplir con los siguientes requisitos:
-                  </div>
-                  <div className="space-y-1">
-                    <div className={`flex items-center text-xs ${validatePassword(formData.password).hasUpperCase ? 'text-green-600' : 'text-red-600'}`}>
-                      <div className={`w-2 h-2 rounded-full mr-2 ${validatePassword(formData.password).hasUpperCase ? 'bg-green-600' : 'bg-red-600'}`}></div>
-                      Al menos una letra mayúscula (A-Z)
+              {formData.password && (() => {
+                const v = validatePassword(formData.password);
+                const rules = [
+                  { ok: v.hasUpperCase, label: 'Al menos una letra mayúscula (A-Z)' },
+                  { ok: v.hasLowerCase, label: 'Al menos una letra minúscula (a-z)' },
+                  { ok: v.hasNumbers, label: 'Al menos un número (0-9)' },
+                  { ok: v.hasSpecialChar, label: 'Al menos un carácter especial (!@#$%^&*(),.?":{}|<>)' },
+                  { ok: v.isLongEnough, label: 'Mínimo 8 caracteres' },
+                ];
+                return (
+                  <div className="mt-2 space-y-1">
+                    <div className="text-xs text-neutral-600 dark:text-neutral-400 mb-2">
+                      La contraseña debe cumplir con los siguientes requisitos:
                     </div>
-                    <div className={`flex items-center text-xs ${validatePassword(formData.password).hasLowerCase ? 'text-green-600' : 'text-red-600'}`}>
-                      <div className={`w-2 h-2 rounded-full mr-2 ${validatePassword(formData.password).hasLowerCase ? 'bg-green-600' : 'bg-red-600'}`}></div>
-                      Al menos una letra minúscula (a-z)
-                    </div>
-                    <div className={`flex items-center text-xs ${validatePassword(formData.password).hasNumbers ? 'text-green-600' : 'text-red-600'}`}>
-                      <div className={`w-2 h-2 rounded-full mr-2 ${validatePassword(formData.password).hasNumbers ? 'bg-green-600' : 'bg-red-600'}`}></div>
-                      Al menos un número (0-9)
-                    </div>
-                    <div className={`flex items-center text-xs ${validatePassword(formData.password).hasSpecialChar ? 'text-green-600' : 'text-red-600'}`}>
-                      <div className={`w-2 h-2 rounded-full mr-2 ${validatePassword(formData.password).hasSpecialChar ? 'bg-green-600' : 'bg-red-600'}`}></div>
-                      Al menos un carácter especial (!@#$%^&*(),.?":{}|&lt;&gt;)
-                    </div>
-                    <div className={`flex items-center text-xs ${validatePassword(formData.password).isLongEnough ? 'text-green-600' : 'text-red-600'}`}>
-                      <div className={`w-2 h-2 rounded-full mr-2 ${validatePassword(formData.password).isLongEnough ? 'bg-green-600' : 'bg-red-600'}`}></div>
-                      Mínimo 8 caracteres
+                    <div className="space-y-1">
+                      {rules.map((r) => (
+                        <div key={r.label} className={`flex items-center text-xs ${r.ok ? 'text-green-600' : 'text-red-600'}`}>
+                          <div className={`w-2 h-2 rounded-full mr-2 ${r.ok ? 'bg-green-600' : 'bg-red-600'}`} />
+                          {r.label}
+                        </div>
+                      ))}
                     </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
             
             <div>
@@ -1261,20 +1146,13 @@ const UsersModule: React.FC = () => {
               <Select 
                 value={formData.roleId.toString()} 
                 onValueChange={(value) => setFormData({ ...formData, roleId: parseInt(value) })}
-                disabled={false}
               >
                 <SelectTrigger className="focus:ring-0 focus:ring-offset-0 hover:bg-transparent">
                   <SelectValue placeholder="Seleccionar rol" />
                 </SelectTrigger>
                 <SelectContent>
                   {availableRoles
-                    .filter(role => {
-                      // Excluir roles de dispositivos (tablets, TV, principal)
-                      const excludedRoles = ['tablet1', 'tablet2', 'principal', 'tv', 'tablet', 'television'];
-                      return !excludedRoles.some(excluded => 
-                        role.name.toLowerCase().includes(excluded)
-                      );
-                    })
+                    .filter(role => !EXCLUDED_ROLES.some(ex => role.name.toLowerCase().includes(ex)))
                     .map(role => (
                     <SelectItem key={role.id} value={role.id.toString()}>
                       {role.name}
@@ -1321,15 +1199,18 @@ const UsersModule: React.FC = () => {
             <Button 
               variant="outline" 
               onClick={closeDialog}
+              disabled={saving}
               leftIcon={<X className="h-4 w-4" />}
             >
               Cancelar
             </Button>
             <Button 
               onClick={() => editingUser ? handleUpdateUser(editingUser.id) : handleCreateUser()}
+              loading={saving}
+              disabled={saving}
               leftIcon={<Save className="h-4 w-4" />}
             >
-              {editingUser ? 'Actualizar' : 'Crear'}
+              {saving ? (editingUser ? 'Actualizando...' : 'Creando...') : (editingUser ? 'Actualizar' : 'Crear')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1428,6 +1309,3 @@ const UsersModule: React.FC = () => {
 };
 
 export default UsersModule;
-
-
-

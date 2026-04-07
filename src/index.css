@@ -499,3 +499,46 @@ input:focus {
 .slide-in-from-right-full {
   animation: slide-in-from-right 0.3s ease-out;
 }
+
+/* ── Gantt module animations ── */
+
+@keyframes gantt-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes gantt-fade-in-left {
+  from { opacity: 0; transform: translateX(-12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes gantt-slide-right {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes gantt-scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes gantt-expand {
+  from { opacity: 0; max-height: 0; }
+  to   { opacity: 1; max-height: 800px; }
+}
+@keyframes gantt-bar-grow {
+  from { opacity: 0; transform: scaleX(0); }
+  to   { opacity: 1; transform: scaleX(1); }
+}
+@keyframes gantt-progress-fill {
+  from { width: 0%; }
+}
+
+.gantt-fade-in       { animation: gantt-fade-in 0.3s ease-out both; }
+.gantt-fade-in-left  { animation: gantt-fade-in-left 0.35s ease-out both; }
+.gantt-slide-right   { animation: gantt-slide-right 0.3s ease-out both; }
+.gantt-scale-in      { animation: gantt-scale-in 0.25s ease-out both; }
+.gantt-expand        { animation: gantt-expand 0.35s ease-out both; overflow: hidden; }
+.gantt-bar-grow      { animation: gantt-bar-grow 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both; transform-origin: left center; }
+.gantt-progress-fill { animation: gantt-progress-fill 0.6s ease-out both; }
+.gantt-stagger-1 { animation-delay: 0.04s; }
+.gantt-stagger-2 { animation-delay: 0.08s; }
+.gantt-stagger-3 { animation-delay: 0.12s; }
+.gantt-stagger-4 { animation-delay: 0.16s; }
+.gantt-stagger-5 { animation-delay: 0.20s; }

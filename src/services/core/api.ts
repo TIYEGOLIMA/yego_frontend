@@ -14,9 +14,10 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || (
 export const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
-    'Content-Type': 'application/json',
+    'Content-Type': 'application/json;charset=UTF-8',
+    'Accept': 'application/json',
   },
-  timeout: 60000, // 60 segundos de timeout (aumentado para reportes que pueden demorar)
+  timeout: 60000,
 })
 
 // Interceptor para agregar el token de autenticación a todas las peticiones

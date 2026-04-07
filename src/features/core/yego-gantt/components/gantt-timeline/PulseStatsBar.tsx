@@ -85,7 +85,7 @@ export function PulseStatsBar({ kpis }: { kpis: PulseKpis | null }) {
   return (
     <div className="flex items-center gap-0.5 px-4 sm:px-5 py-2.5 border-b border-border/80 bg-gradient-to-b from-muted/25 to-background overflow-x-auto">
       {items.map((s, i) => (
-        <div key={s.key} className="flex items-center">
+        <div key={s.key} className="flex items-center gantt-fade-in" style={{ animationDelay: `${i * 0.06}s` }}>
           <div className="flex items-center gap-2.5 px-3 py-1 rounded-xl hover:bg-muted/50 transition-colors">
             {s.key === 'pr' ? (
               <>

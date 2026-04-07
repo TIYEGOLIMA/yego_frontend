@@ -59,6 +59,7 @@ export interface TaskRowLike {
   priority?: TaskPriority | null
   progressPercent: number
   assignedUserId?: number | null
+  assignedUserIds?: number[]
 }
 
 export function mapVisualStatus(s: AreaTaskStatus): GanttVisualStatus {

@@ -4,17 +4,17 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "../../utils/cn"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center rounded-xl font-semibold transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden group",
+  "inline-flex items-center justify-center rounded-xl font-semibold transition-colors duration-200 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden group",
   {
     variants: {
       variant: {
-        primary: "bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white focus:ring-primary-500 shadow-xl shadow-primary-500/25 hover:shadow-2xl hover:shadow-primary-500/30 transform hover:scale-105",
-        secondary: "glassmorphism-light hover:glassmorphism text-neutral-900 dark:text-neutral-100 hover:scale-105 focus:ring-neutral-500", 
-        ghost: "text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100/50 dark:hover:bg-neutral-800/50 focus:ring-neutral-500 backdrop-blur-sm",
-        danger: "bg-gradient-to-r from-error-500 to-error-600 hover:from-error-600 hover:to-error-700 text-white focus:ring-error-500 shadow-xl shadow-error-500/25 hover:shadow-2xl hover:shadow-error-500/30 transform hover:scale-105",
-        outline: "border-2 border-primary-500 text-primary-500 dark:text-primary-400 hover:bg-primary-50/50 dark:hover:bg-primary-950/50 focus:ring-primary-500 backdrop-blur-sm",
+        primary: "bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white shadow-lg shadow-primary-500/20",
+        secondary: "glassmorphism-light hover:glassmorphism text-neutral-900 dark:text-neutral-100",
+        ghost: "text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100/50 dark:hover:bg-neutral-800/50 backdrop-blur-sm",
+        danger: "bg-gradient-to-r from-error-500 to-error-600 hover:from-error-600 hover:to-error-700 text-white shadow-lg shadow-error-500/20",
+        outline: "border-2 border-primary-500 text-primary-500 dark:text-primary-400 hover:bg-primary-50/50 dark:hover:bg-primary-950/50 backdrop-blur-sm",
         link: "text-primary-500 underline-offset-4 hover:underline p-0 h-auto font-normal",
-        glassmorphism: "glassmorphism hover:glassmorphism-strong text-neutral-900 dark:text-neutral-100 hover:scale-105 focus:ring-neutral-500",
+        glassmorphism: "glassmorphism hover:glassmorphism-strong text-neutral-900 dark:text-neutral-100",
       },
       size: {
         sm: "h-9 px-4 text-sm",
@@ -79,9 +79,9 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
             </svg>
           )}
           
-          {!loading && leftIcon && <span className="mr-3 transition-transform group-hover:scale-110">{leftIcon}</span>}
-          <span className="transition-transform group-hover:scale-105">{children}</span>
-          {!loading && rightIcon && <span className="ml-3 transition-transform group-hover:scale-110">{rightIcon}</span>}
+          {!loading && leftIcon && <span className="mr-3">{leftIcon}</span>}
+          <span>{children}</span>
+          {!loading && rightIcon && <span className="ml-3">{rightIcon}</span>}
         </div>
       </Comp>
     )
