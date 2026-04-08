@@ -7,7 +7,7 @@ import { authService } from './auth-service'
 
 // URL base de la API usando variable de entorno
 const API_BASE_URL = import.meta.env.VITE_API_URL || (
-  import.meta.env.DEV ? 'http://localhost:3030/api' : '/api'
+  import.meta.env.DEV ? 'http://localhost:8080/api' : '/api'
 )
 
 // Crear instancia de axios con configuración base

@@ -1,4 +1,4 @@
-import { SystemEvent, ForcedLogoutEvent, AccountBlockedEvent, UserTableUpdateEvent, PremiumProcessAvailableEvent, RoleDeactivatedEvent } from '../types/system-notifications'
+import { SystemEvent, ForcedLogoutEvent, AccountBlockedEvent, UserTableUpdateEvent, PremiumProcessAvailableEvent, RoleDeactivatedEvent, YangoApiLogUpdatedEvent } from '../types/system-notifications'
 import socketService from './socket-service'
 
 /**
@@ -15,6 +15,7 @@ class SystemNotificationsService {
   private onUserTableUpdate: ((event: UserTableUpdateEvent) => void) | null = null
   private onPremiumProcessAvailable: ((event: PremiumProcessAvailableEvent) => void) | null = null
   private onRoleDeactivated: ((event: RoleDeactivatedEvent) => void) | null = null
+  private onYangoApiLogUpdated: ((event: YangoApiLogUpdatedEvent) => void) | null = null
 
   constructor() {
     this.setupSubscriptions()
@@ -75,7 +76,10 @@ class SystemNotificationsService {
    */
   private handleSystemEvent(event: SystemEvent, currentUserId: number | null) {
     try {
-          const eventKey = `${event.type}-${(event as any).userId || (event as any).timestamp || Date.now()}`
+          const eventKey =
+            event.type === 'YANGO_API_LOG_UPDATED'
+              ? `${event.type}-${(event as YangoApiLogUpdatedEvent).logId}`
+              : `${event.type}-${(event as any).userId || (event as any).timestamp || Date.now()}`
 
           // Evitar procesar el mismo evento múltiples veces
           if (this.processedEvents.has(eventKey)) {
@@ -111,6 +115,9 @@ class SystemNotificationsService {
               break
             case 'ROLE_DEACTIVATED':
               this.onRoleDeactivated?.(event as RoleDeactivatedEvent)
+              break
+            case 'YANGO_API_LOG_UPDATED':
+              this.onYangoApiLogUpdated?.(event as YangoApiLogUpdatedEvent)
               break
           }
         } catch (error) {
@@ -170,6 +177,10 @@ class SystemNotificationsService {
 
   public setOnRoleDeactivated(callback: ((event: RoleDeactivatedEvent) => void) | null) {
     this.onRoleDeactivated = callback
+  }
+
+  public setOnYangoApiLogUpdated(callback: ((event: YangoApiLogUpdatedEvent) => void) | null) {
+    this.onYangoApiLogUpdated = callback
   }
 
   /**

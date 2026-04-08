@@ -41,9 +41,18 @@ export interface RoleDeactivatedEvent {
   timestamp?: string
 }
 
+/** Alguien llamó a /api/yango-external/* (excepto /logs); el panel de API puede refrescar datos */
+export interface YangoApiLogUpdatedEvent {
+  type: 'YANGO_API_LOG_UPDATED'
+  logId: number
+  endpoint: string
+  timestamp: string
+}
+
 export type SystemEvent =
   | ForcedLogoutEvent
   | AccountBlockedEvent
   | UserTableUpdateEvent
   | PremiumProcessAvailableEvent
   | RoleDeactivatedEvent
+  | YangoApiLogUpdatedEvent

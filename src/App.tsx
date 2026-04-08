@@ -21,6 +21,7 @@ import PermissionsModule from './features/core/permissions/permissions.module'
 import ModulesModule from './features/core/modules/modules.module'
 import { AreasModule } from './features/core/areas'
 import AuditModule from './features/core/audit/audit.module'
+import ApiLogsModule from './features/core/api-logs/api-logs.module'
 import SessionsModule from './features/core/sessions/sessions.module'
 import { AsistenciaModule } from './features/core/asistencia'
 import { WelcomeModule } from './features/core/welcome'
@@ -341,6 +342,11 @@ function App() {
             <Route path="audit" element={
               <PermissionRoute module="audit">
                 <AuditModule />
+              </PermissionRoute>
+            } />
+            <Route path="api-logs" element={
+              <PermissionRoute module="api-logs">
+                <ApiLogsModule />
               </PermissionRoute>
             } />
             <Route path="sessions" element={

@@ -8,13 +8,13 @@ export default defineConfig({
     port: 5173, 
     host: true,
     proxy: {
-      '/api': {
-        target: 'http://localhost:8080', // Ajusta el puerto según tu backend
+      // Usar '/api/' (con barra) para NO capturar la ruta SPA '/api-logs' (empieza por '/api' pero no es API)
+      '/api/': {
+        target: 'http://localhost:8080',
         changeOrigin: true,
         secure: false,
-        rewrite: (path) => path.replace(/^\/api/, '/api')
-      }
-    }
+      },
+    },
   },
   resolve: {
     alias: {

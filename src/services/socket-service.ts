@@ -36,7 +36,7 @@ const getWebSocketUrl = (token: string): string => {
     const prodUrl = WS_URL || 'wss://api-int.yego.pro/ws';
     return `${prodUrl}?token=${encodeURIComponent(token)}`;
   }
-  const devUrl = WS_URL || 'ws://localhost:3030/ws';
+  const devUrl = WS_URL || 'ws://localhost:8080/ws';
   return `${devUrl}?token=${encodeURIComponent(token)}`;
 };
 
