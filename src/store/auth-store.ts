@@ -72,7 +72,9 @@ export const useAuthStore = create<AuthState>()(
           }
 
           api.defaults.headers.common['Authorization'] = `Bearer ${response.accessToken}`
-          const user = await authService.getProfile(response.accessToken)
+          const user =
+            response.user ??
+            (await authService.getProfile(response.accessToken))
           
           set({ 
             user, 
@@ -160,7 +162,9 @@ export const useAuthStore = create<AuthState>()(
           try {
             const refreshResponse = await authService.refreshToken()
             api.defaults.headers.common['Authorization'] = `Bearer ${refreshResponse.accessToken}`
-            const user = await authService.getProfile(refreshResponse.accessToken)
+            const user =
+              refreshResponse.user ??
+              (await authService.getProfile(refreshResponse.accessToken))
             set({ 
               user, 
               token: refreshResponse.accessToken,

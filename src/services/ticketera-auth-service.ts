@@ -1,9 +1,11 @@
 import api from './core/api'
 import { getAccessTokenFromResponse } from './core/auth-token-header'
+import type { AuthUser } from './core/auth-service'
 
 export interface TicketeraAuthResponse {
   accessToken: string;
   message?: string;
+  user?: AuthUser;
 }
 
 export const ticketeraAuthService = {
@@ -14,13 +16,19 @@ export const ticketeraAuthService = {
   async refreshToken(): Promise<TicketeraAuthResponse> {
     try {
       console.log('🔄 [ticketeraAuthService] Renovando token JWT para ticketera...');
-      const response = await api.post<{ message?: string }>('/ticketera/auth/refresh');
-      const accessToken = getAccessTokenFromResponse(response);
+      const response = await api.post<{
+        message?: string
+        accessToken?: string
+        user?: AuthUser
+      }>('/ticketera/auth/refresh');
+      const accessToken =
+        (typeof response.data?.accessToken === 'string' && response.data.accessToken) ||
+        getAccessTokenFromResponse(response);
       if (!accessToken) {
-        throw new Error('No se recibió token de acceso (header X-Access-Token)');
+        throw new Error('No se recibió token de acceso (cuerpo ni header X-Access-Token)');
       }
       console.log('✅ [ticketeraAuthService] Token renovado exitosamente');
-      return { accessToken, message: response.data?.message };
+      return { accessToken, message: response.data?.message, user: response.data?.user };
     } catch (error: any) {
       console.error('❌ [ticketeraAuthService] Error renovando token:', error.response?.data || error.message);
       throw error;

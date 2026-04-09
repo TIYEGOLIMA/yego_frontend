@@ -19,7 +19,9 @@ export const useTicketeraTokenRefresh = (intervalMinutes: number = 30) => {
         console.log('🔄 [useTicketeraTokenRefresh] Token inválido, renovando...')
         const refreshResponse = await ticketeraAuthService.refreshToken()
         api.defaults.headers.common['Authorization'] = `Bearer ${refreshResponse.accessToken}`
-        const user = await authService.getProfile(refreshResponse.accessToken)
+        const user =
+          refreshResponse.user ??
+          (await authService.getProfile(refreshResponse.accessToken))
         useAuthStore.setState({ 
           token: refreshResponse.accessToken,
           user,

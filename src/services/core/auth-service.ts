@@ -1,3 +1,4 @@
+import type { AxiosResponse } from 'axios'
 import api from './api'
 import { getAccessTokenFromResponse } from './auth-token-header'
 
@@ -28,11 +29,21 @@ export interface AuthUser {
   requirePasswordChange?: boolean;
 }
 
-/** Login y refresh: solo token + mensaje; el perfil se obtiene con getProfile(). */
+/** Login y refresh: token + mensaje; el usuario puede venir en el cuerpo (mismo shape que getProfile). */
 export interface AuthResponse {
   accessToken: string;
   message?: string;
   user?: AuthUser;
+}
+
+function resolveAccessToken(
+  data: { accessToken?: string } | undefined,
+  response: AxiosResponse
+): string | undefined {
+  if (typeof data?.accessToken === 'string' && data.accessToken.length > 0) {
+    return data.accessToken
+  }
+  return getAccessTokenFromResponse(response)
 }
 
 export interface ChangePasswordData {
@@ -49,12 +60,20 @@ export const authService = {
    */
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
     try {
-      const response = await api.post<{ message?: string }>('/auth/login', credentials)
-      const accessToken = getAccessTokenFromResponse(response)
+      const response = await api.post<{
+        message?: string
+        accessToken?: string
+        user?: AuthUser
+      }>('/auth/login', credentials)
+      const accessToken = resolveAccessToken(response.data, response)
       if (!accessToken) {
-        throw new Error('No se recibió token de acceso (header X-Access-Token)')
+        throw new Error('No se recibió token de acceso (cuerpo ni header X-Access-Token)')
       }
-      return { accessToken, message: response.data?.message }
+      const user =
+        response.data?.user != null
+          ? response.data.user
+          : await authService.getProfile(accessToken)
+      return { accessToken, message: response.data?.message, user }
     } catch (error: any) {
       console.error('Error en login:', error.response?.data || error.message);
       if (error.message === 'Network Error') {
@@ -165,12 +184,20 @@ export const authService = {
    */
   async refreshToken(): Promise<AuthResponse> {
     try {
-      const response = await api.post<{ message?: string }>('/auth/refresh')
-      const accessToken = getAccessTokenFromResponse(response)
+      const response = await api.post<{
+        message?: string
+        accessToken?: string
+        user?: AuthUser
+      }>('/auth/refresh')
+      const accessToken = resolveAccessToken(response.data, response)
       if (!accessToken) {
-        throw new Error('No se recibió token de acceso (header X-Access-Token)')
+        throw new Error('No se recibió token de acceso (cuerpo ni header X-Access-Token)')
       }
-      return { accessToken, message: response.data?.message }
+      const user =
+        response.data?.user != null
+          ? response.data.user
+          : await authService.getProfile(accessToken)
+      return { accessToken, message: response.data?.message, user }
     } catch (error: any) {
       console.error('❌ [authService] Error renovando token:', error.response?.data || error.message);
       throw error;
