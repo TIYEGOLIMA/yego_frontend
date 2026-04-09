@@ -13,10 +13,7 @@ interface UseTVDisplayWebSocketReturn {
   subscribe: (topic: string, callback: (message: any) => void) => () => void
 }
 
-/**
- * Hook WebSocket específico para TVDisplay
- * Maneja eventos de tickets para mostrar en pantallas
- */
+/** TVDisplay: ticketera WebSocket events for display screens. */
 export const useTVDisplayWebSocket = (): UseTVDisplayWebSocketReturn => {
   const {
     isConnected,
@@ -25,7 +22,6 @@ export const useTVDisplayWebSocket = (): UseTVDisplayWebSocketReturn => {
     sendTicketeraEvent
   } = useWebSocket()
 
-  // Implementar métodos específicos usando onTicketeraEvent
   const onTicketCreated = (callback: (ticket: any) => void) => {
     return onTicketeraEvent((event: any) => {
       if (event.type === 'ticket_created') {
@@ -74,15 +70,12 @@ export const useTVDisplayWebSocket = (): UseTVDisplayWebSocketReturn => {
     })
   }
 
-  // Método para emitir actualizaciones de pantalla
   const emitDisplayUpdate = (displayData: any): boolean => {
     sendTicketeraEvent({ type: 'display_updated', data: displayData })
     return true
   }
 
-  // Método de suscripción compatible con la interfaz anterior del TVDisplay
   const subscribe = (topic: string, callback: (message: any) => void): () => void => {
-    // Mapear topics del SocketContext anterior a eventos del WebSocket centralizado
     const topicMap: { [key: string]: () => () => void } = {
       '/topic/new-ticket': () => onTicketCreated(callback),
       '/topic/ticket-created': () => onTicketCreated(callback),
@@ -93,12 +86,10 @@ export const useTVDisplayWebSocket = (): UseTVDisplayWebSocketReturn => {
       '/topic/display-updated': () => onDisplayUpdated(callback),
     }
     
-    // Si el topic está mapeado, usar el método específico
     if (topicMap[topic]) {
       return topicMap[topic]()
     }
     
-    // Para topics genéricos, usar onTicketeraEvent
     return onTicketeraEvent(callback)
   }
 

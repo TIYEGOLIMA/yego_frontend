@@ -9,9 +9,7 @@ interface TicketCardProps {
   onAttend: (ticket: Ticket) => void
   onCancel: (ticket: Ticket) => void
   onComplete: (ticket: Ticket, notes?: string) => void
-  // 🎯 NUEVO: Prop para verificar si el ticket está en proceso
   isProcessing?: boolean
-  // 🎯 NUEVO: Prop para bloquear botón de llamar cuando hay tickets en proceso
   bloquearLlamar?: boolean
 }
 
@@ -26,7 +24,6 @@ export const TicketCard: React.FC<TicketCardProps> = ({
 }) => {
   const [showCompleteModal, setShowCompleteModal] = useState(false)
   const [notes, setNotes] = useState('')
-  // 🎯 NUEVO: Estado para controlar si la tarjeta está expandida
   const [isExpanded, setIsExpanded] = useState(false)
 
 
@@ -38,17 +35,15 @@ export const TicketCard: React.FC<TicketCardProps> = ({
     }
   }
 
-  // 🎯 NUEVA FUNCIÓN: Alternar estado expandido
   const toggleExpanded = () => {
     setIsExpanded(!isExpanded)
   }
 
   return (
     <>
-      <div className="bg-white dark:bg-slate-800 from-red-50 to-red-100 border-2 border-red-300 dark:border-red-500 rounded-xl p-6 shadow-lg hover:shadow-xl transition-all duration-200">
+      <div className="bg-surface dark:bg-surface-dark border-2 border-red-300 dark:border-red-500 rounded-xl p-6 shadow-lg hover:shadow-xl transition-all duration-200">
         {/* Header del ticket */}
         <div className="mb-6">
-          {/* 🎯 NUEVO: Indicador de loading cuando el ticket está en proceso */}
           {isProcessing && (
             <div className="flex items-center text-xs text-red-600 font-medium mb-4 p-2 bg-red-50 rounded-lg border border-red-200">
               <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-red-600 mr-2"></div>
@@ -62,7 +57,6 @@ export const TicketCard: React.FC<TicketCardProps> = ({
               <h3 className="text-xl font-bold text-red-800 dark:text-white">
                 Ticket #{ticket.ticketNumber}
               </h3>
-              {/* 🔔 Icono de volver a llamar para tickets CALLED */}
               {ticket.status === TICKET_STATUS.CALLED && (
                 <button
                   onClick={() => onCall(ticket)}
@@ -82,7 +76,6 @@ export const TicketCard: React.FC<TicketCardProps> = ({
             </div>
             <div className="flex items-center space-x-2">
               
-                             {/* 🎯 NUEVO: Botón de expandir/colapsar para TODOS los tickets */}
                <button
                  onClick={toggleExpanded}
                  className="p-1 rounded-full hover:bg-red-200 transition-colors duration-200"
@@ -102,12 +95,10 @@ export const TicketCard: React.FC<TicketCardProps> = ({
             </div>
           </div>
           
-          {/* 🎯 INFORMACIÓN BÁSICA: Siempre visible */}
-          <div className="bg-white dark:bg-slate-700 rounded-lg p-3 border-2 border-red-500 dark:border-red-500 mb-4">
+          <div className="bg-surface-secondary dark:bg-surface-dark-secondary rounded-lg p-3 border-2 border-red-500 dark:border-red-500 mb-4">
             <p className="text-sm text-slate-900 dark:text-white">
               <span className="font-semibold">Conductor:</span> {ticket.driverName || ticket.licenseNumber || 'No disponible'}
             </p>
-                         {/* 🎯 NUEVO: Indicador de información adicional disponible para TODOS los tickets */}
              {(ticket.licenseNumber || ticket.categoryName || ticket.subcategoryName || ticket.categoryDescription || ticket.subcategoryDescription) && (
                <div className="mt-2 flex items-center text-xs text-red-500">
                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -120,12 +111,11 @@ export const TicketCard: React.FC<TicketCardProps> = ({
              )}
           </div>
 
-                                {/* 🎯 INFORMACIÓN EXPANDIDA: Visible cuando está expandida para TODOS los tickets */}
             {isExpanded && (
              <div className="space-y-3 mb-4">
               {/* LicenseNumber si está disponible */}
               {ticket.licenseNumber && ticket.driverName && (
-                <div className="bg-white dark:bg-slate-700 rounded-lg p-3 border-2 border-red-500 dark:border-red-500">
+                <div className="bg-surface-secondary dark:bg-surface-dark-secondary rounded-lg p-3 border-2 border-red-500 dark:border-red-500">
                   <p className="text-sm text-slate-900 dark:text-white">
                     <span className="font-semibold">Número:</span> {ticket.licenseNumber}
                   </p>
@@ -134,7 +124,7 @@ export const TicketCard: React.FC<TicketCardProps> = ({
               
               {/* Categoría si está disponible */}
               {ticket.categoryName && (
-                <div className="bg-white dark:bg-slate-700 rounded-lg p-3 border-2 border-red-500 dark:border-red-500">
+                <div className="bg-surface-secondary dark:bg-surface-dark-secondary rounded-lg p-3 border-2 border-red-500 dark:border-red-500">
                   <p className="text-sm text-slate-900 dark:text-white">
                     <span className="font-semibold">Objetivo:</span> {ticket.categoryName}
                   </p>
@@ -143,7 +133,7 @@ export const TicketCard: React.FC<TicketCardProps> = ({
               
               {/* Subcategoría si está disponible */}
               {ticket.subcategoryName && (
-                <div className="bg-white dark:bg-slate-700 rounded-lg p-3 border-2 border-red-500 dark:border-red-500">
+                <div className="bg-surface-secondary dark:bg-surface-dark-secondary rounded-lg p-3 border-2 border-red-500 dark:border-red-500">
                   <p className="text-sm text-slate-900 dark:text-white">
                     <span className="font-semibold">Subcategoría:</span> {ticket.subcategoryName}
                   </p>
@@ -154,7 +144,7 @@ export const TicketCard: React.FC<TicketCardProps> = ({
               {(ticket.categoryDescription || ticket.subcategoryDescription) && (
                 <div className="space-y-2">
                   {ticket.categoryDescription && (
-                    <div className="bg-white dark:bg-slate-700 rounded-lg p-3 border-2 border-red-500 dark:border-red-500">
+                    <div className="bg-surface-secondary dark:bg-surface-dark-secondary rounded-lg p-3 border-2 border-red-500 dark:border-red-500">
                       <p className="text-xs text-slate-900 dark:text-white">
                         <span className="font-semibold">Descripción:</span> {ticket.categoryDescription}
                       </p>
@@ -162,7 +152,7 @@ export const TicketCard: React.FC<TicketCardProps> = ({
                   )}
                   
                   {ticket.subcategoryDescription && (
-                    <div className="bg-white dark:bg-slate-700 rounded-lg p-3 border-2 border-red-500 dark:border-red-500">
+                    <div className="bg-surface-secondary dark:bg-surface-dark-secondary rounded-lg p-3 border-2 border-red-500 dark:border-red-500">
                       <p className="text-xs text-slate-900 dark:text-white">
                         <span className="font-semibold">Detalle:</span> {ticket.subcategoryDescription}
                       </p>
@@ -180,14 +170,14 @@ export const TicketCard: React.FC<TicketCardProps> = ({
               <h4 className="text-sm font-semibold text-red-800 dark:text-white mb-2">Timeline:</h4>
               <div className="space-y-2">
                 {ticket.calledAt && (
-                  <div className="bg-white dark:bg-slate-700 rounded-lg p-2 border-2 border-red-500 dark:border-red-500">
+                  <div className="bg-surface-secondary dark:bg-surface-dark-secondary rounded-lg p-2 border-2 border-red-500 dark:border-red-500">
                     <p className="text-xs text-slate-900 dark:text-white">
                       <span className="font-semibold">Llamado:</span> {new Date(ticket.calledAt).toLocaleString('es-ES')}
                     </p>
                   </div>
                 )}
                 {ticket.completedAt && (
-                  <div className="bg-white dark:bg-slate-700 rounded-lg p-2 border-2 border-red-500 dark:border-red-500">
+                  <div className="bg-surface-secondary dark:bg-surface-dark-secondary rounded-lg p-2 border-2 border-red-500 dark:border-red-500">
                     <p className="text-xs text-slate-900 dark:text-white">
                       <span className="font-semibold">Completado:</span> {new Date(ticket.completedAt).toLocaleString('es-ES')}
                     </p>
@@ -207,7 +197,7 @@ export const TicketCard: React.FC<TicketCardProps> = ({
               className={`px-6 py-3 rounded-lg font-medium transition-all duration-300 transform ${
                 isProcessing || bloquearLlamar
                   ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
-                  : 'bg-white text-red-600 border-2 border-red-600 hover:bg-red-600/25 hover:text-red-700 hover:scale-105 hover:shadow-lg hover:border-red-700'
+                  : 'bg-surface text-red-600 border-2 border-red-600 hover:bg-red-600/25 hover:text-red-700 hover:scale-105 hover:shadow-lg hover:border-red-700'
               }`}
               title={bloquearLlamar ? 'No se puede llamar mientras hay tickets en proceso' : ''}
             >
@@ -222,7 +212,7 @@ export const TicketCard: React.FC<TicketCardProps> = ({
               className={`px-6 py-3 rounded-lg font-medium transition-all duration-300 transform ${
                 isProcessing 
                   ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
-                  : 'bg-white text-red-600 border-2 border-red-600 hover:bg-red-600/25 hover:text-red-700 hover:scale-105 hover:shadow-lg hover:border-red-700'
+                  : 'bg-surface text-red-600 border-2 border-red-600 hover:bg-red-600/25 hover:text-red-700 hover:scale-105 hover:shadow-lg hover:border-red-700'
               }`}
             >
               Atender
@@ -236,7 +226,7 @@ export const TicketCard: React.FC<TicketCardProps> = ({
               className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 ${
                 isProcessing 
                   ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
-                  : 'bg-white text-red-600 border-2 border-red-600 hover:bg-red-600/20 hover:text-red-700'
+                  : 'bg-surface text-red-600 border-2 border-red-600 hover:bg-red-600/20 hover:text-red-700'
               }`}
             >
               Completar
@@ -250,7 +240,7 @@ export const TicketCard: React.FC<TicketCardProps> = ({
               className={`px-6 py-3 rounded-lg font-medium transition-all duration-300 transform ${
                 isProcessing 
                   ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
-                  : 'bg-white text-red-600 border-2 border-red-600 hover:bg-red-600/25 hover:text-red-700 hover:scale-105 hover:shadow-lg hover:border-red-700'
+                  : 'bg-surface text-red-600 border-2 border-red-600 hover:bg-red-600/25 hover:text-red-700 hover:scale-105 hover:shadow-lg hover:border-red-700'
               }`}
             >
               Cancelar

@@ -3,12 +3,8 @@
 @tailwind utilities;
 
 @layer base {
-  * {
-    @apply border-gray-200 dark:border-gray-700;
-  }
-  
   body {
-    @apply bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-700 text-gray-900 dark:text-white;
+    @apply bg-background-secondary dark:bg-background-dark text-neutral-900 dark:text-white;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
   
@@ -19,11 +15,11 @@
 
 @layer components {
   .glass-card {
-    @apply bg-white/90 dark:bg-gray-900/90 backdrop-blur-md border border-gray-200/50 dark:border-gray-700/50 shadow-xl;
+    @apply bg-surface/90 dark:bg-surface-dark/90 backdrop-blur-md shadow-xl;
   }
   
   .glass-card-hover {
-    @apply hover:bg-white/95 dark:hover:bg-gray-900/95 hover:border-gray-300/70 dark:hover:border-gray-600/70 transition-all duration-300;
+    @apply hover:bg-surface/95 dark:hover:bg-surface-dark/95 hover:border-border/70 dark:hover:border-border-dark/70 transition-all duration-300;
   }
   
   .btn-primary {

@@ -1,5 +1,6 @@
 import { useEffect, useCallback } from 'react'
 import { authService } from '../services'
+import api from '../services/core/api'
 import { useAuthStore } from '../store/auth-store'
 
 /**
@@ -17,11 +18,11 @@ export const useTokenRefresh = (intervalMinutes: number = 30) => {
       if (!isValid) {
         console.log('🔄 [useTokenRefresh] Token inválido, renovando...')
         const refreshResponse = await authService.refreshToken()
-        
-        // Actualizar store (Zustand persist guardará en auth-storage automáticamente)
+        api.defaults.headers.common['Authorization'] = `Bearer ${refreshResponse.accessToken}`
+        const user = await authService.getProfile(refreshResponse.accessToken)
         useAuthStore.setState({ 
           token: refreshResponse.accessToken,
-          user: refreshResponse.user 
+          user,
         })
         
         console.log('✅ [useTokenRefresh] Token renovado exitosamente')

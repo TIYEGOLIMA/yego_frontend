@@ -8,10 +8,7 @@ import { LoadingSpinner } from './components/LoadingSpinner'
 import { Ticket } from './types'
 import './styles/index.css'
 
-// 🎯 COMPONENTE SIN WEBSOCKET: Envuelve AgentPanel para evitar conexiones WebSocket
 const AgentPanel: React.FC = () => {
-  
-  // 🔐 VERIFICAR AUTENTICACIÓN
   const { currentUser, loading: authLoading } = useAuth()
   const { isConnected } = useSocket()
   
@@ -20,16 +17,10 @@ const AgentPanel: React.FC = () => {
     selectedModule,
     modules,
     showModuleSelection,
-    
-    // Estados derivados
     ticketsEnEspera,
     ticketsLlamados,
     ticketsAtendiendo,
-    
-    // 🎯 NUEVO: Estado de tickets en proceso
     ticketsEnProceso,
-    
-    // Acciones
     cargarTickets,
     seleccionarModulo,
     llamarTicket,
@@ -41,7 +32,6 @@ const AgentPanel: React.FC = () => {
     actualizarModulosDesdeLista,
   } = useAgentPanel()
 
-  // 🎯 FUNCIONES ESPECÍFICAS PARA CADA ACCIÓN
   const handleCallTicket = async (ticket: Ticket) => {
     try {
       await llamarTicket(ticket)
@@ -75,19 +65,18 @@ const AgentPanel: React.FC = () => {
   }
 
 
-  // 🔐 VERIFICAR AUTENTICACIÓN PRIMERO
   if (authLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900">
+      <div className="flex items-center justify-center min-h-screen bg-background-secondary dark:bg-background-dark">
         <LoadingSpinner />
-        <div className="ml-4 text-gray-600 dark:text-gray-400">Verificando autenticación...</div>
+        <div className="ml-4 text-gray-600 dark:text-neutral-400">Verificando autenticación...</div>
       </div>
     )
   }
 
   if (!currentUser) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900">
+      <div className="flex items-center justify-center min-h-screen bg-background-secondary dark:bg-background-dark">
         <div className="text-center">
           <div className="text-red-600 dark:text-red-400 text-xl mb-4">❌ No autenticado</div>
           <button 
@@ -103,14 +92,12 @@ const AgentPanel: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900">
+      <div className="flex items-center justify-center min-h-screen bg-background-secondary dark:bg-background-dark">
         <LoadingSpinner />
       </div>
     )
   }
 
-  // 🎯 VERIFICAR SI EL USUARIO NECESITA SELECCIONAR MÓDULO EN EL SISTEMA PRINCIPAL
-  // Usar el estado del store principal en lugar de localStorage para evitar problemas de sincronización
   const userData = localStorage.getItem('user')
   let needsModuleSelection = false
   
@@ -126,7 +113,7 @@ const AgentPanel: React.FC = () => {
 
   if (showModuleSelection) {
     return (
-      <div className="min-h-screen bg-gray-100 dark:bg-gray-900 p-4">
+      <div className="min-h-screen bg-background-secondary dark:bg-background-dark p-4">
         <ModuleSelection
           onModuleSelected={seleccionarModulo}
           modules={modules}
@@ -139,7 +126,7 @@ const AgentPanel: React.FC = () => {
   return (
     <div className="w-full pt-6">
       {/* Header con soporte dark mode */}
-      <div className="mb-8 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-6">
+      <div className="mb-8 bg-surface dark:bg-surface-dark rounded-xl shadow-lg p-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
@@ -151,12 +138,12 @@ const AgentPanel: React.FC = () => {
           </div>
           <div className="flex items-center space-x-4">
             <div className="text-right">
-              <div className="text-sm text-gray-600 dark:text-gray-400 flex items-center justify-end gap-2">
-                <span className="text-gray-500 dark:text-gray-400">WebSocket:</span>
+              <div className="text-sm text-gray-600 dark:text-neutral-400 flex items-center justify-end gap-2">
+                <span className="text-gray-500 dark:text-neutral-400">WebSocket:</span>
                 <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border ${
                   isConnected
-                    ? 'bg-gray-100 dark:bg-gray-700 text-green-800 dark:text-green-200 border-green-300 dark:border-green-600' 
-                    : 'bg-gray-100 dark:bg-gray-700 text-red-800 dark:text-red-200 border-red-300 dark:border-red-600'
+                    ? 'bg-surface-secondary dark:bg-surface-dark-secondary text-green-800 dark:text-green-200 border-green-300 dark:border-green-600' 
+                    : 'bg-surface-secondary dark:bg-surface-dark-secondary text-red-800 dark:text-red-200 border-red-300 dark:border-red-600'
                 }`}>
                   <span className="relative flex items-center justify-center w-3 h-3">
                     <span className={`w-3 h-3 rounded-full ${
@@ -238,9 +225,7 @@ const AgentPanel: React.FC = () => {
                 hayTicketLlamado={ticketsLlamados.length > 0 || ticketsAtendiendo.length > 0}
                 autoLoading={false}
                 ticketsEnProceso={ticketsEnProceso}
-                // 🎯 NUEVO: Bloquear botón de llamar cuando hay tickets en proceso
                 bloquearLlamar={ticketsLlamados.length > 0 || ticketsAtendiendo.length > 0}
-                // 🎯 NUEVO: Layout horizontal solo para tickets en espera
                 layoutHorizontal={true}
               />
             </div>
@@ -250,5 +235,4 @@ const AgentPanel: React.FC = () => {
   )
 }
 
-// ✅ COMPONENTE PRINCIPAL: Con WebSocket habilitado
 export default AgentPanel

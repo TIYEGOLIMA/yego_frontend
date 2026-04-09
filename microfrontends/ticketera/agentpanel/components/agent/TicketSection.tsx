@@ -44,7 +44,7 @@ export const TicketSection: React.FC<TicketSectionProps> = ({
 
 
   return (
-    <div className={`bg-white dark:bg-slate-800 from-white to-gray-50 rounded-2xl shadow-xl border border-gray-100 dark:border-slate-700 p-6 ${className}`}>
+    <div className={`bg-surface dark:bg-surface-dark rounded-2xl shadow-xl border border-border dark:border-border-dark p-6 ${className}`}>
       <div className="mb-6">
         <div className="mb-4">
           <h3 className="text-xl font-bold text-gray-800 dark:text-white">{title}</h3>

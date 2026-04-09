@@ -3,7 +3,6 @@ import { Card, CardContent } from '../shared/components/ui/Card'
 import { Clock, Volume2, LogOut } from 'lucide-react'
 import { useTVDisplay } from './hooks/useTVDisplay'
 
-// 🎯 Estilos para animación de vibración (reducida)
 const shakeAnimation = `
   @keyframes shake {
     0%, 100% { transform: translateX(0) scale(1); }
@@ -19,7 +18,6 @@ const shakeAnimation = `
 
 export const TVDisplay = () => {
   const {
-    // Estados
     currentTime,
     loading,
     soundEnabled,
@@ -30,7 +28,6 @@ export const TVDisplay = () => {
     vibratingTickets,
     currentDisplayTicket,
     
-    // Estados derivados
     ticketsEnEspera,
     ticketsLlamados,
     ticketsEnAtencion,
@@ -38,41 +35,32 @@ export const TVDisplay = () => {
     isConnected,
     connectionStatus,
     
-    // Acciones
     formatearHora,
     formatearFecha,
     toggleSound
   } = useTVDisplay()
 
 
-  // 🎯 FUNCIÓN DE LOGOUT
   const handleLogout = async () => {
     try {
-      // Limpiar datos locales
       localStorage.removeItem('user')
       localStorage.removeItem('token')
       localStorage.removeItem('auth-storage')
       
-      // Forzar redirección a login usando window.location
       window.location.href = '/login'
       
     } catch (error) {
-      console.error('❌ [TVDisplay] Error en logout:', error)
-      // En caso de error, forzar redirección
+      console.error('[TVDisplay] Error en logout:', error)
       window.location.href = '/login'
     }
   }
 
-  // 🎯 VALIDACIÓN: Filtrar tickets inválidos
   const ticketsEnEsperaValidos = ticketsEnEspera.filter(ticket => ticket && typeof ticket === 'object')
   const ticketsLlamadosValidos = ticketsLlamados.filter(ticket => ticket && typeof ticket === 'object')
   const ticketsEnAtencionValidos = ticketsEnAtencion.filter(ticket => ticket && typeof ticket === 'object')
 
-  // Componente memoizado para mostrar información del conductor
   const DriverInfo = useCallback(({ ticket }: { ticket: any }) => {
-    // 🎯 VALIDACIÓN: Asegurarse de que el ticket sea válido
     if (!ticket || typeof ticket !== 'object') {
-      console.warn('⚠️ [TVDisplay] DriverInfo recibió ticket inválido:', ticket)
       return (
         <div className="text-xs text-red-400">
           ⚠️ Ticket inválido
@@ -80,7 +68,6 @@ export const TVDisplay = () => {
       )
     }
     
-    // 🎯 SIMPLE: Mostrar driverName si está disponible
     if (ticket.driverName && ticket.driverName.trim() !== '') {
       return (
         <div className="text-xs font-semibold text-white leading-tight">
@@ -89,7 +76,6 @@ export const TVDisplay = () => {
       )
     }
     
-    // 🎯 FALLBACK: Mostrar licenseNumber si no hay nombre
     if (ticket.licenseNumber) {
       return (
         <div className="text-xs text-slate-400">
@@ -98,7 +84,6 @@ export const TVDisplay = () => {
       )
     }
     
-    // 🎯 FALLBACK: Mostrar phone si no hay licenseNumber
     if (ticket.phone) {
       return (
         <div className="text-xs text-slate-400">
@@ -107,7 +92,6 @@ export const TVDisplay = () => {
       )
     }
     
-    // 🎯 ÚLTIMO RECURSO: Sin información
     return (
       <div className="text-xs text-slate-400">
         📱 Sin información
@@ -115,7 +99,6 @@ export const TVDisplay = () => {
     )
   }, [])
 
-  // 🎯 NUEVO: Componente reutilizable para tickets con diseño moderno
   const TicketCard = useCallback(({ ticket, status }: { 
     ticket: any, 
     status: 'waiting' | 'called' | 'attention'
@@ -133,7 +116,6 @@ export const TVDisplay = () => {
           boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)'
         }}
       >
-        {/* Header del ticket - Banner superior */}
         <div 
           className="p-3 border-b border-slate-600/20"
           style={{
@@ -145,9 +127,7 @@ export const TVDisplay = () => {
           </div>
         </div>
 
-        {/* Contenido del ticket */}
         <div className="p-4 space-y-3">
-          {/* Información del conductor */}
           <div className="space-y-2">
             <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
               Conductor
@@ -157,7 +137,6 @@ export const TVDisplay = () => {
             </div>
           </div>
 
-          {/* 🎯 Hora de llamado para tickets llamados */}
           {status === 'called' && ticket.calledAt && (
             <div className="flex items-center space-x-2 pt-2 border-t border-slate-600/20">
               <div 
@@ -177,7 +156,6 @@ export const TVDisplay = () => {
             </div>
           )}
 
-          {/* 🎯 NUEVO: Hora de inicio para tickets en atención */}
           {status === 'attention' && ticket.calledAt && (
             <div className="flex items-center space-x-2 pt-2 border-t border-slate-600/20">
               <div 
@@ -208,11 +186,9 @@ export const TVDisplay = () => {
       minWidth: '100vw',
       padding: '60px'
     }}>
-      {/* 🎯 Estilos CSS para animación de vibración */}
       <style>{shakeAnimation}</style>
       
-      <div className="h-full w-full flex flex-col">
-        {/* Header */}
+        <div className="h-full w-full flex flex-col">
         <div className="flex justify-between items-center mb-2">
           <div>
             <h1 className="text-2xl font-bold mb-1 text-white">Sistema de Ticketera</h1>
@@ -233,7 +209,6 @@ export const TVDisplay = () => {
           </div>
           
           <div className="flex items-center space-x-3">
-            {/* 🎯 Estado real del WebSocket */}
             <div className="flex items-center space-x-2 px-3 py-2 rounded-lg" style={{
               backgroundColor: isConnected ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)',
               border: isConnected ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)'
@@ -255,7 +230,6 @@ export const TVDisplay = () => {
               <Volume2 className="w-5 h-5" />
             </button>
             
-            {/* Botón de Cerrar Sesión */}
             <button
               onClick={handleLogout}
               className="p-2 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-all duration-200 shadow-lg"
@@ -274,9 +248,7 @@ export const TVDisplay = () => {
           width: '100%',
           gridTemplateColumns: '30% 70%'
         }}>
-          {/* Columna izquierda - Tickets Llamados y Tickets en Atención */}
           <div className="flex flex-col gap-4 items-start">
-            {/* Tickets Llamados */}
             <Card className="backdrop-blur-sm shadow-lg" style={{
                 background: '#ffffff1a',
                 height: '70%',
@@ -310,7 +282,6 @@ export const TVDisplay = () => {
                 </CardContent>
               </Card>
 
-            {/* Tickets en Atención */}
             <Card className="backdrop-blur-sm shadow-lg" style={{
                 background: '#ffffff1a',
                 height: '70%',
@@ -345,7 +316,6 @@ export const TVDisplay = () => {
               </Card>
           </div>
 
-          {/* Tickets en Espera - Columna derecha */}
           <Card className="backdrop-blur-sm shadow-lg" style={{
             background: '#ffffff1a',
             height: '100%',
@@ -389,7 +359,6 @@ export const TVDisplay = () => {
           </Card>
         </div>
 
-        {/* Estadísticas */}
         <div className="mt-32 pt-16">
           <Card className="backdrop-blur-sm shadow-lg" style={{
             background: '#ffffff1a',
@@ -434,16 +403,13 @@ export const TVDisplay = () => {
         </div>
       </div>
       
-      {/* 🎬 MODAL DE PANTALLA COMPLETA PARA TICKET LLAMADO */}
       {currentDisplayTicket && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-95 animate-fadeIn">
           <div className="text-center px-8 py-12 max-w-5xl animate-scaleIn">
-            {/* Título principal */}
             <h2 className="text-7xl font-bold text-white mb-8 animate-pulse">
               ¡TICKET LLAMADO!
             </h2>
             
-            {/* Número de ticket */}
             <div className="bg-gradient-to-r from-red-600 to-orange-600 rounded-3xl p-12 mb-8 shadow-2xl">
               <p className="text-4xl font-semibold text-white mb-4">
                 TICKET #
@@ -453,9 +419,7 @@ export const TVDisplay = () => {
               </p>
             </div>
             
-            {/* Información del conductor y módulo */}
             <div className="grid grid-cols-2 gap-6 mb-8">
-              {/* Conductor */}
               <div className="bg-white bg-opacity-10 backdrop-blur-md rounded-2xl p-8">
                 <p className="text-3xl font-semibold text-white mb-4">
                   Conductor:
@@ -465,7 +429,6 @@ export const TVDisplay = () => {
                 </p>
               </div>
               
-              {/* Módulo Asignado */}
               <div className="bg-blue-600 bg-opacity-80 backdrop-blur-md rounded-2xl p-8">
                 <p className="text-3xl font-semibold text-white mb-4">
                   Módulo:
@@ -476,7 +439,6 @@ export const TVDisplay = () => {
               </div>
             </div>
             
-            {/* Mensaje de instrucción */}
             <p className="text-4xl text-white font-bold animate-bounce">
               📍 Diríjase al MÓDULO {currentDisplayTicket.moduleId || '?'}
             </p>
@@ -484,7 +446,6 @@ export const TVDisplay = () => {
         </div>
       )}
       
-      {/* Estilos para animaciones del modal */}
       <style>{`
         @keyframes fadeIn {
           from { opacity: 0; }

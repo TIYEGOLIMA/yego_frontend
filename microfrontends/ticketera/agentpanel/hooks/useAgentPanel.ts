@@ -8,31 +8,20 @@ import { normalizeDriverName } from '../utils/utf8Decoder'
 import { useSocket } from '../contexts/SocketContext'
 
 interface UseAgentPanelReturn {
-  // Estados básicos
   tickets: Ticket[]
   loading: boolean
   selectedModule: number | null
   modules: any[]
   showModuleSelection: boolean
-  
-  // 🎯 NUEVO: Estado de tickets en proceso
   ticketsEnProceso: Set<number>
   estaTicketEnProceso: (ticketId: number) => boolean
-  
-  // Estados derivados (SIMPLE)
   ticketsEnEspera: Ticket[]
   ticketsLlamados: Ticket[]
   ticketsAtendiendo: Ticket[]
-  
-  // Estados de error
   error: string | null
   errorMessage: string
   showError: boolean
-  
-  // Estados de actualización
   lastUpdate: Date | null
-  
-  // Acciones básicas
   mostrarError: (message: string) => void
   ocultarError: () => void
   cargarTickets: () => Promise<void>
@@ -43,24 +32,14 @@ interface UseAgentPanelReturn {
   atenderTicket: (ticket: Ticket) => Promise<void>
   completarTicket: (ticket: Ticket, notes?: string) => Promise<void>
   cancelarTicket: (ticket: Ticket) => Promise<void>
-  
-  // 🎯 NUEVO: Funciones de manejo de loading
   marcarTicketEnProceso: (ticketId: number) => void
   desmarcarTicketEnProceso: (ticketId: number) => void
-  
-  // 🆕 Función para liberar módulo
   liberarModulo: () => Promise<void>
-  
-  // 🆕 Función para actualizar módulos disponibles
   actualizarModulos: () => Promise<void>
-  
-  // 🆕 Función para actualizar módulos desde lista externa
   actualizarModulosDesdeLista: (modules: any[]) => void
-  
 }
 
 export const useAgentPanel = (): UseAgentPanelReturn => {
-  // Estados básicos
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedModule, setSelectedModule] = useState<number | null>(null)
@@ -69,17 +48,12 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
   const [errorMessage, setErrorMessage] = useState<string>('')
   const [showError, setShowError] = useState(false)
   
-  
-  // 🎯 WebSocket para AgentPanel
   const { isConnected, subscribe } = useSocket()
-  
-  // 🎯 Usar useRef para evitar múltiples llamadas al endpoint de módulos
   const hasLoadedModules = useRef(false)
   const isLoadingModules = useRef(false)
   const hasRecuperadoModulo = useRef(false)
   const isInicializando = useRef(false)
 
-  // 🎯 HELPER: Obtener datos del usuario desde auth-storage
   const getCurrentUser = useCallback(() => {
     try {
       const authStorageData = localStorage.getItem('auth-storage')
@@ -91,22 +65,19 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       if (!user?.id) return null
       return user
     } catch (error) {
-      console.error('❌ [useAgentPanel] Error obteniendo usuario:', error)
+      console.error('[useAgentPanel] Error obteniendo usuario:', error)
       return null
     }
   }, [])
 
-  // 🎯 FUNCIÓN ASÍNCRONA: Obtener nombre del conductor y actualizar estado
   const obtenerNombreConductorAsync = useCallback(async (ticket: any) => {
     if (!ticket.licenseNumber || (ticket.driverName && !ticket.driverName.includes('Conductor:'))) {
       return Promise.resolve()
     }
 
     try {
-      // Verificar caché primero
       const cache = JSON.parse(localStorage.getItem('driver_names_cache') || '{}')
       if (cache[ticket.licenseNumber]?.name) {
-        // Actualizar el estado inmediatamente con el nombre del caché
         setTickets(prevTickets => 
           prevTickets.map(t => 
             t.id === ticket.id 
@@ -117,19 +88,14 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
         return Promise.resolve()
       }
 
-      // Si no está en caché, consultar API
       const { validationService } = await import('../services/validationService')
       const driverData = await validationService.getDriverByPhonePublic(ticket.licenseNumber)
       
       if (driverData?.full_name) {
         const normalizedName = normalizeDriverName(driverData.full_name)
-        
-        // Guardar en caché
         const newCache = { ...cache }
         newCache[ticket.licenseNumber] = { name: normalizedName, timestamp: Date.now() }
         localStorage.setItem('driver_names_cache', JSON.stringify(newCache))
-        
-        // Actualizar el estado inmediatamente
         setTickets(prevTickets => 
           prevTickets.map(t => 
             t.id === ticket.id 
@@ -147,7 +113,6 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
     }
   }, [])
   
-  // 🎯 SUSCRIPCIONES DE WEBSOCKET PARA ACTUALIZACIONES EN TIEMPO REAL
   useEffect(() => {
     if (!isConnected) {
       return
@@ -155,39 +120,29 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
     
     
     const subscriptions: any[] = []
-    
-    // 🎯 SUSCRIPCIÓN PRINCIPAL: Escuchar todos los eventos de tickets
     const ticketsSub = subscribe('/topic/tickets', (message: any) => {
-      // Ignorar eventos que no son de tickets (ej: MODULOS_ACTUALIZADOS)
       if (!message || message.type === 'MODULOS_ACTUALIZADOS' || (!message.id && !message.ticketId && !message.ticketNumber)) {
         return;
       }
       
       setTickets(prevTickets => {
-        // Si es un nuevo ticket WAITING sin módulo (moduleId = null), agregarlo (visible para todos los módulos)
         if (message.status === 'WAITING' && (message.moduleId === null || message.moduleId === undefined) && !prevTickets.some(t => t.id === message.id)) {
-          // Conservar TODA la información del ticket nuevo
           const newTicket = {
-            ...message, // Conservar toda la información del mensaje
+            ...message,
             _lastUpdated: Date.now()
           }
-          
-          // 🎯 OBTENER NOMBRE DEL CONDUCTOR SI NO LO TIENE
           if (newTicket.licenseNumber && !newTicket.driverName) {
             obtenerNombreConductorAsync(newTicket)
           }
           
           return [...prevTickets, newTicket]
         }
-        
-        // Si es una actualización de ticket existente
         if (prevTickets.some(t => t.id === message.id || t.id === message.ticketId)) {
           const updatedTickets = prevTickets.map(t => {
             if (t.id === message.id || t.id === message.ticketId) {
-              // 🎯 CONSERVAR TODA LA INFORMACIÓN EXISTENTE Y AGREGAR LA NUEVA
               const updatedTicket = {
-                ...t, // Mantener toda la información existente
-                ...message, // Agregar/sobrescribir con nueva información
+                ...t,
+                ...message,
                 _lastUpdated: Date.now()
               }
               
@@ -204,9 +159,7 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       
     })
 
-    // Suscripción para tickets llamados (fallback)
     const ticketCalledSub = subscribe('/topic/ticket-called', (message: any) => {
-      // Ignorar eventos que no son de tickets
       if (!message || message.type === 'MODULOS_ACTUALIZADOS' || !message.ticketId) {
         return;
       }
@@ -215,15 +168,13 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
         const updatedTickets = prevTickets.map(t => {
           if (t.id === message.ticketId) {
             const updatedTicket = {
-              ...t, // Conserva toda la información existente incluyendo driverName
+              ...t,
               status: 'CALLED' as const,
               userId: message.userId,
               moduleId: message.moduleId,
               calledAt: message.calledAt || new Date().toISOString(),
               _lastUpdated: Date.now()
             }
-            
-            // 🎯 SI NO TIENE NOMBRE DEL CONDUCTOR, OBTENERLO
             if (!updatedTicket.driverName && updatedTicket.licenseNumber) {
               obtenerNombreConductorAsync(updatedTicket)
             }
@@ -237,9 +188,7 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       })
     })
     
-    // Suscripción para tickets iniciados
     const ticketStartedSub = subscribe('/topic/ticket-started', (message: any) => {
-      // Ignorar eventos que no son de tickets
       if (!message || message.type === 'MODULOS_ACTUALIZADOS' || !message.ticketId) {
         return;
       }
@@ -263,9 +212,7 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       })
     })
     
-    // Suscripción para tickets completados
     const ticketCompletedSub = subscribe('/topic/ticket-completed', (message: any) => {
-      // Ignorar eventos que no son de tickets
       if (!message || message.type === 'MODULOS_ACTUALIZADOS' || !message.ticketId) {
         return;
       }
@@ -275,27 +222,19 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       })
     })
     
-    // Suscripción para nuevos tickets
     const newTicketSub = subscribe('/topic/new-ticket', (message: any) => {
-      // Ignorar eventos que no son de tickets
       if (!message || message.type === 'MODULOS_ACTUALIZADOS' || (!message.id && !message.ticketNumber)) {
         return;
       }
-      
-      // Los tickets nuevos WAITING sin módulo están disponibles para todos
       if ((message.status === 'WAITING' && (message.moduleId === null || message.moduleId === undefined)) || 
           message.moduleId === selectedModule) {
         setTickets(prevTickets => {
-          // Verificar si el ticket ya existe
           const exists = prevTickets.some(t => t.id === message.id)
           if (!exists) {
-            // Conservar TODA la información del ticket nuevo
             const newTicket = {
-              ...message, // Conservar toda la información
+              ...message,
               _lastUpdated: Date.now()
             }
-            
-            // 🎯 OBTENER NOMBRE DEL CONDUCTOR SI NO LO TIENE
             if (newTicket.licenseNumber && !newTicket.driverName) {
               obtenerNombreConductorAsync(newTicket)
             }
@@ -307,37 +246,29 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
         })
       }
     })
-    
-    // Guardar suscripciones
     if (ticketsSub) subscriptions.push(ticketsSub)
     if (ticketCalledSub) subscriptions.push(ticketCalledSub)
     if (ticketStartedSub) subscriptions.push(ticketStartedSub)
     if (ticketCompletedSub) subscriptions.push(ticketCompletedSub)
     if (newTicketSub) subscriptions.push(newTicketSub)
-    
-    
-    // Cleanup
     return () => {
       subscriptions.forEach(sub => {
         try {
           if (sub && typeof sub.unsubscribe === 'function') {
             sub.unsubscribe()
           }
-        } catch (error) {
-          console.warn('⚠️ [AgentPanel] Error desuscribiendo:', error)
+        } catch {
+          /* ignore unsubscribe errors */
         }
       })
     }
   }, [isConnected, selectedModule, obtenerNombreConductorAsync])
-  // 🎯 ESTADO PARA TICKETS EN PROCESO (loading)
   const [ticketsEnProceso, setTicketsEnProceso] = useState<Set<number>>(new Set())
 
-  // 🎯 NUEVO: Función para marcar ticket como en proceso
   const marcarTicketEnProceso = useCallback((ticketId: number) => {
     setTicketsEnProceso(prev => new Set(prev).add(ticketId))
   }, [])
 
-  // 🎯 NUEVO: Función para desmarcar ticket como en proceso
   const desmarcarTicketEnProceso = useCallback((ticketId: number) => {
     setTicketsEnProceso(prev => {
       const newSet = new Set(prev)
@@ -346,79 +277,51 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
     })
   }, [])
 
-  // 🎯 NUEVO: Función para verificar si un ticket está en proceso
   const estaTicketEnProceso = useCallback((ticketId: number) => {
     return ticketsEnProceso.has(ticketId)
   }, [ticketsEnProceso])
 
-  // 🎯 FUNCIÓN SIMPLE: Mostrar errores
   const mostrarError = useCallback((message: string) => {
     setErrorMessage(message)
     setShowError(true)
     setTimeout(() => setShowError(false), 3000)
   }, [])
-
-
-  // 🎯 FUNCIÓN REAL: Cargar tickets del backend
   const cargarTickets = useCallback(async (esConsultaAutomatica = false) => {
     if (!selectedModule) {
       return
     }
     
     try {
-      // 🎯 OBTENER TODOS LOS TICKETS usando /tickets/all
       const todosLosTicketsBackend = await ticketService.getAllTickets()
-      
-      // 🎯 OBTENER AGENT ID DEL USUARIO ACTUAL
       const currentUser = getCurrentUser()
       const currentAgentId = currentUser?.id || null
-      
-      // 🎯 FILTRAR TICKETS RELEVANTES PARA ESTE MÓDULO
       const ticketsRelevantes = todosLosTicketsBackend.filter(ticket => {
-        // Mostrar tickets WAITING (sin módulo asignado - moduleId = null)
         if (ticket.status === 'WAITING' && (ticket.moduleId === null || ticket.moduleId === undefined)) {
           return true
         }
-        
-        // Mostrar tickets asignados a este módulo específico
         if (ticket.moduleId === selectedModule && (ticket.status === 'CALLED' || ticket.status === 'IN_PROGRESS')) {
           return true
         }
-        
-        // Mostrar tickets CALLED/IN_PROGRESS asignados a este agente Y módulo
         if (currentAgentId && ticket.agentId === currentAgentId && ticket.moduleId === selectedModule && (ticket.status === 'CALLED' || ticket.status === 'IN_PROGRESS')) {
           return true
         }
         return false
       })
-      
-      
-      // 🎯 PROCESAR TICKETS FILTRADOS CONSERVANDO TODOS LOS DATOS
       const todosLosTickets = ticketsRelevantes.map(ticket => {
         if (ticket.status === 'WAITING') {
-          // Los tickets en espera no tienen módulo asignado aún, pero conservan toda su información
           const processedTicket = {
-            ...ticket, // Conservar TODA la información del ticket
-            userId: null, // Solo limpiar el userId para tickets en espera
+            ...ticket,
+            userId: null,
           }
-          
-          
           return processedTicket
         }
-        
-        // Los tickets llamados/atendiendo mantienen TODA su información
         const processedTicket = {
-          ...ticket // Conservar TODA la información del ticket
+          ...ticket
         }
-        
-        
         return processedTicket
       })
 
-      // 🎯 CARGAR NOMBRES DE CONDUCTORES PARA TODOS LOS TICKETS
       if (!esConsultaAutomatica) {
-        
-        // 🧹 Limpiar cache corrupto si es necesario (una vez por sesión)
         if (!sessionStorage.getItem('cache_cleaned')) {
           try {
             const cache = JSON.parse(localStorage.getItem('driver_names_cache') || '{}')
@@ -446,7 +349,6 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
 
       const ticketsConNombres = await Promise.all(
         todosLosTickets.map(async (ticket) => {
-          // Si ya tiene driverName, no hacer nada
           if (ticket.driverName) {
             return ticket
           }
@@ -456,17 +358,13 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
           }
           
           try {
-
-            // 🎯 NUEVO: Primero verificar si ya está en el cache con diferentes formatos
             try {
               const cache = JSON.parse(localStorage.getItem('driver_names_cache') || '{}')
-              
-              // Probar diferentes formatos en cache
               const cacheKeys = [
-                ticket.licenseNumber, // Formato original
-                ticket.licenseNumber.startsWith('+51') ? ticket.licenseNumber : `+51${ticket.licenseNumber}`, // Con +51
-                ticket.licenseNumber.startsWith('+51') ? ticket.licenseNumber.substring(3) : ticket.licenseNumber, // Sin +51
-                ticket.licenseNumber.replace(/[\s\-\(\)]/g, '') // Sin espacios ni caracteres especiales
+                ticket.licenseNumber,
+                ticket.licenseNumber.startsWith('+51') ? ticket.licenseNumber : `+51${ticket.licenseNumber}`,
+                ticket.licenseNumber.startsWith('+51') ? ticket.licenseNumber.substring(3) : ticket.licenseNumber,
+                ticket.licenseNumber.replace(/[\s\-\(\)]/g, '')
               ]
               
               for (const key of cacheKeys) {
@@ -478,51 +376,31 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
                 }
               }
             } catch (error) {
-              // Ignorar errores de cache
+              /* ignore cache errors */
             }
-            
-            // 🎯 NUEVO: Si no está en cache, consultar API
             let phoneToSearch = ticket.licenseNumber.trim()
-            
-            // Intentar diferentes formatos de teléfono
             const phoneVariants = []
-            
-            // Formato original
             phoneVariants.push(phoneToSearch)
-            
-            // Limpiar espacios y caracteres especiales
             const cleanPhone = phoneToSearch.replace(/[\s\-\(\)]/g, '')
             if (cleanPhone !== phoneToSearch) {
               phoneVariants.push(cleanPhone)
             }
-            
-            // Si no empieza con +51, agregarlo
             if (!cleanPhone.startsWith('+51') && cleanPhone.length === 9) {
               phoneVariants.push(`+51${cleanPhone}`)
             }
-            
-            // Si empieza con +51, también probar sin el +51
             if (cleanPhone.startsWith('+51')) {
               phoneVariants.push(cleanPhone.substring(3))
             }
-            
-            // Si el teléfono es solo números de 9 dígitos, agregarlo con +51
             if (/^\d{9}$/.test(cleanPhone)) {
               phoneVariants.push(`+51${cleanPhone}`)
             }
-            
-            // Si el teléfono empieza con 9 y tiene 9 dígitos, es un celular peruano válido
             if (/^9\d{8}$/.test(cleanPhone)) {
               phoneVariants.push(`+51${cleanPhone}`)
             }
-            
-            // Remover duplicados
             const uniqueVariants = [...new Set(phoneVariants)]
             
             let driverData = null
             let successfulPhone = null
-            
-            // Probar cada variante hasta encontrar una que funcione
             for (const phoneVariant of uniqueVariants) {
               if (!phoneVariant) continue
               
@@ -539,16 +417,13 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
             
             if (driverData?.full_name && successfulPhone) {
               const normalizedName = normalizeDriverName(driverData.full_name)
-              
-              // Guardar en cache con el teléfono que funcionó
               try {
                 const cache = JSON.parse(localStorage.getItem('driver_names_cache') || '{}')
                 cache[successfulPhone] = { name: normalizedName, timestamp: Date.now() }
-                // También guardar con el teléfono original
                 cache[ticket.licenseNumber] = { name: normalizedName, timestamp: Date.now() }
                 localStorage.setItem('driver_names_cache', JSON.stringify(cache))
               } catch (error) {
-                // Ignorar errores de cache
+                /* ignore cache errors */
               }
               
               return {
@@ -556,11 +431,9 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
                 driverName: normalizedName
               }
             } else {
-              // 🎯 FALLBACK: Si no se encontró nombre, usar el teléfono como identificador temporal
-              // Esto es mejor que no mostrar nada
               return {
                 ...ticket,
-                driverName: `Conductor: ${ticket.licenseNumber}` // Temporal hasta que se encuentre el nombre real
+                driverName: `Conductor: ${ticket.licenseNumber}`
               }
             }
           } catch (error) {
@@ -569,18 +442,13 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
           return ticket
         })
       )
-      
-      // 🎯 MOSTRAR TICKETS INMEDIATAMENTE CON TODOS LOS DETALLES
       setTickets(ticketsConNombres)
-
-      // 🎯 OBTENER NOMBRES ASINCRÓNICAMENTE (SIN BLOQUEAR LA UI)
       const ticketsSinNombre = ticketsConNombres.filter(ticket => 
         ticket.licenseNumber && 
         (!ticket.driverName || ticket.driverName.includes('Conductor:'))
       )
       
       if (ticketsSinNombre.length > 0) {
-        // Procesar en paralelo todos los nombres
         Promise.all(
           ticketsSinNombre.map(ticket => obtenerNombreConductorAsync(ticket))
         ).catch(() => {
@@ -588,17 +456,11 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       }
       
     } catch (error: any) {
-      console.error('❌ [AgentPanel] Error cargando tickets del backend:', error)
-      
-      // 🎯 MANEJAR ERRORES DE AUTENTICACIÓN ESPECÍFICAMENTE
+      console.error('[AgentPanel] Error cargando tickets del backend:', error)
       if (error?.response?.status === 401) {
         mostrarError('Error de autenticación. Por favor, inicie sesión nuevamente.')
-        
-        // 🎯 MICROFRONTEND: Solo limpiar datos locales (NO hacer logout completo)
         safeSetItem('selectedModule', '')
         setTickets([])
-        
-        // Redirigir al login (el sistema principal manejará el logout completo)
         window.location.href = '/login'
         return
       }
@@ -607,7 +469,6 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
     }
   }, [selectedModule, mostrarError, getCurrentUser])
 
-  // 🎯 FUNCIÓN SIMPLE: Llamar ticket
   const llamarTicket = useCallback(async (ticket: Ticket) => {
     if (!selectedModule) {
       mostrarError('Debe seleccionar un módulo primero')
@@ -615,31 +476,23 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
     }
     
     try {
-      // 🎯 Obtener el userId del usuario actual
       const currentUser = getCurrentUser()
       if (!currentUser?.id) {
         mostrarError('No se pudo identificar el usuario')
         return
       }
       const userId = currentUser.id
-      
-      // Llamar ticket vía API
       const updatedTicket = await ticketService.callTicket(ticket.id, userId, selectedModule)
-      
-      // Actualizar el ticket en el estado local
       setTickets(prevTickets => {
         return prevTickets.map(t => {
           if (t.id === ticket.id) {
-            // 🎯 CONSERVAR EL NOMBRE DEL CONDUCTOR DEL TICKET ORIGINAL
             const ticketActualizado = {
-              ...t, // Datos originales (incluye driverName si ya lo tenía)
-              ...updatedTicket, // Datos del backend
+              ...t,
+              ...updatedTicket,
               status: 'CALLED' as const,
-              driverName: t.driverName || updatedTicket.driverName, // Conservar nombre existente
+              driverName: t.driverName || updatedTicket.driverName,
               _lastUpdated: Date.now()
             }
-
-            // 🎯 SI NO TIENE NOMBRE, OBTENERLO ASINCRÓNICAMENTE
             if (!ticketActualizado.driverName && ticketActualizado.licenseNumber) {
               obtenerNombreConductorAsync(ticketActualizado)
             }
@@ -651,12 +504,11 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       })
       
     } catch (error) {
-      console.error('❌ [AgentPanel] Error llamando ticket:', error)
+      console.error('[AgentPanel] Error llamando ticket:', error)
       mostrarError('Error al llamar el ticket')
     }
   }, [selectedModule, mostrarError, getCurrentUser])
 
-  // Función para atender un ticket
   const atenderTicket = useCallback(async (ticket: Ticket) => {
     if (!selectedModule) {
       mostrarError('Debes seleccionar un módulo primero')
@@ -664,10 +516,7 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
     }
 
     try {
-      // 🎯 NUEVO: Marcar ticket como en proceso
       marcarTicketEnProceso(ticket.id)
-      
-      // 🎯 OBTENER AGENT ID
       const currentUser = getCurrentUser()
       const agentId = ticket.userId || currentUser?.id
       
@@ -677,8 +526,6 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       }
       
       await ticketService.startTicket(ticket.id, agentId)
-      
-      // 🎯 NUEVO: Actualizar estado local inmediatamente para evitar parpadeo
       setTickets(prev => {
         const updatedTickets = prev.map(t => {
           if (t.id === ticket.id) {
@@ -696,22 +543,18 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       })
       
     } catch (error: any) {
-      console.error('❌ Error atendiendo ticket:', error)
+      console.error('Error atendiendo ticket:', error)
       mostrarError(error.response?.data?.message || 'Error al atender el ticket')
-      
-      // 🎯 NUEVO: Revertir cambios si hay error
       setTickets(prev => prev.map(t => 
         t.id === ticket.id 
           ? { ...t, status: 'CALLED', startedAt: undefined }
           : t
       ))
     } finally {
-      // 🎯 NUEVO: Desmarcar ticket como en proceso
       desmarcarTicketEnProceso(ticket.id)
     }
   }, [selectedModule, marcarTicketEnProceso, desmarcarTicketEnProceso, mostrarError, getCurrentUser])
 
-  // 🎯 FUNCIÓN PARA COMPLETAR TICKET
   const completarTicket = useCallback(async (ticket: Ticket, notes?: string) => {
     if (!selectedModule) {
       mostrarError('Debe seleccionar un módulo primero')
@@ -719,7 +562,6 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
     }
     
     try {
-      // 🎯 OBTENER AGENT ID
       const currentUser = getCurrentUser()
       const agentId = ticket.userId || currentUser?.id
       
@@ -727,25 +569,20 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
         mostrarError('No se pudo identificar el agente. Por favor, inicie sesión nuevamente.')
         return
       }
-      
-      // Completar ticket vía API
       await ticketService.completeTicket(ticket.id, agentId, notes)
-      
-      // 🎯 ACTUALIZAR ESTADO LOCAL INMEDIATAMENTE (sin recargar del backend)
       setTickets(prevTickets => {
-        const updatedTickets = prevTickets.filter(t => t.id !== ticket.id) // Remover ticket completado
+        const updatedTickets = prevTickets.filter(t => t.id !== ticket.id)
         
         return updatedTickets
       })
       
       
     } catch (error) {
-      console.error('❌ [AgentPanel] Error completando ticket:', error)
+      console.error('[AgentPanel] Error completando ticket:', error)
       mostrarError('Error al completar el ticket')
     }
   }, [selectedModule, mostrarError, getCurrentUser])
 
-  // 🎯 FUNCIÓN PARA CANCELAR TICKET
   const cancelarTicket = useCallback(async (ticket: Ticket) => {
     if (!selectedModule) {
       mostrarError('Debe seleccionar un módulo primero')
@@ -753,7 +590,6 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
     }
     
     try {
-      // 🎯 OBTENER AGENT ID
       const currentUser = getCurrentUser()
       const agentId = ticket.userId || currentUser?.id
       
@@ -762,14 +598,11 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
         return
       }
       
-      // Cancelar ticket vía API
       await ticketService.cancelTicket(ticket.id, agentId)
-      
-      // Recargar tickets para reflejar el cambio
       await cargarTickets()
       
     } catch (error) {
-      console.error('❌ [AgentPanel] Error cancelando ticket:', error)
+      console.error('[AgentPanel] Error cancelando ticket:', error)
       mostrarError('Error al cancelar el ticket')
     }
   }, [selectedModule, mostrarError, cargarTickets])
@@ -782,24 +615,14 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
         return
       }
       
-      // Marcar que ya se recuperó el módulo para evitar que el useEffect inicial se ejecute de nuevo
       hasRecuperadoModulo.current = true
-      
-      // Limpiar estado anterior
       setTickets([])
-      
-      // Asignar nuevo módulo
       setSelectedModule(moduleId)
       setShowModuleSelection(false)
-      
-      // Persistir módulo seleccionado
       safeSetItem('selectedModule', moduleId.toString())
       safeSetItem('selectedModuleName', selectedModuleData.name)
-      
-      // Cargar tickets del nuevo módulo
       await cargarTickets()
-      
-      mostrarError(`✅ Módulo "${selectedModuleData.name}" asignado correctamente`)
+      mostrarError(`Módulo "${selectedModuleData.name}" asignado correctamente`)
     } catch (error: any) {
       console.error('Error seleccionando módulo:', error)
       
@@ -859,8 +682,6 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
               hasLoadedModules.current = true
             }
           } else {
-            // Cuando tieneModuloAsignado es false, NO mostrar módulos disponibles, solo ocupados para liberar
-            // No establecer módulos disponibles
             setModules([])
             setShowModuleSelection(true)
             hasLoadedModules.current = true
@@ -898,24 +719,17 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
     }
   }, [selectedModule]) 
 
-  // 🎯 ESTADOS DERIVADOS SIMPLES  
   const ticketsEnEspera = useMemo(() => {
     const ticketsWaiting = tickets.filter(t => t.status === 'WAITING')
     const ticketsInProgress = tickets.filter(t => t.status === 'IN_PROGRESS')
-    
-    // Ordenar por fecha de creación (FIFO - First In, First Out)
     const ticketsOrdenados = [...ticketsWaiting].sort((a, b) => {
       const fechaA = a.createdAt ? new Date(a.createdAt).getTime() : a.id
       const fechaB = b.createdAt ? new Date(b.createdAt).getTime() : b.id
       return fechaA - fechaB
     })
-    
-    // Si hay tickets en proceso, solo mostrar 1 ticket en espera (el más antiguo)
     if (ticketsInProgress.length > 0) {
       return ticketsOrdenados.slice(0, 1)
     }
-    
-    // Si no hay tickets en proceso, mostrar todos los tickets en espera ordenados
     return ticketsOrdenados
   }, [tickets])
 
@@ -936,9 +750,6 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       }
 
       await queueAgentService.liberarModuloDelUsuario()
-      
-      // El WebSocket actualizará automáticamente la lista de módulos disponibles y ocupados
-      
       setSelectedModule(null)
       setTickets([])
       safeSetItem('selectedModule', '')
@@ -1006,31 +817,20 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
   }, [])
 
   return {
-    // Estados básicos
     tickets,
     loading,
     selectedModule,
     modules,
     showModuleSelection,
-    
-    // 🎯 NUEVO: Estado de tickets en proceso
     ticketsEnProceso,
     estaTicketEnProceso,
-    
-    // Estados derivados
     ticketsEnEspera,
     ticketsLlamados,
     ticketsAtendiendo,
-    
-    // Estados de error
     error: null,
     errorMessage,
     showError,
-    
-    // Estados de actualización
     lastUpdate: null,
-    
-    // Acciones básicas
     mostrarError,
     ocultarError: () => setShowError(false),
     cargarTickets,
@@ -1041,17 +841,10 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
     atenderTicket,
     completarTicket,
     cancelarTicket,
-    // 🎯 NUEVO: Funciones de manejo de loading
     marcarTicketEnProceso,
     desmarcarTicketEnProceso,
-    
-    // 🆕 Función para liberar módulo
     liberarModulo,
-    
-    // 🆕 Función para actualizar módulos disponibles
     actualizarModulos,
-    
-    // 🆕 Función para actualizar módulos desde lista externa
     actualizarModulosDesdeLista
   }
 }

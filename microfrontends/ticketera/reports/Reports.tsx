@@ -37,7 +37,6 @@ const Reports: React.FC = () => {
   const exportMenuRef = useRef<HTMLDivElement>(null)
   const hasLoadedRef = useRef(false)
 
-  // 🎯 CERRAR MENÚ AL HACER CLIC FUERA
   useEffect(() => {
     const manejarClicExterno = (event: MouseEvent) => {
       if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
@@ -52,11 +51,9 @@ const Reports: React.FC = () => {
     return () => document.removeEventListener('mousedown', manejarClicExterno)
   }, [])
 
-  // 🎯 FUNCIONES PARA EL CALENDARIO
   const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
   const diasSemana = ['L', 'M', 'M', 'J', 'V', 'S', 'D']
   
-  // Función para formatear fecha sin conversión UTC (mantiene fecha local)
   const formatearFechaLocal = (fecha: Date): string => {
     const año = fecha.getFullYear()
     const mes = String(fecha.getMonth() + 1).padStart(2, '0')
@@ -64,7 +61,6 @@ const Reports: React.FC = () => {
     return `${año}-${mes}-${dia}`
   }
 
-  // Función para parsear fecha YYYY-MM-DD como fecha local (sin conversión UTC)
   const parsearFechaLocal = (fechaStr: string): Date => {
     const [año, mes, dia] = fechaStr.split('-').map(Number)
     return new Date(año, mes - 1, dia)
@@ -76,14 +72,12 @@ const Reports: React.FC = () => {
     const primerDia = new Date(año, mes, 1)
     const ultimoDia = new Date(año, mes + 1, 0)
     const diasEnMes = ultimoDia.getDate()
-    const diaInicioSemana = (primerDia.getDay() + 6) % 7 // Ajustar para que Lunes = 0
-    
+    const diaInicioSemana = (primerDia.getDay() + 6) % 7
+
     const dias: (number | null)[] = []
-    // Agregar días vacíos al inicio
     for (let i = 0; i < diaInicioSemana; i++) {
       dias.push(null)
     }
-    // Agregar días del mes
     for (let i = 1; i <= diasEnMes; i++) {
       dias.push(i)
     }
@@ -91,11 +85,10 @@ const Reports: React.FC = () => {
     return dias
   }
 
-  // 🎯 FUNCIÓN PARA VERIFICAR SI UNA FECHA ES FUTURA
   const esFechaFutura = (dia: number) => {
     const fecha = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), dia)
     const hoy = new Date()
-    hoy.setHours(23, 59, 59, 999) // Incluir todo el día de hoy
+    hoy.setHours(23, 59, 59, 999)
     return fecha > hoy
   }
 
@@ -103,21 +96,17 @@ const Reports: React.FC = () => {
     const fechaSeleccionada = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), dia)
     const fechaStr = formatearFechaLocal(fechaSeleccionada)
     
-    // Validar que no sea una fecha futura
     if (esFechaFutura(dia)) {
-      return // No permitir seleccionar fechas futuras
+      return
     }
-    
+
     if (!fechaInicio || (fechaInicio && fechaFin)) {
-      // Iniciar nueva selección
       setFechaInicio(fechaStr)
       setFechaFin('')
     } else if (fechaStr < fechaInicio) {
-      // Si la fecha seleccionada es anterior a la de inicio, hacerla la nueva fecha de inicio
       setFechaInicio(fechaStr)
       setFechaFin('')
     } else {
-      // Completar el rango
       setFechaFin(fechaStr)
     }
   }
@@ -163,14 +152,12 @@ const Reports: React.FC = () => {
       if (direccion === 'anterior') {
         nuevoMes.setMonth(prev.getMonth() - 1)
       } else {
-        // Validar que no se pueda avanzar a un mes futuro
         const mesSiguiente = new Date(prev)
         mesSiguiente.setMonth(prev.getMonth() + 1)
         const hoy = new Date()
-        // Si el mes siguiente es mayor que el mes actual, no permitir avanzar
         if (mesSiguiente.getFullYear() > hoy.getFullYear() || 
             (mesSiguiente.getFullYear() === hoy.getFullYear() && mesSiguiente.getMonth() > hoy.getMonth())) {
-          return prev // No cambiar el mes
+          return prev
         }
         nuevoMes.setMonth(prev.getMonth() + 1)
       }
@@ -179,7 +166,6 @@ const Reports: React.FC = () => {
   }
 
 
-  // 🎯 OBTENER FECHAS PARA USAR EN LAS PETICIONES
   const obtenerFechasParaPeticion = () => {
     if (fechaInicio && fechaFin) {
       return { fechaInicio, fechaFin }
@@ -187,35 +173,19 @@ const Reports: React.FC = () => {
     return {}
   }
 
-  // 🎯 FUNCIÓN DE CARGA DE DATOS
   const loadReportData = async () => {
     try {
       setLoading(true)
       setDatosCargados(false)
-      
+
       const params = obtenerFechasParaPeticion()
-      
-      // Log para indicar si se está cargando con o sin filtros
-      if (params.fechaInicio && params.fechaFin) {
-        console.log('📊 [Reports] Cargando datos de reportes de SAC con filtro de fechas:', params)
-      } else {
-        console.log('📊 [Reports] Cargando todo el historial de reportes de SAC (sin filtros de fecha)')
-      }
-      
-      // Obtener datos reales del backend
+
       const data = await reportsService.getSACPerformanceReports(params)
       setReportData(data)
       setDatosCargados(true)
-      
-      if (params.fechaInicio && params.fechaFin) {
-        console.log('✅ [Reports] Datos de reportes cargados con filtro:', params, data)
-      } else {
-        console.log('✅ [Reports] Todo el historial de reportes cargado:', data)
-      }
-      
+
     } catch (error) {
-      console.error('❌ [Reports] Error cargando datos de reportes:', error)
-      // En caso de error, mostrar datos vacíos
+      console.error('[Reports] Error cargando datos de reportes:', error)
       setReportData({
         totalSACs: 0,
         totalTickets: 0,
@@ -231,25 +201,20 @@ const Reports: React.FC = () => {
     }
   }
 
-  // 🎯 FUNCIÓN PARA CARGAR TODO EL HISTORIAL (endpoint /all)
   const cargarHistorialCompleto = async () => {
     try {
       setLoading(true)
       setDatosCargados(false)
-      // No limpiar las fechas aquí para que el usuario pueda ver qué filtro tenía antes
       setShowDatePicker(false)
-      
-      // Llamar al endpoint /all que devuelve todo el historial
+
       const data = await reportsService.obtenerTodoElHistorial()
       setReportData(data)
       setDatosCargados(true)
-      // Limpiar fechas después de cargar los datos
       setFechaInicio('')
       setFechaFin('')
       
     } catch (error) {
-      console.error('❌ [Reports] Error cargando historial completo:', error)
-      // En caso de error, mostrar datos vacíos
+      console.error('[Reports] Error cargando historial completo:', error)
       setReportData({
         totalSACs: 0,
         totalTickets: 0,
@@ -265,33 +230,26 @@ const Reports: React.FC = () => {
     }
   }
 
-  // 🎯 CARGAR HISTORIAL COMPLETO POR DEFECTO AL MONTAR EL COMPONENTE
   useEffect(() => {
-    // Evitar llamadas duplicadas (especialmente en React StrictMode)
     if (hasLoadedRef.current) return
     hasLoadedRef.current = true
-    
-    // Cargar todo el historial al iniciar
-    cargarHistorialCompleto()
-  }, []) // Solo se ejecuta una vez al montar el componente
 
-  // 🎯 CARGAR DATOS AUTOMÁTICAMENTE CUANDO SE COMPLETA EL RANGO
+    cargarHistorialCompleto()
+  }, [])
+
   useEffect(() => {
     if (fechaInicio && fechaFin) {
-      // Validar que la fecha de inicio sea anterior a la de fin
       if (new Date(fechaInicio) > new Date(fechaFin)) {
         return
       }
-      // Cargar datos automáticamente cuando se seleccionan ambas fechas
       const timer = setTimeout(() => {
         loadReportData()
-      }, 300) // Pequeño delay para evitar múltiples llamadas
-      
+      }, 300)
+
       return () => clearTimeout(timer)
     }
   }, [fechaInicio, fechaFin])
 
-  // 🎯 FUNCIONES DE EXPORTACIÓN
   const descargarArchivo = (blob: Blob, nombreArchivo: string) => {
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
@@ -303,31 +261,18 @@ const Reports: React.FC = () => {
     window.URL.revokeObjectURL(url)
   }
 
-  // 🎯 FUNCIÓN HELPER PARA EXPORTAR
   const exportarReporte = async (tipo: 'excel' | 'imagen', formato?: string) => {
     try {
       setExporting(true)
       setShowExportMenu(false)
-      
-      // Obtener parámetros de fecha para enviar al backend
-      // Si hay fechas seleccionadas, usar esos filtros; si no, exportar todo el historial
+
       const tieneFechas = fechaInicio && fechaFin
       const params = tieneFechas ? { fechaInicio, fechaFin } : {}
-      
-      console.log(`📤 [Reports] Exportando a ${tipo}...`)
-      
-      if (tieneFechas) {
-        console.log(`📅 [Reports] Exportando con filtro de fechas: ${fechaInicio} - ${fechaFin}`)
-        console.log(`📅 [Reports] Parámetros enviados:`, params)
-      } else {
-        console.log(`📚 [Reports] Exportando todo el historial (sin filtros de fecha)`)
-    }
-      
+
       let blob: Blob
       let extension: string
       
       if (tipo === 'excel') {
-        // Si hay fechas, enviar con parámetros; si no, el backend debe manejar sin parámetros
         blob = await reportsService.exportarAExcel(tieneFechas ? params : undefined)
         extension = 'xlsx'
       } else {
@@ -341,14 +286,8 @@ const Reports: React.FC = () => {
       const nombreArchivo = `reporte_sac_${dateRange}.${extension}`
       
       descargarArchivo(blob, nombreArchivo)
-      
-      if (tieneFechas) {
-        console.log(`✅ [Reports] Exportación a ${tipo} completada con filtro de fechas:`, params)
-      } else {
-        console.log(`✅ [Reports] Exportación a ${tipo} completada (historial completo)`)
-      }
     } catch (error) {
-      console.error(`❌ [Reports] Error exportando a ${tipo}:`, error)
+      console.error(`[Reports] Error exportando a ${tipo}:`, error)
       alert(`Error al exportar a ${tipo === 'excel' ? 'Excel' : formato}. Por favor, intente nuevamente.`)
     } finally {
       setExporting(false)
@@ -362,7 +301,6 @@ const Reports: React.FC = () => {
     setShowExportMenu(!showExportMenu)
   }
 
-  // 🎯 RENDERIZADO DE LOADING (solo cuando está cargando datos)
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-white dark:from-slate-900 dark:to-slate-800 p-6">
@@ -383,11 +321,9 @@ const Reports: React.FC = () => {
     )
   }
 
-  // 🎯 RENDERIZADO PRINCIPAL
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-white dark:from-slate-900 dark:to-slate-800 p-6">
       <div className="max-w-7xl mx-auto">
-        {/* HEADER */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-6">
             <div>
@@ -399,7 +335,6 @@ const Reports: React.FC = () => {
               </p>
             </div>
             <div className="flex items-center space-x-4">
-              {/* Date Picker */}
               <div className="relative flex items-center gap-2" ref={datePickerRef}>
                 <button
                   type="button"
@@ -415,7 +350,6 @@ const Reports: React.FC = () => {
                   <ChevronDown className={`w-4 h-4 text-slate-500 dark:text-slate-400 transition-transform ml-2 ${showDatePicker ? 'rotate-180' : ''}`} />
                 </button>
                 
-                {/* Botón de Histórico */}
                 {(fechaInicio || fechaFin) && (
                   <button
                     type="button"
@@ -428,10 +362,8 @@ const Reports: React.FC = () => {
                   </button>
                 )}
                 
-                {/* Calendario desplegable */}
                 {showDatePicker && (
                   <div className="absolute top-full right-0 mt-2 w-80 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-slate-200 dark:border-slate-700 p-5 z-50">
-                    {/* Header del calendario */}
                     <div className="flex items-center justify-between mb-4">
                       <button
                         onClick={() => cambiarMes('anterior')}
@@ -456,8 +388,7 @@ const Reports: React.FC = () => {
                         <ChevronRight className="w-5 h-5 text-slate-600 dark:text-slate-400" />
                       </button>
                     </div>
-                    
-                    {/* Días de la semana */}
+
                     <div className="grid grid-cols-7 gap-2 mb-3">
                       {diasSemana.map((dia, index) => (
                         <div key={index} className="text-center text-sm font-medium text-slate-600 dark:text-slate-400 py-2">
@@ -465,8 +396,7 @@ const Reports: React.FC = () => {
                         </div>
                       ))}
                     </div>
-                    
-                    {/* Días del mes */}
+
                     <div className="grid grid-cols-7 gap-2">
                       {obtenerDiasDelMes(currentMonth).map((dia, index) => {
                         if (dia === null) {
@@ -501,8 +431,7 @@ const Reports: React.FC = () => {
                   </div>
                 )}
               </div>
-              
-              {/* Botón de exportar con menú desplegable */}
+
               <div className="relative" ref={exportMenuRef}>
                 <Button
                   onClick={toggleExportMenu}
@@ -522,7 +451,6 @@ const Reports: React.FC = () => {
                   <ChevronDown className="w-4 h-4 ml-2" />
                 </Button>
 
-                {/* Menú desplegable */}
                 {showExportMenu && (
                   <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-50">
                     <button
@@ -554,7 +482,6 @@ const Reports: React.FC = () => {
         </div>
 
 
-        {/* MÉTRICAS PRINCIPALES - Solo mostrar si hay datos cargados */}
         {datosCargados && reportData ? (
           <>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -581,7 +508,6 @@ const Reports: React.FC = () => {
               })}
         </div>
 
-        {/* TOP 3 MEJORES SAC */}
         <Card className="mb-8 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
           <CardHeader>
             <CardTitle className="flex items-center space-x-2 text-slate-900 dark:text-slate-100">
@@ -628,7 +554,6 @@ const Reports: React.FC = () => {
           </CardContent>
         </Card>
 
-        {/* TABLA DE DESEMPEÑO DETALLADO */}
         <Card className="mb-8 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
           <CardHeader>
             <CardTitle className="flex items-center space-x-2 text-slate-900 dark:text-slate-100">
@@ -692,7 +617,6 @@ const Reports: React.FC = () => {
           </CardContent>
         </Card>
 
-        {/* VALORACIONES RECIENTES */}
         <Card className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
           <CardHeader>
             <CardTitle className="flex items-center space-x-2 text-slate-900 dark:text-slate-100">

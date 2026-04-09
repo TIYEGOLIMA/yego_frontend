@@ -46,7 +46,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     
     return (
       <Comp
-        className={cn(buttonVariants({ variant, size, className }))}
+        className={cn(buttonVariants({ variant, size }), className)}
         ref={ref}
         disabled={disabled || loading}
         {...props}
@@ -55,7 +55,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl"></div>
         )}
         
-        <div className="relative flex items-center justify-center">
+        <div className="relative flex flex-row flex-nowrap items-center justify-center">
           {loading && (
             <svg
               className="animate-spin -ml-1 mr-3 h-5 w-5"

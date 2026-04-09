@@ -3,14 +3,12 @@ import { useLocation } from 'react-router-dom';
 import AgentPanel from 'microfrontends/ticketera/agentpanel/AgentPanel';
 import Reports from 'microfrontends/ticketera/reports/Reports';
 import { SocketProvider } from 'microfrontends/ticketera/agentpanel/contexts/SocketContext';
-import { useAuthStore } from '../../../store/auth-store';
+import { useAuthStore } from '../../../../store/auth-store';
 
 const TicketeraWrapper: React.FC = () => {
   const location = useLocation();
   const { user } = useAuthStore();
-  
-  
-  // 🎯 OPERADOR solo puede ver Reports
+
   if (user?.role === 'OPERADOR') {
     if (location.pathname === '/reports') {
       return <Reports />;
@@ -37,13 +35,11 @@ const TicketeraWrapper: React.FC = () => {
       );
     }
   }
-  
-  // 🎯 SAC y otros roles - Lógica normal
+
   if (location.pathname === '/reports') {
     return <Reports />;
   }
-  
-  // 🎯 Por defecto, renderizar AgentPanel para /tickets
+
   return (
     <SocketProvider>
       <AgentPanel />

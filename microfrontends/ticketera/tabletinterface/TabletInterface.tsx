@@ -16,10 +16,8 @@ import {
   Maximize,
   Minimize
 } from 'lucide-react'
-// Import from local index.ts (types)
 import { ticketService, moduleService, driverService } from './services'
 
-// Definir tipos locales para evitar problemas de import
 interface UserType {
   id: number
   username: string
@@ -30,8 +28,6 @@ interface UserType {
   moduleId?: number | null
 }
 
-// 🔐 MICROFRONTEND: Solo helpers para leer datos (NO hacer logout completo)
-// 🎯 ACTUALIZADO: Leer desde auth-storage (Zustand persist) en lugar de claves directas
 const authHelpers = {
   isAuthenticated: (): boolean => {
     try {
@@ -48,7 +44,6 @@ const authHelpers = {
   
   getUser: (): UserType | null => {
     try {
-      // 🎯 LEER DESDE auth-storage (Zustand persist) en lugar de claves directas
       const authStorageData = localStorage.getItem('auth-storage')
       if (!authStorageData) return null
       
@@ -57,7 +52,6 @@ const authHelpers = {
       
       if (!user) return null
       
-      // Validar que el usuario tenga los campos necesarios
       if (!user.id || !user.username || !user.role) {
         return null
       }
@@ -68,14 +62,11 @@ const authHelpers = {
     }
   },
 
-  // 🎯 MICROFRONTEND: Solo navegar al login (NO limpiar tokens globales)
   navigateToLogin: (): void => {
-    console.log('🚪 [TabletInterface] Navegando al login...')
     window.location.href = '/login'
   }
 }
 
-// 🎯 COMPONENTES ESPECÍFICOS PARA TABLETINTERFACE
 const ErrorMessage = ({ message }: { message: string }) => (
   <div className="flex items-center justify-center text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/30 p-4 rounded-lg border-2 border-red-200 dark:border-red-800">
     <div className="w-5 h-5 mr-2">⚠️</div>
@@ -123,7 +114,6 @@ const AuthStatus = () => (
   </div>
 )
 
-// Hook personalizado para TabletInterface que no hace llamadas innecesarias
 const useTabletInterface = () => {
   const [currentUser, setCurrentUser] = useState<UserType | null>(null)
   const [error, setError] = useState<string>('')
@@ -136,14 +126,11 @@ const useTabletInterface = () => {
       if (user) {
         setCurrentUser(user)
         setError('')
-        console.log('✅ [TabletInterface] Usuario autenticado:', user.username)
       } else {
         setError('Error al obtener información del usuario')
-        console.log('❌ [TabletInterface] Usuario no encontrado')
       }
     } else {
       setError('Debe iniciar sesión para usar la tablet')
-      console.log('❌ [TabletInterface] Usuario no autenticado')
     }
   }, [])
 
@@ -162,7 +149,6 @@ export default function TabletInterface() {
   const { logout } = useAuthStore()
   const { currentUser, error, loading, setLoading, optionsLoaded, setOptionsLoaded, setError } = useTabletInterface()
 
-  // Estados del formulario
   const [selectedOption, setSelectedOption] = useState<number | null>(null)
   const [selectedSubOption, setSelectedSubOption] = useState<number | null>(null)
   const [phoneNumber, setPhoneNumber] = useState('')
@@ -171,7 +157,6 @@ export default function TabletInterface() {
   const [currentStep, setCurrentStep] = useState<'options' | 'subOptions' | 'phone' | 'driver' | 'rating'>('options')
   const [isFullscreen, setIsFullscreen] = useState(false)
 
-  // Estados para el conductor
   const [driverData, setDriverData] = useState({
     firstName: '',
     lastName: '',
@@ -179,15 +164,11 @@ export default function TabletInterface() {
   })
   const [tipoDocumento, setTipoDocumento] = useState<'dni' | 'carnet' | null>(null)
   
-  // ✅ Refs para almacenar timers y limpiarlos correctamente
   const countdownTimerRef = useRef<NodeJS.Timeout | null>(null)
 
-
-  // Estados para las opciones
   const [options, setOptions] = useState<any[]>([])
   const [subOptions, setSubOptions] = useState<any[]>([])
 
-  // Cargar opciones solo una vez
   const cargarOpciones = useCallback(async () => {
     if (optionsLoaded) return
     
@@ -196,21 +177,18 @@ export default function TabletInterface() {
       const opciones = await moduleService.getAllOptions()
       setOptions(opciones)
       setOptionsLoaded(true)
-      console.log('✅ [TabletInterface] Opciones cargadas:', opciones.length)
     } catch (error) {
-      console.error('❌ [TabletInterface] Error cargando opciones:', error)
+      console.error('[TabletInterface] Error cargando opciones:', error)
       setError('Error al cargar las opciones')
     } finally {
       setLoading(false)
     }
   }, [optionsLoaded, setError])
 
-  // Cargar opciones al montar el componente
   useEffect(() => {
     cargarOpciones()
   }, [cargarOpciones])
 
-  // Memoizar funciones para evitar re-renders
   const seleccionarOpcion = useCallback(async (optionId: number) => {
     if (loading) return
     
@@ -220,9 +198,8 @@ export default function TabletInterface() {
       setSubOptions(subOpciones)
       setSelectedOption(optionId)
       setCurrentStep('subOptions')
-      console.log('✅ [TabletInterface] Sub-opciones cargadas:', subOpciones.length)
     } catch (error) {
-      console.error('❌ [TabletInterface] Error cargando sub-opciones:', error)
+      console.error('[TabletInterface] Error cargando sub-opciones:', error)
       setError('Error al cargar las sub-opciones')
     } finally {
       setLoading(false)
@@ -234,11 +211,9 @@ export default function TabletInterface() {
     
     setSelectedSubOption(subOptionId)
     setCurrentStep('phone')
-    console.log('✅ [TabletInterface] Sub-opción seleccionada:', subOptionId)
   }, [loading])
 
   const validarNumeroTicket = useCallback((numero: string) => {
-    // Debe ser exactamente 9 dígitos, empezar con 9
     return numero.length === 9 && /^9\d{8}$/.test(numero)
   }, [])
 
@@ -267,33 +242,25 @@ export default function TabletInterface() {
 
     try {
       setLoading(true)
-      
-      // Primero buscar si el conductor ya existe
+
       const conductorExistente = await driverService.searchDriverByPhone(phoneNumber)
-      
+
       if (conductorExistente) {
-        // Si el conductor existe, crear el ticket directamente
-        console.log('✅ [TabletInterface] Conductor encontrado:', conductorExistente.full_name)
-        
         const ticketData = {
           optionId: selectedSubOption!,
           licenseNumber: phoneNumber
         }
 
-        const nuevoTicket = await ticketService.createTicketPublic(ticketData)
-        console.log('✅ [TabletInterface] Ticket creado:', nuevoTicket)
-        
-        // Guardar datos del conductor encontrado
+        await ticketService.createTicketPublic(ticketData)
+
         setDriverData({
           firstName: conductorExistente.full_name.split(' ')[0] || '',
           lastName: conductorExistente.full_name.split(' ').slice(1).join(' ') || '',
           phone: phoneNumber
         })
-        
-        // Mostrar modal de ticket creado
+
         setShowTicketCreatedModal(true)
-        
-        // Iniciar contador regresivo de 5 segundos
+
         let countdown = 5
         const countdownElement = document.getElementById('countdown')
         const progressBar = document.getElementById('progress-bar')
@@ -310,12 +277,11 @@ export default function TabletInterface() {
           }
         }, 1000)
       } else {
-        // Si no existe, mostrar modal para registrar conductor
         setCurrentStep('driver')
         setShowDriverModal(true)
       }
     } catch (error) {
-      console.error('❌ [TabletInterface] Error creando ticket:', error)
+      console.error('[TabletInterface] Error creando ticket:', error)
       setError('Error al crear el ticket')
     } finally {
       setLoading(false)
@@ -324,7 +290,6 @@ export default function TabletInterface() {
 
 
   const resetearFormulario = useCallback(() => {
-    // ✅ Limpiar timer al resetear
     if (countdownTimerRef.current) {
       clearInterval(countdownTimerRef.current)
       countdownTimerRef.current = null
@@ -339,10 +304,8 @@ export default function TabletInterface() {
     setTipoDocumento(null)
     setDriverData({ firstName: '', lastName: '', phone: '' })
     setError('')
-    console.log('🔄 [TabletInterface] Formulario reseteado')
   }, [setError])
-  
-  // ✅ Cleanup al desmontar componente
+
   useEffect(() => {
     return () => {
       if (countdownTimerRef.current) {
@@ -358,51 +321,39 @@ export default function TabletInterface() {
     
     try {
       setLoading(true)
-      
-      let conductor
+
       if (tipoDocumento === 'dni') {
-        // Si es DNI, validar que tenga 8 dígitos
         if (!validarDNI(driverData.phone)) {
           setError('El DNI debe tener 8 dígitos')
           return
         }
-        // Validar con la API
-        conductor = await driverService.createDriverByDni({
+        await driverService.createDriverByDni({
           dni: driverData.phone,
           phone: phoneNumber
         })
       } else if (tipoDocumento === 'carnet') {
-        // Si es carnet de extranjería, solo guardar nombre y apellido
-        conductor = await driverService.createDriverManual({
+        await driverService.createDriverManual({
           firstName: driverData.firstName,
           lastName: driverData.lastName,
           phone: phoneNumber
         })
       }
-      
-      console.log('✅ [TabletInterface] Conductor guardado:', conductor)
-      
-      // Ahora crear el ticket automáticamente
+
       try {
-        console.log('🎫 [TabletInterface] Creando ticket para conductor:', conductor.full_name)
-        
         const ticketData = {
           optionId: selectedSubOption!,
           licenseNumber: phoneNumber
         }
 
-        const nuevoTicket = await ticketService.createTicketPublic(ticketData)
-        console.log('✅ [TabletInterface] Ticket creado exitosamente:', nuevoTicket)
-        
+        await ticketService.createTicketPublic(ticketData)
+
         setShowDriverModal(false)
         setShowTicketCreatedModal(true)
-        
-        // ✅ Limpiar timer anterior si existe
+
         if (countdownTimerRef.current) {
           clearInterval(countdownTimerRef.current)
         }
-        
-        // Iniciar contador regresivo de 5 segundos
+
         let countdown = 5
         const countdownElement = document.getElementById('countdown')
         const progressBar = document.getElementById('progress-bar')
@@ -423,12 +374,12 @@ export default function TabletInterface() {
         }, 1000)
         
       } catch (ticketError) {
-        console.error('❌ [TabletInterface] Error creando ticket:', ticketError)
+        console.error('[TabletInterface] Error creando ticket:', ticketError)
         setError('Conductor guardado pero error al crear el ticket')
         setShowDriverModal(false)
       }
     } catch (error) {
-      console.error('❌ [TabletInterface] Error guardando conductor:', error)
+      console.error('[TabletInterface] Error guardando conductor:', error)
       setError('Error al guardar el conductor')
     } finally {
       setLoading(false)
@@ -438,25 +389,17 @@ export default function TabletInterface() {
 
   const handleCerrarSesion = useCallback(async () => {
     try {
-      console.log('🚪 [TabletInterface] Cerrando sesión...')
-      
-      // Llamar al logout del store para limpiar todo el estado
       logout()
-      
-      // También llamar al servicio de logout para limpiar el backend
+
       try {
         await authService.logout()
-      } catch (serviceError) {
-        console.warn('⚠️ [TabletInterface] Error en authService.logout, continuando...', serviceError)
+      } catch {
+        // continuar con cierre local
       }
-      
-      console.log('✅ [TabletInterface] Sesión cerrada exitosamente')
-      
-      // Navegar al login usando window.location para forzar recarga completa
+
       window.location.href = '/login'
     } catch (error) {
-      console.error('❌ [TabletInterface] Error en logout:', error)
-      // Incluso si hay error, limpiar y navegar al login
+      console.error('[TabletInterface] Error en logout:', error)
       logout()
       window.location.href = '/login'
     }
@@ -491,7 +434,6 @@ export default function TabletInterface() {
     setCurrentStep('phone')
   }, [])
 
-  // Renderizado de pasos
   const renderPaso1 = () => (
     <div className="space-y-8">
       <div className="text-center">
@@ -579,7 +521,6 @@ export default function TabletInterface() {
           value={phoneNumber}
           onChange={(e) => {
             const value = e.target.value
-            // Solo permitir números y que empiece con 9
             if (value === '') {
               setPhoneNumber(value)
             } else if (/^\d+$/.test(value) && value.startsWith('9')) {
@@ -632,20 +573,15 @@ export default function TabletInterface() {
   )
 
 
-  // Hook local para pantalla completa
   const enterFullscreen = () => {
     if (document.documentElement.requestFullscreen) {
-      document.documentElement.requestFullscreen().catch(err => {
-        console.log('⚠️ [TabletInterface] No se pudo activar pantalla completa:', err.message)
-      })
+      document.documentElement.requestFullscreen().catch(() => {})
     }
   }
 
   const exitFullscreen = () => {
     if (document.exitFullscreen) {
-      document.exitFullscreen().catch(err => {
-        console.log('⚠️ [TabletInterface] No se pudo salir de pantalla completa:', err.message)
-      })
+      document.exitFullscreen().catch(() => {})
     }
   }
 
@@ -657,15 +593,13 @@ export default function TabletInterface() {
     }
   }
 
-  // Detectar cambios en el estado de pantalla completa
   useEffect(() => {
     const handleFullscreenChange = () => {
       setIsFullscreen(!!document.fullscreenElement)
     }
 
     document.addEventListener('fullscreenchange', handleFullscreenChange)
-    
-    // Verificar estado inicial
+
     setIsFullscreen(!!document.fullscreenElement)
 
     return () => {
@@ -676,9 +610,7 @@ export default function TabletInterface() {
   return (
     <>
       <div className="min-h-screen w-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 flex items-center justify-center p-4 relative">
-      {/* Botones de control */}
       <div className="absolute top-4 right-4 z-50 flex space-x-2">
-        {/* Botón de pantalla completa/minimizar */}
         <button
           onClick={toggleFullscreen}
           className="bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
@@ -690,8 +622,7 @@ export default function TabletInterface() {
             <Maximize className="w-6 h-6" />
           )}
         </button>
-        
-        {/* Botón de cerrar sesión - Solo visible cuando NO está en fullscreen */}
+
         {!isFullscreen && (
           <button
             onClick={handleCerrarSesion}
@@ -768,7 +699,6 @@ export default function TabletInterface() {
       </Card>
       </div>
 
-      {/* Modal para agregar conductor */}
       {showDriverModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-slate-800 rounded-xl p-6 max-w-md w-full shadow-2xl">
@@ -791,8 +721,7 @@ export default function TabletInterface() {
                 El número <strong className="dark:text-white">{phoneNumber}</strong> no está registrado. 
                 Seleccione el tipo de documento:
               </p>
-              
-              {/* Selección de tipo de documento */}
+
               <div className="grid grid-cols-2 gap-3 mb-4">
                 <button
                   onClick={() => setTipoDocumento('dni')}
@@ -824,8 +753,7 @@ export default function TabletInterface() {
                   </div>
                 </button>
               </div>
-              
-              {/* Campos según el tipo seleccionado */}
+
               {tipoDocumento === 'dni' && (
                 <div className="space-y-3">
                   <div className="text-center p-4 bg-red-50 dark:bg-red-900/30 rounded-lg mb-4 border border-red-200 dark:border-red-800">
@@ -839,7 +767,6 @@ export default function TabletInterface() {
                     value={driverData.phone}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                       const value = e.target.value
-                      // Solo permitir números y máximo 8 dígitos
                       if (value === '' || (/^\d+$/.test(value) && value.length <= 8)) {
                         setDriverData({ ...driverData, phone: value })
                       }
@@ -918,8 +845,7 @@ export default function TabletInterface() {
           </div>
         </div>
       )}
-      
-      {/* Modal de Ticket Creado */}
+
       {showTicketCreatedModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-slate-800 rounded-xl p-6 max-w-sm w-full shadow-2xl">
@@ -935,8 +861,7 @@ export default function TabletInterface() {
               <p className="text-slate-600 dark:text-white mb-4">
                 Su ticket ha sido registrado exitosamente.
               </p>
-              
-              {/* Mostrar información del conductor */}
+
               {driverData.firstName.trim() && (
                 <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
                   <div className="flex items-center justify-center space-x-2">

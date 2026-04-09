@@ -11,6 +11,7 @@ export type {
   LoginCredentials,
   RegisterData,
   AuthResponse,
+  AuthUser,
   ChangePasswordData
 } from './auth-service';
 

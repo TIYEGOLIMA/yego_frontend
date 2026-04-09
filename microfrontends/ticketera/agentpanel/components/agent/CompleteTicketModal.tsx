@@ -25,7 +25,6 @@ export const CompleteTicketModal = ({
   const [driverName, setDriverName] = useState<string>('')
   const [loadingDriver, setLoadingDriver] = useState(false)
 
-  // 🎯 FUNCIÓN PARA OBTENER NOMBRE DEL CONDUCTOR
   const obtenerNombreConductor = useCallback(async (phoneNumber?: string, licenseNumber?: string) => {
     if (!phoneNumber && !licenseNumber) return
     
@@ -42,14 +41,13 @@ export const CompleteTicketModal = ({
         }
       }
     } catch (error) {
-      console.error('❌ [CompleteTicketModal] Error obteniendo nombre del conductor:', error)
+      console.error('[CompleteTicketModal] Error obteniendo nombre del conductor:', error)
       setDriverName('Error al obtener nombre')
     } finally {
       setLoadingDriver(false)
     }
   }, [])
 
-  // 🎯 EFECTO PARA OBTENER NOMBRE CUANDO SE ABRE EL MODAL
   useEffect(() => {
     if (isOpen && ticket) {
       obtenerNombreConductor(ticket.phone, ticket.licenseNumber)
@@ -60,7 +58,7 @@ export const CompleteTicketModal = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-black dark:bg-opacity-70 flex items-center justify-center p-4 z-50">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-md w-full mx-4 border-2 border-red-100 dark:border-red-600">
+      <div className="bg-surface dark:bg-surface-dark rounded-2xl shadow-2xl max-w-md w-full mx-4 border-2 border-red-100 dark:border-red-600">
         <div className="p-6">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-xl font-bold text-red-800 dark:text-white">
@@ -117,14 +115,14 @@ export const CompleteTicketModal = ({
             <button
               onClick={onClose}
               disabled={loading}
-              className="flex-1 px-6 py-3 rounded-xl font-medium transition-all duration-300 transform bg-gray-100 dark:bg-slate-600 text-gray-700 dark:text-slate-200 border-2 border-gray-300 dark:border-slate-500 hover:bg-gray-200 dark:hover:bg-slate-500 hover:text-gray-800 dark:hover:text-white hover:scale-105 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+              className="flex-1 px-6 py-3 rounded-xl font-medium transition-all duration-300 transform bg-surface-secondary dark:bg-surface-dark-secondary text-gray-700 dark:text-neutral-200 border-2 border-gray-300 dark:border-border-dark hover:bg-gray-200 dark:hover:bg-neutral-700 hover:text-gray-800 dark:hover:text-white hover:scale-105 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
             >
               Cancelar
             </button>
             <button
               onClick={onComplete}
               disabled={loading || !notes.trim()}
-              className="flex-1 px-6 py-3 rounded-xl font-medium transition-all duration-300 transform bg-white dark:bg-slate-700 text-red-600 dark:text-white border-2 border-red-600 dark:border-red-500 hover:bg-red-600/25 dark:hover:bg-red-900/50 hover:text-red-700 dark:hover:text-white hover:scale-105 hover:shadow-lg hover:border-red-700 dark:hover:border-red-400 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+              className="flex-1 px-6 py-3 rounded-xl font-medium transition-all duration-300 transform bg-surface dark:bg-surface-dark-secondary text-red-600 dark:text-white border-2 border-red-600 dark:border-red-500 hover:bg-red-600/25 dark:hover:bg-red-900/50 hover:text-red-700 dark:hover:text-white hover:scale-105 hover:shadow-lg hover:border-red-700 dark:hover:border-red-400 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
             >
               {loading ? (
                 <div className="flex items-center justify-center">

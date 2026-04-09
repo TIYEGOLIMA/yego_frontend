@@ -24,6 +24,7 @@ export {
   type LoginCredentials,
   type RegisterData,
   type AuthResponse,
+  type AuthUser,
   type ChangePasswordData
 } from './core';
 
@@ -32,7 +33,18 @@ export {
   yegoPremiunService,
   type DriverMonthlyStat,
   type DriverMonthlyStatsResponse,
-  type FetchDriverMonthlyStatsParams
+  type FlotaPartnerOption,
+  type DriverSummaryResponse,
+  type DriverSummaryBlock,
+  type DriverSummaryIncome,
+  type DriverSummaryPeriod,
+  type DriverSummaryGoal,
+  type DriverSummaryGoalStep,
+  type DriverTripsMonthResponse,
+  type TripCompletedItem,
+  type DailyTripsPoint,
+  type DriverTripsYearResponse,
+  type MonthlyTripsAggregate,
 } from './yego-premiun-service';
 
 // 🎫 SERVICIOS TICKETERA

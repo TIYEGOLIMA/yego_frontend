@@ -30,8 +30,7 @@ import { MarketingMensajesModule } from './features/core/marketing-mensajes'
 import YegoProOpsModule from './features/core/yego-pro-ops/yego-pro-ops.module'
 import { YegoGanttModule } from './features/core/yego-gantt'
 
-// Importar módulos de features - TICKETERA
-import TicketsModule from './features/ticketera/tickets/tickets.module'
+import TicketsModule from './features/core/ticketera/tickets/tickets.module'
 
 // Importar microfrontends para roles específicos
 import { TVDisplay, RatingTablet, TabletInterface, Reports, GarantizadoModule } from '../microfrontends'

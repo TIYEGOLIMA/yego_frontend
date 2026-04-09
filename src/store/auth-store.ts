@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { authService } from "../services"
+import api from "../services/core/api"
 
 export interface User {
   id: number;
@@ -69,9 +70,12 @@ export const useAuthStore = create<AuthState>()(
           if (!response.accessToken) {
             throw new Error('No se recibió token de acceso')
           }
+
+          api.defaults.headers.common['Authorization'] = `Bearer ${response.accessToken}`
+          const user = await authService.getProfile(response.accessToken)
           
           set({ 
-            user: response.user, 
+            user, 
             token: response.accessToken, 
             loading: false,
             error: null
@@ -79,7 +83,7 @@ export const useAuthStore = create<AuthState>()(
           localStorage.removeItem("requiereCambioPassword")
           
           // Cargar módulos solo si NO debe cambiar contraseña (si debe, no llamar my-modules)
-          if (!response.user?.requirePasswordChange) {
+          if (!user?.requirePasswordChange) {
             try {
               await get().fetchModules();
             } catch {
@@ -87,14 +91,18 @@ export const useAuthStore = create<AuthState>()(
             }
           }
           
-          return response
+          return { ...response, user }
         } catch (error: any) {
           let errorMessage = "Error al iniciar sesión"
           
           if (error.response?.status === 403) {
             errorMessage = "Usuario inactivo. Contacte al administrador del sistema"
           } else if (error.response?.status === 401) {
-            errorMessage = "Credenciales inválidas. Verifique su usuario y contraseña"
+            const failedUrl = String(error.config?.url ?? "")
+            errorMessage =
+              failedUrl.includes("profile")
+                ? "No se pudo cargar el perfil tras iniciar sesión. Intente de nuevo."
+                : "Credenciales inválidas. Verifique su usuario y contraseña"
           } else if (error.message === 'Network Error') {
             errorMessage = "Error de conexión. Verifique su conexión a internet"
           } else {
@@ -151,8 +159,10 @@ export const useAuthStore = create<AuthState>()(
         const tryRefreshToken = async () => {
           try {
             const refreshResponse = await authService.refreshToken()
+            api.defaults.headers.common['Authorization'] = `Bearer ${refreshResponse.accessToken}`
+            const user = await authService.getProfile(refreshResponse.accessToken)
             set({ 
-              user: refreshResponse.user, 
+              user, 
               token: refreshResponse.accessToken,
               loading: false 
             })

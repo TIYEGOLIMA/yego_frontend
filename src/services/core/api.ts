@@ -4,6 +4,7 @@
  */
 import axios from 'axios'
 import { authService } from './auth-service'
+import { getAccessTokenFromResponse } from './auth-token-header'
 
 // URL base de la API usando variable de entorno
 const API_BASE_URL = import.meta.env.VITE_API_URL || (
@@ -36,10 +37,15 @@ api.interceptors.request.use(
       token = localStorage.getItem('token')
     }
     
+    const existingAuth =
+      config.headers?.Authorization ??
+      (config.headers as Record<string, string | undefined>)?.authorization
+
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
-    } else {
-      // Si no hay token, remover el header de Authorization
+    } else if (!existingAuth) {
+      // Solo quitar Authorization si no hay token persistido ni header ya fijado
+      // (tras login, getProfile usa Bearer antes de que Zustand guarde en localStorage)
       delete config.headers.Authorization
     }
     
@@ -96,8 +102,9 @@ api.interceptors.response.use(
             headers: { 'Authorization': `Bearer ${currentToken}` }
           })
           
-          // Actualizar token en store (Zustand persist guardará en auth-storage automáticamente)
-          const newToken = refreshResponse.data.accessToken
+          const newToken =
+            getAccessTokenFromResponse(refreshResponse) ??
+            (refreshResponse.data as { accessToken?: string })?.accessToken
           // Actualizar directamente en el store para que Zustand persist lo guarde en auth-storage
           // Usamos import dinámico para evitar dependencia circular
           try {

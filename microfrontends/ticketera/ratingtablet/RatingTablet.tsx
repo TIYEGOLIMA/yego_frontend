@@ -19,29 +19,22 @@ const RatingTablet: React.FC = () => {
   
   const navigate = useNavigate()
   
-  // Obtener usuario del store de auth
   const authUser = useAuthStore((state) => state.user)
-  
-  // Obtener el moduleId del usuario (prioridad: store de auth > currentUser local)
-  // El moduleId puede estar en el objeto user aunque no esté en el tipo User
+
   const getUserModuleId = (): string | null => {
     const moduleId = (authUser as any)?.moduleId || currentUser?.moduleId || null
     return moduleId ? String(moduleId) : null
   }
 
-  // 🎯 WEBSOCKET CENTRALIZADO para tiempo real
-  const { 
-    isConnected, 
-    connectionStatus,
-    onTicketCompleted, 
+  const {
+    isConnected,
+    onTicketCompleted,
     onRatingRequested,
-    emitRatingSubmitted 
+    emitRatingSubmitted
   } = useRatingWebSocket()
 
-  // 🎯 CARGAR DATOS REALES DEL USUARIO
   useEffect(() => {
     try {
-      // Leer desde auth-storage (Zustand persist) en lugar de 'user'
       const authStorageData = localStorage.getItem('auth-storage')
       if (authStorageData) {
         const parsedData = JSON.parse(authStorageData)
@@ -57,8 +50,7 @@ const RatingTablet: React.FC = () => {
           return
         }
       }
-      
-      // Fallback: intentar leer desde 'user' (compatibilidad)
+
       const userData = localStorage.getItem('user')
       if (userData) {
         const user = JSON.parse(userData)
@@ -84,19 +76,14 @@ const RatingTablet: React.FC = () => {
       })
     }
   }, [])
-  
-  // Función para obtener el nombre del módulo
+
   const getModuleName = (): string => {
     const moduleId = getUserModuleId()
     if (!moduleId) return 'No asignado'
-    
-    // Para ticketera, los módulos son de atención (modulo_atencion), no del sistema principal
-    // Por lo tanto, simplemente mostrar "Módulo {id}" en lugar de buscar en el array de módulos del sistema
-    // que puede contener módulos de otros sistemas (Garantizado, Pro-Ops, etc.)
+
     return `Módulo ${moduleId}`
   }
 
-  // 🎯 WEBSOCKET: Suscripción a tickets completados
   useEffect(() => {
     if (!isConnected) {
       return
@@ -116,7 +103,6 @@ const RatingTablet: React.FC = () => {
       setComment('')
     }, userModuleId)
 
-    // Suscribirse a solicitudes específicas de rating (con filtrado por módulo)
     const unsubscribeRatingRequested = onRatingRequested((ratingRequest: any) => {
       if (ratingRequest.ticket) {
         const ticket = ratingRequest.ticket
@@ -132,15 +118,12 @@ const RatingTablet: React.FC = () => {
     }
   }, [isConnected, onTicketCompleted, onRatingRequested, currentUser?.moduleId, authUser?.moduleId])
 
-  // 🎯 HTTP Polling como fallback cuando WebSocket no esté disponible
   useEffect(() => {
     if (isConnected) {
       return
     }
     
-    const interval = setInterval(() => {
-      // Cargar tickets completados
-    }, 30000)
+    const interval = setInterval(() => {}, 30000)
     
     return () => clearInterval(interval)
   }, [isConnected])
@@ -149,7 +132,6 @@ const RatingTablet: React.FC = () => {
     setRating(value)
   }
 
-  // 🎯 FUNCIONES DE FULLSCREEN
   const enterFullscreen = () => {
     const element = document.documentElement
     if (element.requestFullscreen) {
@@ -175,7 +157,6 @@ const RatingTablet: React.FC = () => {
     }
   }
 
-  // 🎯 EFECTO PARA DETECTAR CAMBIOS EN FULLSCREEN
   useEffect(() => {
     const handleFullscreenChange = () => {
       setIsFullscreen(!!document.fullscreenElement)
@@ -248,7 +229,6 @@ const RatingTablet: React.FC = () => {
     }
   }
 
-  // Pantalla de éxito (después de enviar calificación)
   if (showThankYou) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-red-50 to-white flex items-center justify-center p-4">
@@ -274,9 +254,7 @@ const RatingTablet: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-red-50 to-white flex items-center justify-center p-4 relative">
-      {/* Botones de control en esquina superior derecha */}
       <div className="absolute top-4 right-4 z-50 flex space-x-2">
-        {/* Botón de Fullscreen/Minimizar */}
         <button
           onClick={toggleFullscreen}
           className="p-3 rounded-lg bg-blue-500 hover:bg-blue-600 text-white transition-all duration-200 shadow-lg"
@@ -284,8 +262,7 @@ const RatingTablet: React.FC = () => {
         >
           {isFullscreen ? <Minimize className="w-6 h-6" /> : <Maximize className="w-6 h-6" />}
         </button>
-        
-        {/* Botón de Cerrar Sesión (solo cuando NO está en fullscreen) */}
+
         {!isFullscreen && (
           <button
             onClick={handleLogout}
@@ -297,7 +274,6 @@ const RatingTablet: React.FC = () => {
         )}
       </div>
 
-      {/* Pantalla de espera (cuando no hay tickets para calificar) */}
       {!selectedTicket && (
         <Card className="w-full max-w-2xl text-center dark:bg-slate-800 border-2 border-red-200 dark:border-red-500">
           <CardContent className="py-20 px-10">
@@ -336,7 +312,6 @@ const RatingTablet: React.FC = () => {
         </Card>
       )}
 
-      {/* Modal de calificación (cuando llega un ticket completado) */}
       {selectedTicket && (
         <div className="fixed inset-0 bg-black bg-opacity-70 dark:bg-opacity-90 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
           <Card className="w-full max-w-2xl bg-gradient-to-br from-white to-red-50 dark:from-slate-800 dark:to-slate-900 relative border-4 border-red-400 dark:border-red-500 shadow-2xl">            
@@ -354,7 +329,6 @@ const RatingTablet: React.FC = () => {
               </p>
             </CardHeader>
             <CardContent className="space-y-8 p-8 bg-white dark:bg-slate-800">
-              {/* Estrellas */}
               <div className="text-center">
                 <p className="text-xl font-bold text-slate-800 dark:text-white mb-4">
                   Califica nuestro servicio
@@ -391,7 +365,6 @@ const RatingTablet: React.FC = () => {
                 </div>
               </div>
 
-              {/* Comentario */}
               <div>
                 <label className="block text-lg font-bold text-slate-700 dark:text-white mb-3">
                   Comentarios <span className="text-slate-400 dark:text-slate-500 font-normal">(Opcional)</span>
@@ -405,7 +378,6 @@ const RatingTablet: React.FC = () => {
                 />
               </div>
 
-              {/* Botón enviar */}
               <Button
                 onClick={handleSubmit}
                 disabled={rating === 0 || submitting}

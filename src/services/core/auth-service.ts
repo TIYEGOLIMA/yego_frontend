@@ -1,4 +1,5 @@
 import api from './api'
+import { getAccessTokenFromResponse } from './auth-token-header'
 
 export interface LoginCredentials {
   username: string;
@@ -12,22 +13,26 @@ export interface RegisterData {
   nombre: string;
 }
 
+/** Perfil de usuario (GET /auth/profile o tras login). */
+export interface AuthUser {
+  id: number;
+  username: string;
+  email: string;
+  name: string;
+  role: string;
+  moduleId?: string | null;
+  active: boolean;
+  lastLogin: string;
+  esJefe?: boolean;
+  nombreArea?: string | null;
+  requirePasswordChange?: boolean;
+}
+
+/** Login y refresh: solo token + mensaje; el perfil se obtiene con getProfile(). */
 export interface AuthResponse {
-  accessToken: string;  // Backend envía 'accessToken'
-  user: {
-    id: number;
-    username: string;
-    email: string;
-    name: string;
-    role: string;
-    moduleId?: string | null;  // Backend devuelve string, no number
-    active: boolean;
-    lastLogin: string;         // Backend devuelve LocalDateTime como string ISO
-    esJefe?: boolean;          // Si es manager_id de un área (para localStorage y cuenta)
-    nombreArea?: string | null; // Nombre del área que gestiona (solo si esJefe)
-    /** true si debe cambiar la contraseña (política semanal) para seguir usando Integral */
-    requirePasswordChange?: boolean;
-  };
+  accessToken: string;
+  message?: string;
+  user?: AuthUser;
 }
 
 export interface ChangePasswordData {
@@ -44,8 +49,12 @@ export const authService = {
    */
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
     try {
-      const response = await api.post<AuthResponse>('/auth/login', credentials);
-      return response.data;
+      const response = await api.post<{ message?: string }>('/auth/login', credentials)
+      const accessToken = getAccessTokenFromResponse(response)
+      if (!accessToken) {
+        throw new Error('No se recibió token de acceso (header X-Access-Token)')
+      }
+      return { accessToken, message: response.data?.message }
     } catch (error: any) {
       console.error('Error en login:', error.response?.data || error.message);
       if (error.message === 'Network Error') {
@@ -75,11 +84,11 @@ export const authService = {
    * @param token Token de autenticación
    * @returns Datos del perfil del usuario
    */
-  async getProfile(token: string): Promise<AuthResponse['user']> {
+  async getProfile(token: string): Promise<AuthUser> {
     try {
       // Configurar el token para esta petición específica
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      const response = await api.get<AuthResponse['user']>('/auth/profile');
+      const response = await api.get<AuthUser>('/auth/profile');
       return response.data;
     } catch (error: any) {
       console.error('Error obteniendo perfil:', error.response?.data || error.message);
@@ -156,8 +165,12 @@ export const authService = {
    */
   async refreshToken(): Promise<AuthResponse> {
     try {
-      const response = await api.post<AuthResponse>('/auth/refresh');
-      return response.data;
+      const response = await api.post<{ message?: string }>('/auth/refresh')
+      const accessToken = getAccessTokenFromResponse(response)
+      if (!accessToken) {
+        throw new Error('No se recibió token de acceso (header X-Access-Token)')
+      }
+      return { accessToken, message: response.data?.message }
     } catch (error: any) {
       console.error('❌ [authService] Error renovando token:', error.response?.data || error.message);
       throw error;

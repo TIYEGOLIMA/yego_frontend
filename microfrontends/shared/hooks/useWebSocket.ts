@@ -1,13 +1,25 @@
 import { useEffect, useCallback, useState } from 'react'
 import SocketService from '../../../src/services/socket-service'
 
+function getHasAuthToken(): boolean {
+  let token = ''
+  try {
+    const authStorageData = localStorage.getItem('auth-storage')
+    if (authStorageData) {
+      const parsedData = JSON.parse(authStorageData)
+      token = parsedData?.state?.token || ''
+    }
+  } catch {
+    token = localStorage.getItem('token') || ''
+  }
+  return !!token
+}
+
 export interface UseWebSocketOptions {
-  // Logs habilitados
   debug?: boolean
 }
 
 export interface UseWebSocketReturn {
-  // Estado de la conexión
   isConnected: boolean
   connectionStatus: string
   connectionInfo: {
@@ -16,8 +28,7 @@ export interface UseWebSocketReturn {
     url: string
     hasToken: boolean
   }
-  
-  // Métodos de suscripción con auto-cleanup
+
   onTicketeraEvent: (callback: (event: any) => void) => () => void
   sendTicketeraEvent: (event: any) => void
 }
@@ -26,43 +37,27 @@ export interface UseWebSocketReturn {
  * Hook para usar WebSocket con STOMP/SockJS
  * Proporciona estado de conexión y métodos para suscribirse a eventos
  */
-export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketReturn {
-  const {
-    debug = false
-  } = options
-
+export function useWebSocket(_options: UseWebSocketOptions = {}): UseWebSocketReturn {
   const socketService = SocketService
 
-  // Log para debugging
-  const log = useCallback((message: string, ...args: any[]) => {
-    if (debug) {
-      console.log(`🔌 [useWebSocket] ${message}`, ...args)
-    }
-  }, [debug])
-
-  // Estado de conexión
   const [isConnected, setIsConnected] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState('disconnected')
 
-  // Información de conexión
   const connectionInfo = {
     status: connectionStatus,
     connected: isConnected,
     url: import.meta.env.VITE_SOCKET_URL || 'https://api-int.yego.pro',
-    hasToken: !!localStorage.getItem('token')
+    hasToken: getHasAuthToken()
   }
 
-  // Suscribirse a cambios de estado de conexión
   useEffect(() => {
     const handleStatusChange = (status: string) => {
-      log('Cambio de estado de conexión:', status)
       setConnectionStatus(status)
       setIsConnected(status === 'connected')
     }
 
     socketService.onStatusChange(handleStatusChange)
 
-    // Estado inicial
     const initialStatus = socketService.getConnectionStatus()
     setConnectionStatus(initialStatus)
     setIsConnected(initialStatus === 'connected')
@@ -70,16 +65,12 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
     return () => {
       socketService.offStatusChange(handleStatusChange)
     }
-  }, [socketService, log])
+  }, [socketService])
 
-  // Método para suscribirse a eventos de Ticketera
   const onTicketeraEvent = useCallback((callback: (event: any) => void) => {
-    log('Suscribiéndose a eventos de Ticketera')
-    
     const wrappedCallback = (event: any) => {
-      log('Evento Ticketera recibido:', event)
       try {
-      callback(event)
+        callback(event)
       } catch (error) {
         console.error('[useWebSocket] Error ejecutando callback:', error)
       }
@@ -87,18 +78,14 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
 
     socketService.on('ticketera', wrappedCallback)
 
-    // Retornar función de cleanup
     return () => {
-      log('Desuscribiéndose de eventos de Ticketera')
       socketService.off('ticketera', wrappedCallback)
     }
-  }, [socketService, log])
+  }, [socketService])
 
-  // Método para enviar eventos a Ticketera
   const sendTicketeraEvent = useCallback((event: any) => {
-    log('Enviando evento a Ticketera:', event)
     socketService.sendTicketeraEvent(event)
-  }, [socketService, log])
+  }, [socketService])
 
   return {
     isConnected,

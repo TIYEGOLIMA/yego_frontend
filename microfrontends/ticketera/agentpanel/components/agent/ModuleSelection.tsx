@@ -5,7 +5,6 @@ import { Button } from '../ui/Button'
 import { Loader2, LogOut, Lock, Unlock, ChevronDown, ChevronUp } from 'lucide-react'
 import { ModuloAtencion, ModuloOcupado } from '../../services/moduloAtencionService'
 import { queueAgentService } from '../../services/queueAgentService'
-// Ya no usamos useSocket del contexto, usamos SocketService directamente
 import { useToastNotifications } from '../../../../../src/hooks/useToastNotifications'
 import { NotificationContainer } from '../../../../../src/components/NotificationToast'
 import SocketService from '../../../../../src/services/socket-service'
@@ -129,24 +128,18 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
   const { notifications, removeNotification } = useToastNotifications()
   const modulosOcupadosAnterioresRef = useRef<ModuloOcupado[]>([])
   const hasLoadedInitialData = useRef(false)
-  const [isConnected, setIsConnected] = useState(false)
+  const [, setIsConnected] = useState(false)
 
-  // Verificar estado de conexión directamente desde SocketService
   useEffect(() => {
     const checkConnection = () => {
       setIsConnected(SocketService.getConnectionStatus() === 'connected')
     }
-    
     checkConnection()
-    // ✅ OPTIMIZADO: Intervalo aumentado a 10 segundos (antes 1s) para reducir carga
     const interval = setInterval(checkConnection, 10000)
-    
     const handleStatusChange = (status: string) => {
       setIsConnected(status === 'connected')
     }
-    
     SocketService.onStatusChange(handleStatusChange)
-    
     return () => {
       clearInterval(interval)
       SocketService.offStatusChange(handleStatusChange)
@@ -189,7 +182,6 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
             }
           }
           
-          // Actualizar módulos disponibles siempre
           if (onModulesUpdated) {
             if (respuestaObj.modulosDisponibles && Array.isArray(respuestaObj.modulosDisponibles)) {
               const modulosDisponibles = respuestaObj.modulosDisponibles.map(mapearModuloAtencion)
@@ -203,49 +195,39 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
         }
       } catch (error) {
         console.error('Error cargando estado inicial de módulos:', error)
-        hasLoadedInitialData.current = false // Resetear en caso de error para permitir reintento
+        hasLoadedInitialData.current = false
       }
     }
 
     cargarEstadoInicial()
   }, [user?.id, onModulesUpdated])
 
-  // Usar useRef para mantener referencias estables
   const onModulesUpdatedRef = useRef(onModulesUpdated)
   const userRef = useRef(user)
   
-  // Actualizar refs cuando cambian
   useEffect(() => {
     onModulesUpdatedRef.current = onModulesUpdated
     userRef.current = user
   }, [onModulesUpdated, user])
 
-  // 🎯 Escuchar eventos de módulos actualizados directamente desde SocketService
   useEffect(() => {
     const handleModulosActualizados = (data: any) => {
-      // Actualizar módulos ocupados (siempre, aunque no haya usuario)
       if (data.modulosOcupados && Array.isArray(data.modulosOcupados)) {
         const nuevosOcupados = procesarModulosOcupados(
           data.modulosOcupados,
           data.modulosDisponibles
         )
-          
-        // Verificar si el usuario perdió su módulo (solo si hay usuario)
         if (userRef.current?.id) {
           const moduloAnteriorDelUsuario = modulosOcupadosAnterioresRef.current.find(
             (mod: ModuloOcupado) => mod.userId === userRef.current?.id
           )
-          
           if (moduloAnteriorDelUsuario && !nuevosOcupados.some((mod: ModuloOcupado) => mod.userId === userRef.current?.id)) {
             setShowModalLiberacion(true)
           }
-          }
-          
-          modulosOcupadosAnterioresRef.current = nuevosOcupados
-          setModulosOcupadosData(nuevosOcupados)
         }
-        
-      // Actualizar módulos disponibles directamente desde el evento (sin llamar a la API)
+        modulosOcupadosAnterioresRef.current = nuevosOcupados
+        setModulosOcupadosData(nuevosOcupados)
+      }
       if (data.modulosDisponibles && Array.isArray(data.modulosDisponibles) && onModulesUpdatedRef.current) {
         onModulesUpdatedRef.current(data.modulosDisponibles.map(mapearModuloAtencion))
       }
@@ -255,11 +237,8 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
 
     return () => {
       SocketService.off('modulos-actualizados', handleModulosActualizados)
-          }
-  }, []) // Sin dependencias, se ejecuta una vez al montar
-
-  // Ya no necesitamos la suscripción STOMP porque ahora usamos el evento directo 'modulos-actualizados'
-  // El evento se emite desde SocketService cuando llega a /topic/modulos-atencion o /topic/system
+    }
+  }, [])
 
   const handleModuleSelect = async (moduleId: number) => {
     if (!user) return
@@ -312,7 +291,7 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center max-w-md">
-          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-6">
+          <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-6">
             <h3 className="text-lg font-semibold text-yellow-800 dark:text-yellow-200 mb-2">
               No hay módulos disponibles
             </h3>
@@ -362,7 +341,7 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
+    <div className="min-h-screen p-4">
       <NotificationContainer 
         notifications={notifications} 
         onRemove={removeNotification} 
@@ -371,7 +350,7 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
       {/* Modal de módulo liberado */}
       {showModalLiberacion && (
         <div className="fixed inset-0 bg-black bg-opacity-50 dark:bg-black dark:bg-opacity-70 flex items-center justify-center p-4 z-50">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-md w-full mx-4 border-2 border-orange-200 dark:border-orange-600">
+          <div className="bg-surface dark:bg-surface-dark rounded-2xl shadow-2xl max-w-md w-full mx-4 border-2 border-orange-200 dark:border-orange-600">
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
@@ -393,7 +372,7 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
               </div>
               
               <div className="mb-6">
-                <p className="text-gray-700 dark:text-gray-300 mb-4">
+                <p className="text-gray-700 dark:text-neutral-300 mb-4">
                   Tu módulo ha sido liberado. Por favor, refresca la página para ver los cambios y seleccionar un nuevo módulo.
                 </p>
               </div>
@@ -463,7 +442,7 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
           </button>
 
           {showDisponibles && (
-            <div className="mt-4 bg-white dark:bg-gray-800 border-2 border-green-200 dark:border-green-800 rounded-xl p-6 shadow-lg">
+            <div className="mt-4 bg-surface dark:bg-surface-dark border-2 border-green-200 dark:border-green-800 rounded-xl p-6 shadow-lg">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {modulesFromProps.map((module) => (
                   <Card
@@ -471,7 +450,7 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
                     className={`cursor-pointer transition-all duration-200 ${
                       assigning === module.id 
                         ? 'ring-2 ring-red-500 bg-red-50 dark:bg-red-900/20' 
-                        : 'bg-white dark:bg-gray-800 border-2 border-green-300 dark:border-green-700 hover:border-green-400 dark:hover:border-green-600 shadow-md hover:shadow-lg'
+                        : 'bg-surface dark:bg-surface-dark border-2 border-green-300 dark:border-green-700 hover:border-green-400 dark:hover:border-green-600 shadow-md hover:shadow-lg'
                     }`}
                   >
                     <CardHeader className="pb-3">
@@ -489,8 +468,8 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
                     <CardContent className="pt-0">
                       {module.description && (
                         <div className="mb-4">
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Descripción:</p>
-                          <p className="text-sm text-gray-700 dark:text-gray-300 min-h-[2.5rem]">
+                          <p className="text-xs text-gray-500 dark:text-neutral-400 mb-1">Descripción:</p>
+                          <p className="text-sm text-gray-700 dark:text-neutral-300 min-h-[2.5rem]">
                             {module.description}
                           </p>
                         </div>
@@ -545,12 +524,12 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
             </button>
 
             {showOcupados && (
-              <div className="mt-4 bg-white dark:bg-gray-800 border-2 border-orange-200 dark:border-orange-800 rounded-xl p-6 shadow-lg">
+              <div className="mt-4 bg-surface dark:bg-surface-dark border-2 border-orange-200 dark:border-orange-800 rounded-xl p-6 shadow-lg">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {modulosOcupadosData.map((modulo) => (
                     <Card
                       key={modulo.moduleId}
-                      className="bg-white dark:bg-gray-800 border-2 border-orange-300 dark:border-orange-700 hover:border-orange-400 dark:hover:border-orange-600 transition-all duration-200 shadow-md hover:shadow-lg"
+                      className="bg-surface dark:bg-surface-dark border-2 border-orange-300 dark:border-orange-700 hover:border-orange-400 dark:hover:border-orange-600 transition-all duration-200 shadow-md hover:shadow-lg"
                     >
                       <CardHeader className="pb-3">
                         <div className="flex items-center justify-between mb-2">
@@ -568,7 +547,7 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
                         <div className="space-y-3 mb-4">
                           {modulo.userName && modulo.userName !== 'Usuario desconocido' && (
                           <div>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Usuario:</p>
+                            <p className="text-xs text-gray-500 dark:text-neutral-400 mb-1">Usuario:</p>
                             <p className="text-sm font-semibold text-gray-800 dark:text-white">
                               {modulo.userName}
                             </p>
@@ -576,8 +555,8 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
                           )}
                           {modulo.horaAsignacion && (
                           <div>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Asignado:</p>
-                            <p className="text-sm text-gray-700 dark:text-gray-300">
+                            <p className="text-xs text-gray-500 dark:text-neutral-400 mb-1">Asignado:</p>
+                            <p className="text-sm text-gray-700 dark:text-neutral-300">
                               {formatearFecha(modulo.horaAsignacion)}
                             </p>
                           </div>

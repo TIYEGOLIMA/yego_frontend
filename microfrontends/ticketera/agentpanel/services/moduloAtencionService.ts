@@ -56,23 +56,9 @@ export interface ModuloOcupado {
   updatedAt: string | null
 }
 
-export interface ModuloAtencionResponse {
-  id: number
-  name: string
-  description?: string
-  isActive?: boolean
-  createdAt?: string
-  updatedAt?: string
-}
-
 export const moduloAtencionService = {
   async verificarModuloOListarDisponibles(userId: number): Promise<ModuloAtencion[] | ModuloUsuarioResponse> {
     const response = await api.get(`/modulo-atencion/usuario/${userId}`)
-    return response.data
-  },
-
-  async obtenerModulosActivos(): Promise<ModuloAtencionResponse[]> {
-    const response = await api.get('/modulo-atencion/activos')
     return response.data
   }
 }

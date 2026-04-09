@@ -1,7 +1,3 @@
-// 🎯 SHARED UTILITIES - Entry Point
-// Exportar todas las utilidades compartidas entre microfrontends
-
-// Constants and Configuration
 export {
   API_BASE_URL,
   SOCKET_URL,
@@ -13,17 +9,3 @@ export {
   SESSION_CONFIG,
   SOUND_CONFIG
 } from './utils/constants'
-
-// Types  
-export type { TicketStatus, TouchUIConfig, SoundConfig } from './types/index'
-
-// UI Components
-export {
-  Button,
-  Card,
-  CardContent, 
-  CardHeader,
-  CardTitle,
-  LoadingSpinner,
-  ErrorMessage
-} from './components/index'

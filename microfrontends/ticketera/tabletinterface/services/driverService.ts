@@ -1,6 +1,5 @@
 import axios from 'axios'
 
-// 🌐 API Instance inline para evitar problemas de import
 const api = axios.create({
   baseURL: import.meta.env.VITE_AGENT_API_URL || 'https://api-int.yego.pro/api/ticketera',
   timeout: 30000,
@@ -61,7 +60,7 @@ export const driverService = {
       if (error?.response?.status === 404 || error?.response?.status === 400) {
         return null
       }
-      console.error('❌ [driverService] Error consultando conductor:', error)
+      console.error('[driverService] Error consultando conductor:', error)
       return null
     }
   },
@@ -71,7 +70,7 @@ export const driverService = {
       const response = await api.post('/drivers/registrar', driverData)
       return response.data
     } catch (error) {
-      console.error('❌ [driverService] Error registrando conductor:', error)
+      console.error('[driverService] Error registrando conductor:', error)
       throw error
     }
   },
@@ -81,16 +80,7 @@ export const driverService = {
       const response = await api.post('/drivers/registrar-dni', dniData)
       return response.data
     } catch (error) {
-      console.error('❌ [driverService] Error registrando conductor por DNI:', error)
-      throw error
-    }
-  },
-
-  async clearDriverCache(): Promise<void> {
-    try {
-      await api.get('/drivers/cache/clear')
-    } catch (error) {
-      console.error('❌ [driverService] Error limpiando cache de conductores:', error)
+      console.error('[driverService] Error registrando conductor por DNI:', error)
       throw error
     }
   }

@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useCallback } from 'react'
 import { useWebSocket } from '../../../shared/hooks/useWebSocket'
 
 interface UseTabletInterfaceWebSocketReturn {
@@ -9,39 +9,43 @@ interface UseTabletInterfaceWebSocketReturn {
   emitTicketCreated: (ticketData: any) => boolean
 }
 
-/**
- * Hook WebSocket específico para TabletInterface
- * Maneja eventos relacionados con la creación de tickets y cambios de cola
- */
 export const useTabletInterfaceWebSocket = (): UseTabletInterfaceWebSocketReturn => {
   const {
     isConnected,
     connectionStatus,
-    onTicketCreated,
-    onQueueChanged,
-    emit
-  } = useWebSocket({
-    debug: true,
-    autoReconnect: true
-  })
+    onTicketeraEvent,
+    sendTicketeraEvent
+  } = useWebSocket({ debug: true })
 
-  console.log('📱 [TabletInterface] Estado WebSocket:', {
-    isConnected,
-    connectionStatus
-  })
+  const onTicketCreated = useCallback(
+    (callback: (ticket: any) => void) => {
+      return onTicketeraEvent((event: any) => {
+        if (event.type === 'ticket_created') {
+          callback(event.data || event)
+        }
+      })
+    },
+    [onTicketeraEvent]
+  )
 
-  // Método para emitir nuevo ticket creado
-  const emitTicketCreated = (ticketData: any): boolean => {
-    console.log('📤 [TabletInterface] Enviando nuevo ticket:', ticketData)
-    return emit('ticket-created', ticketData)
-  }
+  const onQueueChanged = useCallback(
+    (callback: (queueData: any) => void) => {
+      return onTicketeraEvent((event: any) => {
+        if (event.type === 'queue_changed') {
+          callback(event.data || event)
+        }
+      })
+    },
+    [onTicketeraEvent]
+  )
 
-  // Auto-notificar cuando se conecta
-  useEffect(() => {
-    if (isConnected) {
-      console.log('✅ [TabletInterface] WebSocket conectado y listo')
-    }
-  }, [isConnected])
+  const emitTicketCreated = useCallback(
+    (ticketData: any): boolean => {
+      sendTicketeraEvent({ type: 'ticket_created', data: ticketData })
+      return true
+    },
+    [sendTicketeraEvent]
+  )
 
   return {
     isConnected,

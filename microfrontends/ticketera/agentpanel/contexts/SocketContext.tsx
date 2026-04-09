@@ -18,13 +18,11 @@ const SocketContext = createContext<SocketContextType | undefined>(undefined)
  * Mantiene la misma interfaz para compatibilidad con componentes existentes
  */
 export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
-  // 🎯 USAR WEBSOCKET CENTRALIZADO EN LUGAR DE CREAR UNO PROPIO
   const socketHook = useSocketHook()
 
-  // 🎯 MEMOIZAR EL CONTEXT VALUE PARA EVITAR RE-RENDERS INFINITOS
   const contextValue: SocketContextType = useMemo(() => {
     return {
-      client: null, // No hay cliente STOMP, ahora usa Socket.IO centralizado
+      client: null,
       isConnected: socketHook.isConnected,
       latency: socketHook.latency,
       connect: socketHook.connect,
@@ -41,10 +39,7 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
   )
 }
 
-/**
- * Hook para usar el contexto de WebSocket
- * Ahora usa el WebSocket centralizado del sistema principal
- */
+/** Hook para el WebSocket centralizado del sistema principal */
 export const useSocket = () => {
   const context = useContext(SocketContext)
   if (context === undefined) {
@@ -53,5 +48,4 @@ export const useSocket = () => {
   return context
 }
 
-// Exportar también el context para compatibilidad
 export { SocketContext }

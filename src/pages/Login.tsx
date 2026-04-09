@@ -41,9 +41,12 @@ export default function Login() {
       // El login carga los módulos inmediatamente con await antes de retornar
       const response = await login(credentials.username, credentials.password)
       
-      // Usar getRedirectPathForRole con módulos para redirección dinámica
       const { getRedirectPathForRole } = await import('../utils/role-based-routing');
-      const redirectPath = getRedirectPathForRole(response.user.role, modules || []);
+      const { modules: modulesAfterLogin } = useAuthStore.getState()
+      const redirectPath = getRedirectPathForRole(
+        response.user!.role,
+        modulesAfterLogin?.length ? modulesAfterLogin : modules || [],
+      )
       navigate(redirectPath);
     } catch (error) {
       // Error ya manejado en el store
