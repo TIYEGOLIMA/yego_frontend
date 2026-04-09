@@ -40,7 +40,6 @@ import ViajesMesVisitanteTab from './ViajesMesVisitanteTab'
 const NAME_LOOKUP_NOT_ALLOWED_MSG =
   'No se permite buscar por nombre. Usa DNI, licencia, teléfono o ID del conductor.'
 
-/** Texto que parece solo nombre (letras/espacios), sin números: no se permite como búsqueda. */
 function looksLikeNameOnlyQuery(text: string): boolean {
   const t = text.trim()
   if (t.length < 2) return false
@@ -55,6 +54,16 @@ const formatCurrency = (value: number | null | undefined) => {
     currency: 'PEN',
     minimumFractionDigits: 2,
   }).format(value)
+}
+
+const formatGoalStepPercent = (value: number | null | undefined) => {
+  if (value === null || value === undefined) return '—'
+  const n = Number(value)
+  if (Number.isNaN(n)) return '—'
+  return `${new Intl.NumberFormat('es-PE', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(n)} %`
 }
 
 const formatDate = (value: string | null | undefined) => {
@@ -195,7 +204,7 @@ const GoalsSection: React.FC<{
                           Viajes
                         </th>
                         <th className="pb-2 pr-4 text-left font-medium text-neutral-500 dark:text-neutral-400">
-                          Monto
+                          Porcentaje
                         </th>
                         <th className="pb-2 text-left font-medium text-neutral-500 dark:text-neutral-400">
                           Bono máx.
@@ -212,7 +221,7 @@ const GoalsSection: React.FC<{
                             {step.nrides ?? '—'}
                           </td>
                           <td className="py-2 pr-4 text-neutral-700 dark:text-neutral-300">
-                            {formatCurrency(step.amount)}
+                            {formatGoalStepPercent(step.amount)}
                           </td>
                           <td className="py-2 text-neutral-700 dark:text-neutral-300">
                             {formatCurrency(step.max_bonus)}
@@ -233,7 +242,6 @@ const GoalsSection: React.FC<{
 
 interface ConsultaTabProps {
   showProcessing?: boolean
-  /** Sin scroll interno: el contenido fluye con el scroll de la página */
   visitorView?: boolean
 }
 
