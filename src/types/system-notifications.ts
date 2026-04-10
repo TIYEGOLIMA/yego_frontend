@@ -25,7 +25,7 @@ export interface UserTableUpdateEvent {
 }
 
 export interface PremiumProcessAvailableEvent {
-  type: 'PREMIUN_PROCESS_AVAILABLE'
+  type: 'PREMIUM_PROCESS_AVAILABLE'
   message: string
   month: number
   year: number

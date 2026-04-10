@@ -110,7 +110,7 @@ class SystemNotificationsService {
             case 'USER_TABLE_UPDATE':
               this.onUserTableUpdate?.(event as UserTableUpdateEvent)
               break
-            case 'PREMIUN_PROCESS_AVAILABLE':
+            case 'PREMIUM_PROCESS_AVAILABLE':
               this.onPremiumProcessAvailable?.(event as PremiumProcessAvailableEvent)
               break
             case 'ROLE_DEACTIVATED':

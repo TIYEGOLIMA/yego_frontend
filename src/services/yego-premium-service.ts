@@ -67,7 +67,7 @@ const fetchDriverMonthlyStats = async (
   params: { signal?: AbortSignal } = {}
 ): Promise<DriverMonthlyStatsResponse> => {
   const { signal } = params
-  const response = await api.get('/yego-premiun/driver-active/list', {
+  const response = await api.get('/yego-premium/driver-active/list', {
     signal,
   })
 
@@ -104,7 +104,7 @@ const fetchFlotaPartners = async (params: { signal?: AbortSignal } = {}): Promis
 
 const processDriverActiveStats = async () => {
   // Usar timeout extendido (10 minutos) para esta operación que puede tardar mucho tiempo
-  const response = await api.post('/yego-premiun/driver-active/process', {}, {
+  const response = await api.post('/yego-premium/driver-active/process', {}, {
     timeout: 600000, // 10 minutos (600000ms)
   })
   const responseData = response.data
@@ -121,7 +121,7 @@ const processDriverActiveStats = async () => {
 const processDriverActiveStatsByMonth = async (month: number, year: number) => {
   // Usar timeout extendido (10 minutos) para esta operación que puede tardar mucho tiempo
   const response = await api.post(
-    '/yego-premiun/driver-active/process',
+    '/yego-premium/driver-active/process',
     { month, year },
     {
       timeout: 600000, // 10 minutos (600000ms)
@@ -218,7 +218,7 @@ const fetchDriverTripsMonth = async (
   params: { driverId: string; month: number; year: number; signal?: AbortSignal }
 ): Promise<DriverTripsMonthResponse> => {
   const { driverId, month, year, signal } = params
-  const response = await api.get<DriverTripsMonthResponse>('/yego-premiun/driver-trips/month', {
+  const response = await api.get<DriverTripsMonthResponse>('/yego-premium/driver-trips/month', {
     params: { driverId, month, year },
     signal,
   })
@@ -243,14 +243,14 @@ const fetchDriverTripsYear = async (
   params: { driverId: string; year: number; signal?: AbortSignal }
 ): Promise<DriverTripsYearResponse> => {
   const { driverId, year, signal } = params
-  const response = await api.get<DriverTripsYearResponse>('/yego-premiun/driver-trips/year', {
+  const response = await api.get<DriverTripsYearResponse>('/yego-premium/driver-trips/year', {
     params: { driverId, year },
     signal,
   })
   return response.data
 }
 
-export const yegoPremiunService = {
+export const yegoPremiumService = {
   fetchDriverMonthlyStats,
   fetchFlotaPartners,
   processDriverActiveStats,
@@ -260,4 +260,4 @@ export const yegoPremiunService = {
   fetchDriverTripsYear,
 }
 
-export default yegoPremiunService
+export default yegoPremiumService

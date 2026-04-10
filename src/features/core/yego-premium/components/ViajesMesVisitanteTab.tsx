@@ -27,7 +27,7 @@ import {
 import { Label } from '../../../../components/ui/label'
 import { Button } from '../../../../components/ui/button'
 import { Loader2, RefreshCw, Route, TrendingUp, Wallet } from 'lucide-react'
-import { yegoPremiunService, type DriverTripsYearResponse } from '../../../../services'
+import { yegoPremiumService, type DriverTripsYearResponse } from '../../../../services'
 import { getDefaultTripsYear, getTripsYearSelectOptions } from '../trips-year-options'
 
 const MONTH_SHORT = [
@@ -90,7 +90,7 @@ const ViajesMesVisitanteTab: React.FC<ViajesMesVisitanteTabProps> = ({ driverId 
     setLoading(true)
     setError(null)
 
-    yegoPremiunService
+    yegoPremiumService
       .fetchDriverTripsYear({
         driverId: driverId.trim(),
         year: Number(year),

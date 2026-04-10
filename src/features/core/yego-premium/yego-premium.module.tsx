@@ -6,7 +6,7 @@ import { Eye } from 'lucide-react'
 import ConsultaTab from './components/ConsultaTab'
 import ViajesMesTab from './components/ViajesMesTab'
 
-const YegoPremiunModule: React.FC = () => {
+const YegoPremiumModule: React.FC = () => {
   const user = useAuthStore((state) => state.user)
   const roleNorm = user?.role?.trim().toUpperCase() ?? ''
   /** Solo consulta visitante, sin switch ni tabla global (mismos permisos que visitante de lectura). */
@@ -19,7 +19,7 @@ const YegoPremiunModule: React.FC = () => {
     return (
       <div className="flex w-full min-w-0 max-w-none flex-col gap-5">
         <header className="shrink-0">
-          <h1 className="yego-heading-1 mb-2">Módulo Yego Premiun</h1>
+          <h1 className="yego-heading-1 mb-2">Módulo Yego Premium</h1>
           <p className="yego-body">
             Consulta información de conductores y sus viajes mensuales.
           </p>
@@ -35,11 +35,11 @@ const YegoPremiunModule: React.FC = () => {
     <div className="w-full max-w-none space-y-6 p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="yego-heading-1 mb-2">Módulo Yego Premiun</h1>
+          <h1 className="yego-heading-1 mb-2">Módulo Yego Premium</h1>
           <p className="yego-body">
             {visitanteMode
               ? 'Consulta información de conductores y sus viajes mensuales.'
-              : 'Consulta los registros mensuales de conductores asociados a la categoría Yego Premiun.'}
+              : 'Consulta los registros mensuales de conductores asociados a la categoría Yego Premium.'}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -69,4 +69,4 @@ const YegoPremiunModule: React.FC = () => {
   )
 }
 
-export default YegoPremiunModule
+export default YegoPremiumModule

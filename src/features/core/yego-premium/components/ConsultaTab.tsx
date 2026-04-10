@@ -28,7 +28,7 @@ import {
   Trophy,
 } from 'lucide-react'
 import {
-  yegoPremiunService,
+  yegoPremiumService,
   type DriverSummaryResponse,
   type DriverSummaryBlock,
   type DriverSummaryGoal,
@@ -259,7 +259,7 @@ const ConsultaTab: React.FC<ConsultaTabProps> = ({ showProcessing = false, visit
   useEffect(() => {
     const controller = new AbortController()
     setFleetLoading(true)
-    yegoPremiunService
+    yegoPremiumService
       .fetchFlotaPartners({ signal: controller.signal })
       .then((list) => {
         const sorted = [...list].sort((a, b) =>
@@ -291,7 +291,7 @@ const ConsultaTab: React.FC<ConsultaTabProps> = ({ showProcessing = false, visit
       setError(null)
       setResult(null)
 
-      const data = await yegoPremiunService.fetchDriverSummary(trimmed, selectedParkId)
+      const data = await yegoPremiumService.fetchDriverSummary(trimmed, selectedParkId)
       setResult(data)
       setLastSearchText(trimmed)
       setHasSearched(true)

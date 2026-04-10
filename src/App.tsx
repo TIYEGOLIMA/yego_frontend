@@ -25,7 +25,7 @@ import ApiLogsModule from './features/core/api-logs/api-logs.module'
 import SessionsModule from './features/core/sessions/sessions.module'
 import { AsistenciaModule } from './features/core/asistencia'
 import { WelcomeModule } from './features/core/welcome'
-import YegoPremiunModule from './features/core/yego-premiun/yego-premiun.module'
+import YegoPremiumModule from './features/core/yego-premium/yego-premium.module'
 import { MarketingMensajesModule } from './features/core/marketing-mensajes'
 import YegoProOpsModule from './features/core/yego-pro-ops/yego-pro-ops.module'
 import { YegoGanttModule } from './features/core/yego-gantt'
@@ -373,9 +373,9 @@ function App() {
                <AsistenciaModule />
              </PermissionRoute>
            } />
-           <Route path="yego-premiun" element={
-             <PermissionRoute module="yego-premiun">
-               <YegoPremiunModule />
+           <Route path="yego-premium" element={
+             <PermissionRoute module="yego-premium">
+               <YegoPremiumModule />
              </PermissionRoute>
            } />
            <Route path="yego-pro-ops" element={

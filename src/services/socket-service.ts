@@ -466,7 +466,7 @@ class SocketService {
       this.emit('system', event);
     };
 
-    this.subscribe('/topic/yego-premiun', handlePremiumEvent);
+    this.subscribe('/topic/yego-premium', handlePremiumEvent);
     this.subscribe('/topic/premium-driver', handlePremiumEvent);
   }
 

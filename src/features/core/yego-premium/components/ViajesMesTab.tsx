@@ -36,7 +36,7 @@ import {
   RefreshCcw,
   Award,
 } from 'lucide-react'
-import { yegoPremiunService, type DriverMonthlyStat, type FlotaPartnerOption } from '../../../../services'
+import { yegoPremiumService, type DriverMonthlyStat, type FlotaPartnerOption } from '../../../../services'
 import { getDefaultTripsYear, getTripsYearSelectOptions } from '../trips-year-options'
 import {
   Dialog,
@@ -265,7 +265,7 @@ const ViajesMesTab: React.FC<ViajesMesTabProps> = ({ showProcessing = false, dri
         }
         setError(null)
 
-        const response = await yegoPremiunService.fetchDriverMonthlyStats({ signal })
+        const response = await yegoPremiumService.fetchDriverMonthlyStats({ signal })
 
         if (!signal || !signal.aborted) {
           setStats(response.data)
@@ -274,7 +274,7 @@ const ViajesMesTab: React.FC<ViajesMesTabProps> = ({ showProcessing = false, dri
         if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED' || err?.message === 'canceled') {
           return
         }
-        console.error('[YegoPremiun] Error al cargar estadísticas:', err)
+        console.error('[YegoPremium] Error al cargar estadísticas:', err)
         if (!signal || !signal.aborted) {
           setError('No se pudieron cargar los registros. Intenta de nuevo.')
           setStats([])
@@ -302,7 +302,7 @@ const ViajesMesTab: React.FC<ViajesMesTabProps> = ({ showProcessing = false, dri
   useEffect(() => {
     const controller = new AbortController()
     setFleetOptionsError(null)
-    yegoPremiunService
+    yegoPremiumService
       .fetchFlotaPartners({ signal: controller.signal })
       .then((list) => {
         const sorted = [...list].sort((a, b) =>
@@ -312,7 +312,7 @@ const ViajesMesTab: React.FC<ViajesMesTabProps> = ({ showProcessing = false, dri
       })
       .catch((err) => {
         if (controller.signal.aborted) return
-        console.error('[YegoPremiun] Error al cargar lista de flotas:', err)
+        console.error('[YegoPremium] Error al cargar lista de flotas:', err)
         setFleetOptionsError('No se pudo cargar el listado de flotas')
         setFleetOptions([])
       })
@@ -425,7 +425,7 @@ const ViajesMesTab: React.FC<ViajesMesTabProps> = ({ showProcessing = false, dri
       }, 1000)
 
       try {
-        const processed = await yegoPremiunService.processDriverActiveStatsByMonth(month, year)
+        const processed = await yegoPremiumService.processDriverActiveStatsByMonth(month, year)
         clearInterval(timeInterval)
         
         setStats(processed)
@@ -438,7 +438,7 @@ const ViajesMesTab: React.FC<ViajesMesTabProps> = ({ showProcessing = false, dri
         setProcessingTime(0)
       }
     } catch (err: any) {
-      console.error('[YegoPremiun] Error al procesar por mes:', err)
+      console.error('[YegoPremium] Error al procesar por mes:', err)
       setError('No se pudo procesar la información del mes seleccionado. Intenta nuevamente.')
       setShowProgressModal(false)
       setProcessingTime(0)
@@ -475,7 +475,7 @@ const ViajesMesTab: React.FC<ViajesMesTabProps> = ({ showProcessing = false, dri
           <TableCell colSpan={6} className="py-10 text-center text-neutral-500">
             <div className="flex items-center justify-center gap-2">
               <Loader2 className="h-5 w-5 animate-spin" />
-              <span>Cargando registros de Yego Premiun...</span>
+              <span>Cargando registros de Yego Premium...</span>
             </div>
           </TableCell>
         </TableRow>
@@ -674,7 +674,7 @@ const ViajesMesTab: React.FC<ViajesMesTabProps> = ({ showProcessing = false, dri
           <CardContent className="p-3">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-amber-600 dark:text-amber-400">Premiun Oro</p>
+                <p className="text-xs font-medium text-amber-600 dark:text-amber-400">Premium Oro</p>
                 <p className="text-2xl font-bold text-amber-900 dark:text-amber-100">
                   {countOro}
                 </p>
@@ -690,7 +690,7 @@ const ViajesMesTab: React.FC<ViajesMesTabProps> = ({ showProcessing = false, dri
           <CardContent className="p-3">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-slate-600 dark:text-slate-400">Premiun Plata</p>
+                <p className="text-xs font-medium text-slate-600 dark:text-slate-400">Premium Plata</p>
                 <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">
                   {countPlata}
                 </p>

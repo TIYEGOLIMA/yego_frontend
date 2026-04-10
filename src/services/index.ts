@@ -30,7 +30,7 @@ export {
 
 // 📊 SERVICIOS ESPECÍFICOS
 export {
-  yegoPremiunService,
+  yegoPremiumService,
   type DriverMonthlyStat,
   type DriverMonthlyStatsResponse,
   type FlotaPartnerOption,
@@ -45,7 +45,7 @@ export {
   type DailyTripsPoint,
   type DriverTripsYearResponse,
   type MonthlyTripsAggregate,
-} from './yego-premiun-service';
+} from './yego-premium-service';
 
 // 🎫 SERVICIOS TICKETERA
 export {
