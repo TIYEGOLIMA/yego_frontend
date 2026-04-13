@@ -15,3 +15,4 @@ export { WelcomeModule } from './welcome';
 export { MarketingMensajesModule } from './marketing-mensajes';
 export { YegoGanttModule } from './yego-gantt';
 export { default as TicketsModule } from './ticketera/tickets/tickets.module';
+export { default as ControlTowerModule } from './control-tower/control-tower.module';

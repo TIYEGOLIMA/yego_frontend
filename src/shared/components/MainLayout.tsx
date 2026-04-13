@@ -164,6 +164,9 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
   const getCurrentPageTitle = () => {
     if (location.pathname === '/') return 'Dashboard';
+    if (location.pathname === '/control-tower' || location.pathname.startsWith('/control-tower/')) {
+      return 'Control Tower';
+    }
     return navItems.find(item => isActive(item.to))?.label || 'Dashboard'
   }
 

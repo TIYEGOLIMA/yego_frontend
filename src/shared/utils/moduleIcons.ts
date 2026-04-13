@@ -33,6 +33,7 @@ import {
   MapPin,
   Phone,
   GanttChart,
+  RadioTower,
   type LucideIcon
 } from 'lucide-react';
 
@@ -79,6 +80,7 @@ export const AVAILABLE_ICONS: ModuleIconConfig[] = [
   { name: 'MapPin', icon: MapPin, label: 'Ubicación' },
   { name: 'Phone', icon: Phone, label: 'Teléfono' },
   { name: 'GanttChart', icon: GanttChart, label: 'Gantt' },
+  { name: 'RadioTower', icon: RadioTower, label: 'Torre / Control' },
 ];
 
 // Mapa de iconos por nombre para acceso rápido

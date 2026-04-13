@@ -29,6 +29,7 @@ import YegoPremiumModule from './features/core/yego-premium/yego-premium.module'
 import { MarketingMensajesModule } from './features/core/marketing-mensajes'
 import YegoProOpsModule from './features/core/yego-pro-ops/yego-pro-ops.module'
 import { YegoGanttModule } from './features/core/yego-gantt'
+import ControlTowerModule from './features/core/control-tower/control-tower.module'
 
 import TicketsModule from './features/core/ticketera/tickets/tickets.module'
 
@@ -392,6 +393,11 @@ function App() {
            <Route path="mensajes-marketing" element={
              <PermissionRoute module="mensajes-marketing">
                <MarketingMensajesModule />
+             </PermissionRoute>
+           } />
+           <Route path="control-tower" element={
+             <PermissionRoute module="control-tower">
+               <ControlTowerModule />
              </PermissionRoute>
            } />
           </Route>
