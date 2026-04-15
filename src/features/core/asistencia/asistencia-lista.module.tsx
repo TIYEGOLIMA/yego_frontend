@@ -48,13 +48,8 @@ interface MarcacionData {
 interface UsuarioAsistencia {
   id: number;
   nombre: string;
-  cargo: string;
-  departamento: string;
   email?: string;
   rol?: string;
-  totalMarcaciones: number;
-  ultimaMarcacion: MarcacionData | null;
-  marcaciones: MarcacionData[];
 }
 
 export const AsistenciaListaModule: React.FC = () => {
@@ -77,101 +72,83 @@ export const AsistenciaListaModule: React.FC = () => {
   const [exportando, setExportando] = useState(false);
   const [exportacionExitosa, setExportacionExitosa] = useState(false);
   const [nombreArchivoExportado, setNombreArchivoExportado] = useState<string>('');
-  
-  // ============================================
-  // LÓGICA SIMPLIFICADA DE FECHAS Y EXPORTACIÓN
-  // ============================================
-  
-  // Obtener información del día actual
+
+  /**
+   * Ventanas de exportación Excel:
+   * - Quincena: días 14 y 15 (desde el día anterior al 15, igual que fin de mes).
+   * - Fin de mes: penúltimo y último día del mes calendario.
+   */
   const obtenerInfoFecha = () => {
     const hoy = new Date();
     const año = hoy.getFullYear();
     const mes = hoy.getMonth();
     const dia = hoy.getDate();
     const ultimoDiaMes = new Date(año, mes + 1, 0).getDate();
-    const diasRestantesMes = ultimoDiaMes - dia;
-    
-    // "2 días antes de fin de mes" = estamos en el rango (ej. 26 o 27 en mes de 28 días)
-    const esDosDiasAntesFinMes = diasRestantesMes >= 1 && diasRestantesMes <= 2;
+
+    const enVentanaQuincena = dia === 14 || dia === 15;
+    const enVentanaFinMes = dia === ultimoDiaMes - 1 || dia === ultimoDiaMes;
+
     return {
       año,
       mes,
       dia,
       ultimoDiaMes,
-      diasRestantesMes,
-      esDia15: dia === 15,
-      esUltimoDia: dia === ultimoDiaMes,
-      esDosDiasAntesFinMes,
-      estaEnPrimeraQuincena: dia < 15
+      enVentanaQuincena,
+      enVentanaFinMes,
+      /** Rango export 1–15, UI fija inicio en día 1 */
+      enModoPrimeraQuincena: enVentanaQuincena,
+      /** Rango export 16–último día */
+      enModoSegundaMitad: enVentanaFinMes,
     };
   };
 
-  // Formatear fecha a string YYYY-MM-DD
   const formatearFecha = (año: number, mes: number, dia: number): string => {
     return `${año}-${String(mes + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
   };
 
-  // Verificar si se puede exportar
-  // Se puede exportar SOLO en:
-  // - Día 15 (quincena)
-  // - 2 días antes del fin de mes
-  // - Último día del mes
   const puedeExportar = (): boolean => {
     const info = obtenerInfoFecha();
-    return info.esDia15 || info.esDosDiasAntesFinMes || info.esUltimoDia;
+    return info.enVentanaQuincena || info.enVentanaFinMes;
   };
 
-  // Obtener fecha de inicio (siempre día 1 del mes)
   const obtenerFechaInicioExportacion = (): string => {
     const info = obtenerInfoFecha();
+    if (info.enModoPrimeraQuincena) {
+      return formatearFecha(info.año, info.mes, 1);
+    }
+    if (info.enModoSegundaMitad) {
+      return formatearFecha(info.año, info.mes, 16);
+    }
     return formatearFecha(info.año, info.mes, 1);
   };
 
-  // Obtener fecha fin por defecto según el día actual
   const obtenerFechaFinExportacion = (): string => {
     const info = obtenerInfoFecha();
-    
-    if (info.esDia15) {
-      // Día 15: exportar hasta el día 15
+    if (info.enModoPrimeraQuincena) {
       return formatearFecha(info.año, info.mes, 15);
-    } else if (info.esUltimoDia) {
-      // Último día: exportar hasta el último día
-      return formatearFecha(info.año, info.mes, info.ultimoDiaMes);
-    } else if (info.esDosDiasAntesFinMes) {
-      // 2 días antes del fin de mes: exportar hasta 2 días antes
-      return formatearFecha(info.año, info.mes, info.ultimoDiaMes - 2);
-    } else if (info.estaEnPrimeraQuincena) {
-      // Antes del día 15: exportar hasta 2 días antes del 15 (día 13)
-      return formatearFecha(info.año, info.mes, 13);
-    } else {
-      // Por defecto: 2 días antes del fin de mes
-      return formatearFecha(info.año, info.mes, info.ultimoDiaMes - 2);
     }
+    if (info.enModoSegundaMitad) {
+      return formatearFecha(info.año, info.mes, info.ultimoDiaMes);
+    }
+    return formatearFecha(info.año, info.mes, 15);
   };
 
-  // Obtener fecha máxima permitida para seleccionar
   const obtenerFechaMaxima = (): string => {
     const info = obtenerInfoFecha();
-    
-    if (info.esDia15 || info.estaEnPrimeraQuincena) {
-      // Día 15 o antes: máximo día 15
+    if (info.enModoPrimeraQuincena) {
       return formatearFecha(info.año, info.mes, 15);
-    } else if (info.esUltimoDia) {
-      // Último día: máximo último día
-      return formatearFecha(info.año, info.mes, info.ultimoDiaMes);
-    } else {
-      // Después del 15: máximo 2 días antes del fin de mes
-      return formatearFecha(info.año, info.mes, info.ultimoDiaMes - 2);
     }
+    return formatearFecha(info.año, info.mes, info.ultimoDiaMes);
   };
 
-  // Obtener fecha mínima permitida (siempre día 1)
   const obtenerFechaMinima = (): string => {
     const info = obtenerInfoFecha();
+    if (info.enModoSegundaMitad) {
+      return formatearFecha(info.año, info.mes, 16);
+    }
     return formatearFecha(info.año, info.mes, 1);
   };
-  
-  // Roles únicos para el filtro (excluyendo TABLET1, TABLET2, PRINCIPAL, TV)
+
   const rolesExcluidos = ['TABLET1', 'TABLET2', 'PRINCIPAL', 'TV'];
   const rolesUnicos = Array.from(
     new Set(usuarios.map(u => u.rol).filter(Boolean))
@@ -179,8 +156,6 @@ export const AsistenciaListaModule: React.FC = () => {
     Boolean(rol && rol.trim() !== '' && !rolesExcluidos.includes(rol.toUpperCase()))
   );
 
-
-  // Función para obtener el icono según el tipo (igual que en asistencia.module.tsx)
   const getTipoIcon = (tipo: string) => {
     switch (tipo) {
       case 'entrada':
@@ -196,7 +171,6 @@ export const AsistenciaListaModule: React.FC = () => {
     }
   };
 
-  // Función para ordenar las marcaciones en orden lógico de jornada
   const ordenarMarcaciones = (marcaciones: MarcacionData[]) => {
     const ordenTipos = {
       'entrada': 1,
@@ -206,26 +180,18 @@ export const AsistenciaListaModule: React.FC = () => {
     };
 
     return [...marcaciones].sort((a, b) => {
-      // Primero por orden lógico de tipos
       const ordenA = ordenTipos[a.tipo as keyof typeof ordenTipos] || 999;
       const ordenB = ordenTipos[b.tipo as keyof typeof ordenTipos] || 999;
-      
-      if (ordenA !== ordenB) {
-        return ordenA - ordenB;
-      }
-      
-      // Si son del mismo tipo, ordenar por hora
+      if (ordenA !== ordenB) return ordenA - ordenB;
       return a.hora.localeCompare(b.hora);
     });
   };
 
-  // Función para ver historial de asistencias
-  const verHistorialAsistencia = async (usuario: UsuarioAsistencia) => {
+  const verHistorialAsistencia = (usuario: UsuarioAsistencia) => {
     setUsuarioSeleccionado(usuario);
     setModalHistorial(true);
   };
 
-  // Función para cargar historial de asistencias
   const cargarHistorialAsistencias = async (usuarioId: number) => {
     try {
       setCargandoHistorial(true);
@@ -262,7 +228,6 @@ export const AsistenciaListaModule: React.FC = () => {
     }
   };
 
-  // Función para cerrar modal
   const cerrarModalHistorial = () => {
     setModalHistorial(false);
     setUsuarioSeleccionado(null);
@@ -270,15 +235,12 @@ export const AsistenciaListaModule: React.FC = () => {
     setFechaHistorial('');
   };
 
-  // Cargar historial cuando cambie la fecha
   useEffect(() => {
     if (modalHistorial && usuarioSeleccionado && fechaHistorial) {
       cargarHistorialAsistencias(usuarioSeleccionado.id);
     }
   }, [fechaHistorial]);
 
-
-  // Cargar datos iniciales (AbortController evita doble request en Strict Mode)
   useEffect(() => {
     const controller = new AbortController();
     let cancelled = false;
@@ -294,13 +256,8 @@ export const AsistenciaListaModule: React.FC = () => {
           const usuariosArray = data.usuarios.map((usuario: any) => ({
             id: usuario.id,
             nombre: usuario.nombreCompleto,
-            cargo: '',
-            departamento: '',
             email: usuario.email,
             rol: usuario.rol,
-            totalMarcaciones: 0,
-            ultimaMarcacion: null,
-            marcaciones: []
           }));
           setUsuarios(usuariosArray);
         } else {
@@ -322,18 +279,10 @@ export const AsistenciaListaModule: React.FC = () => {
     };
   }, []);
 
-  // Inicializar fechas cuando se abre el modal de exportación
   useEffect(() => {
-    if (modalExportarAbierto) {
-      const primerDia = obtenerFechaInicioExportacion();
-      const fechaFinCalculada = obtenerFechaFinExportacion();
-      setFechaInicio(primerDia);
-      setFechaFin(fechaFinCalculada);
-    }
-  }, [modalExportarAbierto]);
+    setCurrentPage(1);
+  }, [searchTerm]);
 
-
-  // Función para exportar a Excel
   const exportarAExcel = async () => {
     if (!fechaInicio) {
       alert('Por favor, selecciona la fecha de inicio para exportar');
@@ -349,8 +298,6 @@ export const AsistenciaListaModule: React.FC = () => {
       alert('Por favor, selecciona un rol para exportar');
       return;
     }
-
-    // Validar que la fecha de inicio no sea mayor que la fecha de fin
     if (new Date(fechaInicio) > new Date(fechaFin)) {
       alert('La fecha de inicio no puede ser mayor que la fecha de fin');
       return;
@@ -358,27 +305,21 @@ export const AsistenciaListaModule: React.FC = () => {
 
     setExportando(true);
     try {
-      // El backend maneja la exportación y devuelve el archivo Excel
       const params = new URLSearchParams();
       params.append('fechaInicio', fechaInicio);
       params.append('fechaFin', fechaFin);
-      // Si es "TODOS", enviar "TODOS" al backend para que maneje todos los roles
       params.append('rol', rolFiltro === 'TODOS' ? 'TODOS' : rolFiltro);
 
-      // Realizar petición al backend para exportar
       const response = await api.get(`/asistencia/marcaciones/exportar?${params.toString()}`, {
-        responseType: 'blob' // Importante para recibir archivos binarios
+        responseType: 'blob',
       });
 
-      // Crear URL del blob y descargar
       const blob = new Blob([response.data], {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
       });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      
-      // Generar nombre del archivo
       const fechaInicioFormato = fechaInicio.split('-').reverse().join('');
       const fechaFinFormato = fechaFin.split('-').reverse().join('');
       const rolNombreArchivo = rolFiltro === 'TODOS' ? 'TODOS_LOS_ROLES' : rolFiltro;
@@ -390,17 +331,13 @@ export const AsistenciaListaModule: React.FC = () => {
       link.remove();
       window.URL.revokeObjectURL(url);
 
-      // Mostrar mensaje de éxito en el modal
       setNombreArchivoExportado(nombreArchivo);
       setExportacionExitosa(true);
-      
-      // Cerrar el modal automáticamente después de 2 segundos
       setTimeout(() => {
         setModalExportarAbierto(false);
         setExportacionExitosa(false);
         setNombreArchivoExportado('');
-        setExportando(false); // Resetear estado de exportación
-        // Limpiar filtros después de exportar
+        setExportando(false);
         setFechaInicio('');
         setFechaFin('');
         setRolFiltro('');
@@ -408,8 +345,6 @@ export const AsistenciaListaModule: React.FC = () => {
     } catch (error: any) {
       console.error('❌ Error al exportar a Excel:', error);
       setExportando(false);
-      
-      // Mostrar error en el modal
       if (error.response?.status === 404) {
         alert('El endpoint de exportación no está disponible. Por favor, contacta al administrador del sistema.');
       } else {
@@ -418,20 +353,14 @@ export const AsistenciaListaModule: React.FC = () => {
     }
   };
 
-  // Filtrar usuarios por término de búsqueda
-  const usuariosFiltrados = usuarios.filter(usuario =>
-    usuario.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    usuario.cargo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    usuario.departamento.toLowerCase().includes(searchTerm.toLowerCase())
+  const usuariosFiltrados = usuarios.filter((u) =>
+    u.nombre.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Paginación
   const totalPages = Math.ceil(usuariosFiltrados.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const usuariosPaginados = usuariosFiltrados.slice(startIndex, endIndex);
-
-
 
   if (loading) {
     return (
@@ -446,7 +375,6 @@ export const AsistenciaListaModule: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Lista de Usuarios */}
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-4">
@@ -464,31 +392,25 @@ export const AsistenciaListaModule: React.FC = () => {
               </div>
               
               <div className="flex items-center gap-4">
-                <div className="flex flex-col items-end gap-2">
                 <Button
                   onClick={() => setModalExportarAbierto(true)}
-                  variant={puedeExportar() ? "primary" : "outline"}
-                  className={!puedeExportar() ? "cursor-not-allowed opacity-60" : ""}
+                  variant={puedeExportar() ? 'primary' : 'outline'}
+                  className={!puedeExportar() ? 'cursor-not-allowed opacity-60' : ''}
                   disabled={!puedeExportar()}
-                  title={!puedeExportar() ? 'La exportación está disponible el día 15, 2 días antes de quincena o fin de mes' : 'Exportar a Excel'}
+                  title={
+                    puedeExportar()
+                      ? 'Exportar a Excel'
+                      : 'Exportación disponible solo los días 14 y 15, y desde el penúltimo día del mes hasta el último'
+                  }
                 >
                   <Download className="h-4 w-4" />
                   Exportar a Excel
                 </Button>
-                  {!puedeExportar() && (
-                    <div className="flex items-center gap-1.5 px-2 py-1 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-md">
-                      <span className="text-xs font-medium text-amber-700 dark:text-amber-300">
-                        Disponible el día 15, 2 días antes de quincena/fin de mes
-                      </span>
-              </div>
-                  )}
-                </div>
               </div>
             </div>
           </div>
         </CardHeader>
         
-        {/* Búsqueda */}
         <div className="pb-4">
           <div className="flex items-center gap-4">
             <div className="relative max-w-lg">
@@ -580,7 +502,6 @@ export const AsistenciaListaModule: React.FC = () => {
         </CardContent>
       </Card>
 
-      {/* Paginación */}
       {!loading && usuariosFiltrados.length > 0 && (
         <Card>
           <CardContent className="pt-6">
@@ -662,23 +583,18 @@ export const AsistenciaListaModule: React.FC = () => {
         </Card>
       )}
 
-      {/* Modal de Exportación a Excel */}
       <Dialog open={modalExportarAbierto} onOpenChange={(open) => {
         setModalExportarAbierto(open);
         if (!open) {
-          // Limpiar estados al cerrar el modal
           setExportacionExitosa(false);
           setNombreArchivoExportado('');
           setFechaInicio('');
           setFechaFin('');
           setRolFiltro('');
-          setExportando(false); // Resetear estado de exportación
+          setExportando(false);
         } else {
-          // Al abrir el modal, inicializar fechas automáticamente
-          const fechaInicioCalculada = obtenerFechaInicioExportacion();
-          const fechaFinCalculada = obtenerFechaFinExportacion();
-          setFechaInicio(fechaInicioCalculada);
-          setFechaFin(fechaFinCalculada);
+          setFechaInicio(obtenerFechaInicioExportacion());
+          setFechaFin(obtenerFechaFinExportacion());
         }
       }}>
         <DialogContent className="sm:max-w-[500px]">
@@ -691,12 +607,11 @@ export const AsistenciaListaModule: React.FC = () => {
               )}
               {exportacionExitosa ? 'Exportación Exitosa' : 'Exportar a Excel'}
             </DialogTitle>
-            <DialogDescription>
-              {exportacionExitosa 
-                ? `El archivo ${nombreArchivoExportado} se ha descargado exitosamente.`
-                : ''
-              }
-            </DialogDescription>
+            {exportacionExitosa && (
+              <DialogDescription>
+                {`El archivo ${nombreArchivoExportado} se ha descargado exitosamente.`}
+              </DialogDescription>
+            )}
           </DialogHeader>
           
           {exportacionExitosa ? (
@@ -723,30 +638,29 @@ export const AsistenciaListaModule: React.FC = () => {
                   value={fechaInicio}
                   onChange={(e) => {
                     const info = obtenerInfoFecha();
-                    const fechaSeleccionada = new Date(e.target.value);
-                    const año = fechaSeleccionada.getFullYear();
-                    const mes = fechaSeleccionada.getMonth();
-                    
-                    if (info.estaEnPrimeraQuincena) {
-                      // Primera quincena: siempre día 1
-                      const primerDia = formatearFecha(año, mes, 1);
-                      setFechaInicio(primerDia);
+                    const val = e.target.value;
+                    if (info.enModoPrimeraQuincena) {
+                      setFechaInicio(formatearFecha(info.año, info.mes, 1));
+                      return;
+                    }
+                    const fechaMin = obtenerFechaMinima();
+                    const fechaMax = obtenerFechaMaxima();
+                    if (val < fechaMin) {
+                      setFechaInicio(fechaMin);
+                    } else if (val > fechaMax) {
+                      setFechaInicio(fechaMax);
                     } else {
-                      // Fin de mes: permitir desde día 1, pero validar que no sea menor
-                      const fechaMin = obtenerFechaMinima();
-                      const fechaSeleccionadaStr = e.target.value;
-                      if (fechaSeleccionadaStr >= fechaMin) {
-                        setFechaInicio(fechaSeleccionadaStr);
-                      } else {
-                        setFechaInicio(fechaMin);
-                      }
+                      setFechaInicio(val);
+                    }
+                    if (fechaFin && val > fechaFin) {
+                      setFechaFin(val);
                     }
                   }}
                   min={obtenerFechaMinima()}
-                  max={obtenerInfoFecha().estaEnPrimeraQuincena ? obtenerFechaMinima() : obtenerFechaMaxima()}
-                  className={obtenerInfoFecha().estaEnPrimeraQuincena ? "w-full bg-neutral-50 dark:bg-neutral-800 cursor-not-allowed" : "w-full"}
+                  max={obtenerInfoFecha().enModoPrimeraQuincena ? obtenerFechaMinima() : obtenerFechaMaxima()}
+                  className={obtenerInfoFecha().enModoPrimeraQuincena ? 'w-full cursor-not-allowed bg-neutral-50 dark:bg-neutral-800' : 'w-full'}
                   required
-                  readOnly={obtenerInfoFecha().estaEnPrimeraQuincena}
+                  readOnly={obtenerInfoFecha().enModoPrimeraQuincena}
                 />
               </div>
               <div>
@@ -759,38 +673,20 @@ export const AsistenciaListaModule: React.FC = () => {
                   onChange={(e) => {
                     const fechaSeleccionada = e.target.value;
                     const fechaMax = obtenerFechaMaxima();
-                    const fechaMin = obtenerFechaMinima();
-                    const info = obtenerInfoFecha();
-                    const dia15 = formatearFecha(info.año, info.mes, 15);
-                    
-                    // Si estamos en fin de mes, permitir elegir hasta el día 15 también (para primera quincena)
-                    if (!info.estaEnPrimeraQuincena) {
-                      const fechaSeleccionadaDate = new Date(fechaSeleccionada);
-                      const fecha15Date = new Date(dia15);
-                      
-                      // Si la fecha seleccionada es el día 15 o menor, y es mayor o igual a fecha inicio, permitirla
-                      if (fechaSeleccionadaDate <= fecha15Date && fechaSeleccionada >= fechaInicio) {
-                        setFechaFin(fechaSeleccionada);
-                        return;
-                      }
-                    }
-                    
-                    // Validar que la fecha esté en el rango permitido y que sea mayor o igual a fecha inicio
-                    if (fechaSeleccionada >= fechaInicio && fechaSeleccionada <= fechaMax && fechaSeleccionada >= fechaMin) {
-                      setFechaFin(fechaSeleccionada);
-                    } else if (fechaSeleccionada > fechaMax) {
-                      // Si selecciona una fecha mayor al máximo, establecer el máximo
+                    const inicio = fechaInicio || obtenerFechaMinima();
+                    if (fechaSeleccionada > fechaMax) {
                       setFechaFin(fechaMax);
-                      alert(`La fecha de fin no puede ser mayor al ${new Date(fechaMax).toLocaleDateString('es-PE', { day: 'numeric', month: 'long' })}. Se ha establecido el máximo permitido.`);
-                    } else if (fechaSeleccionada < fechaInicio) {
-                      // Si selecciona una fecha menor a la fecha inicio, establecer la fecha inicio
-                      setFechaFin(fechaInicio);
-                      alert('La fecha de fin no puede ser menor a la fecha de inicio. Se ha establecido la fecha de inicio.');
-                    } else {
-                      // Si selecciona una fecha menor al mínimo, establecer el mínimo
-                      setFechaFin(fechaMin);
-                      alert(`La fecha de fin no puede ser menor al ${new Date(fechaMin).toLocaleDateString('es-PE', { day: 'numeric', month: 'long' })}. Se ha establecido el mínimo permitido.`);
+                      alert(
+                        `La fecha de fin no puede ser posterior al ${new Date(fechaMax + 'T12:00:00').toLocaleDateString('es-PE', { day: 'numeric', month: 'long' })}. Se ajustó al máximo permitido.`
+                      );
+                      return;
                     }
+                    if (fechaSeleccionada < inicio) {
+                      setFechaFin(inicio);
+                      alert('La fecha de fin no puede ser anterior a la fecha de inicio.');
+                      return;
+                    }
+                    setFechaFin(fechaSeleccionada);
                   }}
                   min={fechaInicio || obtenerFechaMinima()}
                   max={obtenerFechaMaxima()}
@@ -814,13 +710,11 @@ export const AsistenciaListaModule: React.FC = () => {
                   <SelectItem value="TODOS" className="font-semibold">
                     Todos los roles
                   </SelectItem>
-                  {rolesUnicos
-                    .filter((rol): rol is string => Boolean(rol && rol.trim() !== ''))
-                    .map((rol) => (
-                      <SelectItem key={rol} value={rol}>
-                        {rol}
-                      </SelectItem>
-                    ))}
+                  {rolesUnicos.map((rol) => (
+                    <SelectItem key={rol} value={rol}>
+                      {rol}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -834,7 +728,7 @@ export const AsistenciaListaModule: React.FC = () => {
                   setModalExportarAbierto(false);
                   setExportacionExitosa(false);
                   setNombreArchivoExportado('');
-                  setExportando(false); // Resetear estado de exportación
+                  setExportando(false);
                   setFechaInicio('');
                   setFechaFin('');
                   setRolFiltro('');
@@ -851,7 +745,7 @@ export const AsistenciaListaModule: React.FC = () => {
                     setFechaInicio('');
                     setFechaFin('');
                     setRolFiltro('');
-                    setExportando(false); // Resetear estado de exportación
+                    setExportando(false);
                     setModalExportarAbierto(false);
                   }}
                   disabled={exportando}
@@ -881,11 +775,9 @@ export const AsistenciaListaModule: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Historial de Asistencias */}
       {modalHistorial && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden">
-            {/* Header del Modal */}
             <div className="flex items-center justify-between p-6 border-b border-neutral-200 dark:border-neutral-700">
               <div>
                 <h3 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100 flex items-center gap-2">
@@ -906,9 +798,7 @@ export const AsistenciaListaModule: React.FC = () => {
               </Button>
             </div>
 
-            {/* Contenido del Modal */}
             <div className="p-6">
-              {/* Filtro de Fecha */}
               <div className="mb-6">
                 <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-3">
                   Seleccionar fecha para ver el historial de asistencias
@@ -931,7 +821,6 @@ export const AsistenciaListaModule: React.FC = () => {
                 )}
               </div>
 
-              {/* Lista de Asistencias */}
               {cargandoHistorial ? (
                 <div className="text-center py-8">
                   <div className="w-8 h-8 border-4 border-red-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
@@ -989,7 +878,6 @@ export const AsistenciaListaModule: React.FC = () => {
               )}
             </div>
 
-            {/* Footer del Modal */}
             <div className="flex justify-end gap-3 p-6 border-t border-neutral-200 dark:border-neutral-700">
               <Button
                 variant="outline"

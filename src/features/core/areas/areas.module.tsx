@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -38,7 +38,6 @@ import {
   Save,
   X,
   UserPlus,
-  UserMinus,
   Filter,
   ChevronLeft,
   ChevronRight,
@@ -64,7 +63,6 @@ interface Area {
 interface UserSimple {
   id: number;
   nombreCompleto: string;
-  /** Si tiene valor y no es el área actual, no mostrarlo en combo de colaboradores. */
   areaId?: number | null;
 }
 
@@ -89,13 +87,29 @@ const initialFormData: AreaFormData = {
   activo: true,
 };
 
+const isAbortError = (e: unknown) =>
+  (e as { name?: string; code?: string })?.name === 'AbortError' ||
+  (e as { code?: string })?.code === 'ERR_CANCELED';
+
+const apiErrorMessage = (e: unknown, fallback: string) =>
+  (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? fallback;
+
 const showApiError = (e: unknown, fallback: string) => {
-  alert((e as { response?: { data?: { message?: string } } })?.response?.data?.message || fallback);
+  alert(apiErrorMessage(e, fallback));
 };
 
-/** Clases base para modales (editar/nueva, eliminar, colaboradores) adaptados a móvil */
 const modalContentClass =
   'w-[calc(100vw-1.5rem)] max-h-[90dvh] overflow-y-auto p-4 sm:p-6 sm:w-full rounded-xl mx-auto my-4 sm:my-0 border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-lg';
+
+const colaboradoresDialogContentClass =
+  'w-[calc(100vw-1.5rem)] sm:w-full max-w-2xl max-h-[90dvh] overflow-visible flex flex-col p-4 sm:p-6 rounded-xl mx-auto my-4 sm:my-0 border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 shadow-lg';
+
+const Spinner: React.FC<{ className?: string }> = ({ className }) => (
+  <div
+    className={className ?? 'w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin'}
+    aria-hidden
+  />
+);
 
 const AreasModule: React.FC = () => {
   const authState = useAuth();
@@ -125,28 +139,43 @@ const AreasModule: React.FC = () => {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
 
+  const colabSectionRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!openColabCombo) return;
+    const onMouseDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (colabSectionRef.current?.contains(t)) return;
+      setOpenColabCombo(false);
+    };
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, [openColabCombo]);
+
   const fetchAreas = async (signal?: AbortSignal) => {
-    const isRefresh = signal === undefined;
-    if (isRefresh) setLoading(true);
+    const isManualRefresh = signal === undefined;
+    if (isManualRefresh) setLoading(true);
     try {
       const res = await api.get('/areas/find-all', { signal });
       setAreas(Array.isArray(res.data) ? res.data : []);
     } catch (e: unknown) {
-      if ((e as { name?: string; code?: string })?.name === 'AbortError' || (e as { code?: string })?.code === 'ERR_CANCELED') return;
+      if (isAbortError(e)) return;
       console.error('Error cargando áreas:', e);
       setAreas([]);
     } finally {
-      if (isRefresh) setLoading(false);
+      if (isManualRefresh) setLoading(false);
     }
   };
 
   const fetchUsuarios = async (areaId?: number, signal?: AbortSignal) => {
     try {
-      const params = areaId != null ? { params: { areaId } } : { signal };
-      const res = await api.get('/areas/usuarios-para-responsable', params);
+      const res = await api.get('/areas/usuarios-para-responsable', {
+        ...(areaId != null ? { params: { areaId } } : {}),
+        signal,
+      });
       setUsuarios(Array.isArray(res.data) ? res.data : []);
     } catch (e: unknown) {
-      if ((e as { name?: string; code?: string })?.name === 'AbortError' || (e as { code?: string })?.code === 'ERR_CANCELED') return;
+      if (isAbortError(e)) return;
       console.error('Error cargando usuarios:', e);
       setUsuarios([]);
     }
@@ -169,8 +198,6 @@ const AreasModule: React.FC = () => {
     (async () => {
       try {
         await Promise.all([fetchAreas(ac.signal), fetchUsuarios(undefined, ac.signal)]);
-      } catch {
-        // Evitar setLoading(false) si el efecto fue abortado (ej. Strict Mode)
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -210,7 +237,7 @@ const AreasModule: React.FC = () => {
     setEditingArea(null);
     setFormData(initialFormData);
     setIsDialogOpen(true);
-    fetchUsuarios(); // lista sin responsables de otras áreas
+    fetchUsuarios();
   };
 
   const openEdit = (area: Area) => {
@@ -222,7 +249,6 @@ const AreasModule: React.FC = () => {
       activo: area.activo,
     });
     setIsDialogOpen(true);
-    // Recargar usuarios incluyendo al responsable actual de esta área para que siga en el combo
     fetchUsuarios(area.id);
   };
 
@@ -300,6 +326,12 @@ const AreasModule: React.FC = () => {
     setPreviewPopupLoading(false);
   };
 
+  const closeColaboradoresDialog = () => {
+    setColaboradoresDialogArea(null);
+    setColabBuscarNombre('');
+    setOpenColabCombo(false);
+  };
+
   const openColaboradoresDialog = async (area: Area) => {
     setColaboradoresDialogArea(area);
     setColaboradores([]);
@@ -354,7 +386,6 @@ const AreasModule: React.FC = () => {
     }
   };
 
-  // Solo usuarios que no están ya en esta área, no son el responsable, y no tienen otra área asignada (un colaborador solo puede estar en un área)
   const usuariosDisponiblesParaAgregar = usuarios.filter(
     (u) =>
       !colaboradores.some((c) => c.id === u.id) &&
@@ -362,8 +393,7 @@ const AreasModule: React.FC = () => {
       (u.areaId == null || u.areaId === colaboradoresDialogArea?.id)
   );
 
-  // Filtro por nombre dentro del diálogo de colaboradores (buscar por nombre)
-  const usuariosDisponiblesFiltradosPorNombre = colabBuscarNombre.trim()
+  const usuariosColabComboFiltrados = colabBuscarNombre.trim()
     ? usuariosDisponiblesParaAgregar.filter((u) =>
         (u.nombreCompleto ?? '')
           .toLowerCase()
@@ -462,7 +492,7 @@ const AreasModule: React.FC = () => {
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <div className="flex flex-col items-center gap-4">
-                <div className="w-10 h-10 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
+                <Spinner className="w-10 h-10 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
                 <p className="yego-body-sm">Cargando áreas...</p>
               </div>
             </div>
@@ -765,18 +795,19 @@ const AreasModule: React.FC = () => {
             <Button variant="outline" onClick={closeDialog} disabled={saving} className="w-full sm:w-auto min-h-12 sm:min-h-11 touch-manipulation text-base">
               Cancelar
             </Button>
-            <Button onClick={handleSubmit} disabled={saving || !formData.name.trim()} className="gap-2 w-full sm:w-auto min-h-12 sm:min-h-11 touch-manipulation text-base">
-              {saving ? (
-                <>
-                  <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Guardando...
-                </>
-              ) : (
-                <>
-                  <Save className="h-4 w-4" />
-                  {editingArea ? 'Guardar' : 'Crear'}
-                </>
-              )}
+            <Button
+              onClick={handleSubmit}
+              disabled={saving || !formData.name.trim()}
+              leftIcon={
+                saving ? (
+                  <span className="inline-block h-4 w-4 shrink-0 border-2 border-white border-t-transparent rounded-full animate-spin" aria-hidden />
+                ) : (
+                  <Save className="h-4 w-4 shrink-0" aria-hidden />
+                )
+              }
+              className="w-full sm:w-auto min-h-12 sm:min-h-11 touch-manipulation text-base"
+            >
+              {saving ? 'Guardando...' : editingArea ? 'Guardar' : 'Crear'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -826,7 +857,7 @@ const AreasModule: React.FC = () => {
             </div>
             {previewPopupLoading ? (
               <div className="flex justify-center py-6">
-                <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+                <Spinner className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
               </div>
             ) : previewPopupColabs.length === 0 ? (
               <p className="text-sm text-neutral-500 dark:text-neutral-400 py-2">No hay colaboradores.</p>
@@ -852,17 +883,8 @@ const AreasModule: React.FC = () => {
         </>
       )}
 
-      <Dialog
-        open={!!colaboradoresDialogArea}
-        onOpenChange={(open) => {
-          if (!open) {
-            setColaboradoresDialogArea(null);
-            setColabBuscarNombre('');
-            setOpenColabCombo(false);
-          }
-        }}
-      >
-        <DialogContent className={`${modalContentClass} max-w-lg overflow-hidden flex flex-col max-h-[90dvh] sm:max-h-[90dvh]`}>
+      <Dialog open={!!colaboradoresDialogArea} onOpenChange={(open) => !open && closeColaboradoresDialog()}>
+        <DialogContent className={colaboradoresDialogContentClass}>
           <DialogHeader className="space-y-1.5 sm:space-y-2 shrink-0 pb-1">
             <DialogTitle className="flex items-start gap-2 text-base sm:text-xl pr-12 sm:pr-8 leading-tight">
               <Users className="h-5 w-5 text-primary-500 shrink-0 mt-0.5" />
@@ -878,94 +900,92 @@ const AreasModule: React.FC = () => {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-2 flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
-            <div className="flex flex-col gap-3 sm:flex-row sm:gap-2">
-              <div className="relative flex-1 min-w-0">
-                <button
-                  type="button"
-                  onClick={() => usuariosDisponiblesParaAgregar.length > 0 && setOpenColabCombo((v) => !v)}
-                  className="flex h-11 sm:h-10 w-full items-center justify-between rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-700 dark:bg-neutral-950 dark:ring-offset-neutral-950 dark:placeholder:text-neutral-400 dark:focus:ring-primary-600 touch-manipulation"
-                  disabled={usuariosDisponiblesParaAgregar.length === 0}
+          <div className="shrink-0 space-y-3 pb-2">
+            <div ref={colabSectionRef} className="relative z-[60]">
+              <div className="flex min-w-0 flex-row flex-nowrap items-stretch gap-2">
+                <div className="min-w-0 flex-1">
+                  <button
+                    type="button"
+                    onClick={() => usuariosDisponiblesParaAgregar.length > 0 && setOpenColabCombo((v) => !v)}
+                    className="flex h-11 w-full items-center justify-between rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-neutral-700 dark:bg-neutral-950 dark:ring-offset-neutral-950 dark:placeholder:text-neutral-400 dark:focus:ring-primary-600 touch-manipulation sm:h-10"
+                    disabled={usuariosDisponiblesParaAgregar.length === 0}
+                  >
+                    <span className="truncate text-left">
+                      {selectedUserIdsToAdd.length === 0
+                        ? 'Seleccionar usuarios para agregar...'
+                        : `${selectedUserIdsToAdd.length} usuario(s) seleccionado(s)`}
+                    </span>
+                    <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+                  </button>
+                </div>
+                <Button
+                  onClick={agregarColaboradores}
+                  disabled={selectedUserIdsToAdd.length === 0 || addingColab}
+                  leftIcon={!addingColab ? <UserPlus className="h-4 w-4 shrink-0" aria-hidden /> : undefined}
+                  className="min-h-11 shrink-0 touch-manipulation self-center whitespace-nowrap"
                 >
-                  <span className="truncate text-left">
-                    {selectedUserIdsToAdd.length === 0
-                      ? 'Seleccionar usuarios para agregar...'
-                      : `${selectedUserIdsToAdd.length} usuario(s) seleccionado(s)`}
-                  </span>
-                  <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
-                </button>
-                {openColabCombo && usuariosDisponiblesParaAgregar.length > 0 && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-40"
-                      aria-hidden
-                      onClick={() => setOpenColabCombo(false)}
-                    />
-                    <div className="absolute z-50 mt-1 left-0 right-0 sm:left-auto sm:right-auto w-full rounded-md border border-neutral-200 bg-white shadow-lg dark:border-neutral-700 dark:bg-neutral-800 overflow-hidden max-h-[70vh] flex flex-col">
-                      <div className="p-2 border-b border-neutral-200 dark:border-neutral-700 shrink-0 bg-white dark:bg-neutral-800">
-                        <div className="relative">
-                          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400 pointer-events-none" />
-                          <Input
-                            placeholder="Buscar por nombre..."
-                            value={colabBuscarNombre}
-                            onChange={(e) => setColabBuscarNombre(e.target.value)}
-                            className="pl-8 h-10 sm:h-9 text-sm touch-manipulation"
-                            onKeyDown={(e) => e.stopPropagation()}
-                          />
-                        </div>
-                      </div>
-                      <div className="max-h-52 sm:max-h-56 overflow-auto p-1 min-h-0">
-                        {usuariosDisponiblesFiltradosPorNombre.length === 0 ? (
-                          <p className="py-4 text-center text-sm text-neutral-500 dark:text-neutral-400">
-                            Ningún usuario coincide con la búsqueda.
-                          </p>
-                        ) : (
-                          usuariosDisponiblesFiltradosPorNombre.map((u) => (
-                            <label
-                              key={u.id}
-                              className="flex cursor-pointer items-center gap-2 rounded-sm py-2 px-2 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-700 active:bg-neutral-100 dark:active:bg-neutral-700 touch-manipulation min-h-[44px]"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={selectedUserIdsToAdd.includes(u.id)}
-                                onChange={() => toggleUsuarioToAdd(u.id)}
-                                className="rounded border-neutral-300 text-primary-600 focus:ring-primary-500 w-4 h-4 shrink-0"
-                              />
-                              <span className="truncate text-neutral-900 dark:text-neutral-100">
-                                {u.nombreCompleto?.trim() || `Usuario ${u.id}`}
-                              </span>
-                            </label>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  </>
-                )}
+                  {addingColab ? (
+                    <span className="animate-pulse">Agregando...</span>
+                  ) : (
+                    <>Agregar {selectedUserIdsToAdd.length > 0 ? `(${selectedUserIdsToAdd.length})` : ''}</>
+                  )}
+                </Button>
               </div>
-              <Button
-                onClick={agregarColaboradores}
-                disabled={selectedUserIdsToAdd.length === 0 || addingColab}
-                className="gap-1 shrink-0 min-h-11 touch-manipulation w-full sm:w-auto"
-              >
-                {addingColab ? (
-                  <span className="animate-pulse">Agregando...</span>
-                ) : (
-                  <>
-                    <UserPlus className="h-4 w-4" />
-                    Agregar {selectedUserIdsToAdd.length > 0 ? `(${selectedUserIdsToAdd.length})` : ''}
-                  </>
-                )}
-              </Button>
+              {openColabCombo && usuariosDisponiblesParaAgregar.length > 0 && (
+                <div
+                  className="absolute left-0 right-0 top-full z-[70] mt-1.5 flex max-h-[min(70vh,28rem)] flex-col overflow-hidden rounded-md border border-neutral-200 bg-white shadow-lg dark:border-neutral-700 dark:bg-neutral-800"
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  <div className="shrink-0 border-b border-neutral-200 bg-white p-2 dark:border-neutral-700 dark:bg-neutral-800">
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+                      <Input
+                        placeholder="Buscar por nombre..."
+                        value={colabBuscarNombre}
+                        onChange={(e) => setColabBuscarNombre(e.target.value)}
+                        className="h-10 pl-8 text-sm touch-manipulation sm:h-9"
+                        onKeyDown={(e) => e.stopPropagation()}
+                      />
+                    </div>
+                  </div>
+                  <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1 [-webkit-overflow-scrolling:touch]">
+                    {usuariosColabComboFiltrados.length === 0 ? (
+                      <p className="py-4 text-center text-sm text-neutral-500 dark:text-neutral-400">
+                        Ningún usuario coincide con la búsqueda.
+                      </p>
+                    ) : (
+                      usuariosColabComboFiltrados.map((u) => (
+                        <label
+                          key={u.id}
+                          className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-sm px-2 py-2 text-sm hover:bg-neutral-100 active:bg-neutral-100 dark:hover:bg-neutral-700 dark:active:bg-neutral-700 touch-manipulation"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedUserIdsToAdd.includes(u.id)}
+                            onChange={() => toggleUsuarioToAdd(u.id)}
+                            className="h-4 w-4 shrink-0 rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
+                          />
+                          <span className="truncate text-neutral-900 dark:text-neutral-100">
+                            {u.nombreCompleto?.trim() || `Usuario ${u.id}`}
+                          </span>
+                        </label>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
             {usuariosDisponiblesParaAgregar.length === 0 && (
               <p className="text-sm text-neutral-500 dark:text-neutral-400">
                 No hay usuarios disponibles (todos están en un área o son responsables).
               </p>
             )}
+          </div>
 
+          <div className="relative z-10 flex-1 min-h-0 space-y-4 overflow-x-hidden overflow-y-auto py-2">
             {colaboradoresLoading ? (
               <div className="flex justify-center py-8">
-                <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
+                <Spinner />
               </div>
             ) : colaboradores.length === 0 ? (
               <p className="text-sm text-neutral-500 dark:text-neutral-400 py-4 text-center">
@@ -976,9 +996,9 @@ const AreasModule: React.FC = () => {
                 {colaboradores.map((c) => (
                   <li
                     key={c.id}
-                    className="flex items-center justify-between gap-2 py-3 px-3 sm:py-2 rounded-xl sm:rounded-lg bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700"
+                    className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0 py-3 px-3 sm:py-2 rounded-xl sm:rounded-lg bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700"
                   >
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 overflow-hidden text-left">
                       <div className="font-medium text-neutral-900 dark:text-neutral-100 truncate text-base sm:text-sm">
                         {c.nombreCompleto}
                       </div>
@@ -988,19 +1008,17 @@ const AreasModule: React.FC = () => {
                     </div>
                     <Button
                       variant="outline"
-                      size="sm"
+                      size="icon"
                       onClick={() => quitarColaborador(c.id)}
                       disabled={removingColabId === c.id}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 shrink-0 gap-1.5 flex items-center min-h-11 min-w-11 sm:min-h-10 sm:min-w-10 touch-manipulation px-3 rounded-xl sm:rounded-md text-sm"
+                      aria-label="Quitar de esta área"
                       title="Quitar de esta área"
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 shrink-0 touch-manipulation rounded-xl sm:rounded-md"
                     >
                       {removingColabId === c.id ? (
-                        <span className="animate-pulse">...</span>
+                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
                       ) : (
-                        <>
-                          <UserMinus className="h-4 w-4 shrink-0" />
-                          <span>Quitar</span>
-                        </>
+                        <Trash2 className="h-4 w-4" aria-hidden strokeWidth={2} />
                       )}
                     </Button>
                   </li>
@@ -1010,7 +1028,7 @@ const AreasModule: React.FC = () => {
           </div>
 
           <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 pt-3 pb-4 sm:pb-0 shrink-0 border-t border-neutral-200 dark:border-neutral-700 mt-2">
-            <Button variant="outline" onClick={() => setColaboradoresDialogArea(null)} className="w-full sm:w-auto min-h-12 sm:min-h-11 touch-manipulation text-base rounded-xl sm:rounded-md">
+            <Button variant="outline" onClick={closeColaboradoresDialog} className="w-full sm:w-auto min-h-12 sm:min-h-11 touch-manipulation text-base rounded-xl sm:rounded-md">
               Cerrar
             </Button>
           </DialogFooter>

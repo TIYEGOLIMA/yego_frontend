@@ -63,7 +63,6 @@ interface MensajeMarketing {
   modo: string;
   tipo: string;
   archivo?: string;
-  comentarioImagen?: string;
   whatsapp: boolean;
   yandex: boolean;
   diasActivos: string[];
@@ -281,7 +280,6 @@ const FORM_DATA_DEFAULT: Partial<MensajeMarketing> = {
   modo: '',
   tipo: 'ninguna',
   archivo: undefined,
-  comentarioImagen: '',
   whatsapp: false,
   yandex: false,
   diasActivos: [],
@@ -983,7 +981,6 @@ const MarketingMensajesModule: React.FC = () => {
       modo: response.modo || '',
       tipo: response.tipo || 'ninguna',
       archivo: response.archivo,
-      comentarioImagen: response.comentarioImagen || '',
       whatsapp: response.whatsapp || false,
       yandex: response.yandex || false,
       diasActivos: Array.isArray(response.diasActivos) ? response.diasActivos : [],
@@ -1097,41 +1094,25 @@ const MarketingMensajesModule: React.FC = () => {
     }
     
     const grupos = Array.isArray(formData.grupos) ? formData.grupos : [];
-    // Siempre enviar grupos, incluso si está vacío, para que el backend pueda limpiarlos
-    console.log('🔍 Debug grupos en buildFormData:', {
-      formDataGrupos: formData.grupos,
-      gruposArray: grupos,
-      gruposLength: grupos.length,
-      isArray: Array.isArray(formData.grupos)
-    });
     if (grupos.length > 0) {
       grupos.forEach(grupo => {
-        console.log('📤 Enviando grupo:', grupo);
         formDataToSend.append('grupos', grupo);
       });
     } else {
-      // Enviar un campo vacío cuando no hay grupos para que el backend limpie el array
-      console.log('📤 Enviando grupos vacío');
       formDataToSend.append('grupos', '');
     }
     
     const flotas = Array.isArray(formData.flotas) ? formData.flotas : [];
-    // Siempre enviar flotas, incluso si está vacío, para que el backend pueda limpiarlas
     if (flotas.length > 0) {
       flotas.forEach(flota => {
         formDataToSend.append('flotas', flota);
       });
     } else {
-      // Enviar un campo vacío cuando no hay flotas para que el backend limpie el array
       formDataToSend.append('flotas', '');
     }
     
     if (formData.horasEspecificas) {
       formDataToSend.append('horasEspecificas', JSON.stringify(formData.horasEspecificas));
-    }
-    
-    if (formData.comentarioImagen) {
-      formDataToSend.append('comentarioImagen', formData.comentarioImagen);
     }
     
     return formDataToSend;
@@ -1220,7 +1201,7 @@ const MarketingMensajesModule: React.FC = () => {
   const handleRemoveFile = () => {
     setSelectedFile(null);
     setFilePreview(null);
-    setFormData({ ...formData, archivo: undefined, comentarioImagen: '' });
+    setFormData({ ...formData, archivo: undefined });
   };
 
   const handleDeleteClick = (mensaje: MensajeMarketing) => {
@@ -1315,7 +1296,6 @@ const MarketingMensajesModule: React.FC = () => {
       modo: mensaje.modo,
       tipo: mensaje.tipo,
       archivo: mensaje.archivo,
-      comentarioImagen: mensaje.comentarioImagen || '',
       whatsapp: mensaje.whatsapp,
       yandex: mensaje.yandex,
       diasActivos: Array.isArray(mensaje.diasActivos) ? mensaje.diasActivos : [],
@@ -1366,13 +1346,6 @@ const MarketingMensajesModule: React.FC = () => {
     const newArray = currentArray.includes(item)
       ? currentArray.filter(i => i !== item)
       : [...currentArray, item];
-    
-    console.log(`🔄 toggleArrayItem ${String(key)}:`, {
-      item,
-      currentArray,
-      newArray,
-      isIncluded: currentArray.includes(item)
-    });
     
     setFormData({ 
       ...formData, 
@@ -2317,7 +2290,7 @@ const MarketingMensajesModule: React.FC = () => {
                     // Al cambiar el tipo, limpiar el archivo
                     setSelectedFile(null);
                     setFilePreview(null);
-                    setFormData({ ...formData, tipo: value, archivo: undefined, comentarioImagen: '' });
+                    setFormData({ ...formData, tipo: value, archivo: undefined });
                   }}
                 >
                   <SelectTrigger>

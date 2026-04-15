@@ -1,13 +1,5 @@
-/**
- * URLs para abrir Control Tower con la misma sesión JWT que Integral.
- * Control Tower debe leer en el cliente, por ejemplo en /login:
- *   const p = new URLSearchParams(window.location.hash.slice(1));
- *   const t = p.get('access_token');
- *   if (t) { localStorage.setItem('token', t); ... }
- * Y opcionalmente escuchar: window.addEventListener('message', ...) con type YEGO_INTEGRAL_SSO.
- */
-
-const DEFAULT_BASE = 'http://5.161.86.63';
+/** Base de Control Tower; CT debe leer #access_token en /login o postMessage YEGO_INTEGRAL_SSO. */
+const DEFAULT_BASE = 'https://5.161.86.63';
 
 export function getControlTowerBaseUrl(): string {
   const raw = import.meta.env.VITE_CONTROL_TOWER_URL as string | undefined;
