@@ -257,7 +257,7 @@ export const AsistenciaModule: React.FC = () => {
   const isSAC = userRole === 'SAC';
   
   // SUPERADMIN, ADMIN y jefes de área pueden ver la lista de asistencias (jefes ven solo su área)
-  const puedeVerLista = userRole === 'SUPERADMIN' || userRole === 'ADMIN' || user?.esJefe === true;
+  const puedeVerLista = userRole === 'SUPERADMIN' || userRole === 'ADMIN' || user?.esJefe === true || user?.esSupervisor === true;
   
   const [empleado, setEmpleado] = useState<EmpleadoData | null>(null);
   const [estadisticas, setEstadisticas] = useState<EstadisticasAsistencia>(ESTADISTICAS_INICIALES);

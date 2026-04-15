@@ -66,8 +66,8 @@ interface User {
   lastLogin?: string;
   areaId?: number | null;
   areaNombre?: string | null;
-  /** true si el usuario es responsable (jefe) de ese área */
   areaEsResponsable?: boolean;
+  areaEsSupervisor?: boolean;
 }
 
 interface Role {
@@ -642,6 +642,14 @@ const UsersModule: React.FC = () => {
           </span>
         </div>
       )}
+      {currentUser?.esSupervisor && currentUser?.nombreAreaSupervisor && (
+        <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 px-4 py-3 text-sm text-blue-800 dark:text-blue-200 flex items-center gap-2">
+          <User className="h-5 w-5 flex-shrink-0 text-blue-600 dark:text-blue-400" />
+          <span>
+            <strong>Eres supervisor de:</strong> {currentUser.nombreAreaSupervisor}
+          </span>
+        </div>
+      )}
 
       {/* Search */}
       <Card>
@@ -797,7 +805,7 @@ const UsersModule: React.FC = () => {
                               <>
                                 <Building2 className="h-4 w-4 text-neutral-400 shrink-0" />
                                 <span>
-                                  {user.areaEsResponsable ? `Jefe de ${user.areaNombre}` : user.areaNombre}
+                                  {user.areaEsResponsable ? `Jefe de ${user.areaNombre}` : user.areaEsSupervisor ? `Supervisor de ${user.areaNombre}` : user.areaNombre}
                                 </span>
                               </>
                             ) : (
@@ -882,7 +890,7 @@ const UsersModule: React.FC = () => {
                     <div className="text-xs text-neutral-500 flex items-center gap-1">
                       <Building2 className="w-3 h-3 shrink-0" />{' '}
                       {user.areaNombre
-                        ? (user.areaEsResponsable ? `Jefe de ${user.areaNombre}` : user.areaNombre)
+                        ? (user.areaEsResponsable ? `Jefe de ${user.areaNombre}` : user.areaEsSupervisor ? `Supervisor de ${user.areaNombre}` : user.areaNombre)
                         : 'Sin asignar'}
                     </div>
                     <div className="text-xs text-neutral-500 flex items-center gap-1">
@@ -1166,7 +1174,7 @@ const UsersModule: React.FC = () => {
               <label className="block text-sm font-medium mb-1">Área</label>
               {editingUser ? (
                 <p className="text-sm py-2 px-3 rounded-md bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-700">
-                  Jefe de {editingUser.areaNombre?.trim() || 'Sin asignar'}
+                  {editingUser.areaEsResponsable ? `Jefe de ${editingUser.areaNombre?.trim() || 'Sin asignar'}` : editingUser.areaEsSupervisor ? `Supervisor de ${editingUser.areaNombre?.trim() || 'Sin asignar'}` : editingUser.areaNombre?.trim() || 'Sin asignar'}
                 </p>
               ) : (
                 <>

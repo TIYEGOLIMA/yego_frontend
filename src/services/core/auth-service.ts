@@ -26,6 +26,8 @@ export interface AuthUser {
   lastLogin: string;
   esJefe?: boolean;
   nombreArea?: string | null;
+  esSupervisor?: boolean;
+  nombreAreaSupervisor?: string | null;
   requirePasswordChange?: boolean;
 }
 

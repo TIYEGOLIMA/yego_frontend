@@ -56,6 +56,8 @@ interface Area {
   description: string | null;
   managerId: number | null;
   managerName: string | null;
+  supervisorId: number | null;
+  supervisorName: string | null;
   activo: boolean;
   colaboradoresCount: number;
 }
@@ -77,6 +79,7 @@ interface AreaFormData {
   name: string;
   description: string;
   managerId: string;
+  supervisorId: string;
   activo: boolean;
 }
 
@@ -84,6 +87,7 @@ const initialFormData: AreaFormData = {
   name: '',
   description: '',
   managerId: '',
+  supervisorId: '',
   activo: true,
 };
 
@@ -246,6 +250,7 @@ const AreasModule: React.FC = () => {
       name: area.name,
       description: area.description || '',
       managerId: area.managerId != null ? String(area.managerId) : '',
+      supervisorId: area.supervisorId != null ? String(area.supervisorId) : '',
       activo: area.activo,
     });
     setIsDialogOpen(true);
@@ -267,6 +272,7 @@ const AreasModule: React.FC = () => {
           name: formData.name.trim(),
           description: formData.description.trim() || null,
           managerId: formData.managerId ? Number(formData.managerId) : null,
+          supervisorId: formData.supervisorId ? Number(formData.supervisorId) : null,
           activo: formData.activo,
         });
       } else {
@@ -274,6 +280,7 @@ const AreasModule: React.FC = () => {
           name: formData.name.trim(),
           description: formData.description.trim() || null,
           managerId: formData.managerId ? Number(formData.managerId) : null,
+          supervisorId: formData.supervisorId ? Number(formData.supervisorId) : null,
           activo: formData.activo,
         });
       }
@@ -390,6 +397,7 @@ const AreasModule: React.FC = () => {
     (u) =>
       !colaboradores.some((c) => c.id === u.id) &&
       u.id !== colaboradoresDialogArea?.managerId &&
+      u.id !== colaboradoresDialogArea?.supervisorId &&
       (u.areaId == null || u.areaId === colaboradoresDialogArea?.id)
   );
 
@@ -547,6 +555,12 @@ const AreasModule: React.FC = () => {
                       ) : (
                         <span className="text-neutral-400">Sin responsable</span>
                       )}
+                      {area.supervisorName && (
+                        <span className="flex items-center gap-1.5 text-neutral-600 dark:text-neutral-300">
+                          <User className="h-3.5 w-3 text-blue-400" />
+                          <span className="truncate text-blue-600 dark:text-blue-400">{area.supervisorName}</span>
+                        </span>
+                      )}
                       <Badge
                         variant="secondary"
                         className={`gap-1 text-xs shrink-0 min-h-8 px-2 ${area.colaboradoresCount > 0 ? 'cursor-pointer active:opacity-80' : ''}`}
@@ -597,6 +611,7 @@ const AreasModule: React.FC = () => {
                       <TableHead>Nombre</TableHead>
                       <TableHead>Descripción</TableHead>
                       <TableHead>Responsable</TableHead>
+                      <TableHead>Supervisor</TableHead>
                       <TableHead className="text-center">Colaboradores</TableHead>
                       <TableHead>Activo</TableHead>
                       <TableHead className="text-center">Acciones</TableHead>
@@ -612,6 +627,16 @@ const AreasModule: React.FC = () => {
                             <span className="flex items-center gap-1.5 text-sm">
                               <User className="h-4 w-4 text-neutral-400" />
                               {area.managerName}
+                            </span>
+                          ) : (
+                            <span className="text-neutral-400">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {area.supervisorName ? (
+                            <span className="flex items-center gap-1.5 text-sm">
+                              <User className="h-4 w-4 text-blue-400" />
+                              {area.supervisorName}
                             </span>
                           ) : (
                             <span className="text-neutral-400">—</span>
@@ -771,6 +796,25 @@ const AreasModule: React.FC = () => {
               >
                 <SelectTrigger className="min-h-11 sm:min-h-10 touch-manipulation">
                   <SelectValue placeholder="Seleccionar responsable" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Sin asignar</SelectItem>
+                  {usuarios.map((u) => (
+                    <SelectItem key={u.id} value={String(u.id)}>
+                      {u.nombreCompleto?.trim() || `Usuario ${u.id}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-2 block">Supervisor</label>
+              <Select
+                value={formData.supervisorId || 'none'}
+                onValueChange={(v) => setFormData({ ...formData, supervisorId: v === 'none' ? '' : v })}
+              >
+                <SelectTrigger className="min-h-11 sm:min-h-10 touch-manipulation">
+                  <SelectValue placeholder="Seleccionar supervisor" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Sin asignar</SelectItem>
@@ -977,7 +1021,7 @@ const AreasModule: React.FC = () => {
             </div>
             {usuariosDisponiblesParaAgregar.length === 0 && (
               <p className="text-sm text-neutral-500 dark:text-neutral-400">
-                No hay usuarios disponibles (todos están en un área o son responsables).
+                No hay usuarios disponibles (todos están en un área, son responsables o supervisores).
               </p>
             )}
           </div>
