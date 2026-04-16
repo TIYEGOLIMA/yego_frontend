@@ -1,4 +1,4 @@
-const DEFAULT_BASE = 'https://5.161.86.63';
+const DEFAULT_BASE = 'http://5.161.86.63';
 
 export function getControlTowerBaseUrl(): string {
   const raw = import.meta.env.VITE_CONTROL_TOWER_URL as string | undefined;
