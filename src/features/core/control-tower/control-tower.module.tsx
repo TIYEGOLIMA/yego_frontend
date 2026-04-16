@@ -1,47 +1,16 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ExternalLink, LayoutGrid, MonitorPlay, RadioTower, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
-import { useAuthStore } from '../../../store/auth-store';
-import {
-  buildControlTowerSsoLoginUrl,
-  getControlTowerBaseUrl,
-  getControlTowerOrigin,
-  INTEGRAL_SSO_MESSAGE_TYPE,
-} from '../../../utils/control-tower-sso';
+import { buildControlTowerUrl, getControlTowerBaseUrl } from '../../../utils/control-tower-sso';
 
 type ViewMode = 'iframe' | 'external';
 
 const ControlTowerModule: React.FC = () => {
-  const token = useAuthStore((s) => s.token);
   const [viewMode, setViewMode] = useState<ViewMode>('iframe');
   const [iframeKey, setIframeKey] = useState(0);
 
-  const ssoUrl = useMemo(() => (token ? buildControlTowerSsoLoginUrl(token) : ''), [token]);
-  const ctOrigin = useMemo(() => getControlTowerOrigin(), []);
-
-  const sendTokenToIframe = useCallback(
-    (win: Window | null) => {
-      if (!token || !win) return;
-      try {
-        win.postMessage(
-          { type: INTEGRAL_SSO_MESSAGE_TYPE, accessToken: token, source: 'integral' },
-          ctOrigin
-        );
-      } catch {
-        // Origen cruzado: solo si el iframe ya cargó el documento permitido
-      }
-    },
-    [token, ctOrigin]
-  );
-
-  if (!token) {
-    return (
-      <div className="text-center text-neutral-600 dark:text-neutral-400 py-12">
-        No hay sesión activa. Inicia sesión en Integral para usar Control Tower.
-      </div>
-    );
-  }
+  const ctUrl = useMemo(() => buildControlTowerUrl(), []);
 
   return (
     <div className="space-y-6">
@@ -51,8 +20,7 @@ const ControlTowerModule: React.FC = () => {
           YEGO Control Tower
         </h2>
         <p className="text-neutral-600 dark:text-neutral-400 mt-1 max-w-3xl">
-          Misma sesión que Integral: se reutiliza tu JWT de la API. Puedes ver la app aquí embebida o
-          abrirla en una pestaña nueva.
+          Accede a Control Tower directamente. Puedes ver la app aquí embebida o abrirla en una pestaña nueva.
         </p>
       </div>
 
@@ -82,15 +50,15 @@ const ControlTowerModule: React.FC = () => {
           <CardHeader>
             <CardTitle className="text-lg">Ventana externa</CardTitle>
             <CardDescription>
-              Se abre Control Tower en <span className="font-mono text-xs">{getControlTowerBaseUrl()}</span> con
-              tu token ya incluido en la URL (fragmento, no visible en el servidor).
+              Se abre Control Tower en <span className="font-mono text-xs">{getControlTowerBaseUrl()}</span> en
+              una pestaña nueva.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Button
               type="button"
               variant="primary"
-              onClick={() => window.open(ssoUrl, '_blank', 'noopener,noreferrer')}
+              onClick={() => window.open(ctUrl, '_blank', 'noopener,noreferrer')}
               leftIcon={<ExternalLink className="h-4 w-4 shrink-0" aria-hidden />}
             >
               Abrir en nueva pestaña
@@ -117,10 +85,9 @@ const ControlTowerModule: React.FC = () => {
               <iframe
                 key={iframeKey}
                 title="YEGO Control Tower"
-                src={ssoUrl}
+                src={ctUrl}
                 className="w-full min-h-[70vh] border-0 bg-white dark:bg-neutral-950"
                 allow="clipboard-read; clipboard-write; fullscreen"
-                onLoad={(e) => sendTokenToIframe(e.currentTarget.contentWindow)}
               />
             </div>
           </CardContent>

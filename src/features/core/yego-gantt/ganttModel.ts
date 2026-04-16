@@ -89,8 +89,8 @@ export function mapVisualPriority(p?: TaskPriority | null): GanttVisualPriority 
 }
 
 export function buildTimelineRange(tasks: TaskRowLike[]): TimelineRange {
-  const pad = 7
-  const minDays = 42
+  const pad = 2
+  const minDays = 7
   if (tasks.length === 0) {
     const anchor = startOfDay(new Date())
     anchor.setDate(anchor.getDate() - pad)

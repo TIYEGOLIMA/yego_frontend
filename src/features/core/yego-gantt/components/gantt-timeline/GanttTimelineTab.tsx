@@ -36,7 +36,7 @@ export interface GanttTimelineTabProps {
   collaboratorsForArea?: (areaId: number) => TeamCollaborator[]
 }
 
-function TimelineHeader({ anchor, totalDays }: { anchor: Date; totalDays: number }) {
+function TimelineHeader({ anchor, totalDays, dayWidth }: { anchor: Date; totalDays: number; dayWidth: number }) {
   const days = Array.from({ length: totalDays }, (_, i) => i)
   return (
     <div className="flex border-b border-border/80 bg-card/95 backdrop-blur-sm sticky top-0 z-30 shadow-sm">
@@ -49,7 +49,7 @@ function TimelineHeader({ anchor, totalDays }: { anchor: Date; totalDays: number
             className={`shrink-0 flex flex-col items-center justify-center py-2 border-r border-border/50 tabular-nums ${
               weekend ? 'bg-muted/30' : ''
             }`}
-            style={{ width: DAY_WIDTH }}
+            style={{ width: dayWidth }}
           >
             <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{weekday}</span>
             <span className={`text-xs font-medium ${day === 0 ? 'text-red-600 dark:text-red-400' : 'text-foreground'}`}>{label}</span>
@@ -60,10 +60,10 @@ function TimelineHeader({ anchor, totalDays }: { anchor: Date; totalDays: number
   )
 }
 
-function TodayLine({ anchor, totalDays, containerHeight }: { anchor: Date; totalDays: number; containerHeight: number }) {
+function TodayLine({ anchor, totalDays, containerHeight, dayWidth }: { anchor: Date; totalDays: number; containerHeight: number; dayWidth: number }) {
   const range = useMemo(() => ({ anchor, totalDays }), [anchor, totalDays])
   const offset = getTodayOffsetDays(range)
-  const left = offset * DAY_WIDTH + DAY_WIDTH / 2
+  const left = offset * dayWidth + dayWidth / 2
   if (offset < 0 || offset >= totalDays) return null
   return (
     <div
@@ -79,15 +79,17 @@ function GanttBar({
   dimmed,
   yOffset,
   barIndex = 0,
+  dayWidth,
 }: {
   task: GanttTaskItem
   onClick: (t: GanttTaskItem) => void
   dimmed: boolean
   yOffset?: number
   barIndex?: number
+  dayWidth: number
 }) {
-  const left = task.startDay * DAY_WIDTH
-  const width = task.duration * DAY_WIDTH - 4
+  const left = task.startDay * dayWidth
+  const width = task.duration * dayWidth - 4
 
   const statusClass =
     task.status === 'blocked'
@@ -134,6 +136,7 @@ function TeamRowWithGrid({
   showCriticalPath,
   collaborators,
   staggerIndex = 0,
+  dayWidth,
 }: {
   team: GanttTeamItem
   totalDays: number
@@ -143,6 +146,7 @@ function TeamRowWithGrid({
   showCriticalPath: boolean
   collaborators: TeamCollaborator[]
   staggerIndex?: number
+  dayWidth: number
 }) {
   const heatmapBg =
     showHeatmap
@@ -164,7 +168,7 @@ function TeamRowWithGrid({
     return longest ? new Set([longest.id]) : new Set<string>()
   }, [showCriticalPath, team.tasks])
 
-  const tw = totalDays * DAY_WIDTH
+  const tw = totalDays * dayWidth
   const lead = collaborators[0] || null
   const hasCollabs = collaborators.length > 0
   const rowHeight = hasCollabs ? 'auto' : undefined
@@ -219,7 +223,7 @@ function TeamRowWithGrid({
               <div
                 key={i}
                 className={`shrink-0 border-r border-border/30 h-full ${isWeekendDay(anchor, i) ? 'bg-muted/20' : ''}`}
-                style={{ width: DAY_WIDTH }}
+                style={{ width: dayWidth }}
               />
             ))}
           </div>
@@ -232,6 +236,7 @@ function TeamRowWithGrid({
                 dimmed={showCriticalPath && criticalIds !== null && !criticalIds.has(task.id)}
                 yOffset={idx * 34 + 4}
                 barIndex={idx}
+                dayWidth={dayWidth}
               />
             ))}
           </div>
@@ -267,14 +272,16 @@ function Minimap({
   onSeek,
   teams,
   totalDays,
+  dayWidth,
 }: {
   scrollLeft: number
   viewportWidth: number
   onSeek: (x: number) => void
   teams: GanttTeamItem[]
   totalDays: number
+  dayWidth: number
 }) {
-  const totalW = totalDays * DAY_WIDTH
+  const totalW = totalDays * dayWidth
   const scale = MINIMAP_W / totalW
   const thumbW = Math.max(viewportWidth * scale, 20)
   const thumbLeft = scrollLeft * scale
@@ -303,8 +310,8 @@ function Minimap({
               key={task.id}
               className="absolute rounded-sm bg-red-500/50 dark:bg-red-600/45"
               style={{
-                left: task.startDay * scale * DAY_WIDTH,
-                width: Math.max(task.duration * scale * DAY_WIDTH, 2),
+                left: task.startDay * scale * dayWidth,
+                width: Math.max(task.duration * scale * dayWidth, 2),
                 top: teamIdx * 9 + 2,
                 height: 6,
               }}
@@ -529,7 +536,9 @@ export function GanttTimelineTab({
   }, [teamsAll, filterText])
 
   const totalDays = range.totalDays
-  const totalWidth = LEFT_COL + totalDays * DAY_WIDTH
+  const availableForTimeline = viewportW - LEFT_COL
+  const dayWidth = Math.max(DAY_WIDTH, Math.floor(availableForTimeline / totalDays))
+  const totalWidth = LEFT_COL + totalDays * dayWidth
   const rowApproxHeight = 73
   const todayLineHeight = Math.max(120, filteredTeams.length * rowApproxHeight)
 
@@ -598,11 +607,11 @@ export function GanttTimelineTab({
                   >
                     <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-medium">Equipos</span>
                   </div>
-                  <TimelineHeader anchor={range.anchor} totalDays={totalDays} />
+                  <TimelineHeader anchor={range.anchor} totalDays={totalDays} dayWidth={dayWidth} />
                 </div>
                 <div className="relative">
-                  <div className="absolute top-0 pointer-events-none" style={{ left: LEFT_COL, width: totalDays * DAY_WIDTH }}>
-                    <TodayLine anchor={range.anchor} totalDays={totalDays} containerHeight={todayLineHeight} />
+                  <div className="absolute top-0 pointer-events-none" style={{ left: LEFT_COL, width: totalDays * dayWidth }}>
+                    <TodayLine anchor={range.anchor} totalDays={totalDays} containerHeight={todayLineHeight} dayWidth={dayWidth} />
                   </div>
                   {filteredTeams.map((team, tIdx) => (
                     <TeamRowWithGrid
@@ -615,6 +624,7 @@ export function GanttTimelineTab({
                       showHeatmap={showHeatmap}
                       showCriticalPath={showCriticalPath}
                       collaborators={collaboratorsForArea?.(Number(team.id)) ?? []}
+                      dayWidth={dayWidth}
                     />
                   ))}
                 </div>
@@ -626,6 +636,7 @@ export function GanttTimelineTab({
               onSeek={handleSeek}
               teams={filteredTeams}
               totalDays={totalDays}
+              dayWidth={dayWidth}
             />
           </div>
           <TaskDetailPanel
