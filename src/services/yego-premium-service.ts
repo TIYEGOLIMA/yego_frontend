@@ -140,6 +140,8 @@ const processDriverActiveStatsByMonth = async (month: number, year: number) => {
 
 export interface DriverSummaryIncome {
   count_completed?: number | null
+  /** Total neto (balances.total) desde API Yango. */
+  total?: number | null
   cash_collected?: number | null
   non_cash_payment?: number | null
   corporate?: number | null
@@ -166,6 +168,9 @@ export interface DriverSummaryGoal {
   total_rides?: number | null
   steps?: DriverSummaryGoalStep[]
   window?: { start?: string | null; end?: string | null }
+  /** Suma de ingresos de viajes que cuentan para la meta (Yango: multiplier_accounted_income). */
+  multiplier_accounted_income?: string | number | null
+  is_multiplier_goal?: boolean | null
 }
 
 export interface DriverSummaryResponse {

@@ -66,6 +66,13 @@ const formatGoalStepPercent = (value: number | null | undefined) => {
   }).format(n)} %`
 }
 
+const parseMultiplierAccountedIncome = (goal: DriverSummaryGoal): number | null => {
+  const raw = goal.multiplier_accounted_income
+  if (raw == null) return null
+  const n = typeof raw === 'number' ? raw : parseFloat(String(raw))
+  return Number.isNaN(n) ? null : n
+}
+
 const formatDate = (value: string | null | undefined) => {
   if (!value) return '—'
   const date = new Date(value)
@@ -81,11 +88,22 @@ const IncomeBlock: React.FC<{
   title: string
   icon: React.ReactNode
   block: DriverSummaryBlock | null | undefined
-}> = ({ title, icon, block }) => {
+  visitorView?: boolean
+}> = ({ title, icon, block, visitorView }) => {
   if (!block) return null
 
   const period = block.period
   const income = block.income_summary
+  const trips = income?.count_completed
+  const prodTotal = income?.total
+  const ticketHistorico =
+    visitorView &&
+    prodTotal != null &&
+    trips != null &&
+    trips > 0 &&
+    !Number.isNaN(Number(prodTotal))
+      ? Number(prodTotal) / trips
+      : null
 
   return (
     <Card className="h-full flex flex-col">
@@ -110,6 +128,19 @@ const IncomeBlock: React.FC<{
               {income?.count_completed ?? '—'}
             </p>
           </div>
+          {visitorView && (
+            <div className="rounded-lg border border-violet-200/80 bg-violet-50/50 p-3 dark:border-violet-900/50 dark:bg-violet-950/30">
+              <p className="text-[11px] font-medium uppercase text-violet-600 dark:text-violet-400">
+                Ticket histórico
+              </p>
+              <p className="mt-1 text-lg font-semibold text-violet-800 dark:text-violet-200">
+                {ticketHistorico != null ? formatCurrency(ticketHistorico) : '—'}
+              </p>
+              <p className="mt-1 text-[10px] leading-tight text-violet-600/80 dark:text-violet-500/90">
+                Producción total ÷ viajes completados
+              </p>
+            </div>
+          )}
           <div className="rounded-lg border border-neutral-200 bg-neutral-50/50 p-3 dark:border-neutral-800 dark:bg-neutral-900/50">
             <p className="text-[11px] font-medium uppercase text-neutral-500 dark:text-neutral-400">
               Efectivo recaudado
@@ -174,66 +205,85 @@ const GoalsSection: React.FC<{
       </CardHeader>
       <CardContent className="flex-1">
         <div className="space-y-4">
-          {goals.map((goal, goalIdx) => (
-            <div
-              key={goalIdx}
-              className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800"
-            >
-              <div className="mb-3 flex flex-wrap items-center gap-3">
-                {goal.total_rides != null && (
-                  <div className="flex items-center gap-1.5">
-                    <Target className="h-4 w-4 text-primary-500" />
-                    <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
-                      Total viajes: <span className="font-bold">{goal.total_rides}</span>
-                    </span>
-                  </div>
-                )}
-                {goal.window?.start && goal.window?.end && (
-                  <div className="flex items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400">
-                    <Calendar className="h-3.5 w-3.5" />
-                    {formatDate(goal.window.start)} — {formatDate(goal.window.end)}
+          {goals.map((goal, goalIdx) => {
+            const ingresoBonificacion = parseMultiplierAccountedIncome(goal)
+            return (
+              <div
+                key={goalIdx}
+                className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800"
+              >
+                <div className="mb-3 flex flex-wrap items-center gap-3">
+                  {goal.total_rides != null && (
+                    <div className="flex items-center gap-1.5">
+                      <Target className="h-4 w-4 text-primary-500" />
+                      <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                        Total viajes: <span className="font-bold">{goal.total_rides}</span>
+                      </span>
+                    </div>
+                  )}
+                  {ingresoBonificacion != null && (
+                    <div className="flex min-w-0 max-w-full basis-full flex-col gap-0.5 sm:basis-auto sm:flex-row sm:items-center sm:gap-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <DollarSign className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                        <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                          Ingresos en bonificación:{' '}
+                          <span className="font-bold text-emerald-700 dark:text-emerald-300">
+                            {formatCurrency(ingresoBonificacion)}
+                          </span>
+                        </span>
+                      </div>
+                      <span className="text-[11px] leading-snug text-neutral-500 dark:text-neutral-400 sm:pl-1">
+                        Suma de ingresos de los viajes que cuentan para la meta.
+                      </span>
+                    </div>
+                  )}
+                  {goal.window?.start && goal.window?.end && (
+                    <div className="flex items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400">
+                      <Calendar className="h-3.5 w-3.5" />
+                      {formatDate(goal.window.start)} — {formatDate(goal.window.end)}
+                    </div>
+                  )}
+                </div>
+                {goal.steps && goal.steps.length > 0 && (
+                  <div className={visitorView ? 'w-full' : 'overflow-x-auto'}>
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-neutral-200 dark:border-neutral-700">
+                          <th className="pb-2 pr-4 text-left font-medium text-neutral-500 dark:text-neutral-400">
+                            Viajes
+                          </th>
+                          <th className="pb-2 pr-4 text-left font-medium text-neutral-500 dark:text-neutral-400">
+                            Porcentaje
+                          </th>
+                          <th className="pb-2 text-left font-medium text-neutral-500 dark:text-neutral-400">
+                            Bono máx.
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {goal.steps.map((step, stepIdx) => (
+                          <tr
+                            key={stepIdx}
+                            className="border-b border-neutral-100 last:border-0 dark:border-neutral-800"
+                          >
+                            <td className="py-2 pr-4 font-medium text-neutral-800 dark:text-neutral-200">
+                              {step.nrides ?? '—'}
+                            </td>
+                            <td className="py-2 pr-4 text-neutral-700 dark:text-neutral-300">
+                              {formatGoalStepPercent(step.amount)}
+                            </td>
+                            <td className="py-2 text-neutral-700 dark:text-neutral-300">
+                              {formatCurrency(step.max_bonus)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </div>
-              {goal.steps && goal.steps.length > 0 && (
-                <div className={visitorView ? 'w-full' : 'overflow-x-auto'}>
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-neutral-200 dark:border-neutral-700">
-                        <th className="pb-2 pr-4 text-left font-medium text-neutral-500 dark:text-neutral-400">
-                          Viajes
-                        </th>
-                        <th className="pb-2 pr-4 text-left font-medium text-neutral-500 dark:text-neutral-400">
-                          Porcentaje
-                        </th>
-                        <th className="pb-2 text-left font-medium text-neutral-500 dark:text-neutral-400">
-                          Bono máx.
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {goal.steps.map((step, stepIdx) => (
-                        <tr
-                          key={stepIdx}
-                          className="border-b border-neutral-100 last:border-0 dark:border-neutral-800"
-                        >
-                          <td className="py-2 pr-4 font-medium text-neutral-800 dark:text-neutral-200">
-                            {step.nrides ?? '—'}
-                          </td>
-                          <td className="py-2 pr-4 text-neutral-700 dark:text-neutral-300">
-                            {formatGoalStepPercent(step.amount)}
-                          </td>
-                          <td className="py-2 text-neutral-700 dark:text-neutral-300">
-                            {formatCurrency(step.max_bonus)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          ))}
+            )
+          })}
         </div>
       </CardContent>
     </Card>
@@ -371,11 +421,13 @@ const ConsultaTab: React.FC<ConsultaTabProps> = ({ showProcessing = false, visit
                   title="Resumen semanal"
                   icon={<TrendingUp className="h-4 w-4 text-blue-500" />}
                   block={result.weekly}
+                  visitorView={visitorView}
                 />
                 <IncomeBlock
                   title="Resumen mensual"
                   icon={<DollarSign className="h-4 w-4 text-emerald-500" />}
                   block={result.monthly}
+                  visitorView={visitorView}
                 />
               </div>
               {/* Fila 2: metas activas + metas anteriores */}
