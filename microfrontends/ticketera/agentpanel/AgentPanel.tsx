@@ -1,15 +1,20 @@
-import React from 'react'
+import React, { useState, useCallback } from 'react'
 import { useAgentPanel } from './hooks/useAgentPanel'
 import { useAuth } from './hooks/useAuth'
 import { useSocket } from './contexts/SocketContext'
 import { TicketSection } from './components/agent/TicketSection'
 import { ModuleSelection } from './components/agent/ModuleSelection'
+import { SedePicker } from './components/agent/SedePicker'
 import { LoadingSpinner } from './components/LoadingSpinner'
 import { Ticket } from './types'
+import { getSedeActivaId } from '../shared/utils/sedeContext'
 import './styles/index.css'
+
+const ROLES_SIN_SEDE_FIJA = ['ADMIN', 'SUPERVISOR']
 
 const AgentPanel: React.FC = () => {
   const { currentUser, loading: authLoading } = useAuth()
+  const [sedePickerKey, setSedePickerKey] = useState(0)
   const { isConnected } = useSocket()
   
   const {
@@ -28,9 +33,8 @@ const AgentPanel: React.FC = () => {
     completarTicket,
     cancelarTicket,
     liberarModulo,
-    actualizarModulos,
     actualizarModulosDesdeLista,
-  } = useAgentPanel()
+  } = useAgentPanel(sedePickerKey)
 
   const handleCallTicket = async (ticket: Ticket) => {
     try {
@@ -64,6 +68,10 @@ const AgentPanel: React.FC = () => {
     }
   }
 
+  const handleSedeSelected = useCallback(() => {
+    // Fuerza re-render para que useAgentPanel llame a inicializar() con el nuevo sedeId
+    setSedePickerKey((k) => k + 1)
+  }, [])
 
   if (authLoading) {
     return (
@@ -90,25 +98,22 @@ const AgentPanel: React.FC = () => {
     )
   }
 
+  // ADMIN/SUPERVISOR deben elegir sede antes de ver módulos
+  const necesitaElegirSede =
+    currentUser &&
+    ROLES_SIN_SEDE_FIJA.includes(currentUser.role?.toUpperCase?.() ?? '') &&
+    !getSedeActivaId()
+
+  if (necesitaElegirSede) {
+    return <SedePicker key={sedePickerKey} onSedeSelected={handleSedeSelected} />
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background-secondary dark:bg-background-dark">
         <LoadingSpinner />
       </div>
     )
-  }
-
-  const userData = localStorage.getItem('user')
-  let needsModuleSelection = false
-  
-  if (userData) {
-    try {
-      const user = JSON.parse(userData)
-      needsModuleSelection = (user.role === 'OPERADOR' || user.role === 'SAC') && 
-                           (user.moduleId === null || user.moduleId === undefined || user.moduleId === '')
-    } catch (error) {
-      console.error('Error parseando datos del usuario:', error)
-    }
   }
 
   if (showModuleSelection) {

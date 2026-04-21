@@ -5,6 +5,7 @@ import { Button } from '../ui/Button'
 import { Loader2, LogOut, Lock, Unlock, ChevronDown, ChevronUp } from 'lucide-react'
 import { ModuloAtencion, ModuloOcupado } from '../../services/moduloAtencionService'
 import { queueAgentService } from '../../services/queueAgentService'
+import { getSedeActivaId } from '../../../shared/utils/sedeContext'
 import { useToastNotifications } from '../../../../../src/hooks/useToastNotifications'
 import { NotificationContainer } from '../../../../../src/components/NotificationToast'
 import SocketService from '../../../../../src/services/socket-service'
@@ -163,7 +164,10 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
 
       try {
         const { moduloAtencionService } = await import('../../services/moduloAtencionService')
-        const respuesta = await moduloAtencionService.verificarModuloOListarDisponibles(user.id)
+        const respuesta = await moduloAtencionService.verificarModuloOListarDisponibles(
+          user.id,
+          getSedeActivaId()
+        )
         
         if (respuesta && typeof respuesta === 'object' && !Array.isArray(respuesta)) {
           const respuestaObj = respuesta as any
@@ -247,7 +251,7 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
       setAssigning(moduleId)
       setError(null)
       
-      const response = await queueAgentService.assignModuleToUser(user.id, moduleId)
+      const response = await queueAgentService.assignModuleToUser(user.id, moduleId, getSedeActivaId())
       
       const isSuccess = response.success === true || 
                        response.message?.includes('exitosamente') || 

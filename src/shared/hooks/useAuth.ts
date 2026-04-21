@@ -40,12 +40,7 @@ export function useAuthEvents() {
     };
 
     const handleModulosActualizados = (event: any) => {
-      // Verificar si el evento es de tipo MODULOS_ACTUALIZADOS
-      // Los datos de modulosDisponibles/modulosOcupados se procesan directamente en ModuleSelection
-      // Solo necesitamos actualizar el perfil del usuario por si cambió su módulo asignado
       if (event?.type === 'MODULOS_ACTUALIZADOS') {
-        // Los módulos disponibles/ocupados ya se emiten como 'modulos-actualizados' para ModuleSelection
-        // Solo actualizamos el perfil del usuario (por si cambió su moduleId) y refrescamos la UI
         fetchProfile()
           .then(() => {
             triggerRefresh();

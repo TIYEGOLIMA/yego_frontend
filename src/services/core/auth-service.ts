@@ -14,14 +14,12 @@ export interface RegisterData {
   nombre: string;
 }
 
-/** Perfil de usuario (GET /auth/profile o tras login). */
 export interface AuthUser {
   id: number;
   username: string;
   email: string;
   name: string;
   role: string;
-  moduleId?: string | null;
   active: boolean;
   lastLogin: string;
   esJefe?: boolean;
@@ -29,6 +27,8 @@ export interface AuthUser {
   esSupervisor?: boolean;
   nombreAreaSupervisor?: string | null;
   requirePasswordChange?: boolean;
+  sedeId?: number | null;
+  sedeNombre?: string | null;
 }
 
 /** Login y refresh: token + mensaje; el usuario puede venir en el cuerpo (mismo shape que getProfile). */

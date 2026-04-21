@@ -68,6 +68,8 @@ interface User {
   areaNombre?: string | null;
   areaEsResponsable?: boolean;
   areaEsSupervisor?: boolean;
+  sedeId?: number | null;
+  sedeNombre?: string | null;
 }
 
 interface Role {
@@ -76,6 +78,11 @@ interface Role {
 }
 
 interface AreaOption {
+  id: number;
+  name: string;
+}
+
+interface SedeOption {
   id: number;
   name: string;
 }
@@ -90,7 +97,10 @@ interface CreateUserData {
   roleId: number;
   active?: boolean;
   areaId?: number | null;
+  sedeId?: number | null;
 }
+
+const ROLES_REQUIEREN_SEDE = ['SAC', 'OPERADOR', 'SAC_AGENT'];
 
 /** Normaliza texto para username: minúsculas, sin acentos, sin espacios (ej. "García" -> "garcia") */
 function normalizarParaUsername(texto: string): string {
@@ -158,6 +168,7 @@ const UsersModule: React.FC = () => {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [availableRoles, setAvailableRoles] = useState<Role[]>([]);
   const [areas, setAreas] = useState<AreaOption[]>([]);
+  const [sedes, setSedes] = useState<SedeOption[]>([]);
   const [formData, setFormData] = useState<CreateUserData>({
     dni: '',
     username: '',
@@ -167,7 +178,8 @@ const UsersModule: React.FC = () => {
     password: '',
     roleId: 0,
     active: true,
-    areaId: null
+    areaId: null,
+    sedeId: null
   });
 
   const [userStatus, setUserStatus] = useState<'true' | 'false' | 'all'>('all');
@@ -207,6 +219,21 @@ const UsersModule: React.FC = () => {
     } catch (error: any) {
       console.error('[UsersModule] Error cargando areas:', error);
       setAreas([]);
+    }
+  };
+
+  const fetchSedes = async () => {
+    try {
+      const response = await api.get('/ticketera/sedes');
+      const list = Array.isArray(response.data) ? response.data : [];
+      setSedes(
+        list
+          .filter((s: { active?: boolean }) => s.active !== false)
+          .map((s: { id: number; name: string }) => ({ id: s.id, name: s.name }))
+      );
+    } catch (error: any) {
+      console.error('[UsersModule] Error cargando sedes:', error);
+      setSedes([]);
     }
   };
 
@@ -393,7 +420,8 @@ const UsersModule: React.FC = () => {
         name: formData.name.trim(),
         lastName: formData.lastName?.trim() || '',
         roleId: formData.roleId,
-        active: formData.active !== undefined ? formData.active : true
+        active: formData.active !== undefined ? formData.active : true,
+        sedeId: formData.sedeId ?? null
       });
 
       setIsCreateDialogOpen(false);
@@ -426,7 +454,8 @@ const UsersModule: React.FC = () => {
       lastName: formData.lastName || '',
       roleId: formData.roleId,
       active: formData.active,
-      areaId: formData.areaId != null ? formData.areaId : 0
+      areaId: formData.areaId != null ? formData.areaId : 0,
+      sedeId: formData.sedeId != null ? formData.sedeId : 0
     };
 
     if (formData.password && formData.password.trim() !== '') {
@@ -556,11 +585,8 @@ const UsersModule: React.FC = () => {
 
   const openEditDialog = (user: User) => {
     setEditingUser(user);
-    // Cargar áreas solo al abrir el diálogo de edición (no en carga inicial de la vista)
-    if (areas.length === 0) {
-      fetchAreas();
-    }
-    // Buscar el ID del rol basado en el nombre
+    if (areas.length === 0) fetchAreas();
+    if (sedes.length === 0) fetchSedes();
     const roleObj = availableRoles.find(role => role.name === user.role);
     setFormData({
       dni: user.dni || '',
@@ -571,7 +597,8 @@ const UsersModule: React.FC = () => {
       password: '',
       roleId: roleObj?.id || 0,
       active: user.active,
-      areaId: user.areaId ?? null
+      areaId: user.areaId ?? null,
+      sedeId: user.sedeId ?? null
     });
   };
 
@@ -595,7 +622,8 @@ const UsersModule: React.FC = () => {
       password: '',
       roleId: 0,
       active: true,
-      areaId: null
+      areaId: null,
+      sedeId: null
     });
   };
 
@@ -626,6 +654,7 @@ const UsersModule: React.FC = () => {
           variant="primary"
           onClick={() => {
             if (areas.length === 0) fetchAreas();
+            if (sedes.length === 0) fetchSedes();
             setIsCreateDialogOpen(true);
           }}
           leftIcon={<Plus className="h-4 w-4" />}
@@ -1199,6 +1228,37 @@ const UsersModule: React.FC = () => {
                   </p>
                 </>
               )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                Sede
+                {(() => {
+                  const roleName = availableRoles.find(r => r.id === formData.roleId)?.name?.toUpperCase()
+                  return roleName && ROLES_REQUIEREN_SEDE.includes(roleName)
+                    ? <span className="text-red-500 ml-1">*</span>
+                    : null
+                })()}
+              </label>
+              <Select
+                value={formData.sedeId != null && formData.sedeId !== 0 ? String(formData.sedeId) : 'none'}
+                onValueChange={(value) => setFormData({ ...formData, sedeId: value === 'none' ? null : Number(value) })}
+              >
+                <SelectTrigger className="focus:ring-0 focus:ring-offset-0 hover:bg-transparent">
+                  <SelectValue placeholder="Seleccionar sede" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Sin asignar</SelectItem>
+                  {sedes.map((sede) => (
+                    <SelectItem key={sede.id} value={String(sede.id)}>
+                      {sede.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-neutral-500 mt-1">
+                Sede física del usuario. Obligatorio para SAC/OPERADOR.
+              </p>
             </div>
 
           </form>

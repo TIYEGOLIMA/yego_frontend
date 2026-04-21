@@ -17,6 +17,7 @@ import {
   Minimize
 } from 'lucide-react'
 import { ticketService, moduleService, driverService } from './services'
+import { getSedeActivaId } from '../shared/utils/sedeContext'
 
 interface UserType {
   id: number
@@ -246,9 +247,11 @@ export default function TabletInterface() {
       const conductorExistente = await driverService.searchDriverByPhone(phoneNumber)
 
       if (conductorExistente) {
+        const sedeIdActiva = getSedeActivaId()
         const ticketData = {
           optionId: selectedSubOption!,
-          licenseNumber: phoneNumber
+          licenseNumber: phoneNumber,
+          ...(sedeIdActiva !== undefined ? { sedeId: sedeIdActiva } : {}),
         }
 
         await ticketService.createTicketPublic(ticketData)
@@ -340,9 +343,11 @@ export default function TabletInterface() {
       }
 
       try {
+        const sedeIdActiva = getSedeActivaId()
         const ticketData = {
           optionId: selectedSubOption!,
-          licenseNumber: phoneNumber
+          licenseNumber: phoneNumber,
+          ...(sedeIdActiva !== undefined ? { sedeId: sedeIdActiva } : {}),
         }
 
         await ticketService.createTicketPublic(ticketData)

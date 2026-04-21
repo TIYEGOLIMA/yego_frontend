@@ -32,6 +32,8 @@ export interface ModuloAtencion {
   isActive?: boolean
   createdAt?: string
   updatedAt?: string
+  sedeId?: number
+  sedeNombre?: string
 }
 
 export interface ModuloUsuarioResponse {
@@ -57,8 +59,13 @@ export interface ModuloOcupado {
 }
 
 export const moduloAtencionService = {
-  async verificarModuloOListarDisponibles(userId: number): Promise<ModuloAtencion[] | ModuloUsuarioResponse> {
-    const response = await api.get(`/modulo-atencion/usuario/${userId}`)
+  async verificarModuloOListarDisponibles(
+    userId: number,
+    sedeId?: number
+  ): Promise<ModuloAtencion[] | ModuloUsuarioResponse> {
+    const response = await api.get(`/modulo-atencion/usuario/${userId}`, {
+      params: sedeId ? { sedeId } : undefined,
+    })
     return response.data
-  }
+  },
 }

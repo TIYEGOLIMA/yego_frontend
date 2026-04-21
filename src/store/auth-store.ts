@@ -16,6 +16,26 @@ export interface User {
   esSupervisor?: boolean;
   nombreAreaSupervisor?: string | null;
   requirePasswordChange?: boolean;
+  sedeId?: number | null;
+  sedeNombre?: string | null;
+}
+
+const SEDE_ACTIVA_KEY = 'sedeActiva'
+
+/** Sincroniza `localStorage['sedeActiva']` con la sede del usuario autenticado. */
+const sincronizarSedeActiva = (user: User | null | undefined) => {
+  try {
+    if (user?.sedeId != null) {
+      localStorage.setItem(
+        SEDE_ACTIVA_KEY,
+        JSON.stringify({ id: user.sedeId, nombre: user.sedeNombre ?? null })
+      )
+    } else {
+      localStorage.removeItem(SEDE_ACTIVA_KEY)
+    }
+  } catch {
+    // localStorage no disponible (SSR / modo privado)
+  }
 }
 
 export interface ModuleGrupo {
@@ -85,6 +105,7 @@ export const useAuthStore = create<AuthState>()(
             error: null
           })
           localStorage.removeItem("requiereCambioPassword")
+          sincronizarSedeActiva(user)
           
           // Cargar módulos solo si NO debe cambiar contraseña (si debe, no llamar my-modules)
           if (!user?.requirePasswordChange) {
@@ -129,6 +150,7 @@ export const useAuthStore = create<AuthState>()(
         } finally {
           set({ user: null, token: null, modules: [], error: null })
           localStorage.removeItem("requiereCambioPassword")
+          sincronizarSedeActiva(null)
         }
       },
       fetchModules: async () => {
@@ -172,10 +194,12 @@ export const useAuthStore = create<AuthState>()(
               token: refreshResponse.accessToken,
               loading: false 
             })
+            sincronizarSedeActiva(user)
             return true
           } catch {
             set({ user: null, token: null, loading: false });
             localStorage.removeItem('auth-storage');
+            sincronizarSedeActiva(null)
             return false
           }
         }
@@ -189,6 +213,7 @@ export const useAuthStore = create<AuthState>()(
         try {
           const user = await authService.getProfile(token)
           set({ user, loading: false })
+          sincronizarSedeActiva(user)
         } catch (error: any) {
           if (error.response?.status === 401 || error.message?.includes('JWT signature')) {
             await tryRefreshToken()

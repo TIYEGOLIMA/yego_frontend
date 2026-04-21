@@ -36,10 +36,25 @@ export interface ReportData {
   }>;
 }
 
+export interface ReportFilters {
+  fechaInicio?: string;
+  fechaFin?: string;
+  sedeId?: number;
+}
+
+const buildParams = (params?: ReportFilters): Record<string, string | number> | undefined => {
+  if (!params) return undefined;
+  const out: Record<string, string | number> = {};
+  if (params.fechaInicio) out.fechaInicio = params.fechaInicio;
+  if (params.fechaFin) out.fechaFin = params.fechaFin;
+  if (params.sedeId !== undefined && params.sedeId !== null) out.sedeId = params.sedeId;
+  return Object.keys(out).length ? out : undefined;
+};
+
 export const reportsService = {
-  async getSACPerformanceReports(params?: { fechaInicio?: string; fechaFin?: string }): Promise<ReportData> {
+  async getSACPerformanceReports(params?: ReportFilters): Promise<ReportData> {
     try {
-      const response = await api.get('/ticketera/sac-stats', { params });
+      const response = await api.get('/ticketera/sac-stats', { params: buildParams(params) });
       return response.data;
     } catch (error) {
       console.error('[reportsService] Error obteniendo reportes:', error);
@@ -47,9 +62,9 @@ export const reportsService = {
     }
   },
 
-  async obtenerTodoElHistorial(): Promise<ReportData> {
+  async obtenerTodoElHistorial(params?: Pick<ReportFilters, 'sedeId'>): Promise<ReportData> {
     try {
-      const response = await api.get('/ticketera/sac-stats/all');
+      const response = await api.get('/ticketera/sac-stats/all', { params: buildParams(params) });
       return response.data;
     } catch (error) {
       console.error('[reportsService] Error obteniendo todo el historial:', error);
@@ -57,46 +72,26 @@ export const reportsService = {
     }
   },
 
-  async exportarAExcel(params?: { fechaInicio?: string; fechaFin?: string }): Promise<Blob> {
+  async exportarAExcel(params?: ReportFilters): Promise<Blob> {
     try {
-      if (params && params.fechaInicio && params.fechaFin) {
-        const response = await api.get('/ticketera/sac-stats/export/excel', {
-          params: {
-            fechaInicio: params.fechaInicio,
-            fechaFin: params.fechaFin
-          },
-          responseType: 'blob'
-        });
-        return response.data;
-      } else {
-        const response = await api.get('/ticketera/sac-stats/export/excel', {
-          responseType: 'blob'
-        });
-        return response.data;
-      }
+      const response = await api.get('/ticketera/sac-stats/export/excel', {
+        params: buildParams(params),
+        responseType: 'blob',
+      });
+      return response.data;
     } catch (error) {
       console.error('[reportsService] Error exportando a Excel:', error);
       throw error;
     }
   },
 
-  async exportarAImagen(formato: string, params?: { fechaInicio?: string; fechaFin?: string }): Promise<Blob> {
+  async exportarAImagen(formato: string, params?: ReportFilters): Promise<Blob> {
     try {
-      if (params && params.fechaInicio && params.fechaFin) {
-        const response = await api.get(`/ticketera/sac-stats/export/image/${formato}`, {
-          params: {
-            fechaInicio: params.fechaInicio,
-            fechaFin: params.fechaFin
-          },
-          responseType: 'blob'
-        });
-        return response.data;
-      } else {
-        const response = await api.get(`/ticketera/sac-stats/export/image/${formato}`, {
-          responseType: 'blob'
-        });
-        return response.data;
-      }
+      const response = await api.get(`/ticketera/sac-stats/export/image/${formato}`, {
+        params: buildParams(params),
+        responseType: 'blob',
+      });
+      return response.data;
     } catch (error) {
       console.error('[reportsService] Error exportando a imagen:', error);
       throw error;

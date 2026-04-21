@@ -21,7 +21,8 @@ import {
   ChevronRight,
   X
 } from 'lucide-react'
-import { reportsService, ReportData } from './services/reportsService'
+import { reportsService, ReportData, ReportFilters } from './services/reportsService'
+import { getSedeActivaId } from '../shared/utils/sedeContext'
 
 const Reports: React.FC = () => {
   const [reportData, setReportData] = useState<ReportData | null>(null)
@@ -173,12 +174,21 @@ const Reports: React.FC = () => {
     return {}
   }
 
+  const construirFiltros = (extra?: Partial<ReportFilters>): ReportFilters => {
+    const sedeIdActiva = getSedeActivaId()
+    return {
+      ...obtenerFechasParaPeticion(),
+      ...(sedeIdActiva !== undefined ? { sedeId: sedeIdActiva } : {}),
+      ...(extra ?? {}),
+    }
+  }
+
   const loadReportData = async () => {
     try {
       setLoading(true)
       setDatosCargados(false)
 
-      const params = obtenerFechasParaPeticion()
+      const params = construirFiltros()
 
       const data = await reportsService.getSACPerformanceReports(params)
       setReportData(data)
@@ -207,7 +217,10 @@ const Reports: React.FC = () => {
       setDatosCargados(false)
       setShowDatePicker(false)
 
-      const data = await reportsService.obtenerTodoElHistorial()
+      const sedeIdActiva = getSedeActivaId()
+      const data = await reportsService.obtenerTodoElHistorial(
+        sedeIdActiva !== undefined ? { sedeId: sedeIdActiva } : undefined
+      )
       setReportData(data)
       setDatosCargados(true)
       setFechaInicio('')
@@ -267,16 +280,21 @@ const Reports: React.FC = () => {
       setShowExportMenu(false)
 
       const tieneFechas = fechaInicio && fechaFin
-      const params = tieneFechas ? { fechaInicio, fechaFin } : {}
+      const sedeIdActiva = getSedeActivaId()
+      const params: ReportFilters = {
+        ...(tieneFechas ? { fechaInicio, fechaFin } : {}),
+        ...(sedeIdActiva !== undefined ? { sedeId: sedeIdActiva } : {}),
+      }
+      const tieneFiltros = tieneFechas || sedeIdActiva !== undefined
 
       let blob: Blob
       let extension: string
       
       if (tipo === 'excel') {
-        blob = await reportsService.exportarAExcel(tieneFechas ? params : undefined)
+        blob = await reportsService.exportarAExcel(tieneFiltros ? params : undefined)
         extension = 'xlsx'
       } else {
-        blob = await reportsService.exportarAImagen(formato || 'png', tieneFechas ? params : undefined)
+        blob = await reportsService.exportarAImagen(formato || 'png', tieneFiltros ? params : undefined)
         extension = formato || 'png'
       }
       

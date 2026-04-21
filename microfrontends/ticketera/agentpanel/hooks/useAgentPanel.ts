@@ -2,10 +2,11 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { ticketService } from '../services/ticketService'
 import { queueAgentService } from '../services/queueAgentService'
 import { validationService } from '../services/validationService'
-import { safeGetItem, safeSetItem } from '../utils/storage'
+import { safeSetItem } from '../utils/storage'
 import { Ticket } from '../types'
 import { normalizeDriverName } from '../utils/utf8Decoder'
 import { useSocket } from '../contexts/SocketContext'
+import { getSedeActivaId } from '../../shared/utils/sedeContext'
 
 interface UseAgentPanelReturn {
   tickets: Ticket[]
@@ -39,7 +40,7 @@ interface UseAgentPanelReturn {
   actualizarModulosDesdeLista: (modules: any[]) => void
 }
 
-export const useAgentPanel = (): UseAgentPanelReturn => {
+export const useAgentPanel = (sedePickerKey?: number): UseAgentPanelReturn => {
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedModule, setSelectedModule] = useState<number | null>(null)
@@ -47,10 +48,9 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
   const [showModuleSelection, setShowModuleSelection] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string>('')
   const [showError, setShowError] = useState(false)
-  
+
   const { isConnected, subscribe } = useSocket()
   const hasLoadedModules = useRef(false)
-  const isLoadingModules = useRef(false)
   const hasRecuperadoModulo = useRef(false)
   const isInicializando = useRef(false)
 
@@ -641,6 +641,18 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
 
 
   useEffect(() => {
+    if (sedePickerKey !== undefined && sedePickerKey > 0) {
+      hasRecuperadoModulo.current = false
+      hasLoadedModules.current = false
+      isInicializando.current = false
+      setSelectedModule(null)
+      setModules([])
+      setShowModuleSelection(false)
+      setLoading(true)
+    }
+  }, [sedePickerKey])
+
+  useEffect(() => {
     if (hasRecuperadoModulo.current || selectedModule || isInicializando.current) {
       return
     }
@@ -657,7 +669,10 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
         }
         
         const { moduloAtencionService } = await import('../services/moduloAtencionService')
-        const respuesta = await moduloAtencionService.verificarModuloOListarDisponibles(user.id)
+        const respuesta = await moduloAtencionService.verificarModuloOListarDisponibles(
+          user.id,
+          getSedeActivaId()
+        )
         
         if (Array.isArray(respuesta)) {
           if (respuesta.length > 0) {
@@ -711,7 +726,7 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
     }
 
     inicializar()
-  }, [getCurrentUser, mostrarError, selectedModule])
+  }, [getCurrentUser, mostrarError, selectedModule, sedePickerKey])
 
   useEffect(() => {
     if (selectedModule) {
@@ -791,7 +806,10 @@ export const useAgentPanel = (): UseAgentPanelReturn => {
       }
 
       const { moduloAtencionService } = await import('../services/moduloAtencionService')
-      const respuesta = await moduloAtencionService.verificarModuloOListarDisponibles(user.id)
+      const respuesta = await moduloAtencionService.verificarModuloOListarDisponibles(
+        user.id,
+        getSedeActivaId()
+      )
       
       let modulosParaActualizar: any[] = []
       if (Array.isArray(respuesta)) {

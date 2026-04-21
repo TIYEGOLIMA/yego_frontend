@@ -70,16 +70,16 @@ class QueueAgentService {
     }
   }
 
-  /**
-   * Asigna un módulo a un usuario
-   * @param userId ID del usuario
-   * @param moduleId ID del módulo a asignar
-   */
-  async assignModuleToUser(userId: number, moduleId: number): Promise<ModuleAssignmentResponse> {
+  async assignModuleToUser(
+    userId: number,
+    moduleId: number,
+    sedeId?: number
+  ): Promise<ModuleAssignmentResponse> {
     try {
       const response = await api.post<any>('/queue-agents/asignar', {
         userId,
-        moduleId
+        moduleId,
+        ...(sedeId !== undefined ? { sedeId } : {}),
       });
       let moduleAssignment;
       if (response.data.moduleId) {
