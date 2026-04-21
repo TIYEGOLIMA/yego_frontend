@@ -7,7 +7,6 @@ import { useTVDisplayWebSocket } from './useWebSocket'
 
 export const useTVDisplay = () => {
   const [tickets, setTickets] = useState<Ticket[]>([])
-  const [calledTicket, setCalledTicket] = useState<Ticket | null>(null)
   const [currentTime, setCurrentTime] = useState(new Date())
   const [loading, setLoading] = useState(true)
   const [soundEnabled, setSoundEnabled] = useState(true)
@@ -67,100 +66,6 @@ export const useTVDisplay = () => {
     
     return ticket
   }, [])
-
-  useEffect(() => {
-    let token: string | null = null;
-    try {
-      const authStorage = localStorage.getItem('auth-storage');
-      if (authStorage) {
-        const parsed = JSON.parse(authStorage);
-        token = parsed?.state?.token || null;
-      }
-    } catch {
-      token = localStorage.getItem('token');
-    }
-    
-    if (!token || token.trim() === '' || token.split('.').length !== 3) {
-      return;
-    }
-    
-    import('../../../../src/services/socket-service').then((module) => {
-      const socketService = module.default
-      
-      const currentStatus = socketService.getConnectionStatus();
-      if (currentStatus === 'connected') {
-        return;
-      }
-      
-      const sessionId = `tvdisplay-${Date.now()}`
-      socketService.connect(sessionId)
-    }).catch(() => {
-      // ignore
-    })
-  }, [])
-
-  useEffect(() => {
-    if (isConnected) {
-      return
-    }
-
-    let reconexionInterval: NodeJS.Timeout | null = null
-    let isReconnecting = false
-
-    const attemptReconnect = () => {
-      if (isReconnecting || isConnected) {
-        return
-      }
-      
-      let token: string | null = null;
-      try {
-        const authStorage = localStorage.getItem('auth-storage');
-        if (authStorage) {
-          const parsed = JSON.parse(authStorage);
-          token = parsed?.state?.token || null;
-        }
-      } catch {
-        token = localStorage.getItem('token');
-      }
-      
-      if (!token || token.trim() === '' || token.split('.').length !== 3) {
-        return;
-      }
-      
-      isReconnecting = true
-      import('../../../../src/services/socket-service').then((module) => {
-        const socketService = module.default
-        
-        const currentStatus = socketService.getConnectionStatus();
-        if (currentStatus === 'connected') {
-          isReconnecting = false
-          return
-        }
-        
-        if (currentStatus === 'connecting') {
-          isReconnecting = false
-          return
-        }
-        
-        const sessionId = `tvdisplay-reconnect-${Date.now()}`
-        socketService.connect(sessionId)
-        setTimeout(() => {
-          isReconnecting = false
-        }, 5000)
-      }).catch(() => {
-        isReconnecting = false
-      })
-    }
-
-    reconexionInterval = setInterval(attemptReconnect, 10000)
-
-    return () => {
-      if (reconexionInterval) {
-        clearInterval(reconexionInterval)
-      }
-      isReconnecting = false
-    }
-  }, [isConnected])
 
   useEffect(() => {
     if (!isConnected) {
@@ -240,7 +145,6 @@ export const useTVDisplay = () => {
         }
       })
       
-      setCalledTicket(ticketConNombre)
       setLastUpdate(new Date())
       
       if (soundEnabled) {
@@ -516,8 +420,6 @@ export const useTVDisplay = () => {
 
 
   return {
-    tickets,
-    calledTicket,
     currentTime,
     loading,
     soundEnabled,
@@ -527,14 +429,14 @@ export const useTVDisplay = () => {
     maxTicketsToShow,
     vibratingTickets,
     currentDisplayTicket,
-    
+
     ticketsEnEspera,
     ticketsLlamados,
     ticketsEnAtencion,
     currentTickets,
     isConnected,
     connectionStatus,
-    
+
     formatearHora,
     formatearFecha,
     toggleSound

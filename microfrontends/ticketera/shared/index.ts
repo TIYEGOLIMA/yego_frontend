@@ -1,11 +1,1 @@
-export {
-  API_BASE_URL,
-  SOCKET_URL,
-  TICKET_STATUS,
-  TICKET_STATUS_COLORS,
-  TICKET_STATUS_LABELS,
-  PHONE_VALIDATION,
-  REFRESH_INTERVALS,
-  SESSION_CONFIG,
-  SOUND_CONFIG
-} from './utils/constants'
+export { TICKET_STATUS } from './utils/constants'

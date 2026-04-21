@@ -149,12 +149,9 @@ export const AsistenciaListaModule: React.FC = () => {
     return formatearFecha(info.año, info.mes, 1);
   };
 
-  const rolesExcluidos = ['TABLET1', 'TABLET2', 'PRINCIPAL', 'TV'];
   const rolesUnicos = Array.from(
-    new Set(usuarios.map(u => u.rol).filter(Boolean))
-  ).filter((rol): rol is string => 
-    Boolean(rol && rol.trim() !== '' && !rolesExcluidos.includes(rol.toUpperCase()))
-  );
+    new Set(usuarios.map((u) => u.rol).filter(Boolean))
+  ).filter((rol): rol is string => Boolean(rol && rol.trim() !== ''));
 
   const getTipoIcon = (tipo: string) => {
     switch (tipo) {

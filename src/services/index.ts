@@ -46,9 +46,3 @@ export {
   type DriverTripsYearResponse,
   type MonthlyTripsAggregate,
 } from './yego-premium-service';
-
-// 🎫 SERVICIOS TICKETERA
-export {
-  ticketeraAuthService,
-  type TicketeraAuthResponse
-} from './ticketera-auth-service';

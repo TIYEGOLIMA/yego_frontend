@@ -2,71 +2,23 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '../shared/components/ui/Card'
 import { Button } from '../shared/components/ui/Button'
 import { BaseLoader } from '../../shared/components/ui'
-import { authService } from '../../../src/services/core/auth-service'
-import { useAuthStore } from '../../../src/store/auth-store'
-import { 
-  ArrowLeft, 
-  Phone, 
-  User, 
-  CheckCircle, 
+import {
+  ArrowLeft,
+  Phone,
+  User,
+  CheckCircle,
   LogOut,
   X,
-  Lock,
   CreditCard,
   Maximize,
   Minimize
 } from 'lucide-react'
 import { ticketService, moduleService, driverService } from './services'
-import { getSedeActivaId } from '../shared/utils/sedeContext'
-
-interface UserType {
-  id: number
-  username: string
-  role: string
-  name?: string
-  email?: string
-  active?: boolean
-  moduleId?: number | null
-}
-
-const authHelpers = {
-  isAuthenticated: (): boolean => {
-    try {
-      const authStorageData = localStorage.getItem('auth-storage')
-      if (!authStorageData) return false
-      
-      const parsedData = JSON.parse(authStorageData)
-      const token = parsedData?.state?.token || null
-      return !!token
-    } catch {
-      return false
-    }
-  },
-  
-  getUser: (): UserType | null => {
-    try {
-      const authStorageData = localStorage.getItem('auth-storage')
-      if (!authStorageData) return null
-      
-      const parsedData = JSON.parse(authStorageData)
-      const user = parsedData?.state?.user || null
-      
-      if (!user) return null
-      
-      if (!user.id || !user.username || !user.role) {
-        return null
-      }
-      
-      return user
-    } catch {
-      return null
-    }
-  },
-
-  navigateToLogin: (): void => {
-    window.location.href = '/login'
-  }
-}
+import {
+  getDispositivoSession,
+  clearDispositivoSession,
+  type DispositivoSession,
+} from '../../../src/services/core/device-auth-service'
 
 const ErrorMessage = ({ message }: { message: string }) => (
   <div className="flex items-center justify-center text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/30 p-4 rounded-lg border-2 border-red-200 dark:border-red-800">
@@ -95,48 +47,18 @@ const DriverInfo = ({ driverName }: { driverName: string }) => (
   </div>
 )
 
-const AuthStatus = () => (
-  <div className="max-w-md mx-auto">
-    <div className="flex items-center justify-center bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-      <div className="flex items-center space-x-3">
-        <div className="w-10 h-10 bg-red-100 dark:bg-red-900/40 rounded-full flex items-center justify-center">
-          <Lock className="w-5 h-5 text-red-600 dark:text-red-400" />
-        </div>
-        <div className="text-left">
-          <p className="text-sm font-medium text-red-800 dark:text-red-200">
-            No autenticado
-          </p>
-          <p className="text-lg font-semibold text-red-900 dark:text-red-100">
-            Debe iniciar sesión para crear tickets
-          </p>
-        </div>
-      </div>
-    </div>
-  </div>
-)
-
 const useTabletInterface = () => {
-  const [currentUser, setCurrentUser] = useState<UserType | null>(null)
+  const [dispositivo, setDispositivo] = useState<DispositivoSession | null>(null)
   const [error, setError] = useState<string>('')
   const [loading, setLoading] = useState(false)
   const [optionsLoaded, setOptionsLoaded] = useState(false)
 
   useEffect(() => {
-    if (authHelpers.isAuthenticated()) {
-      const user = authHelpers.getUser()
-      if (user) {
-        setCurrentUser(user)
-        setError('')
-      } else {
-        setError('Error al obtener información del usuario')
-      }
-    } else {
-      setError('Debe iniciar sesión para usar la tablet')
-    }
+    setDispositivo(getDispositivoSession())
   }, [])
 
   return {
-    currentUser,
+    dispositivo,
     error,
     loading,
     setLoading,
@@ -147,8 +69,7 @@ const useTabletInterface = () => {
 }
 
 export default function TabletInterface() {
-  const { logout } = useAuthStore()
-  const { currentUser, error, loading, setLoading, optionsLoaded, setOptionsLoaded, setError } = useTabletInterface()
+  const { dispositivo, error, loading, setLoading, optionsLoaded, setOptionsLoaded, setError } = useTabletInterface()
 
   const [selectedOption, setSelectedOption] = useState<number | null>(null)
   const [selectedSubOption, setSelectedSubOption] = useState<number | null>(null)
@@ -247,7 +168,7 @@ export default function TabletInterface() {
       const conductorExistente = await driverService.searchDriverByPhone(phoneNumber)
 
       if (conductorExistente) {
-        const sedeIdActiva = getSedeActivaId()
+        const sedeIdActiva = dispositivo?.sedeId
         const ticketData = {
           optionId: selectedSubOption!,
           licenseNumber: phoneNumber,
@@ -343,7 +264,7 @@ export default function TabletInterface() {
       }
 
       try {
-        const sedeIdActiva = getSedeActivaId()
+        const sedeIdActiva = dispositivo?.sedeId
         const ticketData = {
           optionId: selectedSubOption!,
           licenseNumber: phoneNumber,
@@ -392,23 +313,10 @@ export default function TabletInterface() {
   }, [loading, driverData, phoneNumber, tipoDocumento, setError])
 
 
-  const handleCerrarSesion = useCallback(async () => {
-    try {
-      logout()
-
-      try {
-        await authService.logout()
-      } catch {
-        // continuar con cierre local
-      }
-
-      window.location.href = '/login'
-    } catch (error) {
-      console.error('[TabletInterface] Error en logout:', error)
-      logout()
-      window.location.href = '/login'
-    }
-  }, [logout])
+  const handleCerrarSesion = useCallback(() => {
+    clearDispositivoSession()
+    window.location.href = '/login'
+  }, [])
 
   const retroceder = useCallback(() => {
     switch (currentStep) {
@@ -539,9 +447,7 @@ export default function TabletInterface() {
         />
       </div>
 
-      {!currentUser ? (
-        <AuthStatus />
-      ) : driverData.firstName.trim() ? (
+      {driverData.firstName.trim() ? (
         <DriverInfo driverName={`${driverData.firstName} ${driverData.lastName}`} />
       ) : null}
 
@@ -559,7 +465,7 @@ export default function TabletInterface() {
         <Button
           onClick={crearTicket}
           loading={loading}
-          disabled={!validarNumeroTicket(phoneNumber) || !currentUser}
+          disabled={!validarNumeroTicket(phoneNumber)}
         >
           {loading ? (
             <>
@@ -643,6 +549,12 @@ export default function TabletInterface() {
         <CardHeader className="text-center pb-8">
           <CardTitle className="text-[30px] font-bold text-slate-900 dark:text-white">
             Sistema de Ticketera
+            {dispositivo?.sedeNombre && (
+              <span className="block text-base font-medium text-slate-500 dark:text-slate-300 mt-1">
+                Sede: {dispositivo.sedeNombre}
+                {dispositivo.nombre ? ` · ${dispositivo.nombre}` : ''}
+              </span>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent>

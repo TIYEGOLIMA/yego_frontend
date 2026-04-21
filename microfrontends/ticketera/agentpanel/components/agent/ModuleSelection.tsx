@@ -2,10 +2,11 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card'
 import { Button } from '../ui/Button'
-import { Loader2, LogOut, Lock, Unlock, ChevronDown, ChevronUp } from 'lucide-react'
+import { Loader2, LogOut, Lock, Unlock, ChevronDown, ChevronUp, Building2 } from 'lucide-react'
 import { ModuloAtencion, ModuloOcupado } from '../../services/moduloAtencionService'
 import { queueAgentService } from '../../services/queueAgentService'
-import { getSedeActivaId } from '../../../shared/utils/sedeContext'
+import { getSedeActiva, getSedeActivaId } from '../../../shared/utils/sedeContext'
+import { useAuthStore } from '../../../../../src/store/auth-store'
 import { useToastNotifications } from '../../../../../src/hooks/useToastNotifications'
 import { NotificationContainer } from '../../../../../src/components/NotificationToast'
 import SocketService from '../../../../../src/services/socket-service'
@@ -126,7 +127,14 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
   const [showModalLiberacion, setShowModalLiberacion] = useState(false)
   
   const navigate = useNavigate()
+  const authUser = useAuthStore((s) => s.user)
   const { notifications, removeNotification } = useToastNotifications()
+
+  const rolUpper = authUser?.role?.toUpperCase?.() ?? ''
+  const esRolSinSedeFija = rolUpper === 'ADMIN' || rolUpper === 'SUPERVISOR'
+  const sedeNombreActual = esRolSinSedeFija
+    ? getSedeActiva()?.nombre ?? null
+    : authUser?.sedeNombre ?? null
   const modulosOcupadosAnterioresRef = useRef<ModuloOcupado[]>([])
   const hasLoadedInitialData = useRef(false)
   const [, setIsConnected] = useState(false)
@@ -409,6 +417,12 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
           <p className="text-base text-gray-600 dark:text-white mb-1">
             Hola <span className="font-semibold text-red-600 dark:text-white">{user?.name || user?.username}</span>
           </p>
+          {sedeNombreActual && (
+            <div className="mt-2 mb-1 inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium border bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 border-primary-200 dark:border-primary-700">
+              <Building2 className="w-4 h-4" />
+              <span>Sede: <span className="font-semibold">{sedeNombreActual}</span></span>
+            </div>
+          )}
           <p className="text-sm text-gray-500 dark:text-white mb-3">
             Elija el módulo en el que trabajará durante esta sesión
           </p>

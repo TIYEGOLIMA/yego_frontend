@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react'
+import { Building2 } from 'lucide-react'
 import { useAgentPanel } from './hooks/useAgentPanel'
 import { useAuth } from './hooks/useAuth'
 import { useSocket } from './contexts/SocketContext'
@@ -7,15 +8,30 @@ import { ModuleSelection } from './components/agent/ModuleSelection'
 import { SedePicker } from './components/agent/SedePicker'
 import { LoadingSpinner } from './components/LoadingSpinner'
 import { Ticket } from './types'
-import { getSedeActivaId } from '../shared/utils/sedeContext'
+import { getSedeActiva, getSedeActivaId, clearSedeActiva } from '../shared/utils/sedeContext'
+import { useAuthStore } from '../../../src/store/auth-store'
 import './styles/index.css'
 
 const ROLES_SIN_SEDE_FIJA = ['ADMIN', 'SUPERVISOR']
 
 const AgentPanel: React.FC = () => {
   const { currentUser, loading: authLoading } = useAuth()
+  const authUser = useAuthStore((s) => s.user)
   const [sedePickerKey, setSedePickerKey] = useState(0)
   const { isConnected } = useSocket()
+
+  const esRolSinSedeFija = ROLES_SIN_SEDE_FIJA.includes(
+    currentUser?.role?.toUpperCase?.() ?? '',
+  )
+  const sedeActiva = esRolSinSedeFija ? getSedeActiva() : null
+  const sedeNombreActual = esRolSinSedeFija
+    ? sedeActiva?.nombre ?? null
+    : authUser?.sedeNombre ?? null
+
+  const handleCambiarSede = useCallback(() => {
+    clearSedeActiva()
+    setSedePickerKey((k) => k + 1)
+  }, [])
   
   const {
     loading,
@@ -130,9 +146,8 @@ const AgentPanel: React.FC = () => {
 
   return (
     <div className="w-full pt-6">
-      {/* Header con soporte dark mode */}
       <div className="mb-8 bg-surface dark:bg-surface-dark rounded-xl shadow-lg p-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
               Panel de Agente
@@ -141,7 +156,23 @@ const AgentPanel: React.FC = () => {
               Módulo {selectedModule} - Gestión de Tickets
             </p>
           </div>
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-4 flex-wrap gap-y-2">
+            {sedeNombreActual && (
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 border-primary-200 dark:border-primary-700">
+                <Building2 className="w-3.5 h-3.5" />
+                <span>Sede: <span className="font-semibold">{sedeNombreActual}</span></span>
+                {esRolSinSedeFija && (
+                  <button
+                    type="button"
+                    onClick={handleCambiarSede}
+                    className="ml-1 underline-offset-2 hover:underline text-primary-700 dark:text-primary-300"
+                    title="Cambiar de sede"
+                  >
+                    Cambiar
+                  </button>
+                )}
+              </div>
+            )}
             <div className="text-right">
               <div className="text-sm text-gray-600 dark:text-neutral-400 flex items-center justify-end gap-2">
                 <span className="text-gray-500 dark:text-neutral-400">WebSocket:</span>

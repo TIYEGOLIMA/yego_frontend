@@ -6,7 +6,11 @@ import { Clock, CheckCircle, LogOut, Loader2, Send, Maximize, Minimize } from 'l
 import { Ticket } from './types'
 import { ratingService } from './services/ratingService'
 import { useRatingWebSocket } from './hooks/useWebSocket'
-import { useAuthStore } from '../../../src/store/auth-store'
+import {
+  getDispositivoSession,
+  clearDispositivoSession,
+  type DispositivoSession,
+} from '../../../src/services/core/device-auth-service'
 
 const RatingTablet: React.FC = () => {
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null)
@@ -14,17 +18,13 @@ const RatingTablet: React.FC = () => {
   const [comment, setComment] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [showThankYou, setShowThankYou] = useState(false)
-  const [currentUser, setCurrentUser] = useState<any>(null)
+  const [dispositivo, setDispositivo] = useState<DispositivoSession | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
-  
-  const navigate = useNavigate()
-  
-  const authUser = useAuthStore((state) => state.user)
 
-  const getUserModuleId = (): string | null => {
-    const moduleId = (authUser as any)?.moduleId || currentUser?.moduleId || null
-    return moduleId ? String(moduleId) : null
-  }
+  const navigate = useNavigate()
+
+  const moduleId = dispositivo?.moduleId ?? null
+  const moduleIdStr = moduleId != null ? String(moduleId) : null
 
   const {
     isConnected,
@@ -34,53 +34,11 @@ const RatingTablet: React.FC = () => {
   } = useRatingWebSocket()
 
   useEffect(() => {
-    try {
-      const authStorageData = localStorage.getItem('auth-storage')
-      if (authStorageData) {
-        const parsedData = JSON.parse(authStorageData)
-        const user = parsedData?.state?.user || null
-        if (user) {
-          setCurrentUser({
-            id: user.id,
-            name: user.name,
-            username: user.username,
-            role: user.role,
-            moduleId: user.moduleId || null
-          })
-          return
-        }
-      }
-
-      const userData = localStorage.getItem('user')
-      if (userData) {
-        const user = JSON.parse(userData)
-        setCurrentUser({
-          id: user.id,
-          name: user.name,
-          username: user.username,
-          role: user.role,
-          moduleId: user.moduleId || null
-        })
-      } else {
-        setCurrentUser({
-          name: 'Usuario Rating',
-          role: 'Calificador',
-          moduleId: null
-        })
-      }
-    } catch (error) {
-      setCurrentUser({
-        name: 'Usuario Rating',
-        role: 'Calificador',
-        moduleId: null
-      })
-    }
+    setDispositivo(getDispositivoSession())
   }, [])
 
   const getModuleName = (): string => {
-    const moduleId = getUserModuleId()
     if (!moduleId) return 'No asignado'
-
     return `Módulo ${moduleId}`
   }
 
@@ -89,8 +47,6 @@ const RatingTablet: React.FC = () => {
       return
     }
 
-    const userModuleId = getUserModuleId()
-    
     const unsubscribeCompleted = onTicketCompleted((ticket: any) => {
       setSelectedTicket({
         id: ticket.id,
@@ -101,7 +57,7 @@ const RatingTablet: React.FC = () => {
       })
       setRating(0)
       setComment('')
-    }, userModuleId)
+    }, moduleIdStr)
 
     const unsubscribeRatingRequested = onRatingRequested((ratingRequest: any) => {
       if (ratingRequest.ticket) {
@@ -110,13 +66,13 @@ const RatingTablet: React.FC = () => {
         setRating(0)
         setComment('')
       }
-    }, userModuleId)
-    
+    }, moduleIdStr)
+
     return () => {
       unsubscribeCompleted()
       unsubscribeRatingRequested()
     }
-  }, [isConnected, onTicketCompleted, onRatingRequested, currentUser?.moduleId, authUser?.moduleId])
+  }, [isConnected, onTicketCompleted, onRatingRequested, moduleIdStr])
 
   useEffect(() => {
     if (isConnected) {
@@ -172,9 +128,7 @@ const RatingTablet: React.FC = () => {
 
   const handleLogout = async () => {
     try {
-      localStorage.removeItem('user')
-      localStorage.removeItem('token')
-      localStorage.removeItem('auth-storage')
+      clearDispositivoSession()
       navigate('/login', { replace: true })
     } catch (error) {
       window.location.href = '/login'
@@ -205,7 +159,9 @@ const RatingTablet: React.FC = () => {
         score: rating,
         comment: comment.trim() || '',
         timestamp: new Date().toISOString(),
-        userId: currentUser?.id
+        dispositivoId: dispositivo?.dispositivoId,
+        moduleId: dispositivo?.moduleId,
+        sedeId: dispositivo?.sedeId,
       }
       
       emitRatingSubmitted(ratingData)
@@ -286,18 +242,24 @@ const RatingTablet: React.FC = () => {
             <p className="text-xl text-slate-500 dark:text-slate-300 mb-10">
               Esperando tickets completados para calificar...
             </p>
-            {currentUser && (
-              <div className="mt-10 p-8 bg-slate-50 dark:bg-slate-700 rounded-2xl space-y-6">
-                <p className="text-2xl text-slate-600 dark:text-white text-left">
+            {dispositivo && (
+              <div className="mt-10 p-8 bg-slate-50 dark:bg-slate-700 rounded-2xl space-y-4 text-left">
+                <p className="text-2xl text-slate-600 dark:text-white">
+                  <strong>Dispositivo:</strong> {dispositivo.nombre}
+                </p>
+                <p className="text-2xl text-slate-600 dark:text-white">
+                  <strong>Sede:</strong> {dispositivo.sedeNombre ?? `#${dispositivo.sedeId}`}
+                </p>
+                <p className="text-2xl text-slate-600 dark:text-white">
                   <strong>Módulo:</strong> {getModuleName()}
                 </p>
-                <div className="text-left flex items-center gap-3">
+                <div className="flex items-center gap-3">
                   <p className="text-2xl text-slate-600 dark:text-white">
                     <strong>WebSocket:</strong>
                   </p>
                   <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-lg font-medium border ${
-                    isConnected 
-                      ? 'bg-green-100 dark:bg-gray-700 text-green-800 dark:text-green-200 border-green-400 dark:border-green-600' 
+                    isConnected
+                      ? 'bg-green-100 dark:bg-gray-700 text-green-800 dark:text-green-200 border-green-400 dark:border-green-600'
                       : 'bg-red-100 dark:bg-gray-700 text-red-800 dark:text-red-200 border-red-400 dark:border-red-600'
                   }`}>
                     <span className={`w-3 h-3 rounded-full ${

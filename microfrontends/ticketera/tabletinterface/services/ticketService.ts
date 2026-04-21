@@ -11,8 +11,28 @@ const api = axios.create({
   }
 })
 
+function getRequestToken(): string | null {
+  try {
+    const authStorage = localStorage.getItem('auth-storage')
+    if (authStorage) {
+      const parsed = JSON.parse(authStorage)
+      const t = parsed?.state?.token
+      if (t) return t
+    }
+  } catch {
+    // ignore
+  }
+  try {
+    const raw = localStorage.getItem('dispositivo-session')
+    if (raw) return JSON.parse(raw)?.accessToken ?? null
+  } catch {
+    // ignore
+  }
+  return localStorage.getItem('token')
+}
+
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token')
+  const token = getRequestToken()
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
@@ -21,22 +41,7 @@ api.interceptors.request.use((config) => {
 
 export const ticketService = {
   async createTicketPublic(data: CreateTicketData): Promise<Ticket> {
-    try {
-      const response = await api.post('/tickets/create', data)
-      return response.data
-    } catch (error: any) {
-      console.error('[ticketService] Error creando ticket público:', error)
-
-      if (error?.response) {
-        console.error('[ticketService] Detalles del error:', {
-          status: error.response.status,
-          statusText: error.response.statusText,
-          data: error.response.data,
-          headers: error.response.headers
-        })
-      }
-
-      throw error
-    }
+    const response = await api.post('/tickets/create', data)
+    return response.data
   }
 }

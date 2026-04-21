@@ -54,6 +54,8 @@ export interface ChangePasswordData {
   confirmPassword: string;
 }
 
+const inflightProfile = new Map<string, Promise<AuthUser>>()
+
 export const authService = {
   /**
    * Inicia sesión con credenciales de usuario
@@ -101,20 +103,30 @@ export const authService = {
   },
 
   /**
-   * Obtiene el perfil del usuario autenticado
+   * Obtiene el perfil del usuario autenticado.
+   * Deduplica peticiones simultáneas con el mismo token (evita doble call por StrictMode
+   * o por providers/hook montados en paralelo).
    * @param token Token de autenticación
    * @returns Datos del perfil del usuario
    */
   async getProfile(token: string): Promise<AuthUser> {
-    try {
-      // Configurar el token para esta petición específica
-      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      const response = await api.get<AuthUser>('/auth/profile');
-      return response.data;
-    } catch (error: any) {
-      console.error('Error obteniendo perfil:', error.response?.data || error.message);
-      throw error;
-    }
+    const existing = inflightProfile.get(token)
+    if (existing) return existing
+
+    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    const promise = api
+      .get<AuthUser>('/auth/profile')
+      .then((response) => response.data)
+      .catch((error: any) => {
+        console.error('Error obteniendo perfil:', error.response?.data || error.message);
+        throw error;
+      })
+      .finally(() => {
+        inflightProfile.delete(token)
+      })
+
+    inflightProfile.set(token, promise)
+    return promise
   },
 
   /**

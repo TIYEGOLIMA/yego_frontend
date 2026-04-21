@@ -17,17 +17,30 @@ const HEARTBEAT_INTERVAL = 10000; // 10 segundos
 // HELPERS
 // ============================================================================
 
+const getDispositivoToken = (): string | null => {
+  try {
+    const raw = localStorage.getItem('dispositivo-session');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed?.accessToken || null;
+  } catch {
+    return null;
+  }
+};
+
 const getAuthToken = (): string | null => {
   try {
     const authStorage = localStorage.getItem('auth-storage');
     if (authStorage) {
       const parsed = JSON.parse(authStorage);
-      return parsed?.state?.token || null;
+      const humanToken = parsed?.state?.token || null;
+      if (humanToken) return humanToken;
     }
   } catch {
-    return localStorage.getItem('token');
+    const fallback = localStorage.getItem('token');
+    if (fallback) return fallback;
   }
-  return null;
+  return getDispositivoToken();
 };
 
 const getWebSocketUrl = (token: string): string => {

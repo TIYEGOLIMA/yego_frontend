@@ -8,17 +8,35 @@ const api = axios.create({
   },
 })
 
+function getRequestToken(): string | null {
+  try {
+    const authStorage = localStorage.getItem('auth-storage')
+    if (authStorage) {
+      const parsed = JSON.parse(authStorage)
+      const t = parsed?.state?.token
+      if (t) return t
+    }
+  } catch {
+    // ignore
+  }
+  try {
+    const raw = localStorage.getItem('dispositivo-session')
+    if (raw) return JSON.parse(raw)?.accessToken ?? null
+  } catch {
+    // ignore
+  }
+  return localStorage.getItem('token')
+}
+
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token')
+    const token = getRequestToken()
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
     return config
   },
-  (error) => {
-    return Promise.reject(error)
-  }
+  (error) => Promise.reject(error)
 )
 
 export interface ModuleOption {

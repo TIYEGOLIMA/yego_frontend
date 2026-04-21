@@ -153,8 +153,6 @@ function capitalizarPalabras(texto: string): string {
     .join(' ');
 }
 
-const EXCLUDED_ROLES = ['tablet1', 'tablet2', 'principal', 'tv', 'tablet', 'television'];
-
 const UsersModule: React.FC = () => {
   const { user: currentUser } = useAuthStore();
   
@@ -1188,9 +1186,7 @@ const UsersModule: React.FC = () => {
                   <SelectValue placeholder="Seleccionar rol" />
                 </SelectTrigger>
                 <SelectContent>
-                  {availableRoles
-                    .filter(role => !EXCLUDED_ROLES.some(ex => role.name.toLowerCase().includes(ex)))
-                    .map(role => (
+                  {availableRoles.map(role => (
                     <SelectItem key={role.id} value={role.id.toString()}>
                       {role.name}
                     </SelectItem>

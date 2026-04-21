@@ -58,14 +58,27 @@ export interface ModuloOcupado {
   updatedAt: string | null
 }
 
+const inflightVerificar = new Map<string, Promise<ModuloAtencion[] | ModuloUsuarioResponse>>()
+
 export const moduloAtencionService = {
   async verificarModuloOListarDisponibles(
     userId: number,
     sedeId?: number
   ): Promise<ModuloAtencion[] | ModuloUsuarioResponse> {
-    const response = await api.get(`/modulo-atencion/usuario/${userId}`, {
-      params: sedeId ? { sedeId } : undefined,
-    })
-    return response.data
+    const key = `${userId}|${sedeId ?? ''}`
+    const existing = inflightVerificar.get(key)
+    if (existing) return existing
+
+    const promise = api
+      .get(`/modulo-atencion/usuario/${userId}`, {
+        params: sedeId ? { sedeId } : undefined,
+      })
+      .then((r) => r.data)
+      .finally(() => {
+        inflightVerificar.delete(key)
+      })
+
+    inflightVerificar.set(key, promise)
+    return promise
   },
 }

@@ -64,7 +64,7 @@ export const reportsService = {
 
   async obtenerTodoElHistorial(params?: Pick<ReportFilters, 'sedeId'>): Promise<ReportData> {
     try {
-      const response = await api.get('/ticketera/sac-stats/all', { params: buildParams(params) });
+      const response = await api.get('/ticketera/sac-stats', { params: buildParams(params) });
       return response.data;
     } catch (error) {
       console.error('[reportsService] Error obteniendo todo el historial:', error);

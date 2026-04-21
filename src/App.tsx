@@ -3,8 +3,6 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from './store/auth-store'
 import { useTheme } from './hooks/useTheme'
-import { useFullscreen } from './hooks/useFullscreen'
-import { useAutoLogout } from './hooks/useAutoLogout'
 import { useSystemNotifications } from './hooks/useSystemNotifications'
 import { getRedirectPathForRole } from './utils/role-based-routing'
 import Login from './pages/Login'
@@ -13,8 +11,12 @@ import { MainLayout } from './shared/components/MainLayout'
 import SocketService from './services/socket-service'
 import { useAuthEvents } from './shared/hooks/useAuth'
 import { authService } from './services'
+import {
+  getDispositivoSession,
+  getRutaPorTipo,
+  TipoDispositivo,
+} from './services/core/device-auth-service'
 
-// Importar módulos de features - CORE (Sistema Principal)
 import UsersModule from './features/core/users/users.module'
 import RolesModule from './features/core/roles/roles.module'
 import PermissionsModule from './features/core/permissions/permissions.module'
@@ -33,16 +35,12 @@ import ControlTowerModule from './features/core/control-tower/control-tower.modu
 
 import TicketsModule from './features/core/ticketera/tickets/tickets.module'
 
-// Importar microfrontends para roles específicos
 import { TVDisplay, RatingTablet, TabletInterface, Reports, GarantizadoModule } from '../microfrontends'
 
-// Importar componentes de notificaciones del sistema
 import { ForcedLogoutModal } from './components/ForcedLogoutModal'
 import { AccountBlockedModal } from './components/AccountBlockedModal'
 import { RoleDeactivatedModal } from './components/RoleDeactivatedModal'
 
-
-// Crear cliente de React Query
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -55,6 +53,21 @@ const queryClient = new QueryClient({
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { token } = useAuthStore()
   return token ? <>{children}</> : <Navigate to="/login" />
+}
+
+const DeviceProtectedRoute = ({
+  children,
+  expectedType,
+}: {
+  children: React.ReactNode
+  expectedType: TipoDispositivo
+}) => {
+  const session = getDispositivoSession()
+  if (!session) return <Navigate to="/login" replace />
+  if (session.tipo !== expectedType) {
+    return <Navigate to={getRutaPorTipo(session.tipo)} replace />
+  }
+  return <>{children}</>
 }
 
 const RoleRestrictedRoute = ({ children, allowedRoles }: { children: React.ReactNode, allowedRoles?: string[] }) => {
@@ -187,8 +200,6 @@ function App() {
   const { token, user } = useAuthStore();
   
   useTheme();
-  useAutoLogout();
-  useFullscreen();
   useAuthEvents();
 
   useEffect(() => {
@@ -238,6 +249,19 @@ function App() {
     }
   }, [token, user?.id, user?.username, user?.requirePasswordChange]);
 
+  // Conectar WebSocket cuando solo hay sesión de dispositivo (sin usuario humano)
+  useEffect(() => {
+    if (token && user?.id) return;
+
+    const session = getDispositivoSession();
+    if (!session?.accessToken) return;
+
+    const status = SocketService.getConnectionStatus();
+    if (status === 'connected' || status === 'connecting') return;
+
+    SocketService.connect(`device-${session.tipo}-${session.dispositivoId}`);
+  }, [token, user?.id]);
+
   // Limpiar conexiones WebSocket al cerrar la pestaña o cuando la página pierde visibilidad
   useEffect(() => {
     const handleBeforeUnload = () => {
@@ -253,13 +277,19 @@ function App() {
           }
         }, 5 * 60 * 1000); // 5 minutos
       } else {
-        // Solo reconectar si no debe cambiar contraseña (evita 403 en /ws)
+        const currentStatus = SocketService.getConnectionStatus();
+        if (currentStatus === 'connected') return;
+
         if (token && user?.id && user?.username && !user?.requirePasswordChange) {
-          const currentStatus = SocketService.getConnectionStatus();
-          if (currentStatus !== 'connected') {
-            console.log('🔄 [App] Reconectando WebSocket al volver a ser visible');
-            SocketService.connect(`${user.id}-${user.username}`);
-          }
+          console.log('🔄 [App] Reconectando WebSocket al volver a ser visible');
+          SocketService.connect(`${user.id}-${user.username}`);
+          return;
+        }
+
+        const session = getDispositivoSession();
+        if (session?.accessToken) {
+          console.log('🔄 [App] Reconectando WebSocket de dispositivo al volver a ser visible');
+          SocketService.connect(`device-${session.tipo}-${session.dispositivoId}`);
         }
       }
     };
@@ -289,19 +319,19 @@ function App() {
             </ProtectedRoute>
           } />
           <Route path="/tv-display" element={
-            <ProtectedRoute>
+            <DeviceProtectedRoute expectedType="TV">
               <TVDisplay />
-            </ProtectedRoute>
+            </DeviceProtectedRoute>
           } />
           <Route path="/rating-tablet" element={
-            <ProtectedRoute>
+            <DeviceProtectedRoute expectedType="TABLET">
               <RatingTablet />
-            </ProtectedRoute>
+            </DeviceProtectedRoute>
           } />
           <Route path="/tablet-interface" element={
-            <ProtectedRoute>
+            <DeviceProtectedRoute expectedType="TABLET_PRINCIPAL">
               <TabletInterface />
-            </ProtectedRoute>
+            </DeviceProtectedRoute>
           } />
           <Route path="/" element={
             <ProtectedRoute>
@@ -352,11 +382,6 @@ function App() {
             <Route path="sessions" element={
               <PermissionRoute module="sessions">
                 <SessionsModule />
-              </PermissionRoute>
-            } />
-            <Route path="tickets" element={
-              <PermissionRoute module="tickets">
-                <TicketsModule />
               </PermissionRoute>
             } />
             <Route path="reports" element={

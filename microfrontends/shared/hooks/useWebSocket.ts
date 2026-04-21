@@ -12,6 +12,19 @@ function getHasAuthToken(): boolean {
   } catch {
     token = localStorage.getItem('token') || ''
   }
+
+  if (!token) {
+    try {
+      const raw = localStorage.getItem('dispositivo-session')
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        token = parsed?.accessToken || ''
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   return !!token
 }
 

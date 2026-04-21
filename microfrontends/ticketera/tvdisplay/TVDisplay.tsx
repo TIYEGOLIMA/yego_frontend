@@ -1,7 +1,12 @@
-import React, { useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Card, CardContent } from '../shared/components/ui/Card'
 import { Clock, Volume2, LogOut } from 'lucide-react'
 import { useTVDisplay } from './hooks/useTVDisplay'
+import {
+  getDispositivoSession,
+  clearDispositivoSession,
+  type DispositivoSession,
+} from '../../../src/services/core/device-auth-service'
 
 const shakeAnimation = `
   @keyframes shake {
@@ -41,18 +46,15 @@ export const TVDisplay = () => {
   } = useTVDisplay()
 
 
-  const handleLogout = async () => {
-    try {
-      localStorage.removeItem('user')
-      localStorage.removeItem('token')
-      localStorage.removeItem('auth-storage')
-      
-      window.location.href = '/login'
-      
-    } catch (error) {
-      console.error('[TVDisplay] Error en logout:', error)
-      window.location.href = '/login'
-    }
+  const [dispositivo, setDispositivo] = useState<DispositivoSession | null>(null)
+
+  useEffect(() => {
+    setDispositivo(getDispositivoSession())
+  }, [])
+
+  const handleLogout = () => {
+    clearDispositivoSession()
+    window.location.href = '/login'
   }
 
   const ticketsEnEsperaValidos = ticketsEnEspera.filter(ticket => ticket && typeof ticket === 'object')
@@ -191,7 +193,14 @@ export const TVDisplay = () => {
         <div className="h-full w-full flex flex-col">
         <div className="flex justify-between items-center mb-2">
           <div>
-            <h1 className="text-2xl font-bold mb-1 text-white">Sistema de Ticketera</h1>
+            <h1 className="text-2xl font-bold mb-1 text-white">
+              Sistema de Ticketera
+              {dispositivo?.sedeNombre && (
+                <span className="text-base font-medium text-slate-300 ml-3">
+                  · Sede {dispositivo.sedeNombre}
+                </span>
+              )}
+            </h1>
             <div className="flex items-center space-x-4 text-base">
               <div className="flex items-center text-white">
                 <Clock className="w-5 h-5 mr-2" />
@@ -200,6 +209,11 @@ export const TVDisplay = () => {
               <div className="text-white">
                 {formatearFecha(currentTime)}
               </div>
+              {dispositivo?.nombre && (
+                <div className="text-slate-300 text-sm">
+                  Dispositivo: {dispositivo.nombre}
+                </div>
+              )}
             </div>
             {lastUpdate && (
               <div className="text-xs text-white mt-1 font-medium">
