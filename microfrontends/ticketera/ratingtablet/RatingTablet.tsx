@@ -12,10 +12,15 @@ import {
   type DispositivoSession,
 } from '../../../src/services/core/device-auth-service'
 
+const shellClass =
+  'min-h-dvh min-h-screen relative overflow-x-hidden overflow-y-auto flex flex-col items-center justify-center ' +
+  'p-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] px-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] ' +
+  'bg-gradient-to-br from-slate-950 via-slate-900 to-zinc-950 text-slate-100'
+
 const InfoItem: React.FC<{ label: string; value: string }> = ({ label, value }) => (
-  <div className="text-center">
-    <p className="text-xs uppercase tracking-wider text-slate-400 mb-1">{label}</p>
-    <p className="text-base font-semibold text-white">{value}</p>
+  <div className="flex min-h-[5.5rem] flex-col items-center justify-center rounded-xl border border-white/10 bg-white/[0.06] px-3 py-3 text-center sm:min-h-[6rem] sm:px-4 sm:py-4">
+    <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-slate-400 sm:text-xs">{label}</p>
+    <p className="mt-1.5 text-sm font-semibold leading-tight text-white sm:text-base">{value}</p>
   </div>
 )
 
@@ -33,12 +38,7 @@ const RatingTablet: React.FC = () => {
   const moduleId = dispositivo?.moduleId ?? null
   const moduleIdStr = moduleId != null ? String(moduleId) : null
 
-  const {
-    isConnected,
-    onTicketCompleted,
-    onRatingRequested,
-    emitRatingSubmitted
-  } = useRatingWebSocket()
+  const { isConnected, onTicketCompleted, onRatingRequested, emitRatingSubmitted } = useRatingWebSocket()
 
   useEffect(() => {
     setDispositivo(getDispositivoSession())
@@ -60,7 +60,7 @@ const RatingTablet: React.FC = () => {
         ticketNumber: ticket.ticketNumber || `TICKET-${ticket.id}`,
         status: 'COMPLETED',
         createdAt: ticket.createdAt || new Date().toISOString(),
-        priority: ticket.priority || 1
+        priority: ticket.priority || 1,
       })
       setRating(0)
       setComment('')
@@ -114,11 +114,7 @@ const RatingTablet: React.FC = () => {
   }
 
   const handleSubmit = async () => {
-    if (rating === 0) {
-      return
-    }
-
-    if (!selectedTicket) {
+    if (rating === 0 || !selectedTicket) {
       return
     }
 
@@ -128,7 +124,7 @@ const RatingTablet: React.FC = () => {
       await ratingService.crearRating({
         ticketId: selectedTicket.id,
         score: rating,
-        comment: comment.trim() || undefined
+        comment: comment.trim() || undefined,
       })
 
       const ratingData = {
@@ -141,11 +137,10 @@ const RatingTablet: React.FC = () => {
         moduleId: dispositivo?.moduleId,
         sedeId: dispositivo?.sedeId,
       }
-      
+
       emitRatingSubmitted(ratingData)
-      
       setShowThankYou(true)
-      
+
       setTimeout(() => {
         setSelectedTicket(null)
         setRating(0)
@@ -160,25 +155,38 @@ const RatingTablet: React.FC = () => {
     }
   }
 
+  const bgDecor = (
+    <>
+      <div className="pointer-events-none absolute -top-40 -left-40 h-[min(90vw,32rem)] w-[min(90vw,32rem)] rounded-full bg-red-600/20 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-40 -right-40 h-[min(95vw,36rem)] w-[min(95vw,36rem)] rounded-full bg-rose-600/15 blur-3xl" />
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.07]"
+        style={{
+          backgroundImage:
+            'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.75) 1px, transparent 0)',
+          backgroundSize: '22px 22px',
+        }}
+      />
+    </>
+  )
+
+  const cardBase =
+    'relative z-10 w-full max-w-lg rounded-2xl !border-white/15 !bg-slate-900/95 text-slate-100 shadow-2xl backdrop-blur-xl'
+
   if (showThankYou) {
     return (
-      <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-4 bg-gradient-to-br from-slate-950 via-slate-900 to-red-950">
-        <div className="pointer-events-none absolute -top-32 -left-32 w-[28rem] h-[28rem] rounded-full bg-red-600/20 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-32 -right-32 w-[32rem] h-[32rem] rounded-full bg-emerald-500/10 blur-3xl" />
-        <Card className="w-full max-w-md text-center bg-slate-900/70 backdrop-blur-xl border border-white/10 shadow-2xl">
-          <CardContent className="py-12">
-            <div className="w-20 h-20 bg-emerald-500/15 ring-4 ring-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
-              <CheckCircle className="w-12 h-12 text-emerald-400" />
+      <div className={shellClass}>
+        {bgDecor}
+        <Card className={`${cardBase} mx-auto`}>
+          <CardContent className="flex flex-col items-center px-6 py-12 text-center sm:px-10">
+            <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500/20 ring-2 ring-emerald-400/40">
+              <CheckCircle className="h-12 w-12 text-emerald-400" aria-hidden />
             </div>
-            <h2 className="text-2xl font-bold text-white mb-2">
-              ¡Gracias por su calificación!
-            </h2>
-            <p className="text-slate-300">
+            <h2 className="mb-3 text-2xl font-bold text-white sm:text-3xl">¡Gracias por su calificación!</h2>
+            <p className="max-w-sm text-base leading-relaxed text-slate-300">
               Su opinión nos ayuda a mejorar nuestro servicio.
             </p>
-            <p className="text-sm text-slate-400 mt-4">
-              Volviendo a la pantalla de espera...
-            </p>
+            <p className="mt-6 text-sm text-slate-400">Volviendo a la pantalla de espera…</p>
           </CardContent>
         </Card>
       </div>
@@ -186,78 +194,68 @@ const RatingTablet: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-4 bg-gradient-to-br from-slate-950 via-slate-900 to-red-950">
-      <div className="pointer-events-none absolute -top-40 -left-40 w-[32rem] h-[32rem] rounded-full bg-red-600/25 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-40 -right-40 w-[36rem] h-[36rem] rounded-full bg-rose-500/15 blur-3xl" />
-      <div
-        className="pointer-events-none absolute inset-0 opacity-[0.05]"
-        style={{
-          backgroundImage:
-            'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.6) 1px, transparent 0)',
-          backgroundSize: '24px 24px',
-        }}
-      />
+    <div className={shellClass}>
+      {bgDecor}
 
-      <div className="absolute top-4 right-4 z-50 flex space-x-2">
+      <div className="absolute right-[max(1rem,env(safe-area-inset-right))] top-[max(1rem,env(safe-area-inset-top))] z-50 flex gap-2">
         <button
+          type="button"
           onClick={toggleFullscreen}
-          className="p-3 rounded-lg bg-blue-500 hover:bg-blue-600 text-white transition-all duration-200 shadow-lg"
-          title={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
+          className="inline-flex h-12 w-12 items-center justify-center rounded-xl border border-white/10 bg-slate-800/90 text-white shadow-lg transition-colors hover:bg-slate-700"
+          title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
         >
-          {isFullscreen ? <Minimize className="w-6 h-6" /> : <Maximize className="w-6 h-6" />}
+          {isFullscreen ? <Minimize className="h-6 w-6" /> : <Maximize className="h-6 w-6" />}
         </button>
 
         {!isFullscreen && (
           <button
+            type="button"
             onClick={handleLogout}
-            className="p-3 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-all duration-200 shadow-lg"
+            className="inline-flex h-12 w-12 items-center justify-center rounded-xl border border-red-400/30 bg-red-600/90 text-white shadow-lg transition-colors hover:bg-red-500"
             title="Cerrar sesión"
           >
-            <LogOut className="w-6 h-6" />
+            <LogOut className="h-6 w-6" />
           </button>
         )}
       </div>
 
       {!selectedTicket && (
-        <Card className="relative w-full max-w-2xl text-center bg-slate-900/70 backdrop-blur-xl border border-white/10 shadow-2xl overflow-hidden">
+        <Card className={`${cardBase} mx-auto max-w-2xl overflow-hidden`}>
           <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-red-500 to-transparent" />
-          <CardContent className="py-16 px-10">
-            <div className="relative w-32 h-32 mx-auto mb-10">
-              <span className="absolute inset-0 rounded-full bg-red-500/20 blur-2xl animate-pulse" />
-              <div className="relative w-32 h-32 rounded-full bg-gradient-to-br from-red-500/20 to-red-700/10 ring-4 ring-red-500/30 flex items-center justify-center">
-                <Clock className="w-16 h-16 text-red-400" />
+          <CardContent className="mx-auto flex max-w-xl flex-col items-center px-5 py-12 text-center sm:px-10 sm:py-14">
+            <div className="relative mb-10 h-28 w-28 sm:h-32 sm:w-32">
+              <span className="absolute inset-0 animate-pulse rounded-full bg-red-500/25 blur-2xl" />
+              <div className="relative flex h-full w-full items-center justify-center rounded-full bg-red-950/50 ring-2 ring-red-500/40">
+                <Clock className="h-14 w-14 text-red-400 sm:h-16 sm:w-16" aria-hidden />
               </div>
             </div>
-            <h1 className="text-5xl font-bold text-white mb-4 tracking-tight">
-              Sistema de Calificación
+            <h1 className="mb-3 text-3xl font-bold tracking-tight text-white sm:text-4xl md:text-5xl">
+              Sistema de calificación
             </h1>
-            <p className="text-lg text-slate-300 mb-10">
-              Esperando tickets completados para calificar...
+            <p className="mb-0 max-w-md text-base leading-relaxed text-slate-300 sm:text-lg">
+              Esperando tickets completados para calificar…
             </p>
             {dispositivo && (
-              <div className="mt-8 p-6 bg-white/5 border border-white/10 rounded-2xl backdrop-blur-sm">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="mt-10 w-full max-w-xl rounded-2xl border border-white/10 bg-black/25 p-4 sm:p-5">
+                <div className="grid grid-cols-2 gap-3 sm:gap-4">
                   <InfoItem label="Dispositivo" value={dispositivo.nombre} />
-                  <InfoItem
-                    label="Sede"
-                    value={dispositivo.sedeNombre ?? `#${dispositivo.sedeId}`}
-                  />
+                  <InfoItem label="Sede" value={dispositivo.sedeNombre ?? `#${dispositivo.sedeId}`} />
                   <InfoItem label="Módulo" value={getModuleName()} />
-                  <div className="text-center">
-                    <p className="text-xs uppercase tracking-wider text-slate-400 mb-1">
+                  <div className="flex min-h-[5.5rem] flex-col items-center justify-center rounded-xl border border-white/10 bg-white/[0.06] px-3 py-3 sm:min-h-[6rem] sm:px-4 sm:py-4">
+                    <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-slate-400 sm:text-xs">
                       WebSocket
                     </p>
                     <span
-                      className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium border ${
+                      className={`mt-2 inline-flex items-center justify-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold sm:text-sm ${
                         isConnected
-                          ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
-                          : 'bg-red-500/15 text-red-300 border-red-500/40'
+                          ? 'border-emerald-500/40 bg-emerald-950/80 text-emerald-200'
+                          : 'border-red-500/40 bg-red-950/80 text-red-200'
                       }`}
                     >
                       <span
-                        className={`w-2 h-2 rounded-full ${
+                        className={`h-2.5 w-2.5 shrink-0 rounded-full ${
                           isConnected
-                            ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]'
+                            ? 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.85)]'
                             : 'bg-red-400'
                         }`}
                       />
@@ -272,89 +270,103 @@ const RatingTablet: React.FC = () => {
       )}
 
       {selectedTicket && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 dark:bg-opacity-90 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-          <Card className="w-full max-w-2xl bg-gradient-to-br from-white to-red-50 dark:from-slate-800 dark:to-slate-900 relative border-4 border-red-400 dark:border-red-500 shadow-2xl">            
-            <CardHeader className="text-center bg-gradient-to-r from-red-500 via-red-600 to-red-500 dark:from-red-600 dark:via-red-700 dark:to-red-600 text-white rounded-t-lg py-8">
-              <div className="mb-3">
-                <div className="inline-block p-3 bg-white dark:bg-slate-800 rounded-full mb-3">
-                  <CheckCircle className="w-12 h-12 text-red-600 dark:text-red-400" />
-                </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-md">
+          <Card className="relative z-10 flex max-h-[min(92dvh,92vh)] w-full max-w-lg flex-col overflow-hidden rounded-2xl !border-red-500/35 !bg-slate-900 text-slate-100 shadow-2xl sm:max-w-xl">
+            <CardHeader className="shrink-0 border-b border-red-500/30 bg-gradient-to-r from-red-700 via-red-600 to-red-700 px-5 py-8 text-center sm:px-8 sm:py-9">
+              <div className="mx-auto mb-4 inline-flex rounded-full bg-white/15 p-3 ring-1 ring-white/25">
+                <CheckCircle className="h-11 w-11 text-white sm:h-12 sm:w-12" aria-hidden />
               </div>
-              <CardTitle className="mb-3 text-white text-4xl font-extrabold drop-shadow-lg">
+              <CardTitle className="!mb-2 !text-2xl !font-extrabold !tracking-tight !text-white sm:!text-3xl md:!text-4xl">
                 ¿Cómo fue tu experiencia?
               </CardTitle>
-              <p className="text-red-100 dark:text-white text-xl font-medium">
-                Ticket #{selectedTicket ? `${(selectedTicket as Ticket).ticketNumber}` : 'N/A'}
+              <p className="text-base font-medium text-red-50 sm:text-lg">
+                Ticket #{(selectedTicket as Ticket).ticketNumber}
               </p>
             </CardHeader>
-            <CardContent className="space-y-8 p-8 bg-white dark:bg-slate-800">
-              <div className="text-center">
-                <p className="text-xl font-bold text-slate-800 dark:text-white mb-4">
-                  Califica nuestro servicio
-                </p>
-                <div className="flex justify-center space-x-2 mb-4 p-5 bg-slate-50 dark:bg-slate-700 rounded-2xl border-2 border-slate-200 dark:border-slate-600">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button
-                      key={star}
-                      onClick={() => handleRating(star)}
-                      className={`text-6xl transition-all duration-300 transform hover:scale-125 ${
-                        star <= rating
-                          ? 'text-yellow-400 hover:text-yellow-500 drop-shadow-lg'
-                          : 'text-slate-300 dark:text-slate-600 hover:text-yellow-300'
-                      }`}
-                    >
-                      ★
-                    </button>
-                  ))}
-                </div>
-                <div className={`text-xl font-bold ${
-                  rating === 0 ? 'text-slate-400 dark:text-slate-500' :
-                  rating === 1 ? 'text-red-600 dark:text-red-400' :
-                  rating === 2 ? 'text-orange-600 dark:text-orange-400' :
-                  rating === 3 ? 'text-yellow-600 dark:text-yellow-400' :
-                  rating === 4 ? 'text-lime-600 dark:text-lime-400' :
-                  'text-green-600 dark:text-green-400'
-                }`}>
-                  {rating === 0 && '⭐ Seleccione una calificación'}
-                  {rating === 1 && '😞 Muy insatisfecho'}
-                  {rating === 2 && '😕 Insatisfecho'}
-                  {rating === 3 && '😐 Neutral'}
-                  {rating === 4 && '😊 Satisfecho'}
-                  {rating === 5 && '😄 ¡Muy satisfecho!'}
-                </div>
-              </div>
 
-              <div>
-                <label className="block text-lg font-bold text-slate-700 dark:text-white mb-3">
-                  Comentarios <span className="text-slate-400 dark:text-slate-500 font-normal">(Opcional)</span>
-                </label>
-                <textarea
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  className="w-full px-5 py-4 text-lg border-2 border-slate-300 dark:!border-red-500 rounded-xl focus:ring-4 focus:ring-red-300 dark:focus:ring-red-600 focus:!border-red-500 dark:focus:!border-red-600 resize-none text-slate-900 dark:!text-slate-900 bg-white dark:!bg-white shadow-inner transition-all duration-200"
-                  rows={3}
-                  placeholder="¿Algo que quieras comentarnos? (Opcional)"
-                />
-              </div>
+            <CardContent className="min-h-0 flex-1 overflow-y-auto !bg-slate-950 px-5 py-6 text-slate-100 sm:px-8 sm:py-8">
+              <div className="mx-auto max-w-md space-y-6">
+                <div className="text-center">
+                  <p className="mb-4 text-base font-bold text-white sm:text-lg">Califica nuestro servicio</p>
+                  <div
+                    role="group"
+                    aria-label="Estrellas de calificación"
+                    className="mx-auto grid max-w-sm grid-cols-5 gap-2 sm:max-w-md sm:gap-3"
+                  >
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        type="button"
+                        key={star}
+                        onClick={() => handleRating(star)}
+                        className={`flex aspect-square max-h-[4.25rem] items-center justify-center rounded-xl border text-4xl leading-none transition-transform duration-150 hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 sm:max-h-[5rem] sm:text-5xl ${
+                          star <= rating
+                            ? 'border-amber-500/40 bg-amber-500/10 text-amber-400'
+                            : 'border-slate-700/80 bg-slate-900/50 text-slate-600 hover:border-slate-600'
+                        }`}
+                        aria-label={`${star} de 5 estrellas`}
+                      >
+                        ★
+                      </button>
+                    ))}
+                  </div>
+                  <p
+                    className={`mt-4 min-h-[2.75rem] text-base font-bold sm:text-lg ${
+                      rating === 0
+                        ? 'text-slate-400'
+                        : rating === 1
+                          ? 'text-red-300'
+                          : rating === 2
+                            ? 'text-orange-300'
+                            : rating === 3
+                              ? 'text-amber-200'
+                              : rating === 4
+                                ? 'text-lime-300'
+                                : 'text-emerald-300'
+                    }`}
+                  >
+                    {rating === 0 && 'Seleccione una calificación'}
+                    {rating === 1 && 'Muy insatisfecho'}
+                    {rating === 2 && 'Insatisfecho'}
+                    {rating === 3 && 'Neutral'}
+                    {rating === 4 && 'Satisfecho'}
+                    {rating === 5 && '¡Muy satisfecho!'}
+                  </p>
+                </div>
 
-              <Button
-                onClick={handleSubmit}
-                disabled={rating === 0 || submitting}
-                className="w-full bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 dark:from-red-600 dark:to-red-700 dark:hover:from-red-700 dark:hover:to-red-800 text-white text-xl py-6 rounded-xl shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-300 font-bold disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-                size="lg"
-              >
-                {submitting ? (
-                  <>
-                    <Loader2 className="w-6 h-6 mr-2 animate-spin" />
-                    Enviando calificación...
-                  </>
-                ) : (
-                  <>
-                    <Send className="w-6 h-6 mr-2" />
-                    Enviar Calificación
-                  </>
-                )}
-              </Button>
+                <div className="text-left">
+                  <label htmlFor="rating-comment" className="mb-2 block text-sm font-bold text-white sm:text-base">
+                    Comentarios <span className="font-normal text-slate-400">(opcional)</span>
+                  </label>
+                  <textarea
+                    id="rating-comment"
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    className="w-full rounded-xl border-2 border-slate-600 bg-slate-900 px-4 py-3 text-base text-slate-100 placeholder:text-slate-500 focus:border-red-500 focus:ring-2 focus:ring-red-500/50 sm:text-lg"
+                    rows={3}
+                    placeholder="¿Algo que quieras comentarnos?"
+                  />
+                </div>
+
+                <Button
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={rating === 0 || submitting}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-gradient-to-r from-red-600 to-red-700 py-4 text-base font-bold text-white shadow-lg hover:from-red-500 hover:to-red-600 disabled:cursor-not-allowed disabled:opacity-45 sm:py-5 sm:text-lg"
+                  size="lg"
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="h-6 w-6 shrink-0 animate-spin" />
+                      Enviando…
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-6 w-6 shrink-0" />
+                      Enviar calificación
+                    </>
+                  )}
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>

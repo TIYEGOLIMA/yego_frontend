@@ -348,69 +348,76 @@ export default function TabletInterface() {
   }, [])
 
   const renderPaso1 = () => (
-    <div className="space-y-8">
-      <div className="text-center">
-        <h2 className="text-4xl font-bold text-slate-900 dark:text-white mb-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-3 sm:gap-4">
+      <div className="shrink-0 text-center">
+        <h2 className="text-2xl font-bold leading-tight text-slate-900 sm:text-3xl dark:text-white">
           Seleccione su motivo de visita
         </h2>
-        <p className="text-xl text-slate-600 dark:text-white mb-6">
+        <p className="mt-1 text-sm text-slate-600 sm:text-base dark:text-slate-300">
           Elija la opción que mejor describa su necesidad
         </p>
       </div>
 
       {loading ? (
-        <BaseLoader message="Cargando opciones..." />
+        <div className="flex min-h-0 flex-1 items-center justify-center py-6">
+          <BaseLoader message="Cargando opciones..." />
+        </div>
       ) : (
-        <div className="grid grid-cols-2 gap-5">
-          {options.map((option) => (
-            <Button
-              key={option.id}
-              variant="ghost"
-              size="lg"
-              onClick={() => seleccionarOpcion(option.id)}
-              className="min-h-24 font-semibold text-center leading-tight"
-              disabled={loading}
-            >
-              {option.name}
-            </Button>
-          ))}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch] pr-0.5">
+          <div className="grid min-h-full auto-rows-fr grid-cols-2 gap-2 sm:gap-3">
+            {options.map((option) => (
+              <Button
+                key={option.id}
+                variant="ghost"
+                size="lg"
+                onClick={() => seleccionarOpcion(option.id)}
+                className="h-full min-h-[4.25rem] px-3 py-2 text-center text-sm font-semibold leading-snug sm:min-h-[4.75rem] sm:text-base"
+                disabled={loading}
+              >
+                <span className="line-clamp-4">{option.name}</span>
+              </Button>
+            ))}
+          </div>
         </div>
       )}
     </div>
   )
 
   const renderPaso2 = () => (
-    <div className="space-y-8">
-      <div className="text-center">
-        <h2 className="text-4xl font-bold text-slate-900 dark:text-white mb-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-3 sm:gap-4">
+      <div className="shrink-0 text-center">
+        <h2 className="text-2xl font-bold leading-tight text-slate-900 sm:text-3xl dark:text-white">
           {selectedOption ? options.find((opt: any) => opt.id === selectedOption)?.name : ''}
         </h2>
-        <p className="text-xl text-slate-600 dark:text-white mb-6">
+        <p className="mt-1 text-sm text-slate-600 sm:text-base dark:text-slate-300">
           Seleccione una opción específica
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        {subOptions.map((option: any) => (
-          <Button
-            key={option.id}
-            variant="ghost"
-            size="lg"
-            onClick={() => seleccionarSubOpcion(option.id)}
-            className="min-h-32 font-bold text-center"
-          >
-            {option.name}
-          </Button>
-        ))}
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch] pr-0.5">
+        <div className="grid min-h-full auto-rows-fr grid-cols-2 gap-2 sm:gap-3">
+          {subOptions.map((option: any) => (
+            <Button
+              key={option.id}
+              variant="ghost"
+              size="lg"
+              onClick={() => seleccionarSubOpcion(option.id)}
+              className="h-full min-h-[4.25rem] px-3 py-2 text-center text-sm font-bold leading-snug sm:min-h-[4.75rem] sm:text-base"
+            >
+              <span className="line-clamp-4">{option.name}</span>
+            </Button>
+          ))}
+        </div>
       </div>
-      
-      <div className="flex justify-center pt-4">
+
+      <div className="flex shrink-0 justify-center pt-1">
         <Button
           onClick={retroceder}
           variant="secondary"
-          className="bg-slate-600 hover:bg-slate-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
+          size="md"
+          className="bg-slate-600 text-white shadow-md transition-all duration-200 hover:bg-slate-700 hover:shadow-lg"
         >
-          <ArrowLeft className="w-4 h-4 mr-2" />
+          <ArrowLeft className="mr-2 h-4 w-4" />
           Volver a Categorías
         </Button>
       </div>
@@ -418,17 +425,17 @@ export default function TabletInterface() {
   )
 
   const renderPaso3 = () => (
-    <div className="space-y-8">
-      <div className="text-center">
-        <h2 className="text-4xl font-bold text-slate-900 dark:text-white mb-3">
-          Ingrese su número de telefono
+    <div className="flex min-h-0 flex-1 flex-col justify-between gap-3 sm:gap-4">
+      <div className="shrink-0 text-center">
+        <h2 className="text-2xl font-bold leading-tight text-slate-900 sm:text-3xl dark:text-white">
+          Ingrese su número de teléfono
         </h2>
-        <p className="text-xl text-slate-600 dark:text-white mb-6">
+        <p className="mt-1 text-sm text-slate-600 sm:text-base dark:text-slate-300">
           Debe empezar con 9 y tener exactamente 9 dígitos
         </p>
       </div>
 
-      <div className="max-w-md mx-auto">
+      <div className="mx-auto w-full max-w-md shrink-0 px-1">
         <input
           type="tel"
           value={phoneNumber}
@@ -443,23 +450,20 @@ export default function TabletInterface() {
           maxLength={9}
           placeholder="Ej: 987654321"
           disabled={loading}
-          className="w-full p-5 text-2xl !border-2 !border-red-500 dark:!border-red-500 rounded-lg focus:!ring-2 focus:!ring-red-400 focus:!border-red-500 dark:focus:!border-red-500 focus:outline-none bg-white dark:bg-slate-700 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-400 shadow-md"
+          className="w-full rounded-lg border-2 border-red-500 bg-white p-4 text-2xl text-slate-900 shadow-md placeholder:text-slate-400 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-400 dark:border-red-500 dark:bg-slate-700 dark:text-white dark:placeholder:text-slate-400 dark:focus:border-red-500 sm:p-5 sm:text-3xl"
         />
       </div>
 
-      {driverData.firstName.trim() ? (
-        <DriverInfo driverName={`${driverData.firstName} ${driverData.lastName}`} />
-      ) : null}
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]">
+        {driverData.firstName.trim() ? (
+          <DriverInfo driverName={`${driverData.firstName} ${driverData.lastName}`} />
+        ) : null}
+        {error ? <ErrorMessage message={error} /> : null}
+      </div>
 
-      {error && <ErrorMessage message={error} />}
-
-      <div className="flex justify-center space-x-4">
-        <Button
-          variant="secondary"
-          onClick={retroceder}
-          disabled={loading}
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
+      <div className="flex shrink-0 flex-wrap justify-center gap-3">
+        <Button variant="secondary" onClick={retroceder} disabled={loading}>
+          <ArrowLeft className="mr-2 h-4 w-4" />
           Atrás
         </Button>
         <Button
@@ -469,12 +473,12 @@ export default function TabletInterface() {
         >
           {loading ? (
             <>
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+              <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
               Creando ticket...
             </>
           ) : (
             <>
-              <Phone className="w-4 h-4 mr-2" />
+              <Phone className="mr-2 h-4 w-4" />
               Crear Ticket
             </>
           )}
@@ -520,105 +524,104 @@ export default function TabletInterface() {
 
   return (
     <>
-      <div className="min-h-screen w-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 flex items-center justify-center p-4 relative">
-      <div className="absolute top-4 right-4 z-50 flex space-x-2">
-        <button
-          onClick={toggleFullscreen}
-          className="bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
-          title={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
-        >
-          {isFullscreen ? (
-            <Minimize className="w-6 h-6" />
-          ) : (
-            <Maximize className="w-6 h-6" />
-          )}
-        </button>
-
-        {!isFullscreen && (
+      <div
+        className="fixed inset-0 z-0 flex flex-col overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100 pt-[max(0.75rem,env(safe-area-inset-top))] pr-[max(0.75rem,env(safe-area-inset-right))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] dark:from-slate-900 dark:to-slate-800"
+        role="presentation"
+      >
+        <div className="absolute right-[max(0.75rem,env(safe-area-inset-right))] top-[max(0.75rem,env(safe-area-inset-top))] z-50 flex gap-2">
           <button
-            onClick={handleCerrarSesion}
-            className="bg-red-600 hover:bg-red-700 text-white p-3 rounded-full shadow-lg hover:shadow-xl transition-all duration-200"
-            title="Cerrar sesión"
+            type="button"
+            onClick={toggleFullscreen}
+            className="rounded-full bg-blue-600 p-3 text-white shadow-lg transition-all duration-200 hover:bg-blue-700 hover:shadow-xl"
+            title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
           >
-            <LogOut className="w-6 h-6" />
+            {isFullscreen ? <Minimize className="h-6 w-6" /> : <Maximize className="h-6 w-6" />}
           </button>
-        )}
-      </div>
 
-      <Card className="w-full max-w-7xl">
-        <CardHeader className="text-center pb-8">
-          <CardTitle className="text-[30px] font-bold text-slate-900 dark:text-white">
-            Sistema de Ticketera
-            {dispositivo?.sedeNombre && (
-              <span className="block text-base font-medium text-slate-500 dark:text-slate-300 mt-1">
-                Sede: {dispositivo.sedeNombre}
-                {dispositivo.nombre ? ` · ${dispositivo.nombre}` : ''}
-              </span>
-            )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {currentStep === 'options' && renderPaso1()}
-          {currentStep === 'subOptions' && renderPaso2()}
-          {currentStep === 'phone' && renderPaso3()}
-          {currentStep === 'driver' && (
-            <div className="space-y-8">
-              <div className="text-center">
-                <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">
-                  Ingrese los datos del conductor
-                </h2>
-                <p className="text-slate-600 dark:text-white mb-2">
-                  Por favor, ingrese el nombre del conductor.
-                </p>
-              </div>
-              <div className="max-w-md mx-auto">
-                <input
-                  type="text"
-                  value={`${driverData.firstName} ${driverData.lastName}`}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDriverData({ ...driverData, firstName: e.target.value })}
-                  placeholder="Nombre del Conductor"
-                  className="w-full p-3 !border-2 !border-red-500 dark:!border-red-500 rounded-lg 
-                           bg-white dark:bg-slate-700 text-slate-900 dark:text-white
-                           focus:outline-none focus:!ring-2 focus:!ring-red-400 focus:!border-red-500 dark:focus:!border-red-500"
-                  disabled={loading}
-                />
-              </div>
-              <div className="flex justify-center space-x-4">
-                <Button
-                  variant="secondary"
-                  onClick={retroceder}
-                  disabled={loading}
-                >
-                  <ArrowLeft className="w-4 h-4 mr-2" />
-                  Atrás
-                </Button>
-                <Button
-                  onClick={guardarConductor}
-                  loading={loading}
-                  disabled={!driverData.firstName.trim() || loading}
-                >
-                  {loading ? (
-                    <div className="flex items-center">
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                      Guardando...
-                    </div>
-                  ) : (
-                    <>
-                      <CheckCircle className="w-4 h-4 mr-2" />
-                      Guardar Conductor
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
+          {!isFullscreen && (
+            <button
+              type="button"
+              onClick={handleCerrarSesion}
+              className="rounded-full bg-red-600 p-3 text-white shadow-lg transition-all duration-200 hover:bg-red-700 hover:shadow-xl"
+              title="Cerrar sesión"
+            >
+              <LogOut className="h-6 w-6" />
+            </button>
           )}
-        </CardContent>
-      </Card>
+        </div>
+
+        <div className="flex min-h-0 flex-1 flex-col pt-14 sm:pt-16">
+          <Card className="mx-auto flex h-full min-h-0 w-full max-w-5xl flex-col overflow-hidden border border-slate-200/80 shadow-xl dark:border-slate-700/80">
+            <CardHeader className="shrink-0 border-b border-slate-100 px-4 py-3 text-center dark:border-slate-700/80 sm:px-5 sm:py-4">
+              <CardTitle className="text-xl font-bold text-slate-900 sm:text-2xl dark:text-white">
+                Sistema de Ticketera
+                {dispositivo?.sedeNombre && (
+                  <span className="mt-0.5 block text-xs font-medium text-slate-500 sm:text-sm dark:text-slate-300">
+                    Sede: {dispositivo.sedeNombre}
+                    {dispositivo.nombre ? ` · ${dispositivo.nombre}` : ''}
+                  </span>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden p-3 sm:p-4 md:p-5">
+              {currentStep === 'options' && renderPaso1()}
+              {currentStep === 'subOptions' && renderPaso2()}
+              {currentStep === 'phone' && renderPaso3()}
+              {currentStep === 'driver' && (
+                <div className="flex min-h-0 flex-1 flex-col justify-between gap-3 sm:gap-4">
+                  <div className="shrink-0 text-center">
+                    <h2 className="text-2xl font-bold leading-tight text-slate-900 sm:text-3xl dark:text-white">
+                      Ingrese los datos del conductor
+                    </h2>
+                    <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                      Por favor, ingrese el nombre del conductor.
+                    </p>
+                  </div>
+                  <div className="mx-auto w-full max-w-md shrink-0 px-1">
+                    <input
+                      type="text"
+                      value={`${driverData.firstName} ${driverData.lastName}`}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        setDriverData({ ...driverData, firstName: e.target.value })
+                      }
+                      placeholder="Nombre del Conductor"
+                      className="w-full rounded-lg border-2 border-red-500 bg-white p-3 text-slate-900 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-400 dark:bg-slate-700 dark:text-white dark:focus:border-red-500"
+                      disabled={loading}
+                    />
+                  </div>
+                  <div className="flex shrink-0 flex-wrap justify-center gap-3 pt-1">
+                    <Button variant="secondary" onClick={retroceder} disabled={loading}>
+                      <ArrowLeft className="mr-2 h-4 w-4" />
+                      Atrás
+                    </Button>
+                    <Button
+                      onClick={guardarConductor}
+                      loading={loading}
+                      disabled={!driverData.firstName.trim() || loading}
+                    >
+                      {loading ? (
+                        <div className="flex items-center">
+                          <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                          Guardando...
+                        </div>
+                      ) : (
+                        <>
+                          <CheckCircle className="mr-2 h-4 w-4" />
+                          Guardar Conductor
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       {showDriverModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-xl p-6 max-w-md w-full shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]">
+          <div className="max-h-[min(90dvh,calc(100dvh-2rem))] w-full max-w-md overflow-y-auto overscroll-y-contain rounded-xl bg-white p-5 shadow-2xl dark:bg-slate-800 sm:p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-bold text-slate-900 dark:text-white flex items-center">
                 <CreditCard className="w-5 h-5 mr-2 text-red-500" />
@@ -764,8 +767,8 @@ export default function TabletInterface() {
       )}
 
       {showTicketCreatedModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-xl p-6 max-w-sm w-full shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]">
+          <div className="max-h-[min(90dvh,calc(100dvh-2rem))] w-full max-w-sm overflow-y-auto overscroll-y-contain rounded-xl bg-white p-5 shadow-2xl dark:bg-slate-800 sm:p-6">
             <div className="text-center">
               <div className="w-16 h-16 bg-green-100 dark:bg-green-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
                 <CheckCircle className="w-8 h-8 text-green-600" />
