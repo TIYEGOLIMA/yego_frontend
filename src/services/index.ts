@@ -35,6 +35,7 @@ export {
   type DriverMonthlyStatsResponse,
   type FlotaPartnerOption,
   type DriverSummaryResponse,
+  type DriverSnapshot,
   type DriverSummaryBlock,
   type DriverSummaryIncome,
   type DriverSummaryPeriod,

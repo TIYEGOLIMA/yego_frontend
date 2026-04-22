@@ -22,13 +22,17 @@ import {
   ArrowLeft,
   Calendar,
   DollarSign,
+  IdCard,
   Search,
+  Star,
   Target,
   TrendingUp,
   Trophy,
+  Wallet,
 } from 'lucide-react'
 import {
   yegoPremiumService,
+  type DriverSnapshot,
   type DriverSummaryResponse,
   type DriverSummaryBlock,
   type DriverSummaryGoal,
@@ -82,6 +86,126 @@ const formatDate = (value: string | null | undefined) => {
     month: 'short',
     year: 'numeric',
   })
+}
+
+const formatBalanceAmount = (value: number | null | undefined, currency: string | null | undefined) => {
+  if (value === null || value === undefined) return '—'
+  const code =
+    typeof currency === 'string' && currency.length === 3 ? currency.toUpperCase() : 'PEN'
+  try {
+    return new Intl.NumberFormat('es-PE', {
+      style: 'currency',
+      currency: code,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 3,
+    }).format(value)
+  } catch {
+    return String(value)
+  }
+}
+
+const formatRating = (value: number | null | undefined) => {
+  if (value === null || value === undefined) return '—'
+  const n = Number(value)
+  if (Number.isNaN(n)) return '—'
+  return new Intl.NumberFormat('es-PE', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(n)
+}
+
+function hasDriverFicha(d: DriverSnapshot | null | undefined): boolean {
+  if (!d) return false
+  return (
+    d.full_name != null ||
+    d.first_name != null ||
+    d.last_name != null ||
+    d.driver_id != null ||
+    d.phone != null ||
+    d.license_number != null ||
+    d.balance != null ||
+    d.balance_limit != null ||
+    d.average_rating != null
+  )
+}
+
+const DriverFichaCard: React.FC<{ driver: DriverSnapshot }> = ({ driver }) => {
+  const displayName =
+    driver.full_name?.trim() ||
+    [driver.first_name, driver.last_name].filter(Boolean).join(' ').trim() ||
+    null
+  return (
+    <Card className="w-full min-w-0 border-primary/20 bg-primary/[0.03] dark:bg-primary/5">
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <IdCard className="h-4 w-4 shrink-0 text-primary-500" />
+          Conductor y saldo
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {displayName && (
+            <div className="rounded-lg border border-neutral-200 bg-white/50 p-3 dark:border-neutral-800 dark:bg-neutral-950/40 sm:col-span-2 lg:col-span-1">
+              <p className="text-[11px] font-medium uppercase text-neutral-500 dark:text-neutral-400">
+                Nombre
+              </p>
+              <p className="mt-1 font-semibold text-neutral-900 dark:text-neutral-100">{displayName}</p>
+            </div>
+          )}
+          <div className="rounded-lg border border-neutral-200 bg-white/50 p-3 dark:border-neutral-800 dark:bg-neutral-950/40">
+            <p className="text-[11px] font-medium uppercase text-neutral-500 dark:text-neutral-400">
+              ID conductor
+            </p>
+            <p className="mt-1 break-all font-mono text-sm text-neutral-800 dark:text-neutral-200">
+              {driver.driver_id ?? '—'}
+            </p>
+          </div>
+          <div className="rounded-lg border border-neutral-200 bg-white/50 p-3 dark:border-neutral-800 dark:bg-neutral-950/40">
+            <p className="text-[11px] font-medium uppercase text-neutral-500 dark:text-neutral-400">
+              Licencia
+            </p>
+            <p className="mt-1 font-mono text-sm text-neutral-800 dark:text-neutral-200">
+              {driver.license_number ?? '—'}
+            </p>
+          </div>
+          <div className="rounded-lg border border-neutral-200 bg-white/50 p-3 dark:border-neutral-800 dark:bg-neutral-950/40">
+            <p className="text-[11px] font-medium uppercase text-neutral-500 dark:text-neutral-400">
+              Teléfono
+            </p>
+            <p className="mt-1 text-sm text-neutral-800 dark:text-neutral-200">
+              {driver.phone ?? '—'}
+            </p>
+          </div>
+          <div className="rounded-lg border border-amber-200/80 bg-amber-50/50 p-3 dark:border-amber-900/50 dark:bg-amber-950/20">
+            <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase text-amber-800 dark:text-amber-300">
+              <Wallet className="h-3.5 w-3.5" />
+              Saldo actual
+            </p>
+            <p className="mt-1 text-lg font-bold text-amber-900 dark:text-amber-100">
+              {formatBalanceAmount(driver.balance, driver.currency)}
+            </p>
+          </div>
+          <div className="rounded-lg border border-neutral-200 bg-white/50 p-3 dark:border-neutral-800 dark:bg-neutral-950/40">
+            <p className="text-[11px] font-medium uppercase text-neutral-500 dark:text-neutral-400">
+              Límite de saldo
+            </p>
+            <p className="mt-1 text-lg font-semibold text-neutral-800 dark:text-neutral-200">
+              {formatBalanceAmount(driver.balance_limit, driver.currency)}
+            </p>
+          </div>
+          <div className="rounded-lg border border-violet-200/80 bg-violet-50/50 p-3 dark:border-violet-900/50 dark:bg-violet-950/30">
+            <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase text-violet-700 dark:text-violet-300">
+              <Star className="h-3.5 w-3.5" />
+              Calificación
+            </p>
+            <p className="mt-1 text-lg font-bold text-violet-900 dark:text-violet-100">
+              {formatRating(driver.average_rating)}
+            </p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
 }
 
 const IncomeBlock: React.FC<{
@@ -415,6 +539,9 @@ const ConsultaTab: React.FC<ConsultaTabProps> = ({ showProcessing = false, visit
             </TabsList>
 
             <TabsContent value="resumen" className={`space-y-6 ${visitorView ? 'overflow-visible' : ''}`}>
+              {result.driver && hasDriverFicha(result.driver) && (
+                <DriverFichaCard driver={result.driver} />
+              )}
               {/* Fila 1: resumen semanal + mensual */}
               <div className="grid w-full min-w-0 grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-6 items-stretch">
                 <IncomeBlock

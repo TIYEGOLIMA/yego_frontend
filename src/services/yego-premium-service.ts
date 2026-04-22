@@ -173,8 +173,22 @@ export interface DriverSummaryGoal {
   is_multiplier_goal?: boolean | null
 }
 
+export interface DriverSnapshot {
+  driver_id?: string | null
+  first_name?: string | null
+  last_name?: string | null
+  full_name?: string | null
+  phone?: string | null
+  license_number?: string | null
+  balance?: number | null
+  balance_limit?: number | null
+  currency?: string | null
+  average_rating?: number | null
+}
+
 export interface DriverSummaryResponse {
   resolved_contractor_id?: string | null
+  driver?: DriverSnapshot | null
   weekly?: DriverSummaryBlock | null
   monthly?: DriverSummaryBlock | null
   active_goals?: DriverSummaryGoal[]
