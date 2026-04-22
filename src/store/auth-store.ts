@@ -2,6 +2,10 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { authService } from "../services"
 import api from "../services/core/api"
+import {
+  clearDispositivoSession,
+  parseAxiosErrorCode,
+} from "../services/core/device-auth-service"
 
 export interface User {
   id: number;
@@ -104,6 +108,7 @@ export const useAuthStore = create<AuthState>()(
             loading: false,
             error: null
           })
+          clearDispositivoSession()
           localStorage.removeItem("requiereCambioPassword")
           sincronizarSedeActiva(user)
           
@@ -119,19 +124,36 @@ export const useAuthStore = create<AuthState>()(
           return { ...response, user }
         } catch (error: any) {
           let errorMessage = "Error al iniciar sesión"
-          
-          if (error.response?.status === 403) {
-            errorMessage = "Usuario inactivo. Contacte al administrador del sistema"
-          } else if (error.response?.status === 401) {
-            const failedUrl = String(error.config?.url ?? "")
+          const status = error.response?.status
+          const data = error.response?.data
+          const failedUrl = String(error.config?.url ?? "")
+
+          if (status === 403) {
             errorMessage =
-              failedUrl.includes("profile")
-                ? "No se pudo cargar el perfil tras iniciar sesión. Intente de nuevo."
-                : "Credenciales inválidas. Verifique su usuario y contraseña"
-          } else if (error.message === 'Network Error') {
+              (typeof data?.message === "string" && data.message) ||
+              "Usuario inactivo. Contacte al administrador del sistema"
+          } else if (status === 401) {
+            const code = parseAxiosErrorCode(error)
+            if (failedUrl.includes("profile")) {
+              errorMessage =
+                "No se pudo cargar el perfil tras iniciar sesión. Intente de nuevo."
+            } else if (code === "DEVICE_TOKEN_REVOKED" || code === "DEVICE_REVOKED") {
+              errorMessage =
+                "La sesión de un dispositivo vinculó un token inválido. Use solo usuario y contraseña, o borre datos del sitio e intente de nuevo."
+            } else if (typeof data?.message === "string" && data.message.trim()) {
+              errorMessage = data.message.trim()
+            } else {
+              errorMessage =
+                "Credenciales inválidas. Verifique su usuario y contraseña"
+            }
+          } else if (error.message === "Network Error") {
             errorMessage = "Error de conexión. Verifique su conexión a internet"
           } else {
-            errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || "Error al iniciar sesión"
+            errorMessage =
+              error.response?.data?.message ||
+              error.response?.data?.error ||
+              error.message ||
+              "Error al iniciar sesión"
           }
           
           set({ error: errorMessage, loading: false })

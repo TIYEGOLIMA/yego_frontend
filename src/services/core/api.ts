@@ -13,6 +13,12 @@ import {
 const API_BASE_URL =
   import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8080/api' : '/api')
 
+function esRutaLoginORegistro(url: string | undefined): boolean {
+  if (!url) return false
+  const u = url.toLowerCase()
+  return u.includes('auth/login') || u.includes('auth/register')
+}
+
 export const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -24,19 +30,29 @@ export const api = axios.create({
 
 api.interceptors.request.use(
   (config) => {
-    const token = getHumanJwtFromStorage() || getDispositivoToken()
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type']
+    }
+
+    if (esRutaLoginORegistro(config.url)) {
+      delete config.headers.Authorization
+      delete (config.headers as Record<string, string | undefined>).authorization
+      return config
+    }
+
     const existingAuth =
       config.headers?.Authorization ??
       (config.headers as Record<string, string | undefined>)?.authorization
 
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
-    } else if (!existingAuth) {
-      delete config.headers.Authorization
+    if (existingAuth) {
+      return config
     }
 
-    if (config.data instanceof FormData) {
-      delete config.headers['Content-Type']
+    const token = getHumanJwtFromStorage() || getDispositivoToken()
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    } else {
+      delete config.headers.Authorization
     }
     return config
   },

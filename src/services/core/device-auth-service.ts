@@ -121,6 +121,11 @@ export function createDeviceApiClient(baseURL: string = DEFAULT_API_BASE_URL): A
   })
 
   instance.interceptors.request.use((config) => {
+    const path = (config.url ?? '').toLowerCase()
+    if (path.includes('dispositivos/auth')) {
+      delete config.headers.Authorization
+      return config
+    }
     const token = getRequestToken()
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
