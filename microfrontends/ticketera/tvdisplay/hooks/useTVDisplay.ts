@@ -4,8 +4,20 @@ import { ticketService, validationService } from '../services'
 import { useAudio, normalizeDriverName } from '../utils/audioUtils'
 import { TICKET_STATUS } from '../../shared'
 import { useTVDisplayWebSocket } from './useWebSocket'
+import { getDispositivoSession } from '../../../../src/services/core/device-auth-service'
 
 export const useTVDisplay = () => {
+  const dispositivoSedeId = useMemo(() => {
+    const session = getDispositivoSession()
+    return session?.sedeId ?? null
+  }, [])
+
+  const perteneceASede = useCallback((ticket: any): boolean => {
+    if (dispositivoSedeId == null) return true
+    if (ticket?.sedeId == null) return false
+    return Number(ticket.sedeId) === Number(dispositivoSedeId)
+  }, [dispositivoSedeId])
+
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [currentTime, setCurrentTime] = useState(new Date())
   const [loading, setLoading] = useState(true)
@@ -73,6 +85,7 @@ export const useTVDisplay = () => {
     }
 
     const unsubscribeTicketCreated = onTicketCreated(async (newTicket) => {
+      if (!perteneceASede(newTicket)) return
       const ticketConNombre = await cargarNombreConductor(newTicket)
       
       setTickets(prev => {
@@ -92,6 +105,7 @@ export const useTVDisplay = () => {
     })
 
     const unsubscribeTicketUpdated = onTicketUpdated(async (updatedTicket) => {
+      if (!perteneceASede(updatedTicket)) return
       if (updatedTicket.status === 'COMPLETED') {
         setTickets(prev => {
           return prev.filter(t => t.id !== updatedTicket.id)
@@ -134,6 +148,7 @@ export const useTVDisplay = () => {
     })
 
     const unsubscribeTicketCalled = onTicketCalled(async (calledTicket) => {
+      if (!perteneceASede(calledTicket)) return
       const ticketConNombre = await cargarNombreConductor(calledTicket)
       
       setTickets(prev => {
@@ -164,18 +179,14 @@ export const useTVDisplay = () => {
     })
 
     const unsubscribeTicketCompleted = onTicketCompleted(async (completedTicket) => {
-      setTickets(prev => {
-        return prev.filter(t => t.id !== completedTicket.id)
-      })
-      
+      if (!perteneceASede(completedTicket)) return
+      setTickets(prev => prev.filter(t => t.id !== completedTicket.id))
       setLastUpdate(new Date())
     })
 
     const unsubscribeTicketCancelled = onTicketCancelled(async (cancelledTicket) => {
-      setTickets(prev => {
-        return prev.filter(t => t.id !== cancelledTicket.id)
-      })
-      
+      if (!perteneceASede(cancelledTicket)) return
+      setTickets(prev => prev.filter(t => t.id !== cancelledTicket.id))
       setLastUpdate(new Date())
     })
 
@@ -199,14 +210,14 @@ export const useTVDisplay = () => {
       unsubscribeTicketCancelled()
       unsubscribeDisplayUpdated()
     }
-  }, [isConnected, soundEnabled, cargarNombreConductor, playNotificationSound])
+  }, [isConnected, soundEnabled, cargarNombreConductor, playNotificationSound, perteneceASede])
 
   useEffect(() => {
     const cargarTicketsIniciales = async () => {
       try {
         setLoading(true)
         
-        const ticketsData = await ticketService.getAllTickets()
+        const ticketsData = await ticketService.getAllTickets(dispositivoSedeId)
         
         const ticketsConNombres = await Promise.all(
           ticketsData.map(ticket => cargarNombreConductor(ticket))
@@ -231,7 +242,7 @@ export const useTVDisplay = () => {
     }
 
     cargarTicketsIniciales()
-  }, [])
+  }, [dispositivoSedeId])
 
   useEffect(() => {
     if (!isConnected) {
@@ -239,7 +250,7 @@ export const useTVDisplay = () => {
       
       const interval = setInterval(async () => {
         try {
-          const ticketsData = await ticketService.getAllTickets()
+          const ticketsData = await ticketService.getAllTickets(dispositivoSedeId)
           
           setTickets(prev => {
             if (prev.length !== ticketsData.length || 
@@ -290,7 +301,7 @@ export const useTVDisplay = () => {
         clearInterval(interval)
       }
     }
-  }, [isConnected, soundEnabled, playNotificationSound])
+  }, [isConnected, soundEnabled, playNotificationSound, dispositivoSedeId])
 
   const formatearHora = useCallback((date: Date) => {
     try {

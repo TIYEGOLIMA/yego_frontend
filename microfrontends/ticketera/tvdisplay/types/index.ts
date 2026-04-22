@@ -12,6 +12,7 @@ export interface Ticket {
   phone?: string
   userId?: number | null
   moduleId?: number
+  sedeId?: number | null
   agent_id?: number | null
   calledAt?: string | null
   completedAt?: string | null

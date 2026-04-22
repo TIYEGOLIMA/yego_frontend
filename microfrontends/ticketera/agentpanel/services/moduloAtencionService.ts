@@ -50,6 +50,7 @@ export interface ModuloUsuarioResponse {
 
 export interface ModuloOcupado {
   moduleId: number
+  moduleName?: string
   userId: number
   userName: string
   status: string

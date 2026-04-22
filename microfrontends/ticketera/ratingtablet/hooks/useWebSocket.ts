@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { useWebSocket } from '../../../shared/hooks/useWebSocket'
+import { getDispositivoSession } from '../../../../src/services/core/device-auth-service'
 
 interface UseRatingWebSocketReturn {
   isConnected: boolean
@@ -7,6 +8,14 @@ interface UseRatingWebSocketReturn {
   onTicketCompleted: (callback: (ticket: any) => void, moduleId?: string | null) => () => void
   onRatingRequested: (callback: (ratingRequest: any) => void, moduleId?: string | null) => () => void
   emitRatingSubmitted: (ratingData: any) => boolean
+}
+
+const perteneceASedeDispositivo = (ticket: any): boolean => {
+  const session = getDispositivoSession()
+  const sedeDispositivo = session?.sedeId ?? null
+  if (sedeDispositivo == null) return true
+  if (ticket?.sedeId == null) return false
+  return Number(ticket.sedeId) === Number(sedeDispositivo)
 }
 
 export const useRatingWebSocket = (): UseRatingWebSocketReturn => {
@@ -43,6 +52,10 @@ export const useRatingWebSocket = (): UseRatingWebSocketReturn => {
         if (!ticket) {
           return
         }
+
+        if (!perteneceASedeDispositivo(ticket)) {
+          return
+        }
         
         if (moduleId) {
           if (!ticket.moduleId) {
@@ -57,7 +70,7 @@ export const useRatingWebSocket = (): UseRatingWebSocketReturn => {
           }
         } else {
           if (ticket.moduleId) {
-          return
+            return
           }
         }
         
@@ -71,6 +84,10 @@ export const useRatingWebSocket = (): UseRatingWebSocketReturn => {
       if (event.type === 'RATING_REQUESTED' || event.type === 'rating-requested') {
         const ratingRequest = event
         const ticket = ratingRequest.ticket || ratingRequest.data?.ticket
+
+        if (ticket && !perteneceASedeDispositivo(ticket)) {
+          return
+        }
 
         if (moduleId && ticket) {
           if (!belongsToModule(ticket, moduleId)) {

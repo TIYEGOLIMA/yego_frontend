@@ -1,12 +1,63 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { ticketService } from '../services/ticketService'
 import { queueAgentService } from '../services/queueAgentService'
-import { validationService } from '../services/validationService'
+import { validationService, type DriverResponse } from '../services/validationService'
 import { safeSetItem } from '../utils/storage'
 import { Ticket } from '../types'
 import { normalizeDriverName } from '../utils/utf8Decoder'
 import { useSocket } from '../contexts/SocketContext'
 import { getSedeActivaId } from '../../shared/utils/sedeContext'
+
+const DRIVER_CACHE_KEY = 'driver_names_cache'
+
+interface DriverCacheEntry {
+  name: string
+  timestamp: number
+}
+
+type DriverCache = Record<string, DriverCacheEntry>
+
+const leerCacheConductores = (): DriverCache => {
+  try {
+    return JSON.parse(localStorage.getItem(DRIVER_CACHE_KEY) || '{}') as DriverCache
+  } catch {
+    return {}
+  }
+}
+
+const escribirCacheConductores = (cache: DriverCache) => {
+  try {
+    localStorage.setItem(DRIVER_CACHE_KEY, JSON.stringify(cache))
+  } catch {
+    /* ignore */
+  }
+}
+
+const generarVariantesTelefono = (raw: string): string[] => {
+  const variantes = new Set<string>()
+  const original = raw.trim()
+  if (!original) return []
+  variantes.add(original)
+
+  const limpio = original.replace(/[\s\-()]/g, '')
+  if (limpio) variantes.add(limpio)
+
+  if (limpio.startsWith('+51')) {
+    variantes.add(limpio.substring(3))
+  } else if (/^\d{9}$/.test(limpio) || /^9\d{8}$/.test(limpio)) {
+    variantes.add(`+51${limpio}`)
+  }
+
+  return Array.from(variantes)
+}
+
+const obtenerNombreDesdeCache = (cache: DriverCache, licenseNumber: string): string | null => {
+  for (const key of generarVariantesTelefono(licenseNumber)) {
+    const entry = cache[key]
+    if (entry?.name) return entry.name
+  }
+  return null
+}
 
 interface UseAgentPanelReturn {
   tickets: Ticket[]
@@ -70,49 +121,44 @@ export const useAgentPanel = (sedePickerKey?: number): UseAgentPanelReturn => {
     }
   }, [])
 
-  const obtenerNombreConductorAsync = useCallback(async (ticket: any) => {
+  const obtenerNombreConductorAsync = useCallback(async (ticket: Ticket): Promise<void> => {
     if (!ticket.licenseNumber || (ticket.driverName && !ticket.driverName.includes('Conductor:'))) {
-      return Promise.resolve()
+      return
     }
 
-    try {
-      const cache = JSON.parse(localStorage.getItem('driver_names_cache') || '{}')
-      if (cache[ticket.licenseNumber]?.name) {
-        setTickets(prevTickets => 
-          prevTickets.map(t => 
-            t.id === ticket.id 
-              ? { ...t, driverName: cache[ticket.licenseNumber].name }
-              : t
-          )
-        )
-        return Promise.resolve()
-      }
-
-      const { validationService } = await import('../services/validationService')
-      const driverData = await validationService.getDriverByPhonePublic(ticket.licenseNumber)
-      
-      if (driverData?.full_name) {
-        const normalizedName = normalizeDriverName(driverData.full_name)
-        const newCache = { ...cache }
-        newCache[ticket.licenseNumber] = { name: normalizedName, timestamp: Date.now() }
-        localStorage.setItem('driver_names_cache', JSON.stringify(newCache))
-        setTickets(prevTickets => 
-          prevTickets.map(t => 
-            t.id === ticket.id 
-              ? { ...t, driverName: normalizedName }
-              : t
-          )
-        )
-        
-        return Promise.resolve()
-      } else {
-        return Promise.resolve()
-      }
-    } catch (error) {
-      return Promise.reject(error)
+    const cache = leerCacheConductores()
+    const cached = obtenerNombreDesdeCache(cache, ticket.licenseNumber)
+    if (cached) {
+      setTickets(prev => prev.map(t => (t.id === ticket.id ? { ...t, driverName: cached } : t)))
+      return
     }
+
+    const driverData: DriverResponse | null = await validationService.getDriverByPhonePublic(
+      ticket.licenseNumber
+    )
+    if (!driverData?.full_name) return
+
+    const normalizedName = normalizeDriverName(driverData.full_name)
+    cache[ticket.licenseNumber] = { name: normalizedName, timestamp: Date.now() }
+    escribirCacheConductores(cache)
+    setTickets(prev =>
+      prev.map(t => (t.id === ticket.id ? { ...t, driverName: normalizedName } : t))
+    )
   }, [])
   
+  const sedeFiltroId = useMemo(() => {
+    const sedeContext = getSedeActivaId()
+    if (sedeContext != null) return sedeContext
+    const user = getCurrentUser()
+    return (user?.sedeId as number | undefined) ?? null
+  }, [getCurrentUser])
+
+  const perteneceASedeActiva = useCallback((message: any): boolean => {
+    if (sedeFiltroId == null) return true
+    if (message?.sedeId == null) return false
+    return Number(message.sedeId) === Number(sedeFiltroId)
+  }, [sedeFiltroId])
+
   useEffect(() => {
     if (!isConnected) {
       return
@@ -123,6 +169,9 @@ export const useAgentPanel = (sedePickerKey?: number): UseAgentPanelReturn => {
     const ticketsSub = subscribe('/topic/tickets', (message: any) => {
       if (!message || message.type === 'MODULOS_ACTUALIZADOS' || (!message.id && !message.ticketId && !message.ticketNumber)) {
         return;
+      }
+      if (!perteneceASedeActiva(message)) {
+        return
       }
       
       setTickets(prevTickets => {
@@ -163,6 +212,9 @@ export const useAgentPanel = (sedePickerKey?: number): UseAgentPanelReturn => {
       if (!message || message.type === 'MODULOS_ACTUALIZADOS' || !message.ticketId) {
         return;
       }
+      if (!perteneceASedeActiva(message)) {
+        return
+      }
       
       setTickets(prevTickets => {
         const updatedTickets = prevTickets.map(t => {
@@ -192,6 +244,9 @@ export const useAgentPanel = (sedePickerKey?: number): UseAgentPanelReturn => {
       if (!message || message.type === 'MODULOS_ACTUALIZADOS' || !message.ticketId) {
         return;
       }
+      if (!perteneceASedeActiva(message)) {
+        return
+      }
       
       setTickets(prevTickets => {
         const updatedTickets = prevTickets.map(t => {
@@ -216,6 +271,9 @@ export const useAgentPanel = (sedePickerKey?: number): UseAgentPanelReturn => {
       if (!message || message.type === 'MODULOS_ACTUALIZADOS' || !message.ticketId) {
         return;
       }
+      if (!perteneceASedeActiva(message)) {
+        return
+      }
       
       setTickets(prevTickets => {
         return prevTickets.filter(t => t.id !== message.ticketId)
@@ -225,6 +283,9 @@ export const useAgentPanel = (sedePickerKey?: number): UseAgentPanelReturn => {
     const newTicketSub = subscribe('/topic/new-ticket', (message: any) => {
       if (!message || message.type === 'MODULOS_ACTUALIZADOS' || (!message.id && !message.ticketNumber)) {
         return;
+      }
+      if (!perteneceASedeActiva(message)) {
+        return
       }
       if ((message.status === 'WAITING' && (message.moduleId === null || message.moduleId === undefined)) || 
           message.moduleId === selectedModule) {
@@ -262,7 +323,7 @@ export const useAgentPanel = (sedePickerKey?: number): UseAgentPanelReturn => {
         }
       })
     }
-  }, [isConnected, selectedModule, obtenerNombreConductorAsync])
+  }, [isConnected, selectedModule, obtenerNombreConductorAsync, perteneceASedeActiva])
   const [ticketsEnProceso, setTicketsEnProceso] = useState<Set<number>>(new Set())
 
   const marcarTicketEnProceso = useCallback((ticketId: number) => {
@@ -293,153 +354,64 @@ export const useAgentPanel = (sedePickerKey?: number): UseAgentPanelReturn => {
     
     try {
       const todosLosTicketsBackend = await ticketService.getAllTickets()
-      const currentUser = getCurrentUser()
-      const currentAgentId = currentUser?.id || null
       const ticketsRelevantes = todosLosTicketsBackend.filter(ticket => {
-        if (ticket.status === 'WAITING' && (ticket.moduleId === null || ticket.moduleId === undefined)) {
-          return true
-        }
-        if (ticket.moduleId === selectedModule && (ticket.status === 'CALLED' || ticket.status === 'IN_PROGRESS')) {
-          return true
-        }
-        if (currentAgentId && ticket.agentId === currentAgentId && ticket.moduleId === selectedModule && (ticket.status === 'CALLED' || ticket.status === 'IN_PROGRESS')) {
-          return true
-        }
-        return false
+        if (ticket.status === 'WAITING' && ticket.moduleId == null) return true
+        const enModuloActivo = ticket.moduleId === selectedModule
+        return enModuloActivo && (ticket.status === 'CALLED' || ticket.status === 'IN_PROGRESS')
       })
-      const todosLosTickets = ticketsRelevantes.map(ticket => {
-        if (ticket.status === 'WAITING') {
-          const processedTicket = {
-            ...ticket,
-            userId: null,
-          }
-          return processedTicket
-        }
-        const processedTicket = {
-          ...ticket
-        }
-        return processedTicket
-      })
+      const todosLosTickets = ticketsRelevantes.map(ticket =>
+        ticket.status === 'WAITING' ? { ...ticket, userId: null } : ticket,
+      )
 
-      if (!esConsultaAutomatica) {
-        if (!sessionStorage.getItem('cache_cleaned')) {
-          try {
-            const cache = JSON.parse(localStorage.getItem('driver_names_cache') || '{}')
-            const cleanedCache: any = {}
-            let hasCorruption = false
-            
-            for (const [key, value] of Object.entries(cache)) {
-              if (value && typeof value === 'object' && (value as any).name && typeof (value as any).name === 'string') {
-                cleanedCache[key] = value
-              } else {
-                hasCorruption = true
-              }
-            }
-            
-            if (hasCorruption) {
-              localStorage.setItem('driver_names_cache', JSON.stringify(cleanedCache))
-            }
-            
-            sessionStorage.setItem('cache_cleaned', 'true')
-          } catch (error) {
-            localStorage.removeItem('driver_names_cache')
+      if (!esConsultaAutomatica && !sessionStorage.getItem('cache_cleaned')) {
+        const cache = leerCacheConductores()
+        const cleanedCache: DriverCache = {}
+        let hasCorruption = false
+        for (const [key, value] of Object.entries(cache)) {
+          if (value && typeof value.name === 'string') {
+            cleanedCache[key] = value
+          } else {
+            hasCorruption = true
           }
         }
+        if (hasCorruption) escribirCacheConductores(cleanedCache)
+        sessionStorage.setItem('cache_cleaned', 'true')
       }
 
       const ticketsConNombres = await Promise.all(
         todosLosTickets.map(async (ticket) => {
-          if (ticket.driverName) {
-            return ticket
+          if (ticket.driverName || !ticket.licenseNumber) return ticket
+
+          const cache = leerCacheConductores()
+          const cached = obtenerNombreDesdeCache(cache, ticket.licenseNumber)
+          if (cached) {
+            return { ...ticket, driverName: cached }
           }
-          
-          if (!ticket.licenseNumber) {
-            return ticket
-          }
-          
-          try {
+
+          let driverData: DriverResponse | null = null
+          let successfulPhone: string | null = null
+          for (const phoneVariant of generarVariantesTelefono(ticket.licenseNumber)) {
             try {
-              const cache = JSON.parse(localStorage.getItem('driver_names_cache') || '{}')
-              const cacheKeys = [
-                ticket.licenseNumber,
-                ticket.licenseNumber.startsWith('+51') ? ticket.licenseNumber : `+51${ticket.licenseNumber}`,
-                ticket.licenseNumber.startsWith('+51') ? ticket.licenseNumber.substring(3) : ticket.licenseNumber,
-                ticket.licenseNumber.replace(/[\s\-\(\)]/g, '')
-              ]
-              
-              for (const key of cacheKeys) {
-                if (cache[key] && cache[key].name) {
-                  return {
-                    ...ticket,
-                    driverName: cache[key].name
-                  }
-                }
+              driverData = await validationService.getDriverByPhonePublic(phoneVariant)
+              if (driverData?.full_name) {
+                successfulPhone = phoneVariant
+                break
               }
-            } catch (error) {
-              /* ignore cache errors */
+            } catch {
+              /* probar siguiente variante */
             }
-            let phoneToSearch = ticket.licenseNumber.trim()
-            const phoneVariants = []
-            phoneVariants.push(phoneToSearch)
-            const cleanPhone = phoneToSearch.replace(/[\s\-\(\)]/g, '')
-            if (cleanPhone !== phoneToSearch) {
-              phoneVariants.push(cleanPhone)
-            }
-            if (!cleanPhone.startsWith('+51') && cleanPhone.length === 9) {
-              phoneVariants.push(`+51${cleanPhone}`)
-            }
-            if (cleanPhone.startsWith('+51')) {
-              phoneVariants.push(cleanPhone.substring(3))
-            }
-            if (/^\d{9}$/.test(cleanPhone)) {
-              phoneVariants.push(`+51${cleanPhone}`)
-            }
-            if (/^9\d{8}$/.test(cleanPhone)) {
-              phoneVariants.push(`+51${cleanPhone}`)
-            }
-            const uniqueVariants = [...new Set(phoneVariants)]
-            
-            let driverData = null
-            let successfulPhone = null
-            for (const phoneVariant of uniqueVariants) {
-              if (!phoneVariant) continue
-              
-              try {
-                driverData = await validationService.getDriverByPhonePublic(phoneVariant)
-                if (driverData?.full_name) {
-                  successfulPhone = phoneVariant
-                  break
-                }
-              } catch (error) {
-                continue
-              }
-            }
-            
-            if (driverData?.full_name && successfulPhone) {
-              const normalizedName = normalizeDriverName(driverData.full_name)
-              try {
-                const cache = JSON.parse(localStorage.getItem('driver_names_cache') || '{}')
-                cache[successfulPhone] = { name: normalizedName, timestamp: Date.now() }
-                cache[ticket.licenseNumber] = { name: normalizedName, timestamp: Date.now() }
-                localStorage.setItem('driver_names_cache', JSON.stringify(cache))
-              } catch (error) {
-                /* ignore cache errors */
-              }
-              
-              return {
-                ...ticket,
-                driverName: normalizedName
-              }
-            } else {
-              return {
-                ...ticket,
-                driverName: `Conductor: ${ticket.licenseNumber}`
-              }
-            }
-          } catch (error) {
           }
-          
-          return ticket
+
+          if (driverData?.full_name && successfulPhone) {
+            const normalizedName = normalizeDriverName(driverData.full_name)
+            const cacheActual = leerCacheConductores()
+            cacheActual[successfulPhone] = { name: normalizedName, timestamp: Date.now() }
+            cacheActual[ticket.licenseNumber] = { name: normalizedName, timestamp: Date.now() }
+            escribirCacheConductores(cacheActual)
+            return { ...ticket, driverName: normalizedName }
+          }
+
+          return { ...ticket, driverName: `Conductor: ${ticket.licenseNumber}` }
         })
       )
       setTickets(ticketsConNombres)
@@ -449,12 +421,8 @@ export const useAgentPanel = (sedePickerKey?: number): UseAgentPanelReturn => {
       )
       
       if (ticketsSinNombre.length > 0) {
-        Promise.all(
-          ticketsSinNombre.map(ticket => obtenerNombreConductorAsync(ticket))
-        ).catch(() => {
-        })
+        Promise.all(ticketsSinNombre.map(obtenerNombreConductorAsync)).catch(() => {})
       }
-      
     } catch (error: any) {
       console.error('[AgentPanel] Error cargando tickets del backend:', error)
       if (error?.response?.status === 401) {
@@ -464,10 +432,9 @@ export const useAgentPanel = (sedePickerKey?: number): UseAgentPanelReturn => {
         window.location.href = '/login'
         return
       }
-      
       mostrarError('Error al cargar tickets del backend')
     }
-  }, [selectedModule, mostrarError, getCurrentUser])
+  }, [selectedModule, mostrarError, obtenerNombreConductorAsync])
 
   const llamarTicket = useCallback(async (ticket: Ticket) => {
     if (!selectedModule) {

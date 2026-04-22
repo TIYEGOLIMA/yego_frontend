@@ -1,42 +1,30 @@
-/**
- * Configuración centralizada de Axios para comunicación con la API
- * Incluye interceptores para manejo de tokens y errores
- */
 import axios from 'axios'
 import { authService } from './auth-service'
 import { getAccessTokenFromResponse } from './auth-token-header'
+import {
+  esSoloSesionDispositivo,
+  getDispositivoSession,
+  getDispositivoToken,
+  getHumanJwtFromStorage,
+  handleDispositivoSesionRevocada,
+  parseAxiosErrorCode,
+} from './device-auth-service'
 
-// URL base de la API usando variable de entorno
-const API_BASE_URL = import.meta.env.VITE_API_URL || (
-  import.meta.env.DEV ? 'http://localhost:8080/api' : '/api'
-)
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8080/api' : '/api')
 
-// Crear instancia de axios con configuración base
 export const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json;charset=UTF-8',
-    'Accept': 'application/json',
+    Accept: 'application/json',
   },
   timeout: 60000,
 })
 
-// Interceptor para agregar el token de autenticación a todas las peticiones
 api.interceptors.request.use(
   (config) => {
-    // Intentar obtener el token desde auth-storage (Zustand persist)
-    let token: string | null = null
-    try {
-      const authStorage = localStorage.getItem('auth-storage')
-      if (authStorage) {
-        const parsed = JSON.parse(authStorage)
-        token = parsed?.state?.token || null
-      }
-    } catch (err) {
-      // Si no se puede leer auth-storage, intentar token directo (compatibilidad temporal)
-      token = localStorage.getItem('token')
-    }
-    
+    const token = getHumanJwtFromStorage() || getDispositivoToken()
     const existingAuth =
       config.headers?.Authorization ??
       (config.headers as Record<string, string | undefined>)?.authorization
@@ -44,109 +32,89 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     } else if (!existingAuth) {
-      // Solo quitar Authorization si no hay token persistido ni header ya fijado
-      // (tras login, getProfile usa Bearer antes de que Zustand guarde en localStorage)
       delete config.headers.Authorization
     }
-    
-    // Si el data es FormData, eliminar Content-Type para que axios lo establezca automáticamente
+
     if (config.data instanceof FormData) {
       delete config.headers['Content-Type']
     }
-    
     return config
   },
-  (error) => {
-    return Promise.reject(error)
-  }
+  (error) => Promise.reject(error),
 )
 
-// Interceptor para manejar errores de respuesta
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    // Verificar si el error es del endpoint de login o refresh
-    const isLoginRequest = error.config?.url?.includes('/auth/login')
-    const isRefreshRequest = error.config?.url?.includes('/auth/refresh')
-    const isTicketeraRefreshRequest = error.config?.url?.includes('/ticketera/auth/refresh')
-    
-    // Manejar errores de autenticación (401)
-    // NO interceptar errores 401 del login o refresh (credenciales incorrectas o token inválido)
+    const url = error.config?.url ?? ''
+    const isLoginRequest = url.includes('/auth/login')
+    const isRefreshRequest = url.includes('/auth/refresh')
+    const isTicketeraRefreshRequest = url.includes('/ticketera/auth/refresh')
+
     if (error.response?.status === 401 && !isLoginRequest && !isRefreshRequest && !isTicketeraRefreshRequest) {
-      console.log('🔒 [api] Error 401 - Token expirado, intentando renovar...')
-      
-      // Intentar renovar el token antes de hacer logout
+      const errCode = parseAxiosErrorCode(error)
+      const sesionDispositivo = getDispositivoSession()
+      const currentToken = getHumanJwtFromStorage()
+
+      const cerrarDispositivo =
+        errCode === 'DEVICE_TOKEN_REVOKED' ||
+        errCode === 'DEVICE_REVOKED' ||
+        (!!sesionDispositivo && !currentToken)
+
+      if (cerrarDispositivo) {
+        handleDispositivoSesionRevocada()
+        return Promise.reject(error)
+      }
+
       try {
-        // Leer token desde auth-storage (Zustand persist)
-        let currentToken: string | null = null;
-        try {
-          const authStorage = localStorage.getItem('auth-storage');
-          if (authStorage) {
-            const parsed = JSON.parse(authStorage);
-            currentToken = parsed?.state?.token || null;
-          }
-        } catch (err) {
-          // Fallback: intentar leer desde token directo (compatibilidad temporal)
-          currentToken = localStorage.getItem('token');
-        }
-        
         if (currentToken) {
-          console.log('🔄 [api] Intentando renovar token...')
-          
-          // Determinar qué endpoint de refresh usar según el contexto
-          const refreshUrl = window.location.pathname.includes('/ticketera') 
-            ? '/ticketera/auth/refresh' 
+          const refreshUrl = window.location.pathname.includes('/ticketera')
+            ? '/ticketera/auth/refresh'
             : '/auth/refresh'
-          
-          const refreshResponse = await api.post(refreshUrl, {}, {
-            headers: { 'Authorization': `Bearer ${currentToken}` }
-          })
-          
+
+          const refreshResponse = await api.post(
+            refreshUrl,
+            {},
+            { headers: { Authorization: `Bearer ${currentToken}` } },
+          )
+
           const newToken =
             getAccessTokenFromResponse(refreshResponse) ??
             (refreshResponse.data as { accessToken?: string })?.accessToken
-          // Actualizar directamente en el store para que Zustand persist lo guarde en auth-storage
-          // Usamos import dinámico para evitar dependencia circular
+
           try {
             const { useAuthStore } = await import('../../store/auth-store')
             useAuthStore.setState({ token: newToken })
-          } catch (err) {
-            console.warn('⚠️ [api] No se pudo actualizar store, usando localStorage temporalmente');
-            // Fallback: actualizar header aunque no se actualice el store
+          } catch {
+            // store opcional
           }
-          
-          // Actualizar header de autorización
+
           api.defaults.headers.common['Authorization'] = `Bearer ${newToken}`
-          
-          // Reintentar request original con nuevo token
           error.config.headers['Authorization'] = `Bearer ${newToken}`
-          console.log('✅ [api] Token renovado exitosamente, reintentando request...')
-          
           return api.request(error.config)
         }
-      } catch (refreshError) {
-        console.warn('⚠️ [api] Error renovando token, ejecutando logout...', refreshError)
+      } catch {
+        // sigue a logout humano
       }
-      
-      // Si la renovación falla, hacer logout completo
+
+      if (esSoloSesionDispositivo()) {
+        handleDispositivoSesionRevocada()
+        return Promise.reject(error)
+      }
+
       try {
         await authService.logout()
-        console.log('✅ [api] Logout automático completado')
-      } catch (logoutError) {
-        console.warn('⚠️ [api] Error en logout automático, limpiando localmente:', logoutError)
-        // Fallback: al menos limpiar datos básicos
+      } catch {
         localStorage.removeItem('token')
         localStorage.removeItem('user')
         localStorage.removeItem('auth-storage')
       }
-      
-      // Redireccionar a login si no estamos ya en la página de login
+
       if (!window.location.pathname.includes('/login')) {
         window.location.href = '/login'
       }
     }
-    
-    // Política semanal: 403 PASSWORD_EXPIRED → marcar que debe cambiar contraseña (modal en MainLayout)
+
     if (error.response?.status === 403 && error.response?.data?.error === 'PASSWORD_EXPIRED') {
       try {
         const { useAuthStore } = await import('../../store/auth-store')
@@ -154,25 +122,26 @@ api.interceptors.response.use(
         if (state.user) {
           useAuthStore.setState({ user: { ...state.user, requirePasswordChange: true } })
         }
-      } catch (_) {}
-    }
-
-    // Manejar errores de conexión (ignorar errores cancelados)
-    if (!error.response) {
-      const esCancelado = error.code === 'ECONNABORTED' || 
-                         error.code === 'ERR_CANCELED' || 
-                         error.name === 'AbortError' || 
-                         error.name === 'CanceledError' ||
-                         error.message === 'canceled' ||
-                         error.message === 'Request aborted';
-      
-      if (!esCancelado) {
-        console.error('Error de conexión con el servidor:', error.message);
+      } catch {
+        // ignore
       }
     }
-    
+
+    if (!error.response) {
+      const esCancelado =
+        error.code === 'ECONNABORTED' ||
+        error.code === 'ERR_CANCELED' ||
+        error.name === 'AbortError' ||
+        error.name === 'CanceledError' ||
+        error.message === 'canceled' ||
+        error.message === 'Request aborted'
+      if (!esCancelado) {
+        console.error('Error de conexión con el servidor:', error.message)
+      }
+    }
+
     return Promise.reject(error)
-  }
+  },
 )
 
 export default api

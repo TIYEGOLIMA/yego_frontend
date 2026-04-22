@@ -1,51 +1,25 @@
 import { Client, IMessage } from '@stomp/stompjs'
+import {
+  esSoloSesionDispositivo,
+  getDispositivoToken,
+  getHumanJwtFromStorage,
+  handleDispositivoSesionRevocada,
+} from './core/device-auth-service'
 
-// ============================================================================
-// CONSTANTES DE CONFIGURACIÓN
-// ============================================================================
+const isProduction =
+  window.location.hostname !== 'localhost' &&
+  !window.location.hostname.includes('127.0.0.1') &&
+  (import.meta.env.VITE_DEV_MODE === 'false' ||
+    import.meta.env.MODE === 'production' ||
+    window.location.hostname.includes('yego.pro'))
 
-const isProduction = window.location.hostname !== 'localhost' && 
-                     !window.location.hostname.includes('127.0.0.1') &&
-                     (import.meta.env.VITE_DEV_MODE === 'false' || 
-                      import.meta.env.MODE === 'production' ||
-                      window.location.hostname.includes('yego.pro'));
+const WS_URL = import.meta.env.VITE_WS_URL
+const HEARTBEAT_INTERVAL = 10000
 
-const WS_URL = import.meta.env.VITE_WS_URL;
-const HEARTBEAT_INTERVAL = 10000; // 10 segundos
-
-// ============================================================================
-// HELPERS
-// ============================================================================
-
-const getDispositivoToken = (): string | null => {
-  try {
-    const raw = localStorage.getItem('dispositivo-session');
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    return parsed?.accessToken || null;
-  } catch {
-    return null;
-  }
-};
-
-const getAuthToken = (): string | null => {
-  try {
-    const authStorage = localStorage.getItem('auth-storage');
-    if (authStorage) {
-      const parsed = JSON.parse(authStorage);
-      const humanToken = parsed?.state?.token || null;
-      if (humanToken) return humanToken;
-    }
-  } catch {
-    const fallback = localStorage.getItem('token');
-    if (fallback) return fallback;
-  }
-  return getDispositivoToken();
-};
+const getAuthToken = (): string | null => getHumanJwtFromStorage() || getDispositivoToken()
 
 const getWebSocketUrl = (token: string): string => {
   if (isProduction) {
-    // En producción el proxy (nginx, etc.) debe hacer upgrade WebSocket; si no, ver 403.
     const prodUrl = WS_URL || 'wss://api-int.yego.pro/ws';
     return `${prodUrl}?token=${encodeURIComponent(token)}`;
   }
@@ -62,15 +36,7 @@ const getUserIdFromToken = (token: string): number | null => {
   }
 };
 
-// ============================================================================
-// TIPOS
-// ============================================================================
-
-type ConnectionStatus = 'connected' | 'disconnected' | 'connecting' | 'error';
-
-// ============================================================================
-// SOCKET SERVICE
-// ============================================================================
+type ConnectionStatus = 'connected' | 'disconnected' | 'connecting' | 'error'
 
 class SocketService {
   private static instance: SocketService;
@@ -91,10 +57,6 @@ class SocketService {
 
   private constructor() {}
 
-  // ==========================================================================
-  // GESTIÓN DE ESTADO
-  // ==========================================================================
-
   private updateStatus(status: ConnectionStatus) {
     this.connectionStatus = status;
     this.statusListeners.forEach(listener => listener(status));
@@ -107,10 +69,6 @@ class SocketService {
       this.stopReconnect();
     }
   }
-
-  // ==========================================================================
-  // RECONEXIÓN
-  // ==========================================================================
 
   private calculateReconnectDelay(): number {
     const exponentialDelay = this.baseReconnectDelay * Math.pow(2, this.reconnectAttempts);
@@ -137,8 +95,29 @@ class SocketService {
            lowerMessage.includes('user inactive');
   }
 
+  private detectDispositivoTokenRevocado(errorMessage: string): boolean {
+    if (!errorMessage || typeof errorMessage !== 'string') return false
+    const m = errorMessage.toLowerCase()
+    return (
+      m.includes('token revocado') ||
+      m.includes('dispositivo inactivo') ||
+      m.includes('device_token_revoked') ||
+      m.includes('device_revoked') ||
+      errorMessage.includes('DEVICE_TOKEN_REVOKED') ||
+      errorMessage.includes('DEVICE_REVOKED')
+    )
+  }
+
   private handleConnectionError(errorMessage: string = '') {
     this.isConnecting = false;
+
+    if (esSoloSesionDispositivo() && this.detectDispositivoTokenRevocado(errorMessage)) {
+      this.stopReconnect()
+      this.maxReconnectAttemptsReached = true
+      this.updateStatus('disconnected')
+      handleDispositivoSesionRevocada()
+      return
+    }
     
     if (errorMessage && this.detectUserNotFound(errorMessage)) {
       this.updateStatus('disconnected');
@@ -204,6 +183,10 @@ class SocketService {
         this.stopReconnect();
         this.updateStatus('error');
         this.reconnectExceededListeners.forEach(listener => listener());
+        if (esSoloSesionDispositivo()) {
+          handleDispositivoSesionRevocada()
+          return
+        }
         setTimeout(() => this.attemptTokenRefreshAndReconnect(), 10000);
         return;
       }
@@ -251,7 +234,11 @@ class SocketService {
         this.maxReconnectAttemptsReached = false;
         this.connect('refresh-reconnect');
       } catch {
-        console.warn('⚠️ [SocketService] No se pudo refrescar token después de exceder intentos.');
+        if (esSoloSesionDispositivo()) {
+          handleDispositivoSesionRevocada()
+          return
+        }
+        console.warn('[SocketService] No se pudo refrescar el token tras agotar reintentos.')
       }
     } catch (error) {
       console.error('❌ [SocketService] Error en attemptTokenRefreshAndReconnect:', error);
@@ -266,14 +253,6 @@ class SocketService {
     }
   }
 
-  // ==========================================================================
-  // CONEXIÓN
-  // ==========================================================================
-
-  /**
-   * Conecta al servidor de WebSockets usando STOMP/SockJS
-   * El servidor envía un heartbeat cada 10 segundos y el cliente responde automáticamente
-   */
   public async connect(_sessionId: string) {
     if (this.isConnecting || (this.stompClient && this.stompClient.connected)) {
       return;
@@ -286,7 +265,6 @@ class SocketService {
       return;
     }
 
-    // Cerrar conexión anterior antes de crear nueva
     if (this.stompClient) {
       try {
         this.stopReconnect();
@@ -295,7 +273,7 @@ class SocketService {
         }
         await new Promise(resolve => setTimeout(resolve, 500));
       } catch {
-        // Silencioso
+        /* noop */
       }
       this.stompClient = null;
     }
@@ -305,8 +283,6 @@ class SocketService {
     const clientConfig: any = {};
     const wsUrl = getWebSocketUrl(token);
     
-    // Usar WebSocket nativo tanto en desarrollo como en producción
-    // Esto evita el problema del endpoint /ws/info que SockJS requiere
     clientConfig.brokerURL = wsUrl;
     clientConfig.connectHeaders = { 'Authorization': `Bearer ${token}` };
     
@@ -352,10 +328,6 @@ class SocketService {
     this.stompClient.activate();
   }
 
-  // ==========================================================================
-  // SUSCRIPCIONES
-  // ==========================================================================
-
   private subscribeToAllTopics() {
     this.subscribeToTicketeraEvents();
     this.subscribeToSistemasExternosEvents();
@@ -374,7 +346,7 @@ class SocketService {
         const data = JSON.parse(message.body);
         handler(data);
       } catch {
-        // Silencioso
+        /* noop */
       }
     });
   }
@@ -397,9 +369,7 @@ class SocketService {
       });
     });
 
-    this.subscribe('/topic/pong', () => {
-      // Heartbeat response - no action needed
-    });
+    this.subscribe('/topic/pong', () => {});
 
     this.subscribe('/topic/modulos-atencion', (modulosData) => {
       this.emitModulosActualizados(modulosData);
@@ -503,10 +473,6 @@ class SocketService {
     });
   }
 
-  // ==========================================================================
-  // API PÚBLICA
-  // ==========================================================================
-
   public static getInstance(): SocketService {
     if (!SocketService.instance) {
       SocketService.instance = new SocketService();
@@ -596,9 +562,5 @@ class SocketService {
   }
 }
 
-// ============================================================================
-// EXPORT
-// ============================================================================
-
-const socketService = SocketService.getInstance();
-export default socketService;
+const socketService = SocketService.getInstance()
+export default socketService

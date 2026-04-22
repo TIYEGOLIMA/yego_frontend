@@ -12,6 +12,13 @@ import {
   type DispositivoSession,
 } from '../../../src/services/core/device-auth-service'
 
+const InfoItem: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+  <div className="text-center">
+    <p className="text-xs uppercase tracking-wider text-slate-400 mb-1">{label}</p>
+    <p className="text-base font-semibold text-white">{value}</p>
+  </div>
+)
+
 const RatingTablet: React.FC = () => {
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null)
   const [rating, setRating] = useState(0)
@@ -74,42 +81,17 @@ const RatingTablet: React.FC = () => {
     }
   }, [isConnected, onTicketCompleted, onRatingRequested, moduleIdStr])
 
-  useEffect(() => {
-    if (isConnected) {
-      return
-    }
-    
-    const interval = setInterval(() => {}, 30000)
-    
-    return () => clearInterval(interval)
-  }, [isConnected])
-
   const handleRating = (value: number) => {
     setRating(value)
   }
 
-  const enterFullscreen = () => {
-    const element = document.documentElement
-    if (element.requestFullscreen) {
-      element.requestFullscreen().catch(err => {
-        console.error('Error al entrar en fullscreen:', err)
-      })
-    }
-  }
-
-  const exitFullscreen = () => {
-    if (document.fullscreenElement) {
-      document.exitFullscreen().catch(err => {
-        console.error('Error al salir de fullscreen:', err)
-      })
-    }
-  }
-
   const toggleFullscreen = () => {
     if (isFullscreen) {
-      exitFullscreen()
+      document.exitFullscreen?.().catch(err => console.error('Error saliendo de fullscreen:', err))
     } else {
-      enterFullscreen()
+      document.documentElement.requestFullscreen?.().catch(err =>
+        console.error('Error entrando a fullscreen:', err),
+      )
     }
   }
 
@@ -126,13 +108,9 @@ const RatingTablet: React.FC = () => {
     }
   }, [])
 
-  const handleLogout = async () => {
-    try {
-      clearDispositivoSession()
-      navigate('/login', { replace: true })
-    } catch (error) {
-      window.location.href = '/login'
-    }
+  const handleLogout = () => {
+    clearDispositivoSession()
+    navigate('/login', { replace: true })
   }
 
   const handleSubmit = async () => {
@@ -174,12 +152,9 @@ const RatingTablet: React.FC = () => {
         setComment('')
         setShowThankYou(false)
       }, 3000)
-    } catch (error: any) {
-      if (error.message?.includes('404')) {
-        alert('⚠️ El endpoint de calificaciones no está disponible en el backend.\n\nPor favor, verifica que el controlador de ratings esté creado en:\n/api/ticketera/ratings')
-      } else {
-        alert('Error al enviar la calificación. Intente nuevamente.')
-      }
+    } catch (error) {
+      console.error('[RatingTablet] Error enviando calificación:', error)
+      alert('Error al enviar la calificación. Intente nuevamente.')
     } finally {
       setSubmitting(false)
     }
@@ -187,19 +162,21 @@ const RatingTablet: React.FC = () => {
 
   if (showThankYou) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-red-50 to-white flex items-center justify-center p-4">
-        <Card className="w-full max-w-md text-center">
+      <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-4 bg-gradient-to-br from-slate-950 via-slate-900 to-red-950">
+        <div className="pointer-events-none absolute -top-32 -left-32 w-[28rem] h-[28rem] rounded-full bg-red-600/20 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-32 -right-32 w-[32rem] h-[32rem] rounded-full bg-emerald-500/10 blur-3xl" />
+        <Card className="w-full max-w-md text-center bg-slate-900/70 backdrop-blur-xl border border-white/10 shadow-2xl">
           <CardContent className="py-12">
-            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <CheckCircle className="w-12 h-12 text-green-600" />
+            <div className="w-20 h-20 bg-emerald-500/15 ring-4 ring-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+              <CheckCircle className="w-12 h-12 text-emerald-400" />
             </div>
-            <h2 className="text-2xl font-bold text-slate-900 mb-2">
+            <h2 className="text-2xl font-bold text-white mb-2">
               ¡Gracias por su calificación!
             </h2>
-            <p className="text-slate-600">
+            <p className="text-slate-300">
               Su opinión nos ayuda a mejorar nuestro servicio.
             </p>
-            <p className="text-sm text-slate-500 mt-4">
+            <p className="text-sm text-slate-400 mt-4">
               Volviendo a la pantalla de espera...
             </p>
           </CardContent>
@@ -209,7 +186,18 @@ const RatingTablet: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-red-50 to-white flex items-center justify-center p-4 relative">
+    <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-4 bg-gradient-to-br from-slate-950 via-slate-900 to-red-950">
+      <div className="pointer-events-none absolute -top-40 -left-40 w-[32rem] h-[32rem] rounded-full bg-red-600/25 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-40 -right-40 w-[36rem] h-[36rem] rounded-full bg-rose-500/15 blur-3xl" />
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.05]"
+        style={{
+          backgroundImage:
+            'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.6) 1px, transparent 0)',
+          backgroundSize: '24px 24px',
+        }}
+      />
+
       <div className="absolute top-4 right-4 z-50 flex space-x-2">
         <button
           onClick={toggleFullscreen}
@@ -231,42 +219,51 @@ const RatingTablet: React.FC = () => {
       </div>
 
       {!selectedTicket && (
-        <Card className="w-full max-w-2xl text-center dark:bg-slate-800 border-2 border-red-200 dark:border-red-500">
-          <CardContent className="py-20 px-10">
-            <div className="w-32 h-32 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-10">
-              <Clock className="w-20 h-20 text-red-600 dark:text-red-400" />
+        <Card className="relative w-full max-w-2xl text-center bg-slate-900/70 backdrop-blur-xl border border-white/10 shadow-2xl overflow-hidden">
+          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-red-500 to-transparent" />
+          <CardContent className="py-16 px-10">
+            <div className="relative w-32 h-32 mx-auto mb-10">
+              <span className="absolute inset-0 rounded-full bg-red-500/20 blur-2xl animate-pulse" />
+              <div className="relative w-32 h-32 rounded-full bg-gradient-to-br from-red-500/20 to-red-700/10 ring-4 ring-red-500/30 flex items-center justify-center">
+                <Clock className="w-16 h-16 text-red-400" />
+              </div>
             </div>
-            <h1 className="text-5xl font-bold text-slate-900 dark:text-white mb-8">
+            <h1 className="text-5xl font-bold text-white mb-4 tracking-tight">
               Sistema de Calificación
             </h1>
-            <p className="text-xl text-slate-500 dark:text-slate-300 mb-10">
+            <p className="text-lg text-slate-300 mb-10">
               Esperando tickets completados para calificar...
             </p>
             {dispositivo && (
-              <div className="mt-10 p-8 bg-slate-50 dark:bg-slate-700 rounded-2xl space-y-4 text-left">
-                <p className="text-2xl text-slate-600 dark:text-white">
-                  <strong>Dispositivo:</strong> {dispositivo.nombre}
-                </p>
-                <p className="text-2xl text-slate-600 dark:text-white">
-                  <strong>Sede:</strong> {dispositivo.sedeNombre ?? `#${dispositivo.sedeId}`}
-                </p>
-                <p className="text-2xl text-slate-600 dark:text-white">
-                  <strong>Módulo:</strong> {getModuleName()}
-                </p>
-                <div className="flex items-center gap-3">
-                  <p className="text-2xl text-slate-600 dark:text-white">
-                    <strong>WebSocket:</strong>
-                  </p>
-                  <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-lg font-medium border ${
-                    isConnected
-                      ? 'bg-green-100 dark:bg-gray-700 text-green-800 dark:text-green-200 border-green-400 dark:border-green-600'
-                      : 'bg-red-100 dark:bg-gray-700 text-red-800 dark:text-red-200 border-red-400 dark:border-red-600'
-                  }`}>
-                    <span className={`w-3 h-3 rounded-full ${
-                      isConnected ? 'bg-green-500' : 'bg-red-500'
-                    }`}></span>
-                    {isConnected ? 'Conectado' : 'Desconectado'}
-                  </span>
+              <div className="mt-8 p-6 bg-white/5 border border-white/10 rounded-2xl backdrop-blur-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <InfoItem label="Dispositivo" value={dispositivo.nombre} />
+                  <InfoItem
+                    label="Sede"
+                    value={dispositivo.sedeNombre ?? `#${dispositivo.sedeId}`}
+                  />
+                  <InfoItem label="Módulo" value={getModuleName()} />
+                  <div className="text-center">
+                    <p className="text-xs uppercase tracking-wider text-slate-400 mb-1">
+                      WebSocket
+                    </p>
+                    <span
+                      className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium border ${
+                        isConnected
+                          ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+                          : 'bg-red-500/15 text-red-300 border-red-500/40'
+                      }`}
+                    >
+                      <span
+                        className={`w-2 h-2 rounded-full ${
+                          isConnected
+                            ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]'
+                            : 'bg-red-400'
+                        }`}
+                      />
+                      {isConnected ? 'Conectado' : 'Desconectado'}
+                    </span>
+                  </div>
                 </div>
               </div>
             )}

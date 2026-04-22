@@ -315,7 +315,7 @@ export default function Login() {
                       <Input
                         label="Token de acceso"
                         type={showDeviceToken ? 'text' : 'password'}
-                        placeholder="DISP-XXXXXXXXXXXX"
+                        placeholder="DISP-XXXXX"
                         value={deviceToken}
                         onChange={(e) => {
                           setDeviceToken(e.target.value)

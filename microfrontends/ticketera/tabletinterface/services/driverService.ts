@@ -1,56 +1,11 @@
-import axios from 'axios'
+import { createDeviceApiClient } from '../../../../src/services/core/device-auth-service'
 
-const api = axios.create({
-  baseURL: import.meta.env.VITE_AGENT_API_URL || 'https://api-int.yego.pro/api/ticketera',
-  timeout: 30000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-})
-
-function getRequestToken(): string | null {
-  try {
-    const authStorage = localStorage.getItem('auth-storage')
-    if (authStorage) {
-      const parsed = JSON.parse(authStorage)
-      const t = parsed?.state?.token
-      if (t) return t
-    }
-  } catch {
-    // ignore
-  }
-  try {
-    const raw = localStorage.getItem('dispositivo-session')
-    if (raw) return JSON.parse(raw)?.accessToken ?? null
-  } catch {
-    // ignore
-  }
-  return localStorage.getItem('token')
-}
-
-api.interceptors.request.use(
-  (config) => {
-    const token = getRequestToken()
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
-    }
-    return config
-  },
-  (error) => Promise.reject(error)
-)
+const api = createDeviceApiClient()
 
 export interface CreateDriverData {
   firstName: string
   lastName: string
   phone: string
-}
-
-export interface Driver {
-  id: number
-  firstName: string
-  lastName: string
-  phone: string
-  createdAt: string
 }
 
 export interface CreateDriverByDniData {
@@ -67,11 +22,9 @@ export const driverService = {
   async searchDriverByPhone(phoneDigits: string): Promise<DriverSearchResponse | null> {
     try {
       let phoneToSearch = phoneDigits.trim()
-      
       if (!phoneToSearch.startsWith('+51') && phoneToSearch.length === 9) {
         phoneToSearch = `+51${phoneToSearch}`
       }
-      
       const response = await api.get(`/buscar/telefono/${phoneToSearch}`)
       return response.data
     } catch (error: any) {
@@ -84,22 +37,12 @@ export const driverService = {
   },
 
   async createDriverManual(driverData: CreateDriverData): Promise<any> {
-    try {
-      const response = await api.post('/drivers/registrar', driverData)
-      return response.data
-    } catch (error) {
-      console.error('[driverService] Error registrando conductor:', error)
-      throw error
-    }
+    const response = await api.post('/drivers/registrar', driverData)
+    return response.data
   },
 
   async createDriverByDni(dniData: CreateDriverByDniData): Promise<any> {
-    try {
-      const response = await api.post('/drivers/registrar-dni', dniData)
-      return response.data
-    } catch (error) {
-      console.error('[driverService] Error registrando conductor por DNI:', error)
-      throw error
-    }
-  }
+    const response = await api.post('/drivers/registrar-dni', dniData)
+    return response.data
+  },
 }

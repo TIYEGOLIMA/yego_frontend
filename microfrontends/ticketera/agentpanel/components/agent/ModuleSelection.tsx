@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card'
 import { Button } from '../ui/Button'
@@ -87,7 +87,7 @@ const mapearModuloOcupado = (mod: any): ModuloOcupado & { moduleName?: string } 
   horaAsignacion: mod.horaAsignacion || mod.updatedAt || mod.createdAt || new Date().toISOString(),
   createdAt: mod.createdAt || new Date().toISOString(),
   updatedAt: mod.updatedAt || null,
-  moduleName: mod.name || mod.moduleName || undefined
+  moduleName: mod.moduleName || mod.name || undefined
 })
 
 const procesarModulosOcupados = (
@@ -121,7 +121,6 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
   const [user, setUser] = useState<any>(null)
   const [liberatingModule, setLiberatingModule] = useState<number | null>(null)
   const [modulosOcupadosData, setModulosOcupadosData] = useState<ModuloOcupado[]>([])
-  const [tieneModuloAsignado, setTieneModuloAsignado] = useState<boolean>(true)
   const [showOcupados, setShowOcupados] = useState(true)
   const [showDisponibles, setShowDisponibles] = useState(true)
   const [showModalLiberacion, setShowModalLiberacion] = useState(false)
@@ -138,6 +137,20 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
   const modulosOcupadosAnterioresRef = useRef<ModuloOcupado[]>([])
   const hasLoadedInitialData = useRef(false)
   const [, setIsConnected] = useState(false)
+
+  const sincronizarListasModulos = useCallback(
+    (data: { modulosOcupados?: any[]; modulosDisponibles?: any[] }) => {
+      if (data.modulosOcupados && Array.isArray(data.modulosOcupados)) {
+        const ocupados = procesarModulosOcupados(data.modulosOcupados, data.modulosDisponibles)
+        modulosOcupadosAnterioresRef.current = ocupados
+        setModulosOcupadosData(ocupados)
+      }
+      if (data.modulosDisponibles && Array.isArray(data.modulosDisponibles) && onModulesUpdated) {
+        onModulesUpdated(data.modulosDisponibles.map(mapearModuloAtencion))
+      }
+    },
+    [onModulesUpdated],
+  )
 
   useEffect(() => {
     const checkConnection = () => {
@@ -179,25 +192,18 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
         
         if (respuesta && typeof respuesta === 'object' && !Array.isArray(respuesta)) {
           const respuestaObj = respuesta as any
-          
-          setTieneModuloAsignado(respuestaObj.tieneModuloAsignado ?? true)
-          
+
           if (respuestaObj.modulosOcupados && Array.isArray(respuestaObj.modulosOcupados)) {
-            const ocupados = procesarModulosOcupados(
-              respuestaObj.modulosOcupados,
-              respuestaObj.modulosDisponibles
-            )
-            modulosOcupadosAnterioresRef.current = ocupados
-            setModulosOcupadosData(ocupados)
+            sincronizarListasModulos({
+              modulosOcupados: respuestaObj.modulosOcupados,
+              modulosDisponibles: respuestaObj.modulosDisponibles,
+            })
             if (!respuestaObj.tieneModuloAsignado) {
               setShowOcupados(true)
             }
-          }
-          
-          if (onModulesUpdated) {
+          } else if (onModulesUpdated) {
             if (respuestaObj.modulosDisponibles && Array.isArray(respuestaObj.modulosDisponibles)) {
-              const modulosDisponibles = respuestaObj.modulosDisponibles.map(mapearModuloAtencion)
-              onModulesUpdated(modulosDisponibles)
+              onModulesUpdated(respuestaObj.modulosDisponibles.map(mapearModuloAtencion))
             } else {
               onModulesUpdated([])
             }
@@ -212,7 +218,7 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
     }
 
     cargarEstadoInicial()
-  }, [user?.id, onModulesUpdated])
+  }, [user?.id, onModulesUpdated, sincronizarListasModulos])
 
   const onModulesUpdatedRef = useRef(onModulesUpdated)
   const userRef = useRef(user)
@@ -285,6 +291,18 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
     try {
       setLiberatingModule(moduleId)
       await queueAgentService.liberarModuloPorId(moduleId)
+      const uid = user?.id ?? getUserFromStorage()?.id
+      if (uid) {
+        const { moduloAtencionService } = await import('../../services/moduloAtencionService')
+        const respuesta = await moduloAtencionService.verificarModuloOListarDisponibles(uid, getSedeActivaId())
+        if (respuesta && typeof respuesta === 'object' && !Array.isArray(respuesta)) {
+          const o = respuesta as any
+          sincronizarListasModulos({
+            modulosOcupados: o.modulosOcupados ?? [],
+            modulosDisponibles: o.modulosDisponibles ?? [],
+          })
+        }
+      }
     } catch (error: any) {
       console.error('Error al liberar módulo:', error)
       setError(error.response?.data?.message || error.message || 'Error al liberar el módulo')
