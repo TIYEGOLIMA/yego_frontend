@@ -55,6 +55,8 @@ export interface Module {
   nombre: string;
   descripcion?: string;
   url: string;
+  /** Clave estable enlazada al registro de pantallas (moduleComponentRegistry). La URL puede cambiar sin cambiar esto. */
+  codigo?: string | null;
   estado: string;
   ultimoCheck?: string;
   activo: boolean;

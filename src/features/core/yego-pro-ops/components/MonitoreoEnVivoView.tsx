@@ -12,13 +12,11 @@ import SocketService from '../../../../services/socket-service'
 import { useConnectionStatus } from '../../../../shared/hooks/useConnectionStatus'
 import { yegoProOpsService, type ConductoresEnOrdenResponse, type ConductorEnOrden } from '../../../../services/yego-pro-ops-service'
 
-// Constantes
 const ITEMS_PER_PAGE = 4
 const OBSERVER_THRESHOLD = 0.1
 const TIMELINE_HOURS = 48
 const HOURS_PER_DAY = 24
 
-// Tipos
 type OrderInfo = { bookedAt: string; endedAt: string; status: string; hourIndex: number }
 type ViajePorFecha = {
   status: string
@@ -26,11 +24,8 @@ type ViajePorFecha = {
   id: string
   ended_at: string | null
   booked_at: string
-  // driver_id, driver_full_name y car_brand_model ya no vienen aquí
-  // porque son repetitivos (ya están a nivel de conductor)
 }
 
-// Utilidades de fecha - Centralizadas
 const getAyerYHoyDates = () => {
   const today = new Date()
   const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate())
@@ -57,7 +52,6 @@ const getDayLabels = (): { day1Label: string; day2Label: string } => {
   return { day1Label: getRelativeDayLabel(yesterdayDate), day2Label: getRelativeDayLabel(todayDate) }
 }
 
-// Utilidades de formato
 const formatBalance = (balance: string | number): string => {
   const numBalance = typeof balance === 'string' ? parseFloat(balance) : balance
   return new Intl.NumberFormat('es-PE', {
@@ -100,7 +94,6 @@ const formatTime = (date: Date): string => {
   return `${hours}:${minutes}`
 }
 
-// Helper para normalizar y obtener información del estado
 const getStatusInfo = (status: string | undefined) => {
   const normalizedStatus = status?.toLowerCase() || ''
   
@@ -131,10 +124,6 @@ const getStatusInfo = (status: string | undefined) => {
   }
 }
 
-/**
- * Procesa viajes para el timeline completo (48 horas) - usado en el modal
- * Siempre procesa "Ayer y Hoy"
- */
 const processTimelineData = (trips: ViajePorFecha[]): { hourActivity: boolean[]; hourOrders: Map<number, OrderInfo[]> } => {
   if (!trips || trips.length === 0) {
     return { hourActivity: Array(TIMELINE_HOURS).fill(false), hourOrders: new Map<number, OrderInfo[]>() }
@@ -157,8 +146,7 @@ const processTimelineData = (trips: ViajePorFecha[]): { hourActivity: boolean[];
         const baseHour = isDay1 ? 0 : HOURS_PER_DAY
         const startHour = bookedDate.getHours()
         const startHourIndex = baseHour + startHour
-        
-        // Solo marcar la hora de INICIO del viaje, no todas las horas por las que pasa
+
         if (startHourIndex >= 0 && startHourIndex < TIMELINE_HOURS) {
           hourActivity[startHourIndex] = true
         }
@@ -179,10 +167,6 @@ const processTimelineData = (trips: ViajePorFecha[]): { hourActivity: boolean[];
   return { hourActivity, hourOrders }
 }
 
-/**
- * Procesa viajes para el timeline compacto (24 horas) - usado en la card
- * Solo procesa el día de hoy
- */
 const processTimelineCompact = (trips: ViajePorFecha[]): boolean[] => {
   if (!trips || trips.length === 0) {
     return Array(24).fill(false)
@@ -213,7 +197,6 @@ const processTimelineCompact = (trips: ViajePorFecha[]): boolean[] => {
   return hourActivity
 }
 
-// Componentes
 const LoadingState = () => (
   <Card className="h-full bg-[#1A1A1A]">
     <CardContent className="p-6">
@@ -277,7 +260,6 @@ const ConductorCard = ({
   conductor: ConductorEnOrden
   onOpenModal?: () => void
 }) => {
-  // Usar viajes directamente de la respuesta principal (vienen del backend)
   const viajes = conductor.viajes || []
   const hourActivity = useMemo(() => processTimelineCompact(viajes), [viajes])
   const currentHour = new Date().getHours()
@@ -467,7 +449,6 @@ const InfiniteScrollObserver = ({
   )
 }
 
-// Hook personalizado para filtrado
 const useFilteredConductores = (
   conductores: ConductorEnOrden[] | undefined,
   searchQuery: string
@@ -486,7 +467,6 @@ const useFilteredConductores = (
   }, [conductores, searchQuery])
 }
 
-// Hook personalizado para datos combinados
 const useConductoresData = (data: any) => {
   return useMemo(() => {
     if (!data) return null
@@ -508,14 +488,10 @@ const useConductoresData = (data: any) => {
       total: data.pages[0]?.total || 0,
       timestamp: data.pages[0]?.timestamp || new Date().toISOString(),
       conductores: conductoresUnicos,
-      summary_distance: data.pages[0]?.summary_distance,
-      completed_trips_count: data.pages[0]?.completed_trips_count,
-      completed_trips_total_price: data.pages[0]?.completed_trips_total_price
     }
   }, [data])
 }
 
-// Componente principal
 export function MonitoreoEnVivoView() {
   const { notifications, removeNotification } = useToastNotifications()
   const { isConnected } = useConnectionStatus()
@@ -525,7 +501,6 @@ export function MonitoreoEnVivoView() {
   const [selectedDriverForModal, setSelectedDriverForModal] = useState<{ driverId: string; conductor: ConductorEnOrden } | null>(null)
   const [hoveredHourIndex, setHoveredHourIndex] = useState<number | null>(null)
 
-  // Infinite Query
   const {
     data,
     fetchNextPage,
@@ -544,15 +519,14 @@ export function MonitoreoEnVivoView() {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     refetchOnMount: false,
-    staleTime: Infinity, // Los datos NUNCA se consideran "stale", solo se actualizan por WebSocket
-    gcTime: Infinity, // Mantener en caché hasta que se refresque la página
+    staleTime: Infinity,
+    gcTime: Infinity,
     initialPageParam: 0,
   })
 
   const conductoresEnOrden = useConductoresData(data)
   const conductoresFiltrados = useFilteredConductores(conductoresEnOrden?.conductores, searchQuery)
 
-  // Intersection Observer para scroll infinito
   const handleObserver = useCallback((entries: IntersectionObserverEntry[]) => {
     const [target] = entries
     if (target.isIntersecting && hasNextPage && !isFetchingNextPage) {
@@ -572,7 +546,6 @@ export function MonitoreoEnVivoView() {
     return () => observer.unobserve(element)
   }, [handleObserver])
 
-  // WebSocket - Actualiza el cache directamente
   useEffect(() => {
     if (!isSuccess || !data) return
 
@@ -605,9 +578,6 @@ export function MonitoreoEnVivoView() {
               total: wsData.total,
               timestamp: updatedTimestamp,
               conductores: wsData.conductores,
-              summary_distance: wsData.summary_distance,
-              completed_trips_count: wsData.completed_trips_count,
-              completed_trips_total_price: wsData.completed_trips_total_price
             },
             ...oldData.pages.slice(1).map((page: ConductoresEnOrdenResponse) => ({
               ...page,
@@ -631,30 +601,19 @@ export function MonitoreoEnVivoView() {
     }
   }, [isSuccess, data, queryClient])
 
-  // Los viajes de HOY ya vienen en la respuesta principal de /api/pro-ops/drivers/in-order
-  // No necesitamos consultar viajes adicionales para las cards
-  // Solo consultamos AYER y HOY cuando se abre el modal
-
-  // Calcular queries para el modal (Ayer y Hoy) - solo cuando hay un conductor seleccionado
   const modalDateQueries = useMemo(() => {
     const queries: Array<{ driverId: string; fecha: string }> = []
-    
+
     if (!selectedDriverForModal) return queries
-    
+
     const { yesterdayDate } = getAyerYHoyDates()
     const fechaAyer = formatDateToString(yesterdayDate)
-    
-    // Solo cargar viajes de AYER para el modal
-    // Los viajes de HOY ya los tenemos en conductor.viajes (vienen en la respuesta principal)
-    queries.push(
-      { driverId: selectedDriverForModal.driverId, fecha: fechaAyer }
-    )
-    
+
+    queries.push({ driverId: selectedDriverForModal.driverId, fecha: fechaAyer })
+
     return queries
   }, [selectedDriverForModal])
 
-  // Consultar viajes para el modal (SOLO AYER) - solo cuando el modal está abierto
-  // Los viajes de HOY ya vienen en conductor.viajes de la respuesta principal
   const viajesModalQueries = useQueries({
     queries: modalDateQueries.map(({ driverId, fecha }) => ({
       queryKey: ['pro-ops-viajes-por-fecha', driverId, fecha],
@@ -665,60 +624,49 @@ export function MonitoreoEnVivoView() {
       refetchOnMount: false,
       staleTime: 5 * 60 * 1000,
       gcTime: 24 * 60 * 60 * 1000,
-      enabled: !!selectedDriverForModal, // Solo cuando hay un conductor seleccionado
+      enabled: !!selectedDriverForModal,
     })),
   })
 
-  // Verificar si se están cargando los viajes del día anterior
   const isLoadingViajesAyer = viajesModalQueries.some(query => query.isLoading || query.isFetching)
-  
-  // Verificar si ya terminó de cargar y no hay viajes de ayer
+
   const hasNoViajesAyer = useMemo(() => {
     if (!selectedDriverForModal) return false
-    if (isLoadingViajesAyer) return false // Aún está cargando
-    
-    // Verificar si todas las queries terminaron y no hay datos
+    if (isLoadingViajesAyer) return false
+
     const allQueriesFinished = viajesModalQueries.every(query => !query.isLoading && !query.isFetching)
     if (!allQueriesFinished) return false
-    
-    // Contar viajes de ayer
+
     const viajesAyer: ViajePorFecha[] = []
     viajesModalQueries.forEach((query, index) => {
       if (query.data && modalDateQueries[index]) {
         viajesAyer.push(...(query.data.trips || []))
       }
     })
-    
+
     return viajesAyer.length === 0
   }, [viajesModalQueries, modalDateQueries, selectedDriverForModal, isLoadingViajesAyer])
 
-  // Crear un mapa de viajes para el modal (AYER + HOY)
-  // AYER viene de la consulta, HOY viene de conductor.viajes (ya cargado al inicio)
   const viajesPorConductorModal = useMemo(() => {
     const map = new Map<string, ViajePorFecha[]>()
-    
+
     if (!selectedDriverForModal) return map
-    
+
     const { driverId, conductor } = selectedDriverForModal
-    
-    // Obtener viajes de AYER de la consulta
+
     const viajesAyer: ViajePorFecha[] = []
     viajesModalQueries.forEach((query, index) => {
       if (query.data && modalDateQueries[index]) {
         viajesAyer.push(...(query.data.trips || []))
       }
     })
-    
-    // Obtener viajes de HOY de conductor.viajes (ya vienen en la respuesta principal)
+
     const viajesHoy: ViajePorFecha[] = conductor.viajes || []
-    
-    // Combinar AYER + HOY
     map.set(driverId, [...viajesAyer, ...viajesHoy])
-    
+
     return map
   }, [viajesModalQueries, modalDateQueries, selectedDriverForModal])
 
-  // Estadísticas calculadas
   const stats = useMemo(() => {
     if (!conductoresEnOrden) return null
 
@@ -838,7 +786,6 @@ export function MonitoreoEnVivoView() {
       {/* Modal con Timeline */}
       {selectedDriverForModal && (() => {
         const { driverId, conductor } = selectedDriverForModal
-        // Usar viajes del modal (Ayer y Hoy) en lugar de los de las cards (solo Hoy)
         const viajes = viajesPorConductorModal.get(driverId) || []
         const { hourActivity, hourOrders } = processTimelineData(viajes)
         const currentHour = new Date().getHours()

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useRef } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from './store/auth-store'
@@ -17,25 +17,12 @@ import {
   TipoDispositivo,
 } from './services/core/device-auth-service'
 
-import UsersModule from './features/core/users/users.module'
-import RolesModule from './features/core/roles/roles.module'
-import PermissionsModule from './features/core/permissions/permissions.module'
-import ModulesModule from './features/core/modules/modules.module'
-import { AreasModule } from './features/core/areas'
-import AuditModule from './features/core/audit/audit.module'
-import ApiLogsModule from './features/core/api-logs/api-logs.module'
-import SessionsModule from './features/core/sessions/sessions.module'
-import { AsistenciaModule } from './features/core/asistencia'
 import { WelcomeModule } from './features/core/welcome'
-import YegoPremiumModule from './features/core/yego-premium/yego-premium.module'
-import { MarketingMensajesModule } from './features/core/marketing-mensajes'
-import YegoProOpsModule from './features/core/yego-pro-ops/yego-pro-ops.module'
-import { YegoGanttModule } from './features/core/yego-gantt'
-import ControlTowerModule from './features/core/control-tower/control-tower.module'
 
 import TicketsModule from './features/core/ticketera/tickets/tickets.module'
 
-import { TVDisplay, RatingTablet, TabletInterface, Reports, GarantizadoModule } from '../microfrontends'
+import { TVDisplay, RatingTablet, TabletInterface } from '../microfrontends'
+import { ModuleBySlugRoute } from './routing/ModuleBySlugPage'
 
 import { ForcedLogoutModal } from './components/ForcedLogoutModal'
 import { AccountBlockedModal } from './components/AccountBlockedModal'
@@ -84,76 +71,6 @@ const RoleRestrictedRoute = ({ children, allowedRoles }: { children: React.React
   
   return <>{children}</>
 }
-
-const PermissionRoute = ({ children, module }: { children: React.ReactNode, module: string }) => {
-  const { user, modules } = useAuthStore()
-  const [isChecking, setIsChecking] = useState(true)
-  
-  if (!user) return <Navigate to="/login" />
-  
-  useEffect(() => {
-    if (modules && modules.length > 0) {
-      setIsChecking(false)
-    } else {
-      const timer = setTimeout(() => setIsChecking(false), 2000)
-      return () => clearTimeout(timer)
-    }
-  }, [modules])
-  
-  if (isChecking && (!modules || modules.length === 0)) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-lg text-gray-600 dark:text-gray-400">Verificando permisos...</p>
-        </div>
-      </div>
-    )
-  }
-  
-    const moduleName = module.toLowerCase().trim();
-    
-  // Si no hay módulos, permitir acceso (para desarrollo/testing)
-  if (!modules || modules.length === 0) {
-    return <>{children}</>
-  }
-  
-  const hasPermission = modules.some(m => {
-    if (!m.activo) return false;
-    
-    // Normalizar URL del módulo: quitar barras iniciales/finales y convertir a minúsculas
-    const moduleUrl = (m.url || '').toLowerCase().replace(/^\/+|\/+$/g, '');
-    const moduleNombre = (m.nombre || '').toLowerCase().trim();
-    
-    // Comparar de manera más flexible
-    const urlMatches = moduleUrl === moduleName || 
-           moduleUrl.includes(moduleName) || 
-                       moduleName.includes(moduleUrl);
-    
-    const nameMatches = moduleNombre === moduleName ||
-                        moduleNombre.includes(moduleName) ||
-                        moduleName.includes(moduleNombre);
-    
-    return urlMatches || nameMatches;
-  });
-  
-  if (!hasPermission) {
-    // Intentar redirigir al primer módulo activo disponible
-    const firstActiveModule = modules.find(m => m.activo);
-    if (firstActiveModule) {
-      const redirectUrl = firstActiveModule.url?.startsWith('/') 
-        ? firstActiveModule.url 
-        : `/${firstActiveModule.url}`;
-      return <Navigate to={redirectUrl} replace />
-    }
-    return <Navigate to="/" replace />
-  }
-  
-  if (!children) return null;
-
-  return <>{children}</>
-}
-
 
 const SystemNotificationsHandler = () => {
   const {
@@ -339,92 +256,7 @@ function App() {
             </ProtectedRoute>
           }>
             <Route index element={<WelcomeModule />} />
-            <Route path="dashboard" element={
-              <PermissionRoute module="dashboard">
-                <Dashboard />
-              </PermissionRoute>
-            } />
-            <Route path="users" element={
-              <PermissionRoute module="users">
-                <UsersModule />
-              </PermissionRoute>
-            } />
-            <Route path="roles" element={
-              <PermissionRoute module="roles">
-                <RolesModule />
-              </PermissionRoute>
-            } />
-            <Route path="permissions" element={
-              <PermissionRoute module="permissions">
-                <PermissionsModule />
-              </PermissionRoute>
-            } />
-            <Route path="modules" element={
-              <PermissionRoute module="modules">
-                <ModulesModule />
-              </PermissionRoute>
-            } />
-            <Route path="areas" element={
-              <PermissionRoute module="areas">
-                <AreasModule />
-              </PermissionRoute>
-            } />
-            <Route path="audit" element={
-              <PermissionRoute module="audit">
-                <AuditModule />
-              </PermissionRoute>
-            } />
-            <Route path="api-logs" element={
-              <PermissionRoute module="api-logs">
-                <ApiLogsModule />
-              </PermissionRoute>
-            } />
-            <Route path="sessions" element={
-              <PermissionRoute module="sessions">
-                <SessionsModule />
-              </PermissionRoute>
-            } />
-            <Route path="reports" element={
-              <PermissionRoute module="reports">
-                <Reports />
-              </PermissionRoute>
-            } />
-           <Route path="garantizado" element={
-             <PermissionRoute module="garantizado">
-               <GarantizadoModule />
-             </PermissionRoute>
-           } />
-           <Route path="asistencia" element={
-             <PermissionRoute module="asistencia">
-               <AsistenciaModule />
-             </PermissionRoute>
-           } />
-           <Route path="yego-premium" element={
-             <PermissionRoute module="yego-premium">
-               <YegoPremiumModule />
-             </PermissionRoute>
-           } />
-           <Route path="yego-pro-ops" element={
-             <PermissionRoute module="yego-pro-ops">
-               <YegoProOpsModule />
-             </PermissionRoute>
-           } />
-           <Route path="yego-gantt" element={
-             <PermissionRoute module="yego-gantt">
-               <YegoGanttModule />
-             </PermissionRoute>
-           } />
-
-           <Route path="mensajes-marketing" element={
-             <PermissionRoute module="mensajes-marketing">
-               <MarketingMensajesModule />
-             </PermissionRoute>
-           } />
-           <Route path="control-tower" element={
-             <PermissionRoute module="control-tower">
-               <ControlTowerModule />
-             </PermissionRoute>
-           } />
+            <Route path=":moduleSlug" element={<ModuleBySlugRoute />} />
           </Route>
           <Route path="*" element={<Navigate to="/login" />} />
         </Routes>

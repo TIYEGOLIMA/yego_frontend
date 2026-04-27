@@ -3,6 +3,7 @@ export interface Module {
   nombre: string
   descripcion?: string
   url: string
+  codigo?: string | null
   estado: string
   ultimoCheck?: string
   activo: boolean

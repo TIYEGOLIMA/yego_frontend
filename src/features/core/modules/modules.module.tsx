@@ -56,6 +56,7 @@ interface SistemaExternoResponse {
   nombre: string;
   descripcion: string;
   url: string; // Campo que envía el backend
+  codigo?: string | null;
   estado: 'ACTIVO' | 'MANTENIMIENTO' | 'ERROR' | 'INACTIVO';
   tipo: string;
   ultimoCheck: string;
@@ -74,6 +75,7 @@ interface CreateSistemaExternoData {
   nombre: string;
   descripcion: string;
   url: string;
+  codigo?: string;
   grupo?: string; // Nombre del grupo al que pertenece el módulo
   icono?: string; // Nombre del icono seleccionado
 }
@@ -129,6 +131,7 @@ const SistemasExternosModule: React.FC = () => {
     nombre: '',
     descripcion: '',
     url: '',
+    codigo: '',
     grupo: undefined,
     icono: 'AppWindow'
   });
@@ -312,6 +315,7 @@ const SistemasExternosModule: React.FC = () => {
       const grupoId = selectedGrupoId !== 'none' ? parseInt(selectedGrupoId) : null;
       const dataToSend = {
         ...formData,
+        codigo: formData.codigo?.trim() || undefined,
         grupoId: grupoId,
         tipo: 'GARANTIZADO',
         activo: true,
@@ -337,6 +341,7 @@ const SistemasExternosModule: React.FC = () => {
       const grupoId = selectedGrupoId !== 'none' ? parseInt(selectedGrupoId) : null;
       const dataToSend = {
         ...formData,
+        codigo: formData.codigo?.trim() || undefined,
         grupoId: grupoId,
         tipo: 'GARANTIZADO',
         activo: editingSistema?.activo ?? true,
@@ -425,7 +430,8 @@ const SistemasExternosModule: React.FC = () => {
     const matchesSearch =
       (sistema.nombre ?? '').toLowerCase().includes(term) ||
       (sistema.descripcion ?? '').toLowerCase().includes(term) ||
-      (sistema.url ?? '').toLowerCase().includes(term);
+      (sistema.url ?? '').toLowerCase().includes(term) ||
+      (sistema.codigo ?? '').toLowerCase().includes(term);
 
     const matchesStatus = statusFilter === 'all' ||
       (statusFilter === 'true' && sistema.activo) ||
@@ -456,6 +462,7 @@ const SistemasExternosModule: React.FC = () => {
       nombre: sistema.nombre,
       descripcion: sistema.descripcion,
       url: sistema.url || '', // Usar el campo url que envía el backend
+      codigo: sistema.codigo ?? '',
       icono: (sistema as any).icono || 'AppWindow'
     });
     // Inicializar el grupo seleccionado si existe
@@ -463,7 +470,7 @@ const SistemasExternosModule: React.FC = () => {
   };
 
   const resetFormAndGroup = () => {
-    setFormData({ nombre: '', descripcion: '', url: '', grupo: undefined, icono: 'AppWindow' });
+    setFormData({ nombre: '', descripcion: '', url: '', codigo: '', grupo: undefined, icono: 'AppWindow' });
     setSelectedGrupoId('none');
     setShowQuickCreateGrupo(false);
     setNuevoGrupoNombre('');
@@ -616,6 +623,7 @@ const SistemasExternosModule: React.FC = () => {
                       <TableHead>Descripción</TableHead>
                       <TableHead>Grupo</TableHead>
                       <TableHead>Path</TableHead>
+                      <TableHead>Código UI</TableHead>
                       <TableHead>Último Check</TableHead>
                       <TableHead>Activo</TableHead>
                       <TableHead>Acciones</TableHead>
@@ -648,6 +656,11 @@ const SistemasExternosModule: React.FC = () => {
                             <Globe className="h-3 w-3" />
                           </Button>
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        <code className="text-xs bg-neutral-100 dark:bg-neutral-800 px-2 py-1 rounded font-mono">
+                          {sistema.codigo?.trim() || '—'}
+                        </code>
                       </TableCell>
                       <TableCell>
                         <span className="text-sm text-gray-600 dark:text-gray-400">
@@ -810,8 +823,23 @@ const SistemasExternosModule: React.FC = () => {
               <Input
                 value={formData.url}
                 onChange={(e) => setFormData({ ...formData, url: e.target.value })}
-                placeholder="http://localhost:8081/api/pagos"
+                placeholder="/workos o ruta relativa del menú"
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                Código de pantalla (estable)
+              </label>
+              <Input
+                value={formData.codigo ?? ''}
+                onChange={(e) => setFormData({ ...formData, codigo: e.target.value })}
+                placeholder="ej. YEGO_GANTT — no cambia aunque renombres la URL"
+                className="font-mono text-sm"
+              />
+              <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                Debe coincidir con el registro del frontend. Si cambias solo la URL del módulo, este valor se mantiene.
+              </p>
             </div>
 
             {/* Selector de Iconos */}

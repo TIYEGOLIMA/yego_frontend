@@ -13,7 +13,7 @@ const YegoProOpsModule: React.FC = () => {
             Gestión de Turnos
           </h1>
           <p className="yego-body">
-            Administra turnos de conductores diurnos y nocturnos con asignación de vehículos
+            Administra turnos de conductores por día (mañana y tarde) con asignación de vehículos
           </p>
         </div>
       </div>

@@ -86,7 +86,6 @@ const formatearFechaConDia = (fechaStr: string): string => {
   })
 }
 
-/** Formatea hora en AM/PM (ej. "22:38" o "2026-03-02T22:38" → "10:38 p. m.") */
 const formatHoraAmPm = (horaStr: string | null | undefined): string => {
   if (!horaStr) return '—'
   const d = new Date(horaStr.includes('T') ? horaStr : `1970-01-01T${horaStr}`)
@@ -94,7 +93,6 @@ const formatHoraAmPm = (horaStr: string | null | undefined): string => {
   return d.toLocaleTimeString('es-PE', { hour: 'numeric', minute: '2-digit', hour12: true })
 }
 
-/** Extrae solo la fecha YYYY-MM-DD de un ISO (para usar con formatearFechaLegible) */
 const fechaPart = (isoOrDateStr: string | null | undefined): string | null => {
   if (!isoOrDateStr) return null
   return isoOrDateStr.includes('T') ? isoOrDateStr.split('T')[0]! : isoOrDateStr
@@ -132,7 +130,6 @@ const validarNumeroPositivo = (value: string): string => {
   return cleaned
 }
 
-/** Formato placa: 3 caracteres + guión + 3 caracteres (letras o números en ambos). Ej: ABC-123, A1B-X2Y */
 const PLACA_MAX_LENGTH = 7
 const validarPlaca = (value: string): string => {
   const upper = value.toUpperCase().replace(/[^A-Z0-9-]/g, '')
@@ -554,8 +551,8 @@ export const DetalleView = () => {
   const esFechaActual = fechaSeleccionada === fechaHoy
   
   const { data: listaConductoresData, isLoading: loadingListaConductores, refetch: refetchListaConductores } = useQuery<ListaConductoresResponse>({
-    queryKey: ['yego-pro-ops-lista-conductores', fechaSeleccionada],
-    queryFn: () => yegoProOpsService.obtenerListaConductores(fechaSeleccionada),
+    queryKey: ['yego-pro-ops-lista-conductores'],
+    queryFn: () => yegoProOpsService.obtenerListaConductores(),
     enabled: esFechaActual,
     refetchOnWindowFocus: false,
     staleTime: 60 * 1000,
@@ -616,7 +613,6 @@ export const DetalleView = () => {
 
   const { conductoresPendientes, conductoresLiquidados } = useMemo(() => {
     if (esFechaActual) {
-      // Siempre usar la lista completa de conductores de la flota; mezclar con resumen si existe
       const listaConductores = listaConductoresData?.conductores ?? []
       const resumenConductores = resumenPagosData?.conductores ?? []
       const resumenPorDriverId = new Map(resumenConductores.map(c => [c.driver_id, c]))
@@ -2843,22 +2839,23 @@ value={editOtrosGastos}
                 const duracionHoras = Math.floor(turno.duracion_minutos / 60)
                 const duracionMinutos = turno.duracion_minutos % 60
 
-                const isNocturno = turno.tipo_turno === 'nocturno'
+                const isTarde = turno.tipo_turno === 'tarde'
+                const tipoTurnoLabel = turno.tipo_turno === 'manana' ? 'Mañana' : 'Tarde'
 
                 return (
                   <Card key={turno.id || index} className="border overflow-hidden">
                     <CardContent className="p-4 pt-2">
                       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 mb-3">
                         <span
-                          className={`text-sm font-medium capitalize shrink-0 px-2.5 py-1 rounded-md ${
-                            isNocturno
-                              ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/50'
+                          className={`text-sm font-medium shrink-0 px-2.5 py-1 rounded-md ${
+                            isTarde
+                              ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/50'
                               : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/50'
                           }`}
                         >
-                          {turno.tipo_turno}
+                          {tipoTurnoLabel}
                         </span>
-                        <span className={`text-sm font-semibold tabular-nums shrink-0 ${isNocturno ? 'text-blue-600 dark:text-blue-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                        <span className={`text-sm font-semibold tabular-nums shrink-0 ${isTarde ? 'text-indigo-600 dark:text-indigo-400' : 'text-amber-600 dark:text-amber-400'}`}>
                           {formatBalance(turno.monto_total)}
                         </span>
                       </div>
