@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../../../services/core/api'
-import { useAuthStore } from '../../../store/auth-store'
+import { useAuthStore, type User } from '../../../store/auth-store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -20,84 +20,67 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { AlertTriangle, Check, ChevronDown, GanttChart, LayoutDashboard, ListChecks } from 'lucide-react'
+import {
+  AlertTriangle,
+  Boxes,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Flame,
+  Folder,
+  GanttChartSquare,
+  KanbanSquare,
+  LayoutDashboard,
+  Loader2,
+  Plus,
+  Route,
+  Search,
+  Sparkles,
+} from 'lucide-react'
+import './workos-gantt-shell.css'
 import { GanttTimelineTab } from './components/gantt-timeline/GanttTimelineTab'
-import { PulseGanttToolbar, type PulseNotification } from './components/gantt-timeline/PulseGanttToolbar'
 import { PulseStatsBar } from './components/gantt-timeline/PulseStatsBar'
+import { useIntegralNotificationsStore } from '../../../store/integral-notifications-store'
+import type { IntegralNotification } from '../../../types/integral-notification'
+import { buildTaskAlertNotifications } from './integralFeed'
 import { PortfolioTab } from './components/PortfolioTab'
 import { TodoBoardTab } from './components/TodoBoardTab'
+import { DashboardTab } from './components/DashboardTab'
+import { SprintsTab } from './components/SprintsTab'
+import type {
+  AreaTaskStatus,
+  TaskPriority,
+  TaskRow,
+  AreaFull,
+  ColaboradorDto,
+  ProjectDto,
+  Kpis,
+} from './types'
+import {
+  areasStableKey,
+  fetchAreaCollaboratorsMap,
+  fetchGanttMasterData,
+  fetchGanttTaskSummary,
+  parseGanttLoadError,
+} from './ganttApi'
+import { projectIconByKey } from './projectIcons'
+import { normPriority, STATUS_LABEL, PRIORITY_LABEL } from './utils'
+import { cn } from '@/utils/cn'
 
-type AreaTaskStatus = 'PENDING' | 'IN_PROGRESS' | 'DONE' | 'BLOCKED' | 'AT_RISK'
-type TaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'
-
-export interface AreaFull {
-  id: number
-  name: string
-  description?: string | null
-  managerId?: number | null
-  activo?: boolean
-}
-
-export interface ColaboradorDto {
-  id: number
-  nombreCompleto: string
-  email: string
-  rol: string
-}
-
-export interface ProjectDto {
-  id: number
-  name: string
-  description?: string | null
-  activo?: boolean
-  memberUserIds: number[]
-}
-
-interface TaskRow {
-  id: number
-  areaId: number
-  areaName?: string | null
-  title: string
-  description?: string | null
-  startDate: string
-  endDate: string
-  status: AreaTaskStatus
-  priority?: TaskPriority | null
-  progressPercent: number
-  assignedUserId?: number | null
-  assignedUserIds?: number[]
-  tags?: string[]
-  sortOrder?: number
-}
-
-interface Kpis {
-  equipos: number
-  tareas: number
-  progresoPromedioPct: number
-  completadas: number
-  enRiesgo: number
-  bloqueadas: number
-}
-
-const STATUS_LABEL: Record<AreaTaskStatus, string> = {
-  PENDING: 'Pendiente',
-  IN_PROGRESS: 'En curso',
-  DONE: 'Hecha',
-  BLOCKED: 'Bloqueada',
-  AT_RISK: 'En riesgo',
-}
-
-const PRIORITY_LABEL: Record<TaskPriority, string> = {
-  LOW: 'Baja',
-  MEDIUM: 'Media',
-  HIGH: 'Alta',
-  URGENT: 'Urgente',
-}
-
-function normPriority(p?: TaskPriority | null): TaskPriority {
-  if (p === 'LOW' || p === 'MEDIUM' || p === 'HIGH' || p === 'URGENT') return p
-  return 'MEDIUM'
+/**
+ * Todas las pestañas: admin/jefe, supervisores (rol o área) y supervisor lead.
+ * El resto solo Timeline y Board.
+ */
+function ganttHasFullTabAccess(u: User | null | undefined): boolean {
+  if (!u) return false
+  const r = (u.role || '').toUpperCase().trim()
+  const roleNorm = r.replace(/[\s-]+/g, '_')
+  if (r === 'ADMIN' || r === 'SUPERADMIN') return true
+  if (r === 'SUPERVISOR' || roleNorm === 'SUPERVISOR_LEAD') return true
+  if (u.esJefe === true) return true
+  if (u.esSupervisor === true) return true
+  return false
 }
 
 export function YegoGanttModule() {
@@ -106,17 +89,41 @@ export function YegoGanttModule() {
   const [kpis, setKpis] = useState<Kpis | null>(null)
   const [areas, setAreas] = useState<AreaFull[]>([])
   const [projects, setProjects] = useState<ProjectDto[]>([])
+  /** 'all' = todas; si hay varios proyectos el efecto sugiere uno por defecto hasta que el usuario cambie. */
+  const [projectFilter, setProjectFilter] = useState<string>('all')
   const [areaCollaborators, setAreaCollaborators] = useState<Map<number, ColaboradorDto[]>>(new Map())
   const [areaFilter, setAreaFilter] = useState<string>('all')
   const [priorityFilter, setPriorityFilter] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
-  const [activeTab, setActiveTab] = useState('gantt')
+  const [activeTab, setActiveTab] = useState<'gantt' | 'cartera' | 'board' | 'sprints' | 'dashboard'>(() =>
+    ganttHasFullTabAccess(useAuthStore.getState().user) ? 'sprints' : 'gantt',
+  )
   const [ganttTeamFilter, setGanttTeamFilter] = useState('')
   const [showHeatmap, setShowHeatmap] = useState(false)
   const [showCriticalPath, setShowCriticalPath] = useState(false)
-  const [pulseNotifications, setPulseNotifications] = useState<PulseNotification[]>([])
+  const [timelinePanDays, setTimelinePanDays] = useState(0)
+  const [pulseNotifications, setPulseNotifications] = useState<IntegralNotification[]>([])
   const notifSeqRef = useRef(0)
+  const hasLoadedOnceRef = useRef(false)
+  /** Invalidación solo para `load` + colaboradores (no debe pisar el poll de tareas). */
+  const ganttFullLoadSeqRef = useRef(0)
+  /** Invalidación solo para `reloadTasksAndKpis`. */
+  const tasksKpisSeqRef = useRef(0)
+  /** Tras fetch exitoso; si difiere de areaKey, hay que cargar colaboradores otra vez. */
+  const collabsFetchedForKeyRef = useRef<string>('')
+  /** Una sola `load()` a la vez (Strict Mode monta el efecto dos veces en dev). */
+  const loadInFlightRef = useRef<Promise<void> | null>(null)
+  /** Último `projectFilter` con el que terminó un `load()` completo (para detectar cambio de proyecto). */
+  const prevProjectFilterForLoadRef = useRef<string | null>(null)
+  const [dismissedTaskIds, setDismissedTaskIds] = useState<number[]>([])
+
+  const setIntegralItems = useIntegralNotificationsStore((s) => s.setItems)
+  const registerIntegralHandlers = useIntegralNotificationsStore((s) => s.registerHandlers)
+
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  /** Recarga por cambio de proyecto: mensaje claro arriba y sin pastilla en esquina. */
+  const [projectSwitching, setProjectSwitching] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<TaskRow | null>(null)
@@ -128,6 +135,7 @@ export function YegoGanttModule() {
   const [deletingArea, setDeletingArea] = useState(false)
   const [form, setForm] = useState({
     areaId: '',
+    projectId: '' as string,
     title: '',
     description: '',
     startDate: '',
@@ -137,64 +145,131 @@ export function YegoGanttModule() {
     progressPercent: '0',
     assignedUserIds: [] as number[],
     tagsInput: '',
+    sprintId: '',
   })
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
   const [assignDropdownOpen, setAssignDropdownOpen] = useState(false)
   const assignDropdownRef = useRef<HTMLDivElement>(null)
+  const [taskFormSaving, setTaskFormSaving] = useState(false)
 
-  const manage = useMemo(() => {
-    if (!user) return false
-    const r = (user.role || '').toUpperCase()
-    if (r === 'ADMIN' || r === 'SUPERADMIN') return true
-    return user.esJefe === true
-  }, [user])
+  const manage = useMemo(() => ganttHasFullTabAccess(user), [user])
 
-  const loadCollaborators = useCallback(async (areaList: AreaFull[]) => {
-    const map = new Map<number, ColaboradorDto[]>()
-    const results = await Promise.allSettled(
-      areaList.map((a) => api.get<ColaboradorDto[]>(`/areas/${a.id}/colaboradores`)),
-    )
-    areaList.forEach((a, i) => {
-      const r = results[i]
-      map.set(a.id, r.status === 'fulfilled' ? r.value.data : [])
-    })
+  const loadCollaborators = useCallback(async (areaList: AreaFull[], requestId: number) => {
+    const map = await fetchAreaCollaboratorsMap(areaList)
+    if (requestId !== ganttFullLoadSeqRef.current) return
     setAreaCollaborators(map)
   }, [])
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setErr(null)
-    try {
-      const q: Record<string, string> = {}
-      if (areaFilter !== 'all') q.areaId = areaFilter
-      if (priorityFilter !== 'all') q.priority = priorityFilter
-      const [tr, kp] = await Promise.all([
-        api.get<TaskRow[]>('/yego-gantt/tasks', { params: q }),
-        api.get<Kpis>('/yego-gantt/tasks/kpis', { params: q }),
-      ])
-      setTasks(tr.data)
-      setKpis(kp.data)
+  const reloadTasksAndKpis = useCallback(async () => {
+    const requestId = ++tasksKpisSeqRef.current
+    const { tasks: nextTasks, kpis: nextKpis } = await fetchGanttTaskSummary(areaFilter, priorityFilter, projectFilter)
+    if (requestId !== tasksKpisSeqRef.current) return
+    setTasks(nextTasks)
+    setKpis(nextKpis)
+  }, [areaFilter, priorityFilter, projectFilter])
 
-      const [ar, pr] = await Promise.all([
-        api.get<AreaFull[]>('/areas/find-all-active'),
-        api.get<ProjectDto[]>('/yego-gantt/projects'),
-      ])
-      setAreas(ar.data)
-      setProjects(pr.data)
-      await loadCollaborators(ar.data)
-    } catch (e: unknown) {
-      const msg = e && typeof e === 'object' && 'response' in e
-        ? String((e as { response?: { data?: { message?: string } } }).response?.data?.message || 'Error al cargar')
-        : 'Error al cargar'
-      setErr(msg)
-    } finally {
-      setLoading(false)
+  /** Evita forzar siempre 'all' al primer fetch cuando hay varios proyectos. */
+  const projectFilterInitRef = useRef(false)
+
+  const load = useCallback(async (opts?: { refreshCollaborators?: boolean }) => {
+    if (loadInFlightRef.current) {
+      await loadInFlightRef.current
+      return
     }
-  }, [areaFilter, priorityFilter, loadCollaborators])
+    const requestId = ++ganttFullLoadSeqRef.current
+    const run = (async () => {
+      const isFirstLoad = !hasLoadedOnceRef.current
+      const prevPf = prevProjectFilterForLoadRef.current
+      const isProjectChangeRefresh =
+        !isFirstLoad && prevPf !== null && prevPf !== projectFilter
+      if (isProjectChangeRefresh) {
+        setProjectSwitching(true)
+      }
+      if (isFirstLoad) {
+        setLoading(true)
+      } else {
+        setRefreshing(true)
+      }
+      setErr(null)
+      try {
+        const { tasks: nextTasks, kpis: nextKpis } = await fetchGanttTaskSummary(areaFilter, priorityFilter, projectFilter)
+        if (requestId !== ganttFullLoadSeqRef.current) return
+        setTasks(nextTasks)
+        setKpis(nextKpis)
+
+        const { areas: ar, projects: pr } = await fetchGanttMasterData()
+        if (requestId !== ganttFullLoadSeqRef.current) return
+        setAreas(ar)
+        setProjects(pr)
+
+        const areaKey = areasStableKey(ar)
+        const forceCollabs = opts?.refreshCollaborators === true
+        if (ar.length === 0) {
+          collabsFetchedForKeyRef.current = ''
+          setAreaCollaborators(new Map())
+        } else if (forceCollabs || areaKey !== collabsFetchedForKeyRef.current) {
+          await loadCollaborators(ar, requestId)
+          if (requestId !== ganttFullLoadSeqRef.current) return
+          collabsFetchedForKeyRef.current = areaKey
+        }
+
+        hasLoadedOnceRef.current = true
+      } catch (e: unknown) {
+        if (requestId !== ganttFullLoadSeqRef.current) return
+        setErr(parseGanttLoadError(e))
+      } finally {
+        if (requestId === ganttFullLoadSeqRef.current) {
+          setLoading(false)
+          setRefreshing(false)
+          setProjectSwitching(false)
+          prevProjectFilterForLoadRef.current = projectFilter
+        }
+        loadInFlightRef.current = null
+      }
+    })()
+    loadInFlightRef.current = run
+    await run
+  }, [areaFilter, priorityFilter, projectFilter, loadCollaborators])
+
+  useEffect(() => {
+    if (projects.length === 0) {
+      projectFilterInitRef.current = false
+      setProjectFilter('all')
+      return
+    }
+    if (projects.length === 1) {
+      projectFilterInitRef.current = true
+      setProjectFilter(String(projects[0].id))
+      return
+    }
+    if (!projectFilterInitRef.current) {
+      projectFilterInitRef.current = true
+      const sorted = [...projects].sort((a, b) => a.id - b.id)
+      setProjectFilter(String(sorted[0].id))
+      return
+    }
+    setProjectFilter((prev) => {
+      const ids = new Set(projects.map((p) => String(p.id)))
+      if (prev === 'all') return 'all'
+      if (ids.has(prev)) return prev
+      const sorted = [...projects].sort((a, b) => a.id - b.id)
+      return String(sorted[0].id)
+    })
+  }, [projects])
 
   useEffect(() => {
     load()
   }, [load])
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (document.visibilityState !== 'visible') return
+      void reloadTasksAndKpis().catch(() => {
+        /* silenciar poll en background */
+      })
+    }, 60_000)
+    return () => clearInterval(id)
+  }, [reloadTasksAndKpis])
 
   const displayedTasks = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
@@ -222,15 +297,69 @@ export function YegoGanttModule() {
     return result
   }, [areaCollaborators])
 
-  const openCreate = (presetAreaId?: number) => {
+  const projectsInScope = useMemo(() => {
+    if (projectFilter === 'all') return projects
+    return projects.filter((p) => String(p.id) === projectFilter)
+  }, [projects, projectFilter])
+
+  const projectPickerIcon = useMemo(() => {
+    if (projectFilter === 'all') return Folder
+    const p = projects.find((x) => String(x.id) === projectFilter)
+    return projectIconByKey(p?.iconKey)
+  }, [projectFilter, projects])
+
+  const projectPickerLabel = useMemo(() => {
+    if (projects.length === 0) return '—'
+    if (projectFilter === 'all') return 'Todos los proyectos'
+    return projects.find((p) => String(p.id) === projectFilter)?.name ?? 'Proyecto'
+  }, [projectFilter, projects])
+
+  const PickerGlyph = projectPickerIcon
+
+  const taskAlertNotifications = useMemo(
+    () => buildTaskAlertNotifications(tasks, dismissedTaskIds),
+    [tasks, dismissedTaskIds],
+  )
+
+  const allNotifications = useMemo(
+    () => [...taskAlertNotifications, ...pulseNotifications].slice(0, 40),
+    [taskAlertNotifications, pulseNotifications],
+  )
+
+  useEffect(() => {
+    setDismissedTaskIds((d) => d.filter((id) => tasks.some((t) => t.id === id)))
+  }, [tasks])
+
+  const collaboratorNames = useMemo(() => {
+    const m = new Map<number, string>()
+    areaCollaborators.forEach((list) => {
+      list.forEach((c) => m.set(c.id, c.nombreCompleto))
+    })
+    return m
+  }, [areaCollaborators])
+
+  const openCreate = (
+    presetAreaId?: number,
+    presetProjectId?: number,
+    presetStatus?: AreaTaskStatus,
+    presetSprintId?: number,
+  ) => {
+    setTaskFormSaving(false)
     setEditing(null)
     setForm({
       areaId: presetAreaId?.toString() || areas[0]?.id?.toString() || '',
+      projectId:
+        presetProjectId != null
+          ? String(presetProjectId)
+          : projectFilter !== 'all'
+            ? projectFilter
+            : '',
+      sprintId: presetSprintId != null ? String(presetSprintId) : '',
       title: '',
       description: '',
       startDate: new Date().toISOString().slice(0, 10),
       endDate: new Date().toISOString().slice(0, 10),
-      status: 'PENDING',
+      status: presetStatus ?? 'PENDING',
       priority: 'MEDIUM',
       progressPercent: '0',
       assignedUserIds: [],
@@ -241,9 +370,12 @@ export function YegoGanttModule() {
   }
 
   const openEdit = (t: TaskRow) => {
+    setTaskFormSaving(false)
     setEditing(t)
     setForm({
       areaId: String(t.areaId),
+      projectId: t.projectId != null ? String(t.projectId) : '',
+      sprintId: t.sprintId != null ? String(t.sprintId) : '',
       title: t.title,
       description: t.description || '',
       startDate: t.startDate,
@@ -277,6 +409,7 @@ export function YegoGanttModule() {
   }
 
   const saveTask = async () => {
+    if (taskFormSaving) return
     const errors = validateForm()
     setFormErrors(errors)
     if (Object.keys(errors).length > 0) return
@@ -288,6 +421,8 @@ export function YegoGanttModule() {
       .filter(Boolean)
     const payload = {
       areaId: Number(form.areaId),
+      projectId: form.projectId ? Number(form.projectId) : null,
+      sprintId: form.sprintId ? Number(form.sprintId) : null,
       title: form.title.trim(),
       description: form.description || undefined,
       startDate: form.startDate,
@@ -299,6 +434,8 @@ export function YegoGanttModule() {
       assignedUserIds: form.assignedUserIds.length > 0 ? form.assignedUserIds : null,
       tags: parsedTags.length > 0 ? parsedTags : null,
     }
+    setAssignDropdownOpen(false)
+    setTaskFormSaving(true)
     try {
       if (editing) {
         await api.put(`/yego-gantt/tasks/${editing.id}`, payload)
@@ -307,9 +444,14 @@ export function YegoGanttModule() {
       }
       setFormErrors({})
       setDialogOpen(false)
-      await load()
-    } catch {
-      setErr('No se pudo guardar la tarea')
+      await reloadTasksAndKpis()
+    } catch (e: unknown) {
+      const msg = e && typeof e === 'object' && 'response' in e
+        ? String((e as { response?: { data?: { message?: string } } }).response?.data?.message || 'No se pudo guardar la tarea')
+        : 'No se pudo guardar la tarea'
+      setErr(msg)
+    } finally {
+      setTaskFormSaving(false)
     }
   }
 
@@ -325,7 +467,7 @@ export function YegoGanttModule() {
       await api.delete(`/yego-gantt/tasks/${taskToDelete.id}`)
       setDeleteDialogOpen(false)
       setTaskToDelete(null)
-      await load()
+      await reloadTasksAndKpis()
     } catch {
       setErr('No se pudo eliminar')
     } finally {
@@ -355,13 +497,15 @@ export function YegoGanttModule() {
   }
 
   const changeTaskStatus = useCallback(async (taskId: number, newStatus: AreaTaskStatus) => {
+    setTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, status: newStatus } : t))
     try {
       await api.put(`/yego-gantt/tasks/${taskId}`, { status: newStatus })
-      await load()
+      await reloadTasksAndKpis()
     } catch {
       setErr('No se pudo actualizar el estado')
+      await reloadTasksAndKpis()
     }
-  }, [load])
+  }, [reloadTasksAndKpis])
 
   const onTaskSelectNotify = useCallback((taskTitle: string) => {
     notifSeqRef.current += 1
@@ -379,6 +523,35 @@ export function YegoGanttModule() {
       ].slice(0, 30),
     )
   }, [])
+
+  const onNotificationRead = useCallback((id: string) => {
+    if (id.startsWith('gantt-at-risk-') || id.startsWith('gantt-blocked-')) {
+      const raw = id.replace(/^gantt-(at-risk|blocked)-/, '')
+      const tid = Number(raw)
+      if (!Number.isNaN(tid)) {
+        setDismissedTaskIds((prev) => (prev.includes(tid) ? prev : [...prev, tid]))
+      }
+    } else {
+      setPulseNotifications((p) => p.map((n) => (n.id === id ? { ...n, read: true } : n)))
+    }
+  }, [])
+
+  const clearIntegralFeedPulse = useCallback(() => {
+    setPulseNotifications([])
+    setDismissedTaskIds([])
+  }, [])
+
+  useEffect(() => {
+    setIntegralItems(allNotifications)
+    registerIntegralHandlers({
+      markRead: onNotificationRead,
+      clearAll: clearIntegralFeedPulse,
+    })
+    return () => {
+      setIntegralItems([])
+      registerIntegralHandlers(null)
+    }
+  }, [allNotifications, onNotificationRead, clearIntegralFeedPulse, setIntegralItems, registerIntegralHandlers])
 
   const currentAreaCollabs = useMemo(() => {
     const areaId = Number(form.areaId)
@@ -405,114 +578,302 @@ export function YegoGanttModule() {
     })
   }
 
-  const tabTriggerClass =
-    'inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-all data-[state=active]:bg-red-500/12 data-[state=active]:text-red-700 dark:data-[state=active]:text-red-300 data-[state=active]:border data-[state=active]:border-red-500/35 data-[state=active]:shadow-sm data-[state=inactive]:text-muted-foreground data-[state=inactive]:border data-[state=inactive]:border-transparent data-[state=inactive]:hover:bg-muted/60'
+  const TAB_CONFIG = useMemo(
+    () =>
+      [
+        { id: 'gantt' as const, label: 'Timeline', Icon: GanttChartSquare },
+        { id: 'cartera' as const, label: 'Portfolio', Icon: Boxes },
+        { id: 'board' as const, label: 'Board', Icon: KanbanSquare },
+        { id: 'sprints' as const, label: 'Sprints', Icon: Flame },
+        { id: 'dashboard' as const, label: 'Dashboard', Icon: LayoutDashboard },
+      ],
+    [],
+  )
+
+  const visibleTabs = useMemo(
+    () => (manage ? TAB_CONFIG : TAB_CONFIG.filter((t) => t.id === 'gantt' || t.id === 'board')),
+    [manage, TAB_CONFIG],
+  )
+
+  useEffect(() => {
+    if (manage) return
+    if (activeTab === 'gantt' || activeTab === 'board') return
+    setActiveTab('gantt')
+  }, [manage, activeTab])
 
   return (
-    <div className="min-h-full bg-gradient-to-b from-muted/50 via-muted/25 to-background p-3 md:p-5 font-sans">
-      <div className="max-w-[1840px] mx-auto flex flex-col rounded-2xl border border-border/80 bg-card shadow-xl shadow-black/[0.07] overflow-hidden min-h-[calc(100vh-96px)]">
+    <div className="workos-gantt-shell workos-gantt-shell-bg min-h-[calc(100vh-4rem)] flex flex-col">
+      <header className="sticky top-0 z-30 border-b border-border/80 bg-background shadow-sm dark:shadow-dark-sm">
+        <div className="mx-auto max-w-[1680px] px-4 lg:px-6 py-3 flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="h-9 w-9 shrink-0 rounded-xl workos-gantt-gradient-icon flex items-center justify-center text-white">
+              <Sparkles className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="font-display font-bold text-foreground leading-tight truncate">WorkOS</div>
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider -mt-0.5 truncate">
+                Project OS
+              </div>
+            </div>
+          </div>
+          {projects.length > 0 && (
+            <Select value={projectFilter} onValueChange={setProjectFilter}>
+              <SelectTrigger
+                className={cn(
+                  'workos-project-picker-trigger',
+                  // Quita el chevron por defecto del ui/select (usamos uno dentro del card)
+                  '[&>svg]:hidden',
+                  'h-auto min-h-0 py-1 pl-1.5 pr-2 gap-0 rounded-xl border border-neutral-200/90 dark:border-neutral-600/80',
+                  'bg-white dark:bg-neutral-900/95 shadow-sm w-[min(12.5rem,calc(100vw-10rem))] max-w-[200px]',
+                  'focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500/40',
+                  'hover:border-neutral-300 dark:hover:border-neutral-500',
+                )}
+              >
+                <span className="sr-only">
+                  <SelectValue />
+                </span>
+                <div className="flex items-center gap-2 w-full min-w-0">
+                  <div
+                    className="h-8 w-8 shrink-0 rounded-lg bg-blue-600 dark:bg-blue-500 flex items-center justify-center text-white shadow-sm"
+                    aria-hidden
+                  >
+                    <PickerGlyph className="h-4 w-4 stroke-[2]" />
+                  </div>
+                  <div className="flex-1 min-w-0 text-left leading-none">
+                    <div className="text-[9px] font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                      Proyecto
+                    </div>
+                    <div className="text-[13px] font-semibold text-foreground truncate tracking-tight">
+                      {projectPickerLabel}
+                    </div>
+                  </div>
+                  <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" aria-hidden />
+                </div>
+              </SelectTrigger>
+              <SelectContent align="start" className="rounded-xl">
+                {projects.length > 1 && (
+                  <SelectItem value="all">
+                    <span className="flex items-center gap-2">
+                      <Folder className="h-3.5 w-3.5 shrink-0 opacity-80" />
+                      Todos los proyectos
+                    </span>
+                  </SelectItem>
+                )}
+                {projects.map((p) => {
+                  const ItemIcon = projectIconByKey(p.iconKey)
+                  return (
+                    <SelectItem key={p.id} value={String(p.id)}>
+                      <span className="flex items-center gap-2">
+                        <ItemIcon className="h-3.5 w-3.5 shrink-0 opacity-80" />
+                        {p.name}
+                      </span>
+                    </SelectItem>
+                  )
+                })}
+              </SelectContent>
+            </Select>
+          )}
+          <div className="flex-1 min-w-[200px] max-w-md relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Input
+              value={activeTab === 'gantt' ? ganttTeamFilter : searchQuery}
+              onChange={(e) =>
+                activeTab === 'gantt'
+                  ? setGanttTeamFilter(e.target.value)
+                  : setSearchQuery(e.target.value)
+              }
+              placeholder={activeTab === 'gantt' ? 'Filtrar equipos en timeline…' : 'Buscar tareas o áreas…'}
+              className="pl-9 h-9 text-sm rounded-lg bg-background border-border/80"
+            />
+          </div>
+          {manage && (
+            <Button
+              type="button"
+              onClick={() => openCreate()}
+              className="gap-1.5 h-9 rounded-lg border-0 workos-gantt-btn-primary shadow-sm"
+            >
+              <Plus className="h-4 w-4" />
+              Nueva tarea
+            </Button>
+          )}
+        </div>
+        <div className="mx-auto max-w-[1680px] px-4 lg:px-6 pb-2 pt-1">
+          <div className="flex flex-wrap items-center gap-1">
+            {visibleTabs.map(({ id, label, Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setActiveTab(id)}
+                className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                  activeTab === id
+                    ? 'workos-gantt-tab-active'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/70'
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5 shrink-0" />
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto w-full max-w-[1680px] px-4 lg:px-6 py-5 flex-1 flex flex-col min-h-0 bg-[#f9fafb] dark:bg-transparent">
         {err && (
-          <div className="mx-4 mt-3 rounded-lg bg-destructive/10 text-destructive text-sm px-3 py-2 border border-destructive/20">
+          <div className="mb-3 rounded-lg bg-destructive/10 text-destructive text-sm px-3 py-2 border border-destructive/20">
             {err}
           </div>
         )}
 
-        <PulseGanttToolbar
-          showHeatmap={showHeatmap}
-          onToggleHeatmap={() => setShowHeatmap((v) => !v)}
-          showCriticalPath={showCriticalPath}
-          onToggleCriticalPath={() => setShowCriticalPath((v) => !v)}
-          filterText={activeTab === 'gantt' ? ganttTeamFilter : searchQuery}
-          onFilterChange={activeTab === 'gantt' ? setGanttTeamFilter : setSearchQuery}
-          searchPlaceholder={activeTab === 'gantt' ? 'Filtrar equipos…' : 'Buscar tareas o áreas…'}
-          onCreateTask={() => openCreate()}
-          notifications={pulseNotifications}
-          onMarkNotificationRead={(id) =>
-            setPulseNotifications((p) => p.map((n) => (n.id === id ? { ...n, read: true } : n)))
-          }
-          onClearNotifications={() => setPulseNotifications([])}
-          manage={manage}
-          showGanttExtras={activeTab === 'gantt'}
-        />
-
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-1 min-h-0">
-          <div className="border-b border-border/70 bg-muted/20 px-4 sm:px-5 py-2">
-            <TabsList className="bg-transparent h-auto p-0 gap-1.5 flex flex-wrap justify-start w-full">
-              <TabsTrigger value="gantt" className={tabTriggerClass}>
-                <GanttChart className="h-3.5 w-3.5 shrink-0" />
-                Gantt Timeline
-              </TabsTrigger>
-              <TabsTrigger value="cartera" className={tabTriggerClass}>
-                <LayoutDashboard className="h-3.5 w-3.5 shrink-0" />
-                Cartera de proyectos
-              </TabsTrigger>
-              <TabsTrigger value="board" className={tabTriggerClass}>
-                <ListChecks className="h-3.5 w-3.5 shrink-0" />
-                To-Do Board
-              </TabsTrigger>
-            </TabsList>
+        {refreshing && projectSwitching && (
+          <div
+            className="mb-3 flex w-full shrink-0 items-center justify-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground shadow-sm"
+            role="status"
+            aria-live="polite"
+            aria-busy="true"
+          >
+            <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" aria-hidden />
+            <span className="font-medium">Se está cambiando de proyecto…</span>
           </div>
+        )}
+        {refreshing && !projectSwitching && (
+          <div
+            className="h-0.5 w-full shrink-0 bg-primary/40 animate-pulse rounded-full mb-2"
+            title="Actualizando datos…"
+            aria-busy="true"
+          />
+        )}
 
-          <TabsContent value="gantt" className="mt-0 flex-1 min-h-0 flex flex-col data-[state=inactive]:hidden outline-none">
-            <PulseStatsBar kpis={kpis} />
-            <div className="flex flex-wrap items-center gap-3 px-4 sm:px-5 py-2.5 border-b border-border/60 bg-background/60">
-              <div className="flex items-center gap-2">
-                <Label className="text-xs font-medium whitespace-nowrap text-muted-foreground">Área</Label>
-                <Select value={areaFilter} onValueChange={setAreaFilter}>
-                  <SelectTrigger className="w-[200px] h-8 text-xs rounded-lg border-border/80">
-                    <SelectValue placeholder="Todas" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas las visibles</SelectItem>
-                    {areas.map((a) => (
-                      <SelectItem key={a.id} value={String(a.id)}>
-                        {a.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+        <div className="animate-fade-in flex-1 flex flex-col min-h-0">
+          {activeTab === 'gantt' && (
+            <div className="flex flex-col flex-1 min-h-0">
+              <PulseStatsBar
+                kpis={kpis}
+                trailing={
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setShowHeatmap((v) => !v)}
+                      className={`inline-flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 text-xs rounded-lg border h-8 transition-all ${
+                        showHeatmap
+                          ? 'border-amber-400/80 bg-amber-500/15 text-amber-900 dark:text-amber-100 shadow-sm'
+                          : 'border-[#e5e7eb] bg-white text-muted-foreground hover:text-foreground hover:bg-[#f9fafb] dark:border-border/80 dark:bg-card'
+                      }`}
+                    >
+                      <Flame className="w-3.5 h-3.5 shrink-0" />
+                      Heatmap
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowCriticalPath((v) => !v)}
+                      className={`inline-flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 text-xs rounded-lg border h-8 transition-all ${
+                        showCriticalPath
+                          ? 'border-primary-500 bg-primary-500/10 text-primary-600 dark:text-primary-400 shadow-sm'
+                          : 'border-[#e5e7eb] bg-white text-muted-foreground hover:text-foreground hover:bg-[#f9fafb] dark:border-border/80 dark:bg-card'
+                      }`}
+                    >
+                      <Route className="w-3.5 h-3.5 shrink-0" />
+                      Ruta crítica
+                    </button>
+                  </>
+                }
+              />
+              <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[#e5e7eb] bg-white px-4 py-2 workos-shadow-soft mt-2 dark:border-border/80 dark:bg-card">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">Área</span>
+                  <Select value={areaFilter} onValueChange={setAreaFilter}>
+                    <SelectTrigger className="w-[200px] h-8 text-xs rounded-lg border-[#e5e7eb] dark:border-border/80">
+                      <SelectValue placeholder="Todas" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas las visibles</SelectItem>
+                      {areas.map((a) => (
+                        <SelectItem key={a.id} value={String(a.id)}>
+                          {a.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">Prioridad</span>
+                  <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+                    <SelectTrigger className="w-[180px] h-8 text-xs rounded-lg border-[#e5e7eb] dark:border-border/80">
+                      <SelectValue placeholder="Toda prioridad" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Toda prioridad</SelectItem>
+                      {(Object.keys(PRIORITY_LABEL) as TaskPriority[]).map((k) => (
+                        <SelectItem key={k} value={k}>
+                          {PRIORITY_LABEL[k]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="ml-auto flex items-center gap-1 flex-wrap">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8 rounded-lg border-[#e5e7eb] bg-white dark:border-border/80"
+                    onClick={() => setTimelinePanDays((d) => d - 7)}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 rounded-lg border-[#e5e7eb] bg-white px-3 text-xs dark:border-border/80"
+                    onClick={() => setTimelinePanDays(0)}
+                  >
+                    Hoy
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8 rounded-lg border-[#e5e7eb] bg-white dark:border-border/80"
+                    onClick={() => setTimelinePanDays((d) => d + 7)}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                  <span className="ml-2 text-xs text-muted-foreground tabular-nums">
+                    {displayedTasks.length} tareas en vista
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Label className="text-xs font-medium whitespace-nowrap text-muted-foreground">Prioridad</Label>
-                <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-                  <SelectTrigger className="w-[180px] h-8 text-xs rounded-lg border-border/80">
-                    <SelectValue placeholder="Toda prioridad" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Toda prioridad</SelectItem>
-                    {(Object.keys(PRIORITY_LABEL) as TaskPriority[]).map((k) => (
-                      <SelectItem key={k} value={k}>
-                        {PRIORITY_LABEL[k]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="mt-2 flex-1 min-h-0 flex flex-col">
+                <GanttTimelineTab
+                  tasks={displayedTasks}
+                  loading={loading}
+                  refreshing={refreshing}
+                  suppressEdgeRefreshPill={projectSwitching}
+                  timelinePanDays={timelinePanDays}
+                  filterText={ganttTeamFilter}
+                  onFilterChange={setGanttTeamFilter}
+                  manage={manage}
+                  onEditTask={openEdit}
+                  onDeleteTask={removeTask}
+                  showHeatmap={showHeatmap}
+                  showCriticalPath={showCriticalPath}
+                  onTaskSelectNotify={onTaskSelectNotify}
+                  collaboratorsForArea={collaboratorsForArea}
+                />
               </div>
-              <span className="text-xs text-muted-foreground ml-auto">{displayedTasks.length} tareas en vista</span>
             </div>
-            <GanttTimelineTab
-              tasks={displayedTasks}
-              loading={loading}
-              filterText={ganttTeamFilter}
-              onFilterChange={setGanttTeamFilter}
-              manage={manage}
-              onCreateTask={() => openCreate()}
-              onEditTask={openEdit}
-              onDeleteTask={removeTask}
-              showHeatmap={showHeatmap}
-              showCriticalPath={showCriticalPath}
-              onTaskSelectNotify={onTaskSelectNotify}
-              collaboratorsForArea={collaboratorsForArea}
-            />
-          </TabsContent>
+          )}
 
-          <TabsContent value="cartera" className="mt-0 flex-1 min-h-0 flex flex-col data-[state=inactive]:hidden outline-none">
+          {manage && activeTab === 'cartera' && (
             <PortfolioTab
               tasks={displayedTasks}
               loading={loading}
+              refreshing={refreshing}
+              suppressEdgeRefreshPill={projectSwitching}
               manage={manage}
               areas={areas}
-              projects={projects}
+              projects={projectsInScope}
               collaboratorsForArea={collaboratorsForArea}
               onEdit={openEdit}
               onDelete={removeTask}
@@ -520,24 +881,70 @@ export function YegoGanttModule() {
               onDeleteArea={deleteArea}
               onReload={load}
             />
-          </TabsContent>
+          )}
 
-          <TabsContent value="board" className="mt-0 flex-1 min-h-0 flex flex-col data-[state=inactive]:hidden outline-none">
+          {activeTab === 'board' && (
             <TodoBoardTab
               tasks={displayedTasks}
               loading={loading}
+              refreshing={refreshing}
+              suppressEdgeRefreshPill={projectSwitching}
               manage={manage}
               allCollaborators={allCollaborators}
               onEdit={openEdit}
               onDelete={removeTask}
               onStatusChange={changeTaskStatus}
+              onAddTask={(status) => openCreate(undefined, undefined, status)}
             />
-          </TabsContent>
-        </Tabs>
+          )}
+
+          {manage && activeTab === 'sprints' && (
+            <SprintsTab
+              tasks={tasks}
+              projects={projectsInScope}
+              manage={manage}
+              loading={loading}
+              refreshing={refreshing}
+              suppressEdgeRefreshPill={projectSwitching}
+              onReload={load}
+              onTaskStatusChange={changeTaskStatus}
+              onOpenCreateTask={
+                manage ? (opts) => openCreate(undefined, opts?.projectId, undefined, opts?.sprintId) : undefined
+              }
+              onEditTask={openEdit}
+              collaboratorNames={collaboratorNames}
+            />
+          )}
+
+          {manage && activeTab === 'dashboard' && (
+            <DashboardTab
+              tasks={tasks}
+              projects={projectsInScope}
+              loading={loading}
+              refreshing={refreshing}
+              suppressEdgeRefreshPill={projectSwitching}
+              onCreateTask={manage ? () => openCreate() : undefined}
+            />
+          )}
+        </div>
 
         {/* Task create/edit dialog */}
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogContent className="max-w-lg p-0 gap-0 overflow-hidden">
+        <Dialog
+          open={dialogOpen}
+          onOpenChange={(open) => {
+            if (!open && taskFormSaving) return
+            setDialogOpen(open)
+          }}
+        >
+          <DialogContent
+            className="max-w-lg p-0 gap-0 overflow-hidden"
+            onPointerDownOutside={(e) => {
+              if (taskFormSaving) e.preventDefault()
+            }}
+            onEscapeKeyDown={(e) => {
+              if (taskFormSaving) e.preventDefault()
+            }}
+          >
             <div className="px-6 pt-6 pb-4">
               <DialogHeader className="space-y-1">
                 <DialogTitle className="text-xl font-bold">
@@ -560,6 +967,7 @@ export function YegoGanttModule() {
                 <Input
                   placeholder="Nombre de la tarea"
                   value={form.title}
+                  disabled={taskFormSaving}
                   onChange={(e) => { setForm((f) => ({ ...f, title: e.target.value })); setFormErrors((p) => ({ ...p, title: '' })) }}
                   className={`h-10 rounded-lg focus-visible:ring-red-500 focus-visible:border-red-500 ${formErrors.title ? 'border-red-500' : 'border-border'}`}
                 />
@@ -572,6 +980,7 @@ export function YegoGanttModule() {
                 <Textarea
                   placeholder="Descripción opcional..."
                   value={form.description}
+                  disabled={taskFormSaving}
                   onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                   className="min-h-[100px] rounded-lg border-border resize-none focus-visible:ring-red-500 focus-visible:border-red-500"
                 />
@@ -583,11 +992,34 @@ export function YegoGanttModule() {
                 <Input
                   placeholder="ci-devops, seguridad, backend…"
                   value={form.tagsInput}
+                  disabled={taskFormSaving}
                   onChange={(e) => setForm((f) => ({ ...f, tagsInput: e.target.value }))}
                   className="h-10 rounded-lg border-border focus-visible:ring-red-500 focus-visible:border-red-500"
                 />
                 <p className="text-[10px] text-muted-foreground">Separadas por coma</p>
               </div>
+
+              {/* Proyecto */}
+              {projects.length > 0 && (
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-medium">Proyecto</Label>
+                  <Select
+                    value={form.projectId || 'none'}
+                    disabled={taskFormSaving}
+                    onValueChange={(v) => setForm((f) => ({ ...f, projectId: v === 'none' ? '' : v }))}
+                  >
+                    <SelectTrigger className="h-10 rounded-lg border-border">
+                      <SelectValue placeholder="Sin proyecto" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Sin proyecto</SelectItem>
+                      {projects.map((p) => (
+                        <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               {/* Equipo + Asignado a */}
               <div className="grid grid-cols-2 gap-3">
@@ -598,7 +1030,7 @@ export function YegoGanttModule() {
                   <Select
                     value={form.areaId}
                     onValueChange={(v) => { setForm((f) => ({ ...f, areaId: v, assignedUserIds: [] })); setAssignDropdownOpen(false); setFormErrors((p) => ({ ...p, areaId: '' })) }}
-                    disabled={!!editing}
+                    disabled={!!editing || taskFormSaving}
                   >
                     <SelectTrigger className={`h-10 rounded-lg ${formErrors.areaId ? 'border-red-500' : ''}`}>
                       <SelectValue placeholder="Selecciona" />
@@ -616,8 +1048,9 @@ export function YegoGanttModule() {
                   <div className="relative">
                     <button
                       type="button"
-                      onClick={() => setAssignDropdownOpen((v) => !v)}
-                      className="flex items-center justify-between w-full h-10 rounded-lg border border-border bg-background px-3 text-sm transition-colors hover:bg-muted/50"
+                      disabled={taskFormSaving}
+                      onClick={() => !taskFormSaving && setAssignDropdownOpen((v) => !v)}
+                      className="flex items-center justify-between w-full h-10 rounded-lg border border-border bg-background px-3 text-sm transition-colors hover:bg-muted/50 disabled:opacity-60 disabled:pointer-events-none"
                     >
                       <span className={`truncate ${form.assignedUserIds.length === 0 ? 'text-muted-foreground' : 'text-foreground'}`}>
                         {form.assignedUserIds.length === 0
@@ -666,6 +1099,7 @@ export function YegoGanttModule() {
                   <Input
                     type="date"
                     value={form.startDate}
+                    disabled={taskFormSaving}
                     onChange={(e) => { setForm((f) => ({ ...f, startDate: e.target.value })); setFormErrors((p) => ({ ...p, startDate: '', endDate: '' })) }}
                     className={`h-9 rounded-lg text-xs px-2 ${formErrors.startDate ? 'border-red-500' : ''}`}
                   />
@@ -678,6 +1112,7 @@ export function YegoGanttModule() {
                   <Input
                     type="date"
                     value={form.endDate}
+                    disabled={taskFormSaving}
                     onChange={(e) => { setForm((f) => ({ ...f, endDate: e.target.value })); setFormErrors((p) => ({ ...p, endDate: '' })) }}
                     className={`h-9 rounded-lg text-xs px-2 ${formErrors.endDate ? 'border-red-500' : ''}`}
                   />
@@ -691,6 +1126,7 @@ export function YegoGanttModule() {
                     max={100}
                     placeholder="0"
                     value={form.progressPercent}
+                    disabled={taskFormSaving}
                     onChange={(e) => {
                       const val = e.target.value
                       const num = Number(val)
@@ -709,7 +1145,7 @@ export function YegoGanttModule() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label className="text-sm font-medium">Estado</Label>
-                  <Select value={form.status} onValueChange={(v) => setForm((f) => ({ ...f, status: v as AreaTaskStatus }))}>
+                  <Select value={form.status} disabled={taskFormSaving} onValueChange={(v) => setForm((f) => ({ ...f, status: v as AreaTaskStatus }))}>
                     <SelectTrigger className="h-10 rounded-lg">
                       <SelectValue />
                     </SelectTrigger>
@@ -722,7 +1158,7 @@ export function YegoGanttModule() {
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-sm font-medium">Prioridad</Label>
-                  <Select value={form.priority} onValueChange={(v) => setForm((f) => ({ ...f, priority: v as TaskPriority }))}>
+                  <Select value={form.priority} disabled={taskFormSaving} onValueChange={(v) => setForm((f) => ({ ...f, priority: v as TaskPriority }))}>
                     <SelectTrigger className="h-10 rounded-lg">
                       <SelectValue />
                     </SelectTrigger>
@@ -741,16 +1177,24 @@ export function YegoGanttModule() {
               <Button
                 variant="outline"
                 onClick={() => setDialogOpen(false)}
+                disabled={taskFormSaving}
                 className="rounded-lg px-5"
               >
                 Cancelar
               </Button>
               <Button
-                className="bg-red-600 hover:bg-red-700 text-white rounded-lg px-5"
+                className="bg-red-600 hover:bg-red-700 text-white rounded-lg px-5 inline-flex items-center justify-center gap-2"
                 onClick={saveTask}
-                disabled={!form.title.trim() || (!editing && !form.areaId)}
+                disabled={taskFormSaving || !form.title.trim() || (!editing && !form.areaId)}
               >
-                {editing ? 'Guardar Cambios' : 'Crear Tarea'}
+                {taskFormSaving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                    {editing ? 'Guardando…' : 'Creando…'}
+                  </>
+                ) : (
+                  editing ? 'Guardar Cambios' : 'Crear Tarea'
+                )}
               </Button>
             </div>
           </DialogContent>
@@ -794,7 +1238,7 @@ export function YegoGanttModule() {
 
         {/* Delete area confirmation dialog */}
         <Dialog open={deleteAreaDialogOpen} onOpenChange={(open) => { if (!deletingArea) { setDeleteAreaDialogOpen(open); if (!open) setAreaToDelete(null) } }}>
-          <DialogContent className="max-w-md p-6 rounded-xl gantt-scale-in text-center">
+          <DialogContent className="max-w-md p-6 rounded-xl text-center">
             <DialogHeader className="space-y-1 pb-0">
               <DialogTitle className="text-lg font-semibold text-center">Eliminar Área</DialogTitle>
             </DialogHeader>
@@ -821,9 +1265,7 @@ export function YegoGanttModule() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </div>
+      </main>
     </div>
   )
 }
-
-export default YegoGanttModule

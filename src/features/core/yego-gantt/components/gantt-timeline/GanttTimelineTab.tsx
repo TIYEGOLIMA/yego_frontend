@@ -1,19 +1,27 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Clock, Edit3, FileText, Flag, Route, Trash2, User, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { WorkosRefreshingPill, WorkosTabLoading } from '../WorkosLoading'
 import {
   DAY_WIDTH,
+  areaBarFill,
+  areaLabelColor,
   buildTeamsFromTasks,
   buildTimelineRange,
-  formatTimelineDayLabel,
+  computeCriticalPathTaskIds,
+  computePerDayTaskLoad,
+  formatTimelineDayCell,
+  timelineDayDensity,
   getTodayOffsetDays,
+  isTodayAtIndex,
   isWeekendDay,
+  shiftTimelineRange,
   type GanttTaskItem,
   type GanttTeamItem,
   type TaskRowLike,
 } from '../../ganttModel'
 
-const LEFT_COL = 256
+const LEFT_COL = 288
 
 export interface TeamCollaborator {
   id: number
@@ -24,10 +32,15 @@ export interface TeamCollaborator {
 export interface GanttTimelineTabProps {
   tasks: TaskRowLike[]
   loading: boolean
+  /** Recarga en segundo plano: no oculta el timeline */
+  refreshing?: boolean
+  /** Ocultar pastilla esquina (p. ej. cuando el módulo muestra aviso de cambio de proyecto). */
+  suppressEdgeRefreshPill?: boolean
+  /** Desplazamiento en días del ancla del timeline (navegación ← / →). */
+  timelinePanDays?: number
   filterText: string
   onFilterChange: (v: string) => void
   manage: boolean
-  onCreateTask: () => void
   onEditTask: (t: TaskRowLike) => void
   onDeleteTask: (t: TaskRowLike) => void
   showHeatmap: boolean
@@ -38,21 +51,44 @@ export interface GanttTimelineTabProps {
 
 function TimelineHeader({ anchor, totalDays, dayWidth }: { anchor: Date; totalDays: number; dayWidth: number }) {
   const days = Array.from({ length: totalDays }, (_, i) => i)
+  const density = timelineDayDensity(dayWidth)
   return (
-    <div className="flex border-b border-border/80 bg-card/95 backdrop-blur-sm sticky top-0 z-30 shadow-sm">
+    <div className="flex border-b border-[#e5e7eb] bg-[#fafafa] sticky top-0 z-30 dark:border-border/80 dark:bg-muted/30 min-h-[48px]">
       {days.map((day) => {
-        const { weekday, label } = formatTimelineDayLabel(anchor, day)
+        const { weekday, label, title } = formatTimelineDayCell(anchor, day, density)
         const weekend = isWeekendDay(anchor, day)
+        const today = isTodayAtIndex(anchor, day)
         return (
           <div
             key={day}
-            className={`shrink-0 flex flex-col items-center justify-center py-2 border-r border-border/50 tabular-nums ${
-              weekend ? 'bg-muted/30' : ''
+            title={title}
+            className={`shrink-0 flex flex-col items-center justify-center border-r border-[#e5e7eb] dark:border-border/40 min-w-0 overflow-hidden px-0.5 ${
+              density === 'minimal' ? 'py-1.5 gap-0' : 'py-1.5 gap-0.5'
+            } ${
+              today
+                ? 'bg-primary-500 text-white'
+                : weekend
+                  ? 'bg-[#f3f4f6] text-muted-foreground dark:bg-muted/40'
+                  : 'bg-white text-muted-foreground dark:bg-card'
             }`}
-            style={{ width: dayWidth }}
+            style={{ width: dayWidth, maxWidth: dayWidth }}
           >
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{weekday}</span>
-            <span className={`text-xs font-medium ${day === 0 ? 'text-red-600 dark:text-red-400' : 'text-foreground'}`}>{label}</span>
+            {weekday ? (
+              <span
+                className={`leading-none font-medium whitespace-nowrap max-w-full truncate text-center normal-case tracking-normal ${
+                  density === 'compact' ? 'text-[9px]' : 'text-[10px]'
+                } ${today ? 'text-white/90' : ''}`}
+              >
+                {weekday}
+              </span>
+            ) : null}
+            <span
+              className={`leading-none font-semibold whitespace-nowrap max-w-full truncate text-center normal-case tabular-nums ${
+                density === 'minimal' ? 'text-[11px]' : density === 'compact' ? 'text-[10px]' : 'text-[11px]'
+              } ${today ? 'text-white' : 'text-foreground'}`}
+            >
+              {label}
+            </span>
           </div>
         )
       })}
@@ -77,6 +113,7 @@ function GanttBar({
   task,
   onClick,
   dimmed,
+  highlightCritical,
   yOffset,
   barIndex = 0,
   dayWidth,
@@ -84,6 +121,8 @@ function GanttBar({
   task: GanttTaskItem
   onClick: (t: GanttTaskItem) => void
   dimmed: boolean
+  /** Tarea en ruta crítica: contorno para distinguirla del resto. */
+  highlightCritical?: boolean
   yOffset?: number
   barIndex?: number
   dayWidth: number
@@ -91,31 +130,35 @@ function GanttBar({
   const left = task.startDay * dayWidth
   const width = task.duration * dayWidth - 4
 
-  const statusClass =
-    task.status === 'blocked'
-      ? 'border-red-950/50 bg-red-950/25 dark:bg-red-950/40'
-      : task.status === 'at-risk'
-        ? 'border-orange-500/55 bg-orange-600/20 dark:bg-orange-950/35'
-        : task.status === 'completed'
-          ? 'border-border bg-muted/70 opacity-65'
-          : 'border-red-500/45 bg-gradient-to-r from-red-600/25 to-red-500/15 dark:from-red-900/35 dark:to-red-800/20'
+  const fill = areaBarFill(task.areaId, task.status)
 
   return (
     <button
       type="button"
-      className={`absolute z-10 flex items-center px-2 overflow-hidden rounded-md border text-left cursor-pointer shadow-sm transition-all duration-200 hover:scale-[1.02] hover:z-20 hover:shadow-md gantt-bar-grow ${statusClass} ${
+      className={`absolute z-10 flex items-center px-2 overflow-hidden rounded-lg border border-white/25 text-left cursor-pointer shadow-sm transition-all duration-200 hover:scale-[1.01] hover:z-20 hover:shadow-md hover:ring-2 hover:ring-primary-500/35 gantt-bar-grow ${
         dimmed ? 'opacity-35' : ''
-      }`}
-      style={{ left, width: Math.max(width, 24), height: 28, top: yOffset ?? '50%', transform: yOffset == null ? 'translateY(-50%)' : undefined, animationDelay: `${barIndex * 0.08}s` }}
+      } ${highlightCritical ? 'ring-2 ring-primary-500 ring-offset-2 ring-offset-white dark:ring-offset-card z-[15]' : ''}`}
+      style={{
+        left,
+        width: Math.max(width, 24),
+        height: 28,
+        top: yOffset ?? '50%',
+        transform: yOffset == null ? 'translateY(-50%)' : undefined,
+        animationDelay: `${barIndex * 0.08}s`,
+        backgroundColor: fill,
+        color: '#fff',
+      }}
       onClick={() => onClick(task)}
     >
       <div
-        className="absolute inset-y-0 left-0 rounded-l-md opacity-50 bg-red-700 dark:bg-red-600"
+        className="absolute inset-y-0 left-0 rounded-l-lg bg-black/20"
         style={{ width: `${Math.min(100, Math.max(0, task.progress))}%` }}
       />
-      <span className="relative text-[11px] font-medium text-foreground truncate">{task.name}</span>
-      {task.progress > 0 && width > 80 && (
-        <span className="relative ml-auto text-[10px] tabular-nums text-muted-foreground pl-1">{task.progress}%</span>
+      <span className="relative text-[11px] font-semibold truncate drop-shadow-sm">{task.name}</span>
+      {task.progress > 0 && width > 72 && (
+        <span className="relative ml-auto text-[10px] tabular-nums font-bold bg-black/25 rounded px-1 py-0.5 shrink-0">
+          {task.progress}%
+        </span>
       )}
     </button>
   )
@@ -125,6 +168,28 @@ function avatarInit(name: string): string {
   const parts = name.trim().split(/\s+/)
   if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase()
   return name.slice(0, 2).toUpperCase()
+}
+
+/** Fondo de celda día: hoy, heatmap por carga, fin de semana o neutro. */
+function timelineDayCellClass(
+  anchor: Date,
+  dayIndex: number,
+  showHeatmap: boolean,
+  concurrentTasks: number,
+): string {
+  const base = 'shrink-0 border-r border-[#e5e7eb]/80 h-full dark:border-border/30'
+  if (isTodayAtIndex(anchor, dayIndex)) {
+    return `${base} bg-primary-500/[0.07] dark:bg-primary-500/12`
+  }
+  if (showHeatmap) {
+    if (concurrentTasks >= 3) return `${base} bg-red-500/15 dark:bg-red-500/25`
+    if (concurrentTasks === 2) return `${base} bg-amber-500/12 dark:bg-amber-500/20`
+    if (concurrentTasks === 1) return `${base} bg-emerald-500/10 dark:bg-emerald-500/15`
+  }
+  if (isWeekendDay(anchor, dayIndex)) {
+    return `${base} bg-[#f9fafb] dark:bg-muted/30`
+  }
+  return `${base} bg-white dark:bg-transparent`
 }
 
 function TeamRowWithGrid({
@@ -148,24 +213,21 @@ function TeamRowWithGrid({
   staggerIndex?: number
   dayWidth: number
 }) {
-  const heatmapBg =
-    showHeatmap
-      ? team.capacity >= 90
-        ? 'bg-destructive/5'
-        : team.capacity >= 70
-          ? 'bg-amber-500/5'
-          : 'bg-emerald-500/5'
+  const perDayLoad = useMemo(() => computePerDayTaskLoad(team.tasks, totalDays), [team.tasks, totalDays])
+  const maxOverlap = useMemo(() => perDayLoad.reduce((a, b) => Math.max(a, b), 0), [perDayLoad])
+
+  const heatmapRowTint =
+    showHeatmap && maxOverlap > 0
+      ? maxOverlap >= 3
+        ? 'bg-red-500/[0.05] dark:bg-red-950/25'
+        : maxOverlap >= 2
+          ? 'bg-amber-500/[0.05] dark:bg-amber-950/20'
+          : 'bg-emerald-500/[0.04] dark:bg-emerald-950/15'
       : ''
 
   const criticalIds = useMemo(() => {
     if (!showCriticalPath) return null as Set<string> | null
-    const urgent = team.tasks.filter((t) => t.priority === 'critical')
-    if (urgent.length) return new Set(urgent.map((t) => t.id))
-    const longest = team.tasks.reduce<GanttTaskItem | null>((best, t) => {
-      if (!best || t.duration > best.duration) return t
-      return best
-    }, null)
-    return longest ? new Set([longest.id]) : new Set<string>()
+    return computeCriticalPathTaskIds(team.tasks)
   }, [showCriticalPath, team.tasks])
 
   const tw = totalDays * dayWidth
@@ -174,14 +236,21 @@ function TeamRowWithGrid({
   const rowHeight = hasCollabs ? 'auto' : undefined
 
   return (
-    <div className={`border-b border-border gantt-fade-in ${heatmapBg}`} style={{ animationDelay: `${staggerIndex * 0.06}s` }}>
+    <div
+      className={`border-b border-[#e5e7eb] gantt-fade-in dark:border-border ${heatmapRowTint}`}
+      style={{ animationDelay: `${staggerIndex * 0.06}s` }}
+    >
       {/* Main row: team header + gantt bars */}
       <div className="flex">
         <div
-          className="shrink-0 sticky left-0 z-20 bg-gradient-to-r from-card to-card/95 border-r border-border/80 px-4 py-2.5 flex flex-col gap-1 shadow-[2px_0_8px_-4px_rgba(0,0,0,0.08)]"
+          className="shrink-0 sticky left-0 z-20 bg-white border-r border-[#e5e7eb] px-4 py-2.5 flex flex-col gap-1 shadow-[2px_0_8px_-4px_rgba(0,0,0,0.06)] dark:bg-card dark:border-border/80"
           style={{ width: LEFT_COL }}
         >
-          <span className="text-sm font-semibold text-foreground truncate" title={team.name}>
+          <span
+            className="text-sm font-semibold truncate"
+            style={{ color: areaLabelColor(Number(team.id)) }}
+            title={team.name}
+          >
             {team.name}
           </span>
           <div className="flex items-center gap-2">
@@ -222,8 +291,13 @@ function TeamRowWithGrid({
             {Array.from({ length: totalDays }, (_, i) => (
               <div
                 key={i}
-                className={`shrink-0 border-r border-border/30 h-full ${isWeekendDay(anchor, i) ? 'bg-muted/20' : ''}`}
+                className={timelineDayCellClass(anchor, i, showHeatmap, perDayLoad[i] ?? 0)}
                 style={{ width: dayWidth }}
+                title={
+                  showHeatmap && (perDayLoad[i] ?? 0) > 0
+                    ? `${perDayLoad[i]} tarea(s) activas este día`
+                    : undefined
+                }
               />
             ))}
           </div>
@@ -234,6 +308,7 @@ function TeamRowWithGrid({
                 task={task}
                 onClick={onTaskClick}
                 dimmed={showCriticalPath && criticalIds !== null && !criticalIds.has(task.id)}
+                highlightCritical={showCriticalPath && (criticalIds?.has(task.id) ?? false)}
                 yOffset={idx * 34 + 4}
                 barIndex={idx}
                 dayWidth={dayWidth}
@@ -247,7 +322,7 @@ function TeamRowWithGrid({
       {lead && (
         <div className="flex">
           <div
-            className="shrink-0 sticky left-0 z-20 bg-card/95 border-r border-border/80 px-4 py-1.5 flex items-center gap-2 shadow-[2px_0_8px_-4px_rgba(0,0,0,0.08)]"
+            className="shrink-0 sticky left-0 z-20 bg-white border-r border-[#e5e7eb] px-4 py-1.5 flex items-center gap-2 shadow-[2px_0_8px_-4px_rgba(0,0,0,0.06)] dark:bg-card/95 dark:border-border/80"
             style={{ width: LEFT_COL }}
           >
             <div className="w-6 h-6 rounded-full bg-muted border border-border/60 flex items-center justify-center text-[9px] font-bold text-muted-foreground shrink-0">
@@ -286,7 +361,7 @@ function Minimap({
   const thumbW = Math.max(viewportWidth * scale, 20)
   const thumbLeft = scrollLeft * scale
 
-  const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     const rect = e.currentTarget.getBoundingClientRect()
     const x = e.clientX - rect.left
     const newScroll = (x / MINIMAP_W) * totalW - viewportWidth / 2
@@ -294,7 +369,7 @@ function Minimap({
   }
 
   return (
-    <div className="px-4 py-2 border-t bg-muted/20 flex items-center gap-3 shrink-0">
+    <div className="px-4 py-2 border-t border-[#e5e7eb] bg-[#fafafa] flex items-center gap-3 shrink-0 dark:border-border/60 dark:bg-muted/20">
       <Route className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
       <span className="text-[10px] text-muted-foreground uppercase tracking-wider shrink-0">Nav</span>
       <button
@@ -328,17 +403,23 @@ function Minimap({
 }
 
 const STATUS_UI: Record<string, { label: string; className: string }> = {
-  'on-track': { label: 'En curso', className: 'text-primary bg-primary/10 border-primary/20' },
-  'at-risk': { label: 'En riesgo', className: 'text-amber-700 bg-amber-500/10 border-amber-500/30' },
-  blocked: { label: 'Bloqueado', className: 'text-destructive bg-destructive/10 border-destructive/25' },
-  completed: { label: 'Completado', className: 'text-emerald-700 bg-emerald-500/10 border-emerald-500/25' },
+  'on-track': {
+    label: 'En curso',
+    className: 'text-amber-700 bg-white border-amber-400 dark:bg-transparent dark:border-amber-500/50',
+  },
+  'at-risk': {
+    label: 'En riesgo',
+    className: 'text-orange-700 bg-white border-orange-400 dark:bg-transparent',
+  },
+  blocked: { label: 'Bloqueado', className: 'text-red-700 bg-white border-red-300 dark:bg-transparent' },
+  completed: { label: 'Completado', className: 'text-emerald-700 bg-white border-emerald-400 dark:bg-transparent' },
 }
 
 const PRIORITY_UI: Record<string, { label: string; className: string }> = {
-  low: { label: 'Baja', className: 'text-muted-foreground bg-muted' },
-  medium: { label: 'Media', className: 'text-primary bg-primary/10' },
-  high: { label: 'Alta', className: 'text-amber-800 bg-amber-500/10' },
-  critical: { label: 'Urgente', className: 'text-destructive bg-destructive/10' },
+  low: { label: 'Baja', className: 'text-muted-foreground bg-white border-[#e5e7eb]' },
+  medium: { label: 'Media', className: 'text-sky-700 bg-white border-sky-400 dark:text-sky-300' },
+  high: { label: 'Alta', className: 'text-amber-800 bg-white border-amber-500' },
+  critical: { label: 'Urgente', className: 'text-red-700 bg-white border-red-400' },
 }
 
 function computeDurationDays(start: string, end: string): number {
@@ -394,15 +475,15 @@ function TaskDetailPanel({
   const areaLabel = task.areaName || `Área #${task.areaId}`
 
   return (
-    <div className="w-80 shrink-0 border-l border-border/80 bg-card overflow-y-auto flex flex-col gantt-slide-right">
+    <div className="w-80 shrink-0 border-l border-[#e5e7eb] bg-white overflow-y-auto flex flex-col gantt-slide-right workos-shadow-elevated dark:border-border/80 dark:bg-card">
       <div className="p-5 space-y-5">
         {/* Header */}
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <h3 className="text-base font-bold leading-tight text-foreground">{task.title}</h3>
-            <p className="text-[10px] text-muted-foreground mt-1 font-mono">ID: {task.id}</p>
+            <h3 className="font-display text-base font-bold leading-tight text-foreground">{task.title}</h3>
+            <p className="text-xs text-muted-foreground mt-1 font-mono">t-{task.id}</p>
           </div>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-md hover:bg-muted shrink-0 -mt-1 -mr-1" aria-label="Cerrar">
+          <button type="button" onClick={onClose} className="p-1.5 rounded-md hover:bg-[#f3f4f6] shrink-0 -mt-1 -mr-1" aria-label="Cerrar">
             <X className="w-4 h-4 text-muted-foreground" />
           </button>
         </div>
@@ -410,7 +491,12 @@ function TaskDetailPanel({
         {/* Actions */}
         {manage && (
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="flex-1 text-xs h-9 gap-1.5 rounded-lg" onClick={() => onEdit(task)}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1 min-w-0 text-xs h-9 gap-1.5 rounded-lg border-primary-500 text-primary-600 bg-white hover:bg-primary-50 dark:hover:bg-primary-950/30"
+              onClick={() => onEdit(task)}
+            >
               <Edit3 className="w-3.5 h-3.5" />
               Editar
             </Button>
@@ -427,27 +513,25 @@ function TaskDetailPanel({
 
         {/* Status + Priority */}
         <div className="flex flex-wrap gap-2">
-          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium ${st.className}`}>
+          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold ${st.className}`}>
             <Clock className="w-3 h-3" />
             {st.label}
           </div>
-          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium ${pr.className}`}>
+          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold ${pr.className}`}>
             <Flag className="w-3 h-3" />
             {pr.label}
           </div>
         </div>
 
         {/* Description */}
-        {task.description && (
-          <div className="space-y-2">
-            <span className="text-[10px] uppercase tracking-widest text-muted-foreground flex items-center gap-1.5 font-semibold">
-              <FileText className="w-3 h-3" /> Descripción
-            </span>
-            <div className="rounded-lg border border-border/60 bg-muted/30 p-3">
-              <p className="text-xs text-muted-foreground leading-relaxed">{task.description}</p>
-            </div>
-          </div>
-        )}
+        <div className="space-y-2">
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 font-semibold">
+            <FileText className="w-3 h-3" /> Descripción
+          </span>
+          <p className="text-sm text-foreground leading-relaxed">
+            {task.description?.trim() ? task.description : <span className="italic text-muted-foreground">Sin descripción</span>}
+          </p>
+        </div>
 
         {/* Assigned */}
         <div className="space-y-2">
@@ -475,30 +559,37 @@ function TaskDetailPanel({
           )}
         </div>
 
-        {/* Progress */}
-        <div className="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-2">
-          <div className="flex justify-between items-baseline">
+        {/* Progreso + fechas (misma tarjeta: barra y tres columnas debajo) */}
+        <div className="rounded-lg border border-[#e5e7eb] bg-[#fafafa] p-4 space-y-3 dark:border-border/60 dark:bg-muted/20">
+          <div className="flex items-center justify-between gap-2">
             <span className="text-xs text-muted-foreground">Progreso</span>
-            <span className="text-lg font-bold tabular-nums text-foreground">{ganttTask.progress}%</span>
+            <span className="text-sm font-semibold tabular-nums text-foreground">{ganttTask.progress}%</span>
           </div>
-          <div className="w-full h-2.5 rounded-full bg-muted overflow-hidden">
-            <div className="h-full rounded-full bg-red-600 transition-all" style={{ width: `${ganttTask.progress}%` }} />
+          <div className="w-full h-2.5 rounded-full bg-[#e5e7eb] overflow-hidden dark:bg-border/60">
+            <div
+              className="h-full rounded-full workos-progress-fill transition-all duration-300"
+              style={{ width: `${Math.min(100, Math.max(0, ganttTask.progress))}%` }}
+            />
           </div>
-        </div>
-
-        {/* Dates */}
-        <div className="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-3 text-xs">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Inicio</span>
-            <span className="tabular-nums font-medium">{formatShortDate(task.startDate)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Fin</span>
-            <span className="tabular-nums font-medium">{formatShortDate(task.endDate)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Duración</span>
-            <span className="tabular-nums font-medium">{duration} día{duration !== 1 ? 's' : ''}</span>
+          <div className="grid grid-cols-3 gap-3 pt-1 border-t border-[#e5e7eb]/80 dark:border-border/50">
+            <div className="min-w-0">
+              <div className="text-xs text-muted-foreground">Inicio</div>
+              <div className="text-sm font-semibold tabular-nums text-foreground mt-0.5 leading-tight">
+                {formatShortDate(task.startDate)}
+              </div>
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs text-muted-foreground">Fin</div>
+              <div className="text-sm font-semibold tabular-nums text-foreground mt-0.5 leading-tight">
+                {formatShortDate(task.endDate)}
+              </div>
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs text-muted-foreground">Duración</div>
+              <div className="text-sm font-semibold tabular-nums text-foreground mt-0.5 leading-tight">
+                {duration} día{duration !== 1 ? 's' : ''}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -509,10 +600,12 @@ function TaskDetailPanel({
 export function GanttTimelineTab({
   tasks,
   loading,
+  refreshing = false,
+  suppressEdgeRefreshPill = false,
+  timelinePanDays = 0,
   filterText,
   onFilterChange,
   manage,
-  onCreateTask,
   onEditTask,
   onDeleteTask,
   showHeatmap,
@@ -526,7 +619,8 @@ export function GanttTimelineTab({
   const [viewportW, setViewportW] = useState(800)
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  const range = useMemo(() => buildTimelineRange(tasks), [tasks])
+  const baseRange = useMemo(() => buildTimelineRange(tasks), [tasks])
+  const range = useMemo(() => shiftTimelineRange(baseRange, timelinePanDays), [baseRange, timelinePanDays])
   const teamsAll = useMemo(() => buildTeamsFromTasks(tasks, range), [tasks, range])
 
   const filteredTeams = useMemo(() => {
@@ -568,7 +662,7 @@ export function GanttTimelineTab({
     ro.observe(el)
     setViewportW(el.clientWidth || 800)
     return () => ro.disconnect()
-  }, [loading, filteredTeams.length])
+  }, [filteredTeams.length])
 
   const onTaskClick = useCallback(
     (gt: GanttTaskItem) => {
@@ -580,11 +674,16 @@ export function GanttTimelineTab({
     [taskById, onTaskSelectNotify],
   )
 
-  return (
-    <div className="flex flex-col flex-1 min-h-0 min-h-[420px] max-h-[calc(100vh-260px)] overflow-hidden bg-background">
-      {loading && <p className="text-sm text-muted-foreground p-6">Cargando timeline…</p>}
+  const blockingLoad = loading && tasks.length === 0
 
-      {!loading && filteredTeams.length === 0 && (
+  return (
+    <div className="flex flex-col flex-1 min-h-0 min-h-[420px] max-h-[calc(100vh-260px)] overflow-hidden bg-transparent relative">
+      {refreshing && !blockingLoad && !suppressEdgeRefreshPill && (
+        <WorkosRefreshingPill className="absolute top-0 right-3 z-50" />
+      )}
+      {blockingLoad && <WorkosTabLoading srLabel="Cargando timeline…" />}
+
+      {!blockingLoad && filteredTeams.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground text-sm">
           <p>No hay equipos o tareas que coincidan.</p>
           {filterText && (
@@ -595,17 +694,19 @@ export function GanttTimelineTab({
         </div>
       )}
 
-      {!loading && filteredTeams.length > 0 && (
-        <div className="flex flex-1 min-h-0 overflow-hidden">
+      {!blockingLoad && filteredTeams.length > 0 && (
+        <div
+          className={`flex flex-1 min-h-0 overflow-hidden rounded-xl border border-[#e5e7eb] bg-white workos-shadow-soft dark:border-border/80 dark:bg-card ${refreshing ? 'opacity-95' : ''}`}
+        >
           <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
             <div ref={scrollRef} className="flex-1 overflow-auto" onScroll={handleScroll}>
               <div style={{ minWidth: totalWidth }}>
-                <div className="flex sticky top-0 z-30">
+                <div className="flex sticky top-0 z-30 items-stretch min-h-[48px]">
                   <div
-                    className="shrink-0 sticky left-0 z-40 bg-gradient-to-r from-card to-card/95 border-b border-r border-border/80 px-4 py-2 flex items-end shadow-[2px_0_8px_-4px_rgba(0,0,0,0.08)]"
+                    className="shrink-0 sticky left-0 z-40 bg-[#fafafa] border-b border-r border-[#e5e7eb] px-4 py-1.5 flex items-end shadow-[2px_0_8px_-4px_rgba(0,0,0,0.06)] dark:bg-muted/30 dark:border-border/80 min-h-[48px] box-border"
                     style={{ width: LEFT_COL }}
                   >
-                    <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-medium">Equipos</span>
+                    <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">Equipos</span>
                   </div>
                   <TimelineHeader anchor={range.anchor} totalDays={totalDays} dayWidth={dayWidth} />
                 </div>

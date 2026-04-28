@@ -1,105 +1,64 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useMemo, useCallback } from 'react'
 import {
-  AlertCircle,
-  Calendar,
+  AlertOctagon,
+  AlertTriangle,
+  CalendarDays,
   CheckCircle2,
   Circle,
-  Clock,
-  Eye,
+  CircleDot,
+  Flag,
   Pencil,
+  Plus,
   Trash2,
 } from 'lucide-react'
-import type { ColaboradorDto } from '../yego-gantt.module'
+import { WorkosRefreshingPill, WorkosTabLoading } from './WorkosLoading'
+import type { TodoBoardTabProps, TaskRow, AreaTaskStatus, TaskPriority } from '../types'
+import { PRIO_LABEL, norm } from '../utils'
+import { useKanbanDrag } from '../hooks'
+import { Avatar, ProgressBar } from './common'
 
-type AreaTaskStatus = 'PENDING' | 'IN_PROGRESS' | 'DONE' | 'BLOCKED' | 'AT_RISK'
-type TaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'
-
-interface TaskRow {
-  id: number
-  areaId: number
-  areaName?: string | null
-  title: string
-  description?: string | null
-  startDate: string
-  endDate: string
-  status: AreaTaskStatus
-  priority?: TaskPriority | null
-  progressPercent: number
-  assignedUserId?: number | null
-  assignedUserIds?: number[]
+function boardPriorityPillClass(p: TaskPriority): string {
+  switch (p) {
+    case 'LOW':
+      return 'bg-neutral-100 text-neutral-600 border-neutral-200/90 dark:bg-neutral-800/70 dark:text-neutral-300 dark:border-neutral-600/80'
+    case 'MEDIUM':
+      return 'bg-sky-50 text-sky-700 border-sky-200/90 dark:bg-sky-950/45 dark:text-sky-300 dark:border-sky-800/50'
+    case 'HIGH':
+      return 'bg-amber-50 text-amber-800 border-amber-200/90 dark:bg-amber-950/35 dark:text-amber-300 dark:border-amber-800/45'
+    case 'URGENT':
+      return 'bg-red-50 text-red-700 border-red-200/90 dark:bg-red-950/35 dark:text-red-300 dark:border-red-800/45'
+    default:
+      return 'bg-neutral-100 text-neutral-600 border-neutral-200/90'
+  }
 }
 
-const PRIO_LABEL: Record<TaskPriority, string> = { LOW: 'Baja', MEDIUM: 'Media', HIGH: 'Alta', URGENT: 'Urgente' }
-const PRIO_BADGE: Record<TaskPriority, string> = {
-  LOW: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
-  MEDIUM: 'bg-red-500/10 text-red-700 dark:text-red-300',
-  HIGH: 'bg-amber-500/10 text-amber-700 dark:text-amber-200',
-  URGENT: 'bg-rose-500/10 text-rose-700 dark:text-rose-300',
-}
-
-const PRIO_BORDER: Record<TaskPriority, string> = {
-  LOW: 'border-l-slate-400/40',
-  MEDIUM: 'border-l-red-500/50',
-  HIGH: 'border-l-amber-500/50',
-  URGENT: 'border-l-rose-600/60',
-}
-
-const AREA_CHIP: string[] = [
-  'bg-red-500/10 text-red-700 dark:text-red-300',
-  'bg-violet-500/10 text-violet-700 dark:text-violet-300',
-  'bg-amber-500/10 text-amber-700 dark:text-amber-300',
-  'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
-  'bg-cyan-500/10 text-cyan-700 dark:text-cyan-300',
-  'bg-pink-500/10 text-pink-700 dark:text-pink-300',
-]
-
-function areaChipClass(areaId: number): string {
-  return AREA_CHIP[areaId % AREA_CHIP.length]
-}
-
-function norm(p?: TaskPriority | null): TaskPriority {
-  return p === 'LOW' || p === 'MEDIUM' || p === 'HIGH' || p === 'URGENT' ? p : 'MEDIUM'
-}
-
-interface Column {
+const COLUMNS: {
   status: AreaTaskStatus
   title: string
-  icon: typeof Circle
-  gradient: string
-}
-
-const COLUMNS: Column[] = [
-  { status: 'PENDING', title: 'Pendiente', icon: AlertCircle, gradient: 'from-red-500/15 to-red-500/5' },
-  { status: 'IN_PROGRESS', title: 'En progreso', icon: Clock, gradient: 'from-amber-500/15 to-amber-500/5' },
-  { status: 'AT_RISK', title: 'En riesgo', icon: Eye, gradient: 'from-yellow-500/15 to-yellow-500/5' },
-  { status: 'BLOCKED', title: 'Bloqueada', icon: Circle, gradient: 'from-zinc-500/15 to-zinc-500/5' },
-  { status: 'DONE', title: 'Completado', icon: CheckCircle2, gradient: 'from-emerald-500/15 to-emerald-500/5' },
+  Icon: typeof Circle
+  tone: string
+}[] = [
+  { status: 'PENDING', title: 'Pendiente', Icon: Circle, tone: 'text-muted-foreground border-border' },
+  { status: 'IN_PROGRESS', title: 'En progreso', Icon: CircleDot, tone: 'text-amber-600 border-amber-500/30' },
+  { status: 'AT_RISK', title: 'En riesgo', Icon: AlertTriangle, tone: 'text-primary border-primary/30' },
+  { status: 'BLOCKED', title: 'Bloqueada', Icon: AlertOctagon, tone: 'text-destructive border-destructive/30' },
+  { status: 'DONE', title: 'Completado', Icon: CheckCircle2, tone: 'text-emerald-600 border-emerald-500/30' },
 ]
 
-function avatarInitials(name: string): string {
-  const parts = name.trim().split(/\s+/)
-  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase()
-  return name.slice(0, 2).toUpperCase()
-}
-
-export interface TodoBoardTabProps {
-  tasks: TaskRow[]
-  loading: boolean
-  manage: boolean
-  allCollaborators?: ColaboradorDto[]
-  onEdit: (t: TaskRow) => void
-  onDelete: (t: TaskRow) => void
-  onStatusChange?: (taskId: number, newStatus: AreaTaskStatus) => Promise<void>
-}
-
-export function TodoBoardTab({ tasks, loading, manage, allCollaborators = [], onEdit, onDelete, onStatusChange }: TodoBoardTabProps) {
-  const [dragTaskId, setDragTaskId] = useState<number | null>(null)
-  const [dropTarget, setDropTarget] = useState<AreaTaskStatus | null>(null)
-  const [updatingId, setUpdatingId] = useState<number | null>(null)
-  const dragSourceStatus = useRef<AreaTaskStatus | null>(null)
-
+export function TodoBoardTab({
+  tasks,
+  loading,
+  refreshing = false,
+  suppressEdgeRefreshPill = false,
+  manage,
+  allCollaborators = [],
+  onEdit,
+  onDelete,
+  onStatusChange,
+  onAddTask,
+}: TodoBoardTabProps) {
   const collabMap = useMemo(() => {
-    const m = new Map<number, ColaboradorDto>()
+    const m = new Map<number, { nombreCompleto: string; rol: string }>()
     for (const c of allCollaborators) m.set(c.id, c)
     return m
   }, [allCollaborators])
@@ -116,8 +75,19 @@ export function TodoBoardTab({ tasks, loading, manage, allCollaborators = [], on
         return { id: uid, name: c?.nombreCompleto || `#${uid}` }
       })
     },
-    [collabMap],
+    [collabMap]
   )
+
+  const {
+    dragTaskId,
+    updatingId,
+    handleDragStart,
+    handleDragEnd,
+    handleDragOver,
+    handleDragLeave,
+    handleDrop,
+    isDropTarget,
+  } = useKanbanDrag()
 
   const columnData = useMemo(
     () =>
@@ -125,191 +95,155 @@ export function TodoBoardTab({ tasks, loading, manage, allCollaborators = [], on
         ...col,
         tasks: tasks.filter((t) => t.status === col.status),
       })),
-    [tasks],
+    [tasks]
   )
 
-  const handleDragStart = useCallback((task: TaskRow) => {
-    setDragTaskId(task.id)
-    dragSourceStatus.current = task.status
-  }, [])
-
-  const handleDragEnd = useCallback(() => {
-    setDragTaskId(null)
-    setDropTarget(null)
-    dragSourceStatus.current = null
-  }, [])
-
-  const handleDragOver = useCallback((e: React.DragEvent, colStatus: AreaTaskStatus) => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-    setDropTarget(colStatus)
-  }, [])
-
-  const handleDragLeave = useCallback((e: React.DragEvent, colStatus: AreaTaskStatus) => {
-    const rect = e.currentTarget.getBoundingClientRect()
-    const { clientX, clientY } = e
-    if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
-      setDropTarget((prev) => (prev === colStatus ? null : prev))
-    }
-  }, [])
-
-  const handleDrop = useCallback(async (colStatus: AreaTaskStatus) => {
-    const taskId = dragTaskId
-    const sourceStatus = dragSourceStatus.current
-    setDragTaskId(null)
-    setDropTarget(null)
-    dragSourceStatus.current = null
-
-    if (taskId == null || !onStatusChange || sourceStatus === colStatus) return
-
-    setUpdatingId(taskId)
-    try {
-      await onStatusChange(taskId, colStatus)
-    } finally {
-      setUpdatingId(null)
-    }
-  }, [dragTaskId, onStatusChange])
-
-  if (loading) return <p className="text-sm text-muted-foreground p-6">Cargando tablero…</p>
+  if (loading && tasks.length === 0) {
+    return <WorkosTabLoading srLabel="Cargando tablero…" />
+  }
 
   return (
-    <div className="flex-1 overflow-auto p-4 sm:p-5">
-      <div className="flex gap-3" style={{ minWidth: COLUMNS.length * 280 }}>
-        {columnData.map((col, colIdx) => {
-          const Icon = col.icon
-          const isOver = dropTarget === col.status && dragSourceStatus.current !== col.status
+    <div className={`space-y-4 relative ${refreshing ? 'opacity-[0.97]' : ''}`}>
+      {refreshing && !suppressEdgeRefreshPill && (
+        <WorkosRefreshingPill className="absolute top-0 right-0 z-10" />
+      )}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        {columnData.map((col) => {
+          const Icon = col.Icon
+          const isOver = isDropTarget(col.status)
           return (
             <div
               key={col.status}
-              style={{ animationDelay: `${colIdx * 0.07}s` }}
-              className={`flex-1 min-w-[260px] flex flex-col rounded-xl border overflow-hidden transition-all duration-300 gantt-fade-in ${
-                isOver
-                  ? 'ring-2 ring-red-500/40 border-red-500/50 shadow-lg shadow-red-500/10 scale-[1.01]'
-                  : dragTaskId != null
-                    ? 'ring-1 ring-red-500/10 border-border/60 shadow-md'
-                    : 'border-border/60 shadow-sm'
-              }`}
               onDragOver={(e) => handleDragOver(e, col.status)}
               onDragLeave={(e) => handleDragLeave(e, col.status)}
-              onDrop={() => handleDrop(col.status)}
+              onDrop={() => onStatusChange && handleDrop(col.status, onStatusChange)}
+              className={`flex flex-col rounded-xl border border-border/80 bg-card workos-shadow-soft min-h-[400px] transition-all ${
+                isOver ? 'ring-2 ring-primary/25 border-primary/40' : ''
+              }`}
             >
-              {/* column header */}
-              <div className={`px-4 py-3 bg-gradient-to-b ${col.gradient} border-b border-border/40 transition-colors ${isOver ? 'brightness-110' : ''}`}>
-                <div className="flex items-center gap-2">
-                  <Icon className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span className="text-xs font-semibold text-foreground">{col.title}</span>
-                  <span className="ml-auto text-[10px] tabular-nums px-2 py-0.5 rounded-full bg-background/80 text-muted-foreground border border-border/50 font-medium">
-                    {col.tasks.length}
-                  </span>
-                </div>
+              <div
+                className={`flex items-center gap-2 px-3 py-2.5 border-b border-border/60 ${col.tone} border-t-[3px] rounded-t-xl bg-muted/30`}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                <span className="text-sm font-semibold text-foreground">{col.title}</span>
+                <span className="ml-auto text-xs font-semibold tabular-nums rounded-full bg-background border px-2 py-0.5">
+                  {col.tasks.length}
+                </span>
               </div>
-
-              {/* cards */}
-              <div className={`flex-1 p-2 space-y-2 min-h-[200px] transition-colors duration-200 ${isOver ? 'bg-red-500/[0.03]' : 'bg-gradient-to-b from-background/60 to-muted/20'}`}>
-                {col.tasks.map((t, tIdx) => {
-                  const pr = norm(t.priority)
-                  const isUpdating = updatingId === t.id
-                  return (
-                    <div
-                      key={t.id}
-                      draggable={manage && !isUpdating}
-                      onDragStart={() => handleDragStart(t)}
-                      onDragEnd={handleDragEnd}
-                      style={{ animationDelay: `${tIdx * 0.05}s` }}
-                      className={`group rounded-xl border border-border/80 bg-card hover:bg-card/90 p-3 transition-all duration-200 hover:shadow-lg hover:shadow-red-500/[0.04] hover:-translate-y-0.5 border-l-[3px] gantt-scale-in ${manage && !isUpdating ? 'cursor-grab active:cursor-grabbing' : ''} ${PRIO_BORDER[pr]} ${
-                        dragTaskId === t.id ? 'opacity-40 scale-95 rotate-1' : ''
-                      } ${isUpdating ? 'opacity-60 animate-pulse pointer-events-none' : ''}`}
-                    >
-                      {/* top: area + priority */}
-                      <div className="flex items-center gap-1.5 mb-2">
-                        <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-medium ${areaChipClass(t.areaId)}`}>
-                          {t.areaName || `Área ${t.areaId}`}
-                        </span>
-                        <span className={`text-[9px] px-1.5 py-0.5 rounded-md ml-auto font-medium ${PRIO_BADGE[pr]}`}>
-                          {PRIO_LABEL[pr]}
-                        </span>
-                      </div>
-
-                      {/* title */}
-                      <h4 className="text-xs font-medium text-foreground leading-snug mb-1.5">{t.title}</h4>
-
-                      {/* description */}
-                      {t.description && (
-                        <p className="text-[10px] text-muted-foreground leading-relaxed mb-2 line-clamp-2">{t.description}</p>
-                      )}
-
-                      {/* progress bar */}
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-red-500 gantt-progress-fill"
-                            style={{ width: `${t.progressPercent}%` }}
-                          />
+              <div className="flex-1 p-2 space-y-2 overflow-auto">
+                {col.tasks.length === 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => manage && onAddTask?.(col.status)}
+                    disabled={!manage || !onAddTask}
+                    className="w-full text-center text-xs text-muted-foreground py-8 border border-dashed rounded-lg hover:border-primary hover:text-primary transition disabled:opacity-50 disabled:pointer-events-none"
+                  >
+                    Sin tareas · Click para añadir
+                  </button>
+                ) : (
+                  col.tasks.map((t) => {
+                    const pr = norm(t.priority)
+                    const isUpdating = updatingId === t.id
+                    const assignees = getAssignees(t)
+                    return (
+                      <div
+                        key={t.id}
+                        draggable={manage && !isUpdating}
+                        onDragStart={() => handleDragStart(t)}
+                        onDragEnd={handleDragEnd}
+                        className={`group rounded-lg border border-border/80 bg-card p-3 workos-shadow-soft hover:shadow-md cursor-grab active:cursor-grabbing transition animate-workos-fade-in ${
+                          dragTaskId === t.id ? 'opacity-50' : ''
+                        } ${isUpdating ? 'pointer-events-none opacity-60' : ''}`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span
+                            className="inline-flex items-center gap-1.5 min-w-0 max-w-[58%] rounded-full border border-emerald-200/80 bg-emerald-50 py-0.5 pl-2 pr-2.5 text-[11px] font-semibold text-emerald-700 shadow-sm dark:border-emerald-800/55 dark:bg-emerald-950/45 dark:text-emerald-300"
+                            title={t.areaName || `Área ${t.areaId}`}
+                          >
+                            <span
+                              className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500 dark:bg-emerald-400"
+                              aria-hidden
+                            />
+                            <span className="truncate">{t.areaName || `Área ${t.areaId}`}</span>
+                          </span>
+                          <span
+                            className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${boardPriorityPillClass(pr)}`}
+                          >
+                            <Flag className="h-3 w-3 shrink-0 opacity-75" strokeWidth={2} aria-hidden />
+                            {PRIO_LABEL[pr]}
+                          </span>
                         </div>
-                        <span className="text-[10px] tabular-nums text-muted-foreground">{t.progressPercent}%</span>
-                      </div>
-
-                      {/* footer */}
-                      <div className="flex items-center gap-1.5 mt-1">
-                        {(() => {
-                          const assignees = getAssignees(t)
-                          return assignees.length > 0 ? (
+                        <div className="mt-2 font-medium text-sm text-foreground leading-tight">{t.title}</div>
+                        {t.description && (
+                          <div className="mt-0.5 text-xs text-muted-foreground line-clamp-2">{t.description}</div>
+                        )}
+                        <div className="mt-3 space-y-1.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                              Progreso
+                            </span>
+                            <span className="text-sm font-bold tabular-nums text-foreground">
+                              {Math.min(100, Math.max(0, Math.round(Number(t.progressPercent) || 0)))}%
+                            </span>
+                          </div>
+                          <div className="rounded-full border border-border/60 bg-muted/90 p-0.5 shadow-[inset_0_1px_2px_rgba(0,0,0,0.07)] dark:bg-muted/60">
+                            <ProgressBar
+                              value={t.progressPercent}
+                              size="lg"
+                              variant="primary"
+                              className="!bg-transparent"
+                            />
+                          </div>
+                        </div>
+                        <div className="mt-2 flex items-center justify-between">
+                          {assignees.length ? (
                             <div className="flex items-center -space-x-1.5">
                               {assignees.map((a) => (
-                                <div
-                                  key={a.id}
-                                  className="w-5 h-5 rounded-full bg-red-100 dark:bg-red-900/30 border-2 border-white dark:border-neutral-800 flex items-center justify-center text-[7px] font-bold text-red-600 dark:text-red-400"
-                                  title={a.name}
-                                >
-                                  {avatarInitials(a.name)}
-                                </div>
+                                <Avatar key={a.id} name={a.name} size="xs" title={a.name} />
                               ))}
                             </div>
                           ) : (
-                            <span className="text-[10px] text-muted-foreground/50 italic">Sin asignar</span>
-                          )
-                        })()}
-
-                        <span className="text-[10px] text-muted-foreground flex items-center gap-0.5 ml-auto mr-1 shrink-0">
-                          <Calendar className="w-2.5 h-2.5" />
-                          {t.endDate}
-                        </span>
-
+                            <span className="text-[10px] italic text-muted-foreground">Sin asignar</span>
+                          )}
+                          <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                            <CalendarDays className="h-3 w-3" />
+                            {t.endDate}
+                          </span>
+                        </div>
                         {manage && (
-                          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="mt-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition justify-end">
                             <button
                               type="button"
                               onClick={() => onEdit(t)}
-                              className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                              className="rounded p-1 hover:bg-muted"
+                              aria-label="Editar"
                             >
-                              <Pencil className="w-3 h-3" />
+                              <Pencil className="h-3 w-3" />
                             </button>
                             <button
                               type="button"
                               onClick={() => onDelete(t)}
-                              className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                              className="rounded p-1 hover:bg-destructive/10 text-destructive"
+                              aria-label="Eliminar"
                             >
-                              <Trash2 className="w-3 h-3" />
+                              <Trash2 className="h-3 w-3" />
                             </button>
                           </div>
                         )}
                       </div>
-                    </div>
-                  )
-                })}
-
-                {col.tasks.length === 0 && (
-                  <div className={`flex items-center justify-center py-10 rounded-lg border-2 border-dashed transition-colors ${isOver ? 'border-red-500/30 bg-red-500/[0.04]' : 'border-transparent'}`}>
-                    <p className="text-[11px] text-muted-foreground/40">{isOver ? 'Soltar aquí' : 'Sin tareas'}</p>
-                  </div>
-                )}
-
-                {col.tasks.length > 0 && isOver && (
-                  <div className="flex items-center justify-center py-3 rounded-lg border-2 border-dashed border-red-500/30 bg-red-500/[0.04] transition-all gantt-fade-in">
-                    <p className="text-[11px] text-red-500/60 font-medium">Soltar aquí</p>
-                  </div>
+                    )
+                  })
                 )}
               </div>
+              {manage && onAddTask && (
+                <button
+                  type="button"
+                  onClick={() => onAddTask(col.status)}
+                  className="m-2 mt-0 inline-flex items-center justify-center gap-1 rounded-md border border-dashed py-1.5 text-xs text-muted-foreground hover:border-primary hover:text-primary transition"
+                >
+                  <Plus className="h-3.5 w-3.5" /> Añadir tarea
+                </button>
+              )}
             </div>
           )
         })}

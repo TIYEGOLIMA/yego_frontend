@@ -16,6 +16,58 @@
   transition: none !important;
 }
 
+/* Modal Radix Dialog: apertura/cierre rápidos */
+@keyframes dialog-overlay-show {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes dialog-overlay-hide {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes dialog-content-show {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+@keyframes dialog-content-hide {
+  from {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.96);
+  }
+}
+
+.dialog-overlay-animate[data-state='open'] {
+  animation: dialog-overlay-show 0.16s ease-out both;
+}
+.dialog-overlay-animate[data-state='closed'] {
+  animation: dialog-overlay-hide 0.12s ease-in both;
+}
+
+.dialog-content-animate[data-state='open'] {
+  animation: dialog-content-show 0.18s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+.dialog-content-animate[data-state='closed'] {
+  animation: dialog-content-hide 0.12s ease-in both;
+}
+
 /* Animaciones personalizadas */
 @keyframes slide-down {
   from {

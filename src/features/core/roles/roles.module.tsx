@@ -36,7 +36,6 @@ import {
   Users,
   Calendar,
   X,
-  Save,
   Filter,
   ChevronLeft,
   ChevronRight,

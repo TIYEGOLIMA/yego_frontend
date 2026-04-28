@@ -22,108 +22,24 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { api } from '../../../../services/core/api'
-import type { AreaFull, ColaboradorDto, ProjectDto } from '../yego-gantt.module'
-
-type AreaTaskStatus = 'PENDING' | 'IN_PROGRESS' | 'DONE' | 'BLOCKED' | 'AT_RISK'
-type TaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'
-
-interface TaskRow {
-  id: number
-  areaId: number
-  areaName?: string | null
-  title: string
-  description?: string | null
-  startDate: string
-  endDate: string
-  status: AreaTaskStatus
-  priority?: TaskPriority | null
-  progressPercent: number
-  assignedUserId?: number | null
-  assignedUserIds?: number[]
-  tags?: string[]
-}
-
-const STATUS_LABEL: Record<AreaTaskStatus, string> = {
-  PENDING: 'Por Hacer',
-  IN_PROGRESS: 'En Progreso',
-  DONE: 'Hecho',
-  BLOCKED: 'Bloqueada',
-  AT_RISK: 'Backlog',
-}
-
-const STATUS_BG: Record<AreaTaskStatus, string> = {
-  PENDING: 'bg-red-500 text-white',
-  IN_PROGRESS: 'bg-amber-500 text-white',
-  DONE: 'bg-emerald-500 text-white',
-  BLOCKED: 'bg-zinc-400 text-white',
-  AT_RISK: 'bg-gray-400 text-white',
-}
-
-const PRIO_LABEL: Record<TaskPriority, string> = { LOW: 'Baja', MEDIUM: 'Media', HIGH: 'Alta', URGENT: 'Urgente' }
-const PRIO_COLOR: Record<TaskPriority, string> = {
-  LOW: 'text-emerald-600',
-  MEDIUM: 'text-foreground',
-  HIGH: 'text-amber-600',
-  URGENT: 'text-red-600',
-}
-
-const TAG_COLORS = [
-  'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
-  'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
-  'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300',
-  'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300',
-  'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
-  'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300',
-  'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300',
-  'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
-]
-
-function tagColor(tag: string): string {
-  let h = 0
-  for (let i = 0; i < tag.length; i++) h = (h * 31 + tag.charCodeAt(i)) | 0
-  return TAG_COLORS[Math.abs(h) % TAG_COLORS.length]
-}
-
-function norm(p?: TaskPriority | null): TaskPriority {
-  return p === 'LOW' || p === 'MEDIUM' || p === 'HIGH' || p === 'URGENT' ? p : 'MEDIUM'
-}
-
-function avatarInitials(name: string): string {
-  const parts = name.trim().split(/\s+/)
-  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase()
-  return name.slice(0, 2).toUpperCase()
-}
-
-interface AreaGroup {
-  areaId: number
-  areaName: string
-  description: string
-  tasks: TaskRow[]
-  done: number
-  total: number
-  progressPct: number
-  collaborators: ColaboradorDto[]
-  manager: ColaboradorDto | null
-  managerName: string
-}
-
-export interface PortfolioTabProps {
-  tasks: TaskRow[]
-  loading: boolean
-  manage: boolean
-  areas: AreaFull[]
-  projects: ProjectDto[]
-  collaboratorsForArea: (areaId: number) => ColaboradorDto[]
-  onEdit: (t: TaskRow) => void
-  onDelete: (t: TaskRow) => void
-  onCreateTask: (presetAreaId?: number) => void
-  onDeleteArea: (areaId: number) => void
-  onReload: () => void
-}
+import { WorkosRefreshingPill, WorkosTabLoading } from './WorkosLoading'
+import type { PortfolioTabProps, TaskRow, AreaGroup, AreaFull, ColaboradorDto, ProjectDto } from '../types'
+import { PROJECT_ICON_CHOICES, projectIconByKey } from '../projectIcons'
+import {
+  STATUS_LABEL,
+  STATUS_BG,
+  PRIO_LABEL,
+  PRIO_COLOR,
+  tagColor,
+  norm,
+  avatarInitials,
+} from '../utils'
 
 export function PortfolioTab({
   tasks,
   loading,
+  refreshing = false,
+  suppressEdgeRefreshPill = false,
   manage,
   areas,
   projects,
@@ -140,7 +56,7 @@ export function PortfolioTab({
   // --- Project dialog ---
   const [projectDialogOpen, setProjectDialogOpen] = useState(false)
   const [projectEditing, setProjectEditing] = useState<ProjectDto | null>(null)
-  const [projectForm, setProjectForm] = useState({ name: '', description: '', memberUserIds: [] as number[] })
+  const [projectForm, setProjectForm] = useState({ name: '', description: '', iconKey: 'folder' })
   const [projectSaving, setProjectSaving] = useState(false)
 
   // --- Delete project dialog ---
@@ -159,6 +75,18 @@ export function PortfolioTab({
   const [areaEditing, setAreaEditing] = useState<AreaFull | null>(null)
   const [areaForm, setAreaForm] = useState({ name: '', description: '' })
   const [areaSaving, setAreaSaving] = useState(false)
+
+  const areaIdsByProjectId = useMemo(() => {
+    const m = new Map<number, Set<number>>()
+    for (const t of tasks) {
+      if (t.projectId == null) continue
+      if (!m.has(t.projectId)) m.set(t.projectId, new Set())
+      m.get(t.projectId)!.add(t.areaId)
+    }
+    const out = new Map<number, number[]>()
+    m.forEach((set, pid) => out.set(pid, [...set]))
+    return out
+  }, [tasks])
 
   const groups = useMemo<AreaGroup[]>(() => {
     const areaMap = new Map<number, AreaFull>()
@@ -202,7 +130,8 @@ export function PortfolioTab({
   const toggle = (id: number) =>
     setExpanded((prev) => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
       return next
     })
 
@@ -230,7 +159,7 @@ export function PortfolioTab({
     try {
       await api.patch(`/users/${userId}/area`, { areaId: null })
       setCollabList((prev) => prev.filter((c) => c.id !== userId))
-      onReload()
+      void onReload({ refreshCollaborators: true })
     } catch { /* ignore */ }
     setCollabSaving(false)
   }
@@ -296,19 +225,24 @@ export function PortfolioTab({
   const toggleProject = (id: number) =>
     setExpandedProjects((prev) => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
       return next
     })
 
   const openProjectCreate = () => {
     setProjectEditing(null)
-    setProjectForm({ name: '', description: '', memberUserIds: [] })
+    setProjectForm({ name: '', description: '', iconKey: 'folder' })
     setProjectDialogOpen(true)
   }
 
   const openProjectEdit = (p: ProjectDto) => {
     setProjectEditing(p)
-    setProjectForm({ name: p.name, description: p.description || '', memberUserIds: [...p.memberUserIds] })
+    setProjectForm({
+      name: p.name,
+      description: p.description || '',
+      iconKey: p.iconKey && p.iconKey.trim() !== '' ? p.iconKey : 'folder',
+    })
     setProjectDialogOpen(true)
   }
 
@@ -318,7 +252,7 @@ export function PortfolioTab({
       const payload = {
         name: projectForm.name.trim(),
         description: projectForm.description || null,
-        memberUserIds: projectForm.memberUserIds,
+        iconKey: projectForm.iconKey || 'folder',
       }
       if (projectEditing) {
         await api.put(`/yego-gantt/projects/${projectEditing.id}`, payload)
@@ -343,44 +277,6 @@ export function PortfolioTab({
     setDeletingProject(false)
   }
 
-  const toggleProjectMember = (userId: number) => {
-    setProjectForm((f) => {
-      const ids = f.memberUserIds.includes(userId)
-        ? f.memberUserIds.filter((id) => id !== userId)
-        : [...f.memberUserIds, userId]
-      return { ...f, memberUserIds: ids }
-    })
-  }
-
-  const areaManagers = useMemo(() => {
-    const managers: { userId: number; name: string; areaName: string; areaId: number }[] = []
-    for (const a of areas) {
-      if (a.managerId) {
-        const collabs = collaboratorsForArea(a.id)
-        const mgr = collabs.find((c) => c.id === a.managerId)
-        managers.push({
-          userId: a.managerId,
-          name: mgr?.nombreCompleto || `Usuario #${a.managerId}`,
-          areaName: a.name,
-          areaId: a.id,
-        })
-      }
-    }
-    return managers
-  }, [areas, collaboratorsForArea])
-
-  const projectMemberAreas = useCallback(
-    (memberUserIds: number[]): number[] => {
-      const areaIds: number[] = []
-      for (const uid of memberUserIds) {
-        const mgr = areaManagers.find((m) => m.userId === uid)
-        if (mgr) areaIds.push(mgr.areaId)
-      }
-      return areaIds
-    },
-    [areaManagers],
-  )
-
   const renderAreaCard = (g: AreaGroup, gIdx: number) => {
     const isOpen = expanded.has(g.areaId)
     const areaInfo = areas.find((a) => a.id === g.areaId)
@@ -389,7 +285,7 @@ export function PortfolioTab({
       <div
         key={g.areaId}
         style={{ animationDelay: `${gIdx * 0.06}s` }}
-        className="mx-4 sm:mx-5 my-2 rounded-xl border border-border/40 bg-white dark:bg-neutral-900/60 shadow-sm hover:shadow-md transition-shadow duration-300 gantt-fade-in overflow-hidden"
+        className="mx-2 sm:mx-3 my-2 rounded-xl border border-border/80 bg-card workos-shadow-soft hover:shadow-md transition-shadow duration-300 gantt-fade-in overflow-hidden"
       >
         <div
           className={`flex items-center gap-3 px-5 py-3.5 cursor-pointer select-none transition-colors ${
@@ -498,19 +394,24 @@ export function PortfolioTab({
     )
   }
 
-  if (loading) return <p className="text-sm text-muted-foreground p-6">Cargando cartera…</p>
+  if (loading && tasks.length === 0 && areas.length === 0) {
+    return <WorkosTabLoading srLabel="Cargando cartera…" />
+  }
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden relative">
+      {refreshing && !suppressEdgeRefreshPill && (
+        <WorkosRefreshingPill className="absolute top-2 right-4 z-10" />
+      )}
       {/* Stats strip */}
-      <div className="px-5 sm:px-6 py-3 border-b border-border/40 bg-gradient-to-r from-muted/5 to-muted/15 flex items-center gap-6 shrink-0">
+      <div className="px-4 py-3 mx-1 rounded-xl border border-border/80 bg-card workos-shadow-soft flex items-center gap-6 shrink-0 flex-wrap">
         <div className="flex items-center gap-1.5">
-          <FolderKanban className="w-3.5 h-3.5 text-red-500" />
+          <FolderKanban className="w-3.5 h-3.5 text-primary-600 dark:text-primary-400" />
           <span className="text-xs text-muted-foreground font-medium">Proyectos:</span>
           <span className="text-xs font-bold tabular-nums">{projects.length}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <Building2 className="w-3.5 h-3.5 text-red-500" />
+          <Building2 className="w-3.5 h-3.5 text-primary-600 dark:text-primary-400" />
           <span className="text-xs text-muted-foreground font-medium">Áreas:</span>
           <span className="text-xs font-bold tabular-nums">{totalAreas}</span>
         </div>
@@ -530,7 +431,7 @@ export function PortfolioTab({
             <Button
               size="sm"
               onClick={openProjectCreate}
-              className="h-7 text-xs gap-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg shadow-sm"
+              className="h-8 text-xs gap-1.5 rounded-lg workos-gantt-btn-primary border-0"
             >
               <Plus className="w-3 h-3" />
               Nuevo Proyecto
@@ -549,7 +450,7 @@ export function PortfolioTab({
       </div>
 
       {/* Content list */}
-      <div className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-neutral-950/30 py-2">
+      <div className="flex-1 overflow-y-auto py-2 space-y-1">
         {groups.length === 0 && projects.length === 0 && (
           <div className="text-center py-16">
             <Building2 className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
@@ -560,27 +461,38 @@ export function PortfolioTab({
         {/* ===== PROJECTS ===== */}
         {projects.map((proj, pIdx) => {
           const isProjectOpen = expandedProjects.has(proj.id)
-          const projAreaIds = projectMemberAreas(proj.memberUserIds)
+          const projAreaIds = areaIdsByProjectId.get(proj.id) ?? []
           const projectGroups = groups.filter((g) => projAreaIds.includes(g.areaId))
-          const projectTaskCount = projectGroups.reduce((s, g) => s + g.total, 0)
-          const projectDoneCount = projectGroups.reduce((s, g) => s + g.done, 0)
-          const projectPct = projectTaskCount > 0 ? Math.round((projectDoneCount / projectTaskCount) * 100) : 0
+
+          // KPIs directos: tareas con projectId === proj.id
+          const directTasks = tasks.filter((t) => t.projectId === proj.id)
+          const directDone = directTasks.filter((t) => t.status === 'DONE').length
+          const directInProgress = directTasks.filter((t) => t.status === 'IN_PROGRESS').length
+          const directBlocked = directTasks.filter((t) => t.status === 'BLOCKED').length
+          const directAtRisk = directTasks.filter((t) => t.status === 'AT_RISK').length
+          const directPct = directTasks.length > 0 ? Math.round((directDone / directTasks.length) * 100) : 0
+          const avgProgress = directTasks.length > 0
+            ? Math.round(directTasks.reduce((s, t) => s + (t.progressPercent ?? 0), 0) / directTasks.length)
+            : 0
+
+          // Fallback a conteo por áreas vinculadas por tareas
+          const projectTaskCount = directTasks.length > 0 ? directTasks.length : projectGroups.reduce((s, g) => s + g.total, 0)
+          const projectDoneCount = directTasks.length > 0 ? directDone : projectGroups.reduce((s, g) => s + g.done, 0)
+          const projectPct = directTasks.length > 0 ? directPct : (projectTaskCount > 0 ? Math.round((projectDoneCount / projectTaskCount) * 100) : 0)
+
           const projectCollabCount = (() => {
             const s = new Set<number>()
             for (const g of projectGroups) for (const c of g.collaborators) s.add(c.id)
             return s.size
           })()
 
-          const memberNames = proj.memberUserIds.map((uid) => {
-            const mgr = areaManagers.find((m) => m.userId === uid)
-            return mgr?.name || `#${uid}`
-          })
+          const ProjIcon = projectIconByKey(proj.iconKey)
 
           return (
             <div
               key={`proj-${proj.id}`}
               style={{ animationDelay: `${pIdx * 0.06}s` }}
-              className="mx-4 sm:mx-5 my-3 rounded-xl border-2 border-red-200/60 dark:border-red-800/40 bg-white dark:bg-neutral-900/60 shadow-sm hover:shadow-md transition-shadow duration-300 gantt-fade-in overflow-hidden"
+              className="mx-2 sm:mx-3 my-3 rounded-xl border border-border/80 bg-card workos-shadow-soft hover:shadow-md transition-shadow duration-300 gantt-fade-in overflow-hidden ring-1 ring-[hsla(8,78%,57%,0.15)]"
             >
               {/* Project header */}
               <div
@@ -593,7 +505,12 @@ export function PortfolioTab({
                   {isProjectOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                 </span>
 
-                <FolderKanban className="w-4.5 h-4.5 text-red-500 shrink-0" />
+                <div
+                  className="h-9 w-9 shrink-0 rounded-lg bg-blue-600 dark:bg-blue-500 flex items-center justify-center text-white shadow-sm"
+                  aria-hidden
+                >
+                  <ProjIcon className="w-[18px] h-[18px] stroke-[2]" />
+                </div>
 
                 <div className="flex-1 min-w-0">
                   <h3 className="text-sm font-bold text-foreground leading-tight">{proj.name}</h3>
@@ -602,29 +519,8 @@ export function PortfolioTab({
                   )}
                 </div>
 
-                {/* Member avatars */}
-                <div className="flex items-center -space-x-1.5 shrink-0">
-                  {memberNames.slice(0, 4).map((name, i) => (
-                    <div
-                      key={i}
-                      className="w-6 h-6 rounded-full bg-red-100 dark:bg-red-900/30 border-2 border-white dark:border-neutral-900 flex items-center justify-center text-[8px] font-bold text-red-600 dark:text-red-400"
-                      title={name}
-                    >
-                      {avatarInitials(name)}
-                    </div>
-                  ))}
-                  {memberNames.length > 4 && (
-                    <div className="w-6 h-6 rounded-full bg-muted border-2 border-white dark:border-neutral-900 flex items-center justify-center text-[8px] font-bold text-muted-foreground">
-                      +{memberNames.length - 4}
-                    </div>
-                  )}
-                </div>
-
                 <div className="flex items-center gap-3 shrink-0 text-[11px] text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <Crown className="w-3 h-3 text-amber-500" /> {proj.memberUserIds.length} líderes
-                  </span>
-                  <span className="flex items-center gap-1">
+                  <span className="flex items-center gap-1" title="Personas en áreas con tareas de este proyecto">
                     <UsersIcon className="w-3 h-3" /> {projectCollabCount}
                   </span>
                 </div>
@@ -664,12 +560,37 @@ export function PortfolioTab({
                 )}
               </div>
 
-              {/* Expanded: areas of members */}
+              {/* Expanded: KPIs + areas */}
               {isProjectOpen && (
                 <div className="border-t border-red-200/40 dark:border-red-800/30 gantt-expand">
-                  {projectGroups.length === 0 && (
+                  {/* KPIs por proyecto */}
+                  {directTasks.length > 0 && (
+                    <div className="px-5 py-3 grid grid-cols-5 gap-3 border-b border-red-100/40 dark:border-red-900/20 bg-red-50/30 dark:bg-red-900/5">
+                      <div className="text-center">
+                        <div className="text-[11px] text-muted-foreground mb-0.5">Total</div>
+                        <div className="text-base font-bold tabular-nums">{directTasks.length}</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-[11px] text-muted-foreground mb-0.5">Completadas</div>
+                        <div className="text-base font-bold tabular-nums text-emerald-600">{directDone}</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-[11px] text-muted-foreground mb-0.5">En curso</div>
+                        <div className="text-base font-bold tabular-nums text-amber-600">{directInProgress}</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-[11px] text-muted-foreground mb-0.5">Bloqueadas</div>
+                        <div className="text-base font-bold tabular-nums text-red-600">{directBlocked + directAtRisk}</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-[11px] text-muted-foreground mb-0.5">Progreso</div>
+                        <div className="text-base font-bold tabular-nums">{avgProgress}%</div>
+                      </div>
+                    </div>
+                  )}
+                  {projectGroups.length === 0 && directTasks.length === 0 && (
                     <p className="text-xs text-muted-foreground/50 italic text-center py-6">
-                      No hay líderes asignados a este proyecto.
+                      No hay tareas en este proyecto. Crea tareas y asígnalas a este proyecto desde el formulario de tarea o desde cada área.
                     </p>
                   )}
                   {projectGroups.map((g, gIdx) => renderAreaCard(g, gIdx))}
@@ -774,9 +695,33 @@ export function PortfolioTab({
             <DialogTitle>{projectEditing ? 'Editar Proyecto' : 'Nuevo Proyecto'}</DialogTitle>
           </DialogHeader>
           <p className="text-xs text-muted-foreground -mt-1">
-            {projectEditing ? 'Modifica los detalles del proyecto.' : 'Crea un proyecto y asigna los líderes que participan.'}
+            {projectEditing ? 'Nombre, descripción e icono.' : 'Elige un icono para reconocer el proyecto en el header y en el portfolio.'}
           </p>
           <div className="space-y-4 mt-2">
+            <div>
+              <Label>Icono</Label>
+              <p className="text-[11px] text-muted-foreground mb-2">Se muestra junto al nombre en cartera y en el selector del header.</p>
+              <div className="grid grid-cols-8 gap-1.5 sm:grid-cols-8">
+                {PROJECT_ICON_CHOICES.map(({ key, label, Icon }) => {
+                  const sel = projectForm.iconKey === key
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      title={label}
+                      onClick={() => setProjectForm((f) => ({ ...f, iconKey: key }))}
+                      className={`h-9 w-9 rounded-lg flex items-center justify-center transition-colors border ${
+                        sel
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                          : 'bg-muted/50 text-muted-foreground border-border/60 hover:bg-muted hover:text-foreground'
+                      }`}
+                    >
+                      <Icon className="h-4 w-4 stroke-[2]" />
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
             <div>
               <Label>Nombre del Proyecto *</Label>
               <Input
@@ -796,39 +741,6 @@ export function PortfolioTab({
                 rows={3}
               />
             </div>
-            <div>
-              <Label>Líderes de área (jefes)</Label>
-              <p className="text-[11px] text-muted-foreground mb-2">Selecciona los jefes de área que participan. Sus equipos y tareas se mostrarán dentro del proyecto.</p>
-              <div className="max-h-48 overflow-y-auto border border-border/60 rounded-lg p-2 space-y-1">
-                {areaManagers.map((mgr) => {
-                  const selected = projectForm.memberUserIds.includes(mgr.userId)
-                  return (
-                    <button
-                      key={mgr.userId}
-                      type="button"
-                      onClick={() => toggleProjectMember(mgr.userId)}
-                      className={`w-full text-left flex items-center gap-2.5 px-3 py-2.5 rounded-lg transition-colors text-xs ${
-                        selected ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 font-semibold' : 'hover:bg-muted/40 text-foreground'
-                      }`}
-                    >
-                      <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
-                        selected ? 'border-red-500 bg-red-500' : 'border-border'
-                      }`}>
-                        {selected && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
-                      </div>
-                      <div className="w-6 h-6 rounded-full bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800 flex items-center justify-center text-[8px] font-bold text-red-600 dark:text-red-400 shrink-0">
-                        {avatarInitials(mgr.name)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <span className="font-medium">{mgr.name}</span>
-                        <span className="text-muted-foreground ml-1.5">· Jefe de {mgr.areaName}</span>
-                      </div>
-                    </button>
-                  )
-                })}
-                {areaManagers.length === 0 && <p className="text-xs text-muted-foreground/50 italic py-3 text-center">No hay jefes de área disponibles</p>}
-              </div>
-            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setProjectDialogOpen(false)}>Cancelar</Button>
@@ -845,7 +757,7 @@ export function PortfolioTab({
 
       {/* ===== Delete project dialog ===== */}
       <Dialog open={deleteProjectDialogOpen} onOpenChange={(open) => { if (!deletingProject) { setDeleteProjectDialogOpen(open); if (!open) setProjectToDelete(null) } }}>
-        <DialogContent className="max-w-md p-6 rounded-xl gantt-scale-in text-center">
+        <DialogContent className="max-w-md p-6 rounded-xl text-center">
           <DialogHeader className="space-y-1 pb-0">
             <DialogTitle className="text-lg font-semibold text-center">Eliminar Proyecto</DialogTitle>
           </DialogHeader>

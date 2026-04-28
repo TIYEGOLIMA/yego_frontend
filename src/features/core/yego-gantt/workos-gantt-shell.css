@@ -1,0 +1,112 @@
+/**
+ * Shell del módulo Gantt / WorkOS: tipografía y colores alineados con Yego Integral
+ * (Inter, primary #EF0000, variables --yego-* de index.css).
+ */
+
+.workos-gantt-shell {
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Recharts (burndown, velocity): colores válidos en SVG; --border/--muted no existen en :root global */
+  --workos-chart-grid: #e5e7eb;
+  --workos-chart-axis: #737373;
+  --workos-chart-tooltip-bg: #ffffff;
+  --workos-chart-tooltip-border: #e5e5e5;
+  --workos-chart-ideal-stroke: #64748b;
+  --workos-chart-bar-muted: #a3a3a3;
+}
+
+.dark .workos-gantt-shell {
+  --workos-chart-grid: rgba(255, 255, 255, 0.14);
+  --workos-chart-axis: #a3a3a3;
+  --workos-chart-tooltip-bg: #262626;
+  --workos-chart-tooltip-border: #404040;
+  --workos-chart-ideal-stroke: #94a3b8;
+  --workos-chart-bar-muted: #737373;
+}
+
+/* Títulos destacados: misma familia que el resto de Integral, énfasis tipo yego-heading */
+.workos-gantt-shell .font-display {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.workos-gantt-shell-bg {
+  background: #fafafa;
+}
+
+.dark .workos-gantt-shell-bg {
+  background: linear-gradient(180deg, hsl(222 28% 9%), hsl(222 28% 7%));
+}
+
+.workos-gantt-gradient-icon {
+  background: linear-gradient(135deg, var(--yego-primary, #ef0000) 0%, #f87171 100%);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+/* Selector compacto tipo card (header proyecto) */
+.workos-project-picker-trigger {
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.workos-gantt-btn-primary {
+  background: linear-gradient(135deg, var(--yego-primary, #ef0000) 0%, #f87171 100%);
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.workos-gantt-btn-primary:hover {
+  filter: brightness(1.06);
+}
+
+.workos-gantt-tab-active {
+  background: linear-gradient(135deg, var(--yego-primary, #ef0000) 0%, #f87171 100%);
+  color: #fff !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.workos-shadow-soft {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.workos-shadow-elevated {
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08), 0 4px 8px rgba(0, 0, 0, 0.04);
+}
+
+.workos-progress-fill {
+  background: linear-gradient(135deg, var(--yego-primary, #ef0000) 0%, #f87171 100%);
+}
+
+@keyframes workos-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-workos-fade-in {
+  animation: workos-fade-in 0.25s ease-out both;
+}
+
+.workos-gantt-gradient-sprint-panel {
+  background: #ffffff;
+}
+
+@keyframes workos-pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.65;
+  }
+}
+
+.workos-animate-pulse-soft {
+  animation: workos-pulse-soft 2s ease-in-out infinite;
+}

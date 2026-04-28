@@ -350,7 +350,7 @@ const usePagination = <T,>(items: T[], itemsPerPage: number) => {
 
 export const DetalleView = () => {
   const { user } = useAuth()
-  const { showError, showWarning, showSuccess, notifications, removeNotification } = useToastNotifications()
+  const { showError, showWarning, notifications, removeNotification } = useToastNotifications()
   const [searchTermPendientes, setSearchTermPendientes] = useState('')
   const [searchTermLiquidados, setSearchTermLiquidados] = useState('')
   const [searchTermViajes, setSearchTermViajes] = useState('')

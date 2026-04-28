@@ -23,48 +23,48 @@ export const useToastNotifications = (): UseToastNotificationsReturn => {
   const [notifications, setNotifications] = useState<ToastNotification[]>([]);
   const timersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
+  const removeNotification = useCallback((id: string) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id))
+
+    // Clear timer if exists
+    const timer = timersRef.current.get(id)
+    if (timer) {
+      clearTimeout(timer)
+      timersRef.current.delete(id)
+    }
+  }, [])
+
   const addNotification = useCallback((notification: Omit<ToastNotification, 'id' | 'timestamp'>) => {
-    const id = Date.now().toString() + Math.random().toString(36).substr(2, 9);
-    const timestamp = Date.now();
-    const duration = notification.duration || 5000;
+    const id = Date.now().toString() + Math.random().toString(36).substr(2, 9)
+    const timestamp = Date.now()
+    const duration = notification.duration || 5000
 
     const newNotification: ToastNotification = {
       ...notification,
       id,
-      timestamp
-    };
+      timestamp,
+    }
 
-    setNotifications(prev => [...prev, newNotification]);
+    setNotifications((prev) => [...prev, newNotification])
 
     // Auto-remove notification after duration
     if (duration > 0) {
       const timer = setTimeout(() => {
-        removeNotification(id);
-      }, duration);
+        removeNotification(id)
+      }, duration)
 
-      timersRef.current.set(id, timer);
+      timersRef.current.set(id, timer)
     }
 
     // Play sound for error notifications
     if (notification.type === 'error') {
-      playNotificationSound('error');
+      playNotificationSound('error')
     } else if (notification.type === 'warning') {
-      playNotificationSound('warning');
+      playNotificationSound('warning')
     }
 
-    return id;
-  }, []);
-
-  const removeNotification = useCallback((id: string) => {
-    setNotifications(prev => prev.filter(n => n.id !== id));
-    
-    // Clear timer if exists
-    const timer = timersRef.current.get(id);
-    if (timer) {
-      clearTimeout(timer);
-      timersRef.current.delete(id);
-    }
-  }, []);
+    return id
+  }, [removeNotification])
 
   const clearAllNotifications = useCallback(() => {
     // Clear all timers

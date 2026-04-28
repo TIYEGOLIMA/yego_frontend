@@ -1,92 +1,32 @@
 /** Modelo de vista para Gantt estilo Pulse/Lovable, derivado del API Integral. */
 
-export const DAY_WIDTH = 28
+import type {
+  TaskRowLike,
+  GanttTaskItem,
+  GanttTeamItem,
+  TimelineRange,
+} from './types'
+import {
+  startOfDay,
+  parseYmd,
+  daysBetween,
+  mapVisualStatus,
+  mapVisualPriority,
+  areaBarFill,
+  areaLabelColor,
+} from './utils'
 
-export type GanttVisualStatus = "on-track" | "at-risk" | "blocked" | "completed"
-export type GanttVisualPriority = "low" | "medium" | "high" | "critical"
-
-export interface GanttTaskItem {
-  id: string
-  name: string
-  startDay: number
-  duration: number
-  progress: number
-  status: GanttVisualStatus
-  priority: GanttVisualPriority
-  assignee?: string
-  description?: string
-  sourceId: number
+export type {
+  TaskRowLike,
+  GanttTaskItem,
+  GanttTeamItem,
+  TimelineRange,
 }
 
-export interface GanttTeamItem {
-  id: string
-  name: string
-  capacity: number
-  tasks: GanttTaskItem[]
-}
+export { mapVisualStatus, mapVisualPriority, areaBarFill, areaLabelColor }
 
-export interface TimelineRange {
-  anchor: Date
-  totalDays: number
-}
-
-function startOfDay(d: Date): Date {
-  const x = new Date(d)
-  x.setHours(0, 0, 0, 0)
-  return x
-}
-
-function parseYmd(s: string): Date {
-  return startOfDay(new Date(s + "T12:00:00"))
-}
-
-function daysBetween(a: Date, b: Date): number {
-  return Math.round((b.getTime() - a.getTime()) / 86400000)
-}
-
-export type AreaTaskStatus = "PENDING" | "IN_PROGRESS" | "DONE" | "BLOCKED" | "AT_RISK"
-export type TaskPriority = "LOW" | "MEDIUM" | "HIGH" | "URGENT"
-
-export interface TaskRowLike {
-  id: number
-  areaId: number
-  areaName?: string | null
-  title: string
-  description?: string | null
-  startDate: string
-  endDate: string
-  status: AreaTaskStatus
-  priority?: TaskPriority | null
-  progressPercent: number
-  assignedUserId?: number | null
-  assignedUserIds?: number[]
-}
-
-export function mapVisualStatus(s: AreaTaskStatus): GanttVisualStatus {
-  switch (s) {
-    case "DONE":
-      return "completed"
-    case "BLOCKED":
-      return "blocked"
-    case "AT_RISK":
-      return "at-risk"
-    default:
-      return "on-track"
-  }
-}
-
-export function mapVisualPriority(p?: TaskPriority | null): GanttVisualPriority {
-  switch (p) {
-    case "LOW":
-      return "low"
-    case "HIGH":
-      return "high"
-    case "URGENT":
-      return "critical"
-    default:
-      return "medium"
-  }
-}
+/** Ancho mínimo por día (px): cabe "sáb" + "25 abr" en dos líneas sin recortar con puntos suspensivos. */
+export const DAY_WIDTH = 46
 
 export function buildTimelineRange(tasks: TaskRowLike[]): TimelineRange {
   const pad = 2
@@ -137,7 +77,26 @@ export function taskRowToGanttItem(t: TaskRowLike, range: TimelineRange): GanttT
     assignee: t.assignedUserId != null ? String(t.assignedUserId) : undefined,
     description: t.description ?? undefined,
     sourceId: t.id,
+    areaId: t.areaId,
   }
+}
+
+/** Desplaza el inicio del rango visible (navegación semanal). */
+export function shiftTimelineRange(range: TimelineRange, deltaDays: number): TimelineRange {
+  const a = new Date(range.anchor)
+  a.setDate(a.getDate() + deltaDays)
+  a.setHours(0, 0, 0, 0)
+  return { anchor: a, totalDays: range.totalDays }
+}
+
+/** Celda de cabecera / grid: es el día calendario de hoy. */
+export function isTodayAtIndex(anchor: Date, dayIndex: number): boolean {
+  const d = new Date(anchor)
+  d.setDate(d.getDate() + dayIndex)
+  d.setHours(0, 0, 0, 0)
+  const t = new Date()
+  t.setHours(0, 0, 0, 0)
+  return d.getTime() === t.getTime()
 }
 
 export function buildTeamsFromTasks(tasks: TaskRowLike[], range: TimelineRange): GanttTeamItem[] {
@@ -162,22 +121,54 @@ export function buildTeamsFromTasks(tasks: TaskRowLike[], range: TimelineRange):
   })
 }
 
+/**
+ * Tareas solapadas por día del timeline [0 .. totalDays-1] (base del heatmap por celda).
+ */
+export function computePerDayTaskLoad(tasks: GanttTaskItem[], totalDays: number): number[] {
+  const arr = new Array<number>(totalDays).fill(0)
+  for (const t of tasks) {
+    const start = Math.max(0, t.startDay)
+    const end = Math.min(totalDays, t.startDay + t.duration)
+    for (let d = start; d < end; d++) {
+      arr[d]++
+    }
+  }
+  return arr
+}
+
+/**
+ * Ruta crítica por equipo sin grafo de dependencias en API:
+ * - Prioridad urgente, bloqueada o en riesgo siempre destacan.
+ * - Si no hay ninguna, las que terminan el último día de fin del equipo (empujan la fecha).
+ */
+export function computeCriticalPathTaskIds(tasks: GanttTaskItem[]): Set<string> {
+  const ids = new Set<string>()
+  if (tasks.length === 0) return ids
+
+  for (const t of tasks) {
+    if (t.priority === "critical" || t.status === "blocked" || t.status === "at-risk") {
+      ids.add(t.id)
+    }
+  }
+  if (ids.size > 0) return ids
+
+  const nonCompleted = tasks.filter((t) => t.status !== "completed")
+  const pool = nonCompleted.length > 0 ? nonCompleted : tasks
+  const maxEnd = pool.reduce((m, t) => Math.max(m, t.startDay + t.duration), 0)
+
+  for (const t of pool) {
+    if (t.startDay + t.duration === maxEnd) ids.add(t.id)
+  }
+
+  if (ids.size === 0) {
+    tasks.forEach((t) => ids.add(t.id))
+  }
+  return ids
+}
+
 export function getTodayOffsetDays(range: TimelineRange): number {
   const today = startOfDay(new Date())
   return daysBetween(range.anchor, today)
 }
 
-export function formatTimelineDayLabel(anchor: Date, dayIndex: number): { weekday: string; label: string } {
-  const d = new Date(anchor)
-  d.setDate(d.getDate() + dayIndex)
-  const weekday = d.toLocaleDateString("es-PE", { weekday: "short" })
-  const label = d.toLocaleDateString("es-PE", { day: "numeric", month: "short" })
-  return { weekday, label }
-}
-
-export function isWeekendDay(anchor: Date, dayIndex: number): boolean {
-  const d = new Date(anchor)
-  d.setDate(d.getDate() + dayIndex)
-  const w = d.getDay()
-  return w === 0 || w === 6
-}
+export { timelineDayDensity, formatTimelineDayCell, isWeekendDay, formatSpanishDayHeader } from './utils'

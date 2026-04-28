@@ -4,7 +4,7 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "../../utils/cn"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center rounded-xl font-semibold transition-colors duration-200 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden group",
+  "inline-flex items-center justify-center gap-2 rounded-xl font-semibold whitespace-nowrap transition-colors duration-200 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden group",
   {
     variants: {
       variant: {
@@ -13,7 +13,7 @@ const buttonVariants = cva(
         ghost: "text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100/50 dark:hover:bg-neutral-800/50 backdrop-blur-sm",
         danger: "bg-gradient-to-r from-error-500 to-error-600 hover:from-error-600 hover:to-error-700 text-white shadow-lg shadow-error-500/20",
         outline: "border-2 border-primary-500 text-primary-500 dark:text-primary-400 hover:bg-primary-50/50 dark:hover:bg-primary-950/50 backdrop-blur-sm",
-        link: "text-primary-500 underline-offset-4 hover:underline p-0 h-auto font-normal",
+        link: "text-primary-500 underline-offset-4 hover:underline p-0 h-auto font-normal whitespace-normal",
         glassmorphism: "glassmorphism hover:glassmorphism-strong text-neutral-900 dark:text-neutral-100",
       },
       size: {
@@ -52,13 +52,13 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         {...props}
       >
         {(variant === "primary" || variant === "danger") && (
-          <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl"></div>
+          <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl pointer-events-none" aria-hidden />
         )}
         
-        <div className="relative flex flex-row flex-nowrap items-center justify-center">
+        <div className="relative z-[1] flex flex-row flex-nowrap items-center justify-center gap-2 whitespace-nowrap">
           {loading && (
             <svg
-              className="animate-spin -ml-1 mr-3 h-5 w-5"
+              className="animate-spin h-5 w-5 shrink-0"
               xmlns="http://www.w3.org/2000/svg"
               fill="none"
               viewBox="0 0 24 24"
@@ -79,9 +79,18 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
             </svg>
           )}
           
-          {!loading && leftIcon && <span className="mr-3">{leftIcon}</span>}
-          <span>{children}</span>
-          {!loading && rightIcon && <span className="ml-3">{rightIcon}</span>}
+          {!loading && leftIcon && <span className="shrink-0 inline-flex items-center">{leftIcon}</span>}
+          <span
+            className={cn(
+              "min-w-0",
+              variant === "link"
+                ? "text-left"
+                : "inline-flex max-w-full flex-row flex-nowrap items-center justify-center gap-1.5 [&_svg]:shrink-0"
+            )}
+          >
+            {children}
+          </span>
+          {!loading && rightIcon && <span className="shrink-0 inline-flex items-center">{rightIcon}</span>}
         </div>
       </Comp>
     )

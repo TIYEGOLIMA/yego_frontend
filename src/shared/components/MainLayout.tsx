@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore, Module } from '../../store/auth-store'
+import { useIntegralNotificationsStore } from '../../store/integral-notifications-store'
+import { IntegralNotificationDropdown } from '../../components/IntegralNotificationDropdown'
 import { useConnectionStatus } from '../hooks/useConnectionStatus'
 import { ThemeToggle } from './ThemeToggle'
 import { Button } from '../../components/ui/button'
@@ -38,7 +40,16 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [changePasswordOpen, setChangePasswordOpen] = useState(false)
   const [openDropdowns, setOpenDropdowns] = useState<Set<string>>(new Set())
+  const [notifOpen, setNotifOpen] = useState(false)
+  const notifButtonRef = useRef<HTMLButtonElement>(null)
   const { user, logout, token, modules, fetchModules, fetchProfile, triggerRefresh, refreshTrigger } = useAuthStore()
+  const integralNotifItems = useIntegralNotificationsStore((s) => s.items)
+  const applyIntegralMarkRead = useIntegralNotificationsStore((s) => s.applyMarkRead)
+  const applyIntegralClearAll = useIntegralNotificationsStore((s) => s.applyClearAll)
+  const notifBadgeCount = useMemo(
+    () => integralNotifItems.filter((n) => !n.read).length,
+    [integralNotifItems],
+  )
   const { status } = useConnectionStatus()
 
   const navigate = useNavigate()
@@ -309,10 +320,33 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
           {/* Lado derecho */}
           <div className="flex items-center space-x-2">
             {/* Notificaciones */}
-            <Button variant="ghost" size="icon" className="relative">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="relative"
+              ref={notifButtonRef}
+              onClick={() => setNotifOpen((o) => !o)}
+              aria-label="Notificaciones"
+            >
               <Bell className="h-5 w-5" />
-              <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary-500 rounded-full"></span>
+              {notifBadgeCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center">
+                  {notifBadgeCount > 99 ? '99+' : notifBadgeCount}
+                </span>
+              )}
             </Button>
+            <IntegralNotificationDropdown
+              open={notifOpen}
+              anchorRef={notifButtonRef}
+              notifications={integralNotifItems}
+              onClose={() => setNotifOpen(false)}
+              onMarkRead={applyIntegralMarkRead}
+              onClearAll={() => {
+                applyIntegralClearAll()
+                setNotifOpen(false)
+              }}
+            />
             
             {/* Ayuda */}
             <Button variant="ghost" size="icon">
