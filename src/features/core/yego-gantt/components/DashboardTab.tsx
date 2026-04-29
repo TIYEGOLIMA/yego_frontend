@@ -14,7 +14,7 @@ import {
   Radio,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { WorkosRefreshingPill, WorkosTabLoading } from './WorkosLoading'
+import { WorkosTabLoading } from './WorkosLoading'
 import type { DashboardTabProps, TaskRow, WorkspaceDto } from '../types'
 import { isOverdue } from '../utils'
 import { useTaskStats } from '../hooks'
@@ -25,7 +25,6 @@ export function DashboardTab({
   workspaces,
   loading,
   refreshing = false,
-  suppressEdgeRefreshPill = false,
   onCreateTask,
 }: DashboardTabProps) {
   const navigate = useNavigate()
@@ -83,10 +82,6 @@ export function DashboardTab({
 
   return (
     <div className="space-y-3 relative">
-      {refreshing && !suppressEdgeRefreshPill && (
-        <WorkosRefreshingPill className="absolute top-0 right-0 z-10" />
-      )}
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <Panel Icon={BarChart3} title="Estado de tareas">
           <RowBar

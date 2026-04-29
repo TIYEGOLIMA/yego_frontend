@@ -28,7 +28,7 @@ export const areasPaths = {
   collaboratorsByAreas: '/areas/colaboradores-por-areas',
 } as const
 
-/** Query ?areaId=&priority=&workspaceId=&ownerUserId= para listado/resumen de tareas. */
+/** Query: areaId, priority, workspaceId, ownerUserId, mySpace («Mi espacio»). */
 export function ganttListParams(
   areaFilter: string,
   priorityFilter: string,
@@ -38,7 +38,11 @@ export function ganttListParams(
   const q: Record<string, string> = {}
   if (areaFilter !== 'all') q.areaId = areaFilter
   if (priorityFilter !== 'all') q.priority = priorityFilter
-  if (workspaceFilter !== 'all') q.workspaceId = workspaceFilter
+  if (workspaceFilter === 'my_space') {
+    q.mySpace = 'true'
+  } else {
+    q.workspaceId = workspaceFilter
+  }
   if (ownerUserIdFilter !== 'all') q.ownerUserId = ownerUserIdFilter
   return q
 }

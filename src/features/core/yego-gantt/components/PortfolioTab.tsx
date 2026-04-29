@@ -22,7 +22,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { api } from '../../../../services/core/api'
-import { WorkosRefreshingPill, WorkosTabLoading } from './WorkosLoading'
+import { WorkosTabLoading } from './WorkosLoading'
 import type { PortfolioTabProps, TaskRow, AreaGroup, AreaFull, ColaboradorDto, WorkspaceDto } from '../types'
 import { PROJECT_ICON_CHOICES, projectIconByKey } from '../projectIcons'
 import {
@@ -69,7 +69,6 @@ export function PortfolioTab({
   tasks,
   loading,
   refreshing = false,
-  suppressEdgeRefreshPill = false,
   manage,
   areas,
   workspaces,
@@ -521,9 +520,6 @@ export function PortfolioTab({
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden relative">
-      {refreshing && !suppressEdgeRefreshPill && (
-        <WorkosRefreshingPill className="absolute top-2 right-4 z-10" />
-      )}
       {/* Stats strip */}
       <div className="px-4 py-3 mx-1 rounded-xl border border-border/80 bg-card workos-shadow-soft flex items-center gap-6 shrink-0 flex-wrap">
         <div className="flex items-center gap-1.5">

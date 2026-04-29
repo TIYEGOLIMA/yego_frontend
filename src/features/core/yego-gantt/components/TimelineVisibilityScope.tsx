@@ -27,19 +27,24 @@ export function TimelineVisibilityScope({
   onChange,
   counts,
   currentUserId,
+  hideEquiposScope = false,
 }: {
   value: TimelineVisibilityFilter
   onChange: (v: TimelineVisibilityFilter) => void
   counts: TimelineVisibilityCounts
   currentUserId: number | null | undefined
+  /** En «Mi espacio» no aplica el alcance «Equipos» (solo tareas no privadas por equipo). */
+  hideEquiposScope?: boolean
 }) {
+  const scopes = hideEquiposScope ? SCOPES.filter((s) => s.id !== 'default') : SCOPES
+
   return (
     <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5">
       <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground shrink-0">
         <Filter className="h-3 w-3 opacity-80" aria-hidden />
         Alcance
       </span>
-      {SCOPES.map(({ id, label, Icon, countKey, needsUser }) => {
+      {scopes.map(({ id, label, Icon, countKey, needsUser }) => {
         const active = value === id
         const disabled = needsUser && currentUserId == null
         const count = counts[countKey]

@@ -10,10 +10,11 @@ import {
   Filter,
   ListChecks,
   Lock,
+  Plus,
   UserRound,
   Users,
 } from 'lucide-react'
-import { WorkosRefreshingPill, WorkosTabLoading } from './WorkosLoading'
+import { WorkosTabLoading } from './WorkosLoading'
 import type { TodoBoardTabProps, TaskRow, AreaTaskStatus, TaskPriority } from '../types'
 import { taskIsMine, taskIsMyPrivate } from '../taskPrivacy'
 import { PRIO_LABEL, norm } from '../utils'
@@ -54,13 +55,14 @@ export function TodoBoardTab({
   tasks,
   loading,
   refreshing = false,
-  suppressEdgeRefreshPill = false,
   manage,
   allCollaborators = [],
   onStatusChange,
   onAddTask,
   onOpenTask,
   currentUserId,
+  showWorkspaceOnCards = false,
+  workspaceNameById,
 }: TodoBoardTabProps) {
   const [boardFilter, setBoardFilter] = useState<BoardScopeFilter>('all')
   const collabMap = useMemo(() => {
@@ -138,10 +140,6 @@ export function TodoBoardTab({
 
   return (
     <div className={`space-y-4 relative ${refreshing ? 'opacity-[0.97]' : ''}`}>
-      {refreshing && !suppressEdgeRefreshPill && (
-        <WorkosRefreshingPill className="absolute top-0 right-0 z-10" />
-      )}
-
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
         <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground shrink-0">
           <Filter className="h-3 w-3 opacity-80" aria-hidden />
@@ -216,16 +214,9 @@ export function TodoBoardTab({
                   {col.tasks.length}
                 </span>
               </div>
-              <div className="flex-1 p-2 space-y-2 overflow-auto">
+              <div className="flex-1 p-2 space-y-2 overflow-auto min-h-0">
                 {col.tasks.length === 0 ? (
-                  <button
-                    type="button"
-                    onClick={() => manage && onAddTask?.(col.status)}
-                    disabled={!manage || !onAddTask}
-                    className="w-full text-center text-xs text-muted-foreground py-8 border border-dashed rounded-lg hover:border-primary hover:text-primary transition disabled:opacity-50 disabled:pointer-events-none"
-                  >
-                    Sin tareas · Click para añadir
-                  </button>
+                  <div className="w-full text-center text-xs text-muted-foreground py-6 px-2">Sin tareas</div>
                 ) : (
                   col.tasks.map((t) => {
                     const pr = norm(t.priority)
@@ -271,6 +262,16 @@ export function TodoBoardTab({
                             {PRIO_LABEL[pr]}
                           </span>
                         </div>
+                        {showWorkspaceOnCards && t.workspaceId != null && workspaceNameById && (
+                          <div className="mt-1.5">
+                            <span
+                              className="inline-flex max-w-full items-center rounded-md border border-blue-200/80 bg-blue-50/90 px-2 py-0.5 text-[10px] font-semibold text-blue-800 dark:border-blue-800/60 dark:bg-blue-950/40 dark:text-blue-200 truncate"
+                              title={workspaceNameById.get(t.workspaceId) ?? `Espacio ${t.workspaceId}`}
+                            >
+                              {workspaceNameById.get(t.workspaceId) ?? `Espacio #${t.workspaceId}`}
+                            </span>
+                          </div>
+                        )}
                         <div className="mt-2 font-medium text-sm text-foreground leading-tight">{t.title}</div>
                         {t.description && (
                           <div className="mt-0.5 text-xs text-muted-foreground line-clamp-2">{t.description}</div>
@@ -337,6 +338,21 @@ export function TodoBoardTab({
                   })
                 )}
               </div>
+              {onAddTask ? (
+                <div className="mt-auto shrink-0 border-t border-border/60 p-2">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onAddTask(col.status)
+                    }}
+                    className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-orange-500/55 bg-background py-2.5 text-xs font-medium text-orange-600 transition hover:border-orange-600 hover:bg-orange-500/5 hover:text-orange-700 dark:text-orange-400 dark:hover:bg-orange-500/10 dark:hover:text-orange-300"
+                  >
+                    <Plus className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                    Añadir tarea
+                  </button>
+                </div>
+              ) : null}
             </div>
           )
         })}

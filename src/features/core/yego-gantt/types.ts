@@ -113,6 +113,8 @@ export interface GanttTaskItem {
   description?: string
   sourceId: number
   areaId: number
+  /** Nombre del espacio de trabajo (vista «Mi espacio»). */
+  workspaceLabel?: string | null
 }
 
 export interface GanttTeamItem {
@@ -136,8 +138,6 @@ export interface DashboardTabProps {
   workspaces: WorkspaceDto[]
   loading: boolean
   refreshing?: boolean
-  /** Si true, no mostrar la pastilla de carga en la esquina (el padre ya muestra aviso, p. ej. cambio de proyecto). */
-  suppressEdgeRefreshPill?: boolean
   onCreateTask?: () => void
 }
 
@@ -145,7 +145,6 @@ export interface PortfolioTabProps {
   tasks: TaskRow[]
   loading: boolean
   refreshing?: boolean
-  suppressEdgeRefreshPill?: boolean
   manage: boolean
   areas: AreaFull[]
   workspaces: WorkspaceDto[]
@@ -163,7 +162,6 @@ export interface TodoBoardTabProps {
   tasks: TaskRow[]
   loading: boolean
   refreshing?: boolean
-  suppressEdgeRefreshPill?: boolean
   manage: boolean
   allCollaborators?: ColaboradorDto[]
   onStatusChange?: (taskId: number, newStatus: AreaTaskStatus) => Promise<void>
@@ -172,16 +170,21 @@ export interface TodoBoardTabProps {
   onOpenTask?: (t: TaskRow) => void
   /** Id del usuario logueado (filtro «Mis tareas»). */
   currentUserId?: number | null
+  /** Vista «Mi espacio»: muestra chip con nombre del proyecto si la tarea tiene `workspaceId`. */
+  showWorkspaceOnCards?: boolean
+  workspaceNameById?: Map<number, string>
 }
 
 export interface SprintsTabProps {
   tasks: TaskRow[]
   workspaces: WorkspaceDto[]
   manage: boolean
+  /** Eliminar sprint: solo ADMIN/SUPERADMIN (la API también lo exige). */
+  canDeleteSprints: boolean
   loading: boolean
   refreshing?: boolean
-  suppressEdgeRefreshPill?: boolean
-  onReload: () => void
+  onSprintsPayload: (byWorkspace: Record<number, SprintDto[]>) => void
+  refreshTasksAndKpis: () => Promise<void>
   onTaskStatusChange?: (taskId: number, status: AreaTaskStatus) => void
   onOpenCreateTask?: (opts?: { sprintId?: number; workspaceId?: number }) => void
   onEditTask?: (task: TaskRow) => void
@@ -192,7 +195,6 @@ export interface GanttTimelineTabProps {
   tasks: TaskRow[]
   loading: boolean
   refreshing?: boolean
-  suppressEdgeRefreshPill?: boolean
   timelinePanDays: number
   filterText: string
   onFilterChange: (v: string) => void
@@ -201,8 +203,11 @@ export interface GanttTimelineTabProps {
   onDeleteTask: (t: TaskRow) => void
   showHeatmap: boolean
   showCriticalPath: boolean
-  onTaskSelectNotify: (taskTitle: string) => void
+  onTaskSelectNotify?: (taskTitle: string) => void
   collaboratorsForArea: (areaId: number) => ColaboradorDto[]
+  /** Vista «Mi espacio»: nombre de proyecto en barras del timeline. */
+  mySpaceShowProjectNames?: boolean
+  workspaceNameById?: Map<number, string>
 }
 
 // ==================== OTRAS INTERFACES ====================

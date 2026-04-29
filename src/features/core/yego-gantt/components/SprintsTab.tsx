@@ -16,6 +16,7 @@ import {
   TrendingUp,
   Trophy,
   Users,
+  Loader2,
 } from 'lucide-react'
 import {
   Area,
@@ -31,7 +32,7 @@ import {
   YAxis,
 } from 'recharts'
 import { Button } from '@/components/ui/button'
-import { WorkosRefreshingPill, WorkosTabLoading } from './WorkosLoading'
+import { WorkosTabLoading } from './WorkosLoading'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -60,6 +61,7 @@ import {
   normPriority,
   taskPoints,
   sprintCapacityPts,
+  sprintEndDateReached,
   areaPillClass,
 } from '../utils'
 import { useDragAndDrop, useExpansion, useDialog } from '../hooks'
@@ -234,10 +236,11 @@ export function SprintsTab({
   tasks,
   workspaces,
   manage,
+  canDeleteSprints,
   loading,
   refreshing = false,
-  suppressEdgeRefreshPill = false,
-  onReload,
+  onSprintsPayload,
+  refreshTasksAndKpis,
   onTaskStatusChange,
   onOpenCreateTask,
   onEditTask,
@@ -245,6 +248,8 @@ export function SprintsTab({
 }: SprintsTabProps) {
   const [sprints, setSprints] = useState<Record<number, SprintDto[]>>({})
   const [sprintsLoading, setSprintsLoading] = useState(false)
+  const [sprintsListBusy, setSprintsListBusy] = useState(false)
+  const [sprintsActionError, setSprintsActionError] = useState<string | null>(null)
   const sprintsQuietRef = useRef(false)
   const sprintsLoadLockRef = useRef<Promise<void> | null>(null)
   const workspaceIdsKey = useMemo(
@@ -279,31 +284,38 @@ export function SprintsTab({
     sprintsQuietRef.current = false
   }, [workspaceIdsKey])
 
-  const loadSprints = useCallback(async () => {
-    if (sprintsLoadLockRef.current) {
-      await sprintsLoadLockRef.current
-      return
-    }
-    const run = (async () => {
-      if (workspaces.length === 0) {
-        setSprints({})
-        sprintsQuietRef.current = false
+  const loadSprints = useCallback(
+    async (opts?: { newSprintButtonBusy?: boolean }) => {
+      if (sprintsLoadLockRef.current) {
+        await sprintsLoadLockRef.current
         return
       }
-      const quiet = sprintsQuietRef.current
-      if (!quiet) setSprintsLoading(true)
-      try {
-        const map = await fetchSprintsByWorkspaces(workspaces)
-        setSprints(map)
-        sprintsQuietRef.current = true
-      } finally {
-        if (!quiet) setSprintsLoading(false)
-        sprintsLoadLockRef.current = null
-      }
-    })()
-    sprintsLoadLockRef.current = run
-    await run
-  }, [workspaces])
+      const run = (async () => {
+        if (workspaces.length === 0) {
+          setSprints({})
+          sprintsQuietRef.current = false
+          onSprintsPayload({})
+          return
+        }
+        if (opts?.newSprintButtonBusy) setSprintsListBusy(true)
+        const quiet = sprintsQuietRef.current
+        if (!quiet) setSprintsLoading(true)
+        try {
+          const map = await fetchSprintsByWorkspaces(workspaces)
+          setSprints(map)
+          onSprintsPayload(map)
+          sprintsQuietRef.current = true
+        } finally {
+          if (!quiet) setSprintsLoading(false)
+          if (opts?.newSprintButtonBusy) setSprintsListBusy(false)
+          sprintsLoadLockRef.current = null
+        }
+      })()
+      sprintsLoadLockRef.current = run
+      await run
+    },
+    [workspaces, onSprintsPayload],
+  )
 
   useEffect(() => {
     void loadSprints()
@@ -373,20 +385,31 @@ export function SprintsTab({
   const moveTaskToSprint = async (taskId: number, sprintId: number) => {
     try {
       await api.put(`/yego-gantt/tasks/${taskId}`, { sprintId })
-      await onReload()
-      await loadSprints()
+      await refreshTasksAndKpis()
+      await loadSprints({ newSprintButtonBusy: true })
     } catch {
       // ignore
     }
   }
 
   const setSprintStatus = async (sprint: SprintDto, status: SprintStatus) => {
+    if (status === 'COMPLETED' && !sprintEndDateReached(sprint.endDate)) {
+      setSprintsActionError('No se puede cerrar el sprint antes de su fecha de fin')
+      return
+    }
+    setSprintsActionError(null)
     try {
       await api.put(`/yego-gantt/sprints/${sprint.id}`, { status })
-      await loadSprints()
-      onReload()
-    } catch {
-      // ignore
+      await loadSprints({ newSprintButtonBusy: true })
+    } catch (e: unknown) {
+      const msg =
+        e && typeof e === 'object' && 'response' in e
+          ? String(
+              (e as { response?: { data?: { message?: string } } }).response?.data?.message ||
+                'No se pudo actualizar el sprint',
+            )
+          : 'No se pudo actualizar el sprint'
+      setSprintsActionError(msg)
     }
   }
 
@@ -419,6 +442,11 @@ export function SprintsTab({
   const saveSprint = async () => {
     setSaving(true)
     setSaveError(null)
+    if (form.status === 'COMPLETED' && !sprintEndDateReached(form.endDate)) {
+      setSaveError('No se puede cerrar el sprint antes de su fecha de fin')
+      setSaving(false)
+      return
+    }
     try {
       const payload = {
         workspaceId: Number(form.workspaceId),
@@ -434,8 +462,7 @@ export function SprintsTab({
         await api.post('/yego-gantt/sprints', payload)
       }
       closeDialog()
-      await loadSprints()
-      onReload()
+      await loadSprints({ newSprintButtonBusy: true })
     } catch (e: unknown) {
       const msg =
         e && typeof e === 'object' && 'response' in e
@@ -450,12 +477,22 @@ export function SprintsTab({
   }
 
   const deleteSprint = async (id: number) => {
+    if (!canDeleteSprints) return
     if (!confirm('¿Eliminar este sprint?')) return
+    setSprintsActionError(null)
     try {
       await api.delete(`/yego-gantt/sprints/${id}`)
-      await loadSprints()
-    } catch {
-      // ignore
+      await refreshTasksAndKpis()
+      await loadSprints({ newSprintButtonBusy: true })
+    } catch (e: unknown) {
+      const msg =
+        e && typeof e === 'object' && 'response' in e
+          ? String(
+              (e as { response?: { data?: { message?: string } } }).response?.data?.message ||
+                'No se pudo eliminar el sprint',
+            )
+          : 'No se pudo eliminar el sprint'
+      setSprintsActionError(msg)
     }
   }
 
@@ -488,10 +525,21 @@ export function SprintsTab({
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-y-auto space-y-4 relative pb-4 bg-[#f9fafb] dark:bg-transparent">
-      {(refreshing || sprintsLoading) && !suppressEdgeRefreshPill && (
-        <WorkosRefreshingPill className="absolute top-0 right-0 z-10" />
+      {sprintsActionError && (
+        <div
+          className="rounded-lg border border-destructive/30 bg-destructive/5 text-destructive text-sm px-3 py-2 shrink-0"
+          role="alert"
+        >
+          {sprintsActionError}
+          <button
+            type="button"
+            className="ml-2 text-xs underline underline-offset-2"
+            onClick={() => setSprintsActionError(null)}
+          >
+            Cerrar
+          </button>
+        </div>
       )}
-
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
         <SummaryCard
           tone="primary"
@@ -552,9 +600,19 @@ export function SprintsTab({
           <Button
             size="sm"
             onClick={() => openCreate()}
+            disabled={sprintsListBusy}
             className="gap-1.5 rounded-lg workos-gantt-btn-primary border-0 h-9"
           >
-            <Plus className="h-4 w-4" /> Nuevo sprint
+            {sprintsListBusy ? (
+              <>
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                Cargando sprints…
+              </>
+            ) : (
+              <>
+                <Plus className="h-4 w-4" /> Nuevo sprint
+              </>
+            )}
           </Button>
         )}
       </div>
@@ -623,8 +681,14 @@ export function SprintsTab({
                           </Button>
                           <Button
                             size="sm"
+                            disabled={!sprintEndDateReached(sprint.endDate)}
+                            title={
+                              !sprintEndDateReached(sprint.endDate)
+                                ? 'Solo puedes cerrar el sprint a partir de su fecha de fin'
+                                : undefined
+                            }
                             onClick={() => setSprintStatus(sprint, 'COMPLETED')}
-                            className="gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white border-0"
+                            className="gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white border-0 disabled:opacity-50"
                           >
                             <CheckCircle2 className="h-3.5 w-3.5" />
                             Cerrar sprint
@@ -898,14 +962,17 @@ export function SprintsTab({
                           <Play className="h-3.5 w-3.5" />
                           Iniciar
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => deleteSprint(sprint.id)}
-                          className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                        {canDeleteSprints && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => deleteSprint(sprint.id)}
+                            title="Eliminar sprint"
+                            className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
                       </div>
                     )}
                   </button>
@@ -1280,11 +1347,16 @@ export function SprintsTab({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {(['PLANNED', 'ACTIVE', 'COMPLETED', 'CANCELLED'] as SprintStatus[]).map((k) => (
-                    <SelectItem key={k} value={k}>
-                      {SPRINT_STATUS_LABEL[k]}
-                    </SelectItem>
-                  ))}
+                  {(['PLANNED', 'ACTIVE', 'COMPLETED', 'CANCELLED'] as SprintStatus[]).map((k) => {
+                    const completedLocked =
+                      k === 'COMPLETED' && form.status !== 'COMPLETED' && !sprintEndDateReached(form.endDate)
+                    return (
+                      <SelectItem key={k} value={k} disabled={completedLocked}>
+                        {SPRINT_STATUS_LABEL[k]}
+                        {completedLocked ? ' — desde fecha fin' : ''}
+                      </SelectItem>
+                    )
+                  })}
                 </SelectContent>
               </Select>
             </div>

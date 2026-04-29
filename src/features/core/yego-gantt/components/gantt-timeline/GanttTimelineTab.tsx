@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Clock, Crown, Edit3, FileText, Flag, Route, Trash2, User, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { WorkosRefreshingPill, WorkosTabLoading } from '../WorkosLoading'
+import { WorkosTabLoading } from '../WorkosLoading'
 import {
   DAY_WIDTH,
   timelineTaskBarColor,
@@ -21,34 +21,9 @@ import {
   type TaskRowLike,
 } from '../../ganttModel'
 import { computeDurationDays } from '../../utils'
+import type { ColaboradorDto, GanttTimelineTabProps } from '../../types'
 
 const LEFT_COL = 288
-
-export interface TeamCollaborator {
-  id: number
-  nombreCompleto: string
-  rol: string
-}
-
-export interface GanttTimelineTabProps {
-  tasks: TaskRowLike[]
-  loading: boolean
-  /** Recarga en segundo plano: no oculta el timeline */
-  refreshing?: boolean
-  /** Ocultar pastilla esquina (p. ej. cuando el módulo muestra aviso de cambio de proyecto). */
-  suppressEdgeRefreshPill?: boolean
-  /** Desplazamiento en días del ancla del timeline (navegación ← / →). */
-  timelinePanDays?: number
-  filterText: string
-  onFilterChange: (v: string) => void
-  manage: boolean
-  onEditTask: (t: TaskRowLike) => void
-  onDeleteTask: (t: TaskRowLike) => void
-  showHeatmap: boolean
-  showCriticalPath: boolean
-  onTaskSelectNotify?: (taskTitle: string) => void
-  collaboratorsForArea?: (areaId: number) => TeamCollaborator[]
-}
 
 function TimelineHeader({ anchor, totalDays, dayWidth }: { anchor: Date; totalDays: number; dayWidth: number }) {
   const days = Array.from({ length: totalDays }, (_, i) => i)
@@ -188,13 +163,24 @@ function GanttBar({
         color: '#fff',
       }}
       onClick={() => onClick(task)}
-      title={task.principalUserId != null ? `${task.name} · Responsable principal` : task.name}
+      title={[
+        task.name,
+        task.principalUserId != null ? '· Responsable principal' : '',
+        task.workspaceLabel ? `· ${task.workspaceLabel}` : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
     >
       <div
         className="absolute inset-y-0 left-0 rounded-l-lg bg-black/20"
         style={{ width: `${Math.min(100, Math.max(0, task.progress))}%` }}
       />
-      <span className="relative min-w-0 flex-1 truncate text-[11px] font-semibold drop-shadow-sm">{task.name}</span>
+      <span className="relative min-w-0 flex-1 truncate text-[11px] font-semibold drop-shadow-sm">
+        {task.name}
+        {task.workspaceLabel ? (
+          <span className="font-normal opacity-85"> · {task.workspaceLabel}</span>
+        ) : null}
+      </span>
       {task.progress > 0 && width > 72 && (
         <span className="relative ml-auto text-[10px] tabular-nums font-bold bg-black/25 rounded px-1 py-0.5 shrink-0">
           {task.progress}%
@@ -251,7 +237,7 @@ function TeamRowWithGrid({
   onTaskClick: (t: GanttTaskItem) => void
   showHeatmap: boolean
   showCriticalPath: boolean
-  collaborators: TeamCollaborator[]
+  collaborators: ColaboradorDto[]
   staggerIndex?: number
   dayWidth: number
   selectedSourceId: number | null
@@ -572,7 +558,7 @@ function TaskDetailPanel({
   onEdit: (t: TaskRowLike) => void
   onDelete: (t: TaskRowLike) => void
   manage: boolean
-  collaborators: TeamCollaborator[]
+  collaborators: ColaboradorDto[]
 }) {
   if (!task || !ganttTask) return null
 
@@ -731,7 +717,6 @@ export function GanttTimelineTab({
   tasks,
   loading,
   refreshing = false,
-  suppressEdgeRefreshPill = false,
   timelinePanDays = 0,
   filterText,
   onFilterChange,
@@ -742,6 +727,8 @@ export function GanttTimelineTab({
   showCriticalPath,
   onTaskSelectNotify,
   collaboratorsForArea,
+  mySpaceShowProjectNames = false,
+  workspaceNameById,
 }: GanttTimelineTabProps) {
   const [selectedSourceId, setSelectedSourceId] = useState<number | null>(null)
   const [selectedGantt, setSelectedGantt] = useState<GanttTaskItem | null>(null)
@@ -751,7 +738,14 @@ export function GanttTimelineTab({
 
   const baseRange = useMemo(() => buildTimelineRange(tasks), [tasks])
   const range = useMemo(() => shiftTimelineRange(baseRange, timelinePanDays), [baseRange, timelinePanDays])
-  const teamsAll = useMemo(() => buildTeamsFromTasks(tasks, range), [tasks, range])
+  const teamsAll = useMemo(
+    () =>
+      buildTeamsFromTasks(tasks, range, {
+        workspaceNameById,
+        showProjectNameOnTasks: mySpaceShowProjectNames,
+      }),
+    [tasks, range, workspaceNameById, mySpaceShowProjectNames],
+  )
 
   const filteredTeams = useMemo(() => {
     const q = filterText.trim().toLowerCase()
@@ -808,9 +802,6 @@ export function GanttTimelineTab({
 
   return (
     <div className="flex flex-col flex-1 min-h-0 min-h-[420px] max-h-[calc(100vh-260px)] overflow-hidden bg-transparent relative">
-      {refreshing && !blockingLoad && !suppressEdgeRefreshPill && (
-        <WorkosRefreshingPill className="absolute top-0 right-3 z-50" />
-      )}
       {blockingLoad && <WorkosTabLoading srLabel="Cargando timeline…" />}
 
       {!blockingLoad && filteredTeams.length === 0 && (
@@ -854,7 +845,7 @@ export function GanttTimelineTab({
                       onTaskClick={onTaskClick}
                       showHeatmap={showHeatmap}
                       showCriticalPath={showCriticalPath}
-                      collaborators={collaboratorsForArea?.(Number(team.id)) ?? []}
+                      collaborators={collaboratorsForArea(Number(team.id))}
                       dayWidth={dayWidth}
                       selectedSourceId={selectedSourceId}
                       selectedPrincipalUserId={selectedGantt?.principalUserId}

@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -39,8 +40,8 @@ import {
   CircleDot,
   Crown,
   Flame,
-  Folder,
   GanttChartSquare,
+  Inbox,
   KanbanSquare,
   LayoutDashboard,
   Loader2,
@@ -235,6 +236,13 @@ function ganttHasFullTabAccess(u: User | null | undefined): boolean {
   return false
 }
 
+/** Eliminar sprints en API: solo ADMIN / SUPERADMIN. */
+function ganttIsPlatformAdmin(u: User | null | undefined): boolean {
+  if (!u) return false
+  const r = (u.role || '').toUpperCase().trim()
+  return r === 'ADMIN' || r === 'SUPERADMIN'
+}
+
 export function YegoGanttModule() {
   const user = useAuthStore((s) => s.user)
   const [tasks, setTasks] = useState<TaskRow[]>([])
@@ -242,13 +250,12 @@ export function YegoGanttModule() {
   const [areas, setAreas] = useState<AreaFull[]>([])
   const [workspaces, setWorkspaces] = useState<WorkspaceDto[]>([])
   const [sprintById, setSprintById] = useState<Map<number, SprintDto>>(() => new Map())
-  /** 'all' = todas; si hay varios espacios el efecto sugiere uno por defecto hasta que el usuario cambie. */
-  const [workspaceFilter, setWorkspaceFilter] = useState<string>('all')
+  /** `my_space` hasta cargar workspaces; con 1+ proyectos el efecto puede fijar un id concreto. */
+  const [workspaceFilter, setWorkspaceFilter] = useState<string>('my_space')
   const [areaCollaborators, setAreaCollaborators] = useState<Map<number, ColaboradorDto[]>>(new Map())
   const [areaFilter, setAreaFilter] = useState<string>('all')
   const [priorityFilter, setPriorityFilter] = useState<string>('all')
   const [ownerFilter, setOwnerFilter] = useState<string>('all')
-  const [searchQuery, setSearchQuery] = useState('')
   /** Filtro local del timeline (equipos / texto en cabecera del Gantt). */
   const [ganttTeamFilter, setGanttTeamFilter] = useState('')
   const [activeTab, setActiveTab] = useState<'gantt' | 'cartera' | 'board' | 'sprints' | 'dashboard'>(() =>
@@ -338,6 +345,17 @@ export function YegoGanttModule() {
     setKpis(nextKpis)
   }, [areaFilter, priorityFilter, workspaceFilter, ownerFilter])
 
+  /** Sincroniza sprints desde la pestaña Sprints sin `load()` completo. */
+  const applySprintsPayloadFromTab = useCallback((byWs: Record<number, SprintDto[]>) => {
+    const sprintMap = new Map<number, SprintDto>()
+    for (const list of Object.values(byWs)) {
+      for (const sp of list) {
+        sprintMap.set(sp.id, sp)
+      }
+    }
+    setSprintById(sprintMap)
+  }, [])
+
   /** Tras mutar subtareas: aplaza `GET /summary` para no disparar 2s+ de red en cada clic (ej. checkboxes). */
   const subtaskSummaryDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const scheduleReloadTasksAndKpisAfterSubtasks = useCallback(() => {
@@ -369,7 +387,7 @@ export function YegoGanttModule() {
     }
   }, [dialogOpen, reloadTasksAndKpis])
 
-  /** Evita forzar siempre 'all' al primer fetch cuando hay varios proyectos. */
+  /** Primera vez que hay varios workspaces: elegir un id por defecto si el usuario aún no eligió. */
   const workspaceFilterInitRef = useRef(false)
 
   const load = useCallback(async (opts?: { refreshCollaborators?: boolean }) => {
@@ -393,18 +411,13 @@ export function YegoGanttModule() {
       }
       setErr(null)
       try {
-        const { tasks: nextTasks, kpis: nextKpis } = await fetchGanttTaskSummary(
-          areaFilter,
-          priorityFilter,
-          workspaceFilter,
-          ownerFilter,
-        )
+        const [{ tasks: nextTasks, kpis: nextKpis }, { areas: ar, workspaces: ws }] = await Promise.all([
+          fetchGanttTaskSummary(areaFilter, priorityFilter, workspaceFilter, ownerFilter),
+          fetchGanttMasterData(),
+        ])
         if (requestId !== ganttFullLoadSeqRef.current) return
         setTasks(nextTasks)
         setKpis(nextKpis)
-
-        const { areas: ar, workspaces: ws } = await fetchGanttMasterData()
-        if (requestId !== ganttFullLoadSeqRef.current) return
         setAreas(ar)
         setWorkspaces(ws)
 
@@ -451,10 +464,24 @@ export function YegoGanttModule() {
     await run
   }, [areaFilter, priorityFilter, workspaceFilter, ownerFilter, loadCollaborators])
 
+  const workspacePickerBusy = loading || workspaceSwitching
+
+  const handleWorkspaceFilterChange = useCallback(
+    (next: string) => {
+      if (next === workspaceFilter) return
+      if (workspacePickerBusy) return
+      if (hasLoadedOnceRef.current) {
+        setWorkspaceSwitching(true)
+      }
+      setWorkspaceFilter(next)
+    },
+    [workspaceFilter, workspacePickerBusy],
+  )
+
   useEffect(() => {
     if (workspaces.length === 0) {
       workspaceFilterInitRef.current = false
-      setWorkspaceFilter('all')
+      setWorkspaceFilter('my_space')
       return
     }
     if (workspaces.length === 1) {
@@ -470,7 +497,7 @@ export function YegoGanttModule() {
     }
     setWorkspaceFilter((prev) => {
       const ids = new Set(workspaces.map((p) => String(p.id)))
-      if (prev === 'all') return 'all'
+      if (prev === 'my_space') return 'my_space'
       if (ids.has(prev)) return prev
       const sorted = [...workspaces].sort((a, b) => a.id - b.id)
       return String(sorted[0].id)
@@ -481,24 +508,20 @@ export function YegoGanttModule() {
     load()
   }, [load])
 
-  const displayedTasks = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase()
-    if (!q) return tasks
-    return tasks.filter((t) => {
-      const title = (t.title || '').toLowerCase()
-      const area = (t.areaName || '').toLowerCase()
-      return title.includes(q) || area.includes(q)
-    })
-  }, [tasks, searchQuery])
+  useLayoutEffect(() => {
+    if (workspaceFilter !== 'my_space') return
+    setGanttTeamFilter('')
+    setTimelineVisibility((v) => (v === 'default' ? 'all' : v))
+  }, [workspaceFilter])
 
   const tasksForTimeline = useMemo(
-    () => filterTasksForTimeline(displayedTasks, timelineVisibility, user?.id ?? null),
-    [displayedTasks, timelineVisibility, user?.id],
+    () => filterTasksForTimeline(tasks, timelineVisibility, user?.id ?? null),
+    [tasks, timelineVisibility, user?.id],
   )
 
   const tasksWithoutPrivate = useMemo(
-    () => displayedTasks.filter((t) => !taskRowIsPrivate(t)),
-    [displayedTasks],
+    () => tasks.filter((t) => !taskRowIsPrivate(t)),
+    [tasks],
   )
 
   const tasksWithoutPrivateInWorkspaceScope = useMemo(
@@ -507,13 +530,13 @@ export function YegoGanttModule() {
   )
 
   const timelineFilterCounts = useMemo(() => {
-    const base = displayedTasks
+    const base = tasks
     const equipo = base.filter((t) => !taskRowIsPrivate(t)).length
     const all = base.length
     const mine = user?.id != null ? base.filter((t) => taskIsMine(t, user.id)).length : 0
     const priv = user?.id != null ? base.filter((t) => taskIsMyPrivate(t, user.id)).length : 0
     return { equipo, all, mine, priv }
-  }, [displayedTasks, user?.id])
+  }, [tasks, user?.id])
 
   const sprintsForWorkspace = useMemo(() => {
     const wid = form.workspaceId ? Number(form.workspaceId) : NaN
@@ -550,20 +573,27 @@ export function YegoGanttModule() {
     return result
   }, [areaCollaborators])
 
+  const workspaceNameById = useMemo(
+    () => new Map(workspaces.map((w) => [w.id, w.name])),
+    [workspaces],
+  )
+
+  const isMySpaceView = workspaceFilter === 'my_space'
+
   const workspacesInScope = useMemo(() => {
-    if (workspaceFilter === 'all') return workspaces
+    if (workspaceFilter === 'my_space') return workspaces
     return workspaces.filter((p) => String(p.id) === workspaceFilter)
   }, [workspaces, workspaceFilter])
 
   const WorkspacePickerIcon = useMemo(() => {
-    if (workspaceFilter === 'all') return Folder
+    if (workspaceFilter === 'my_space') return Inbox
     const p = workspaces.find((x) => String(x.id) === workspaceFilter)
     return projectIconByKey(p?.iconKey)
   }, [workspaceFilter, workspaces])
 
   const workspacePickerLabel = useMemo(() => {
+    if (workspaceFilter === 'my_space') return 'Mi espacio'
     if (workspaces.length === 0) return '—'
-    if (workspaceFilter === 'all') return 'Todos los espacios de trabajo'
     return workspaces.find((p) => String(p.id) === workspaceFilter)?.name ?? 'Espacio de trabajo'
   }, [workspaceFilter, workspaces])
 
@@ -634,7 +664,7 @@ export function YegoGanttModule() {
       workspaceId:
         presetWorkspaceId != null
           ? String(presetWorkspaceId)
-          : workspaceFilter !== 'all'
+          : workspaceFilter !== 'my_space' && workspaces.some((w) => String(w.id) === workspaceFilter)
             ? workspaceFilter
             : '',
       sprintId: presetSprintId != null ? String(presetSprintId) : '',
@@ -647,7 +677,7 @@ export function YegoGanttModule() {
       progressPercent: '0',
       assignedUserIds: [],
       tagsInput: '',
-      isPrivateTask: false,
+      isPrivateTask: workspaceFilter === 'my_space',
     })
     setFormErrors({})
     setPendingSubtasks([])
@@ -659,16 +689,17 @@ export function YegoGanttModule() {
     setEditing(t)
     setPendingSubtasks([])
     const privateTask = Boolean(t.privateTask) || tagsIndicatePrivate(t.tags)
+    const effectivePrivate = isMySpaceView || privateTask
     const rawIds = t.assignedUserIds?.length
       ? [...t.assignedUserIds]
       : t.assignedUserId != null
         ? [t.assignedUserId]
         : []
-    const assignedIds = privateTask ? (rawIds[0] != null ? [rawIds[0]] : []) : rawIds
+    const assignedIds = effectivePrivate ? (rawIds[0] != null ? [rawIds[0]] : []) : rawIds
     setForm({
       areaId: String(t.areaId),
       workspaceId: t.workspaceId != null ? String(t.workspaceId) : '',
-      sprintId: privateTask ? '' : t.sprintId != null ? String(t.sprintId) : '',
+      sprintId: effectivePrivate ? '' : t.sprintId != null ? String(t.sprintId) : '',
       title: t.title,
       description: t.description || '',
       startDate: t.startDate,
@@ -678,7 +709,7 @@ export function YegoGanttModule() {
       progressPercent: String(t.progressPercent ?? 0),
       assignedUserIds: assignedIds,
       tagsInput: tagsWithoutPrivateLabels(t.tags ?? []).join(', '),
-      isPrivateTask: privateTask,
+      isPrivateTask: effectivePrivate,
     })
     setFormErrors({})
     setDialogOpen(true)
@@ -718,11 +749,13 @@ export function YegoGanttModule() {
       progressFromFormSubtasks != null
         ? progressFromFormSubtasks
         : Math.min(100, Math.max(0, Number(form.progressPercent) || 0))
+    const isMySpace = workspaceFilter === 'my_space'
+    const effectivePrivate = isMySpace || form.isPrivateTask
     let parsedTags = form.tagsInput
       .split(',')
       .map((t) => t.trim())
       .filter(Boolean)
-    if (form.isPrivateTask) {
+    if (effectivePrivate) {
       const hasPriv = parsedTags.some((tag) => {
         const x = tag.toLowerCase()
         return x === 'privada' || x === 'privado' || x === 'private'
@@ -744,7 +777,7 @@ export function YegoGanttModule() {
       endDate: form.endDate,
       status: form.status,
       priority: form.priority,
-      isPrivateTask: form.isPrivateTask,
+      isPrivateTask: effectivePrivate,
       assignedUserIds: form.assignedUserIds,
     }
     const payload = buildGanttTaskSavePayload(formSnapshot, prog, parsedTags)
@@ -985,10 +1018,18 @@ export function YegoGanttModule() {
     [],
   )
 
-  const visibleTabs = useMemo(
-    () => (manage ? TAB_CONFIG : TAB_CONFIG.filter((t) => t.id === 'gantt' || t.id === 'board')),
-    [manage, TAB_CONFIG],
-  )
+  const visibleTabs = useMemo(() => {
+    const base = manage ? TAB_CONFIG : TAB_CONFIG.filter((t) => t.id === 'gantt' || t.id === 'board')
+    if (!isMySpaceView) return base
+    return base.filter((t) => t.id === 'gantt' || t.id === 'board')
+  }, [manage, TAB_CONFIG, isMySpaceView])
+
+  useEffect(() => {
+    if (!isMySpaceView) return
+    if (activeTab === 'cartera' || activeTab === 'sprints' || activeTab === 'dashboard') {
+      setActiveTab('gantt')
+    }
+  }, [isMySpaceView, activeTab])
 
   useEffect(() => {
     if (manage) return
@@ -1020,7 +1061,14 @@ export function YegoGanttModule() {
             </SelectContent>
           </Select>
         </div>
-      ) : null
+      ) : (
+        <div className={cn('space-y-1.5', sideBySide && 'min-w-0')}>
+          <Label className="text-sm font-medium">Espacio de trabajo</Label>
+          <div className="rounded-lg border border-dashed border-border/80 bg-muted/25 px-3 py-2 text-xs text-muted-foreground leading-snug">
+            No hay espacios de trabajo en el sistema. La tarea quedará solo en el <strong className="text-foreground font-medium">equipo</strong> (sin proyecto). Podrás asignarla a un espacio cuando exista uno.
+          </div>
+        </div>
+      )
 
     const tagsCol = (
       <div className={cn('space-y-1.5', sideBySide && 'min-w-0')}>
@@ -1074,9 +1122,15 @@ export function YegoGanttModule() {
               </div>
             </div>
           </div>
-          {workspaces.length > 0 && (
-            <Select value={workspaceFilter} onValueChange={setWorkspaceFilter}>
+          <Select
+            value={workspaceFilter}
+            onValueChange={handleWorkspaceFilterChange}
+            disabled={workspacePickerBusy}
+          >
               <SelectTrigger
+                title={
+                  workspacePickerBusy ? 'Cargando… espera a poder cambiar de espacio' : undefined
+                }
                 className={cn(
                   'workos-project-picker-trigger',
                   // Quita el chevron por defecto del ui/select (usamos uno dentro del card)
@@ -1109,14 +1163,12 @@ export function YegoGanttModule() {
                 </div>
               </SelectTrigger>
               <SelectContent align="start" className="rounded-xl">
-                {workspaces.length > 1 && (
-                  <SelectItem value="all">
-                    <span className="flex items-center gap-2">
-                      <Folder className="h-3.5 w-3.5 shrink-0 opacity-80" />
-                      Todos los espacios de trabajo
-                    </span>
-                  </SelectItem>
-                )}
+                <SelectItem value="my_space">
+                  <span className="flex items-center gap-2">
+                    <Inbox className="h-3.5 w-3.5 shrink-0 opacity-80" />
+                    Mi espacio
+                  </span>
+                </SelectItem>
                 {workspaces.map((p) => {
                   const ItemIcon = projectIconByKey(p.iconKey)
                   return (
@@ -1130,20 +1182,17 @@ export function YegoGanttModule() {
                 })}
               </SelectContent>
             </Select>
+          {activeTab === 'gantt' && !isMySpaceView && (
+            <div className="flex-1 min-w-[200px] max-w-md relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <Input
+                value={ganttTeamFilter}
+                onChange={(e) => setGanttTeamFilter(e.target.value)}
+                placeholder="Filtrar equipos en timeline…"
+                className="pl-9 h-9 text-sm rounded-lg bg-background border-border/80"
+              />
+            </div>
           )}
-          <div className="flex-1 min-w-[200px] max-w-md relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-            <Input
-              value={activeTab === 'gantt' ? ganttTeamFilter : searchQuery}
-              onChange={(e) =>
-                activeTab === 'gantt'
-                  ? setGanttTeamFilter(e.target.value)
-                  : setSearchQuery(e.target.value)
-              }
-              placeholder={activeTab === 'gantt' ? 'Filtrar equipos en timeline…' : 'Buscar tareas o áreas…'}
-              className="pl-9 h-9 text-sm rounded-lg bg-background border-border/80"
-            />
-          </div>
           {manage && (
             <Button
               type="button"
@@ -1183,17 +1232,6 @@ export function YegoGanttModule() {
           </div>
         )}
 
-        {refreshing && workspaceSwitching && (
-          <div
-            className="mb-3 flex w-full shrink-0 items-center justify-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground shadow-sm"
-            role="status"
-            aria-live="polite"
-            aria-busy="true"
-          >
-            <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" aria-hidden />
-            <span className="font-medium">Se está cambiando de espacio de trabajo…</span>
-          </div>
-        )}
         {refreshing && !workspaceSwitching && (
           <div
             className="h-0.5 w-full shrink-0 bg-primary/40 animate-pulse rounded-full mb-2"
@@ -1202,7 +1240,20 @@ export function YegoGanttModule() {
           />
         )}
 
-        <div className="animate-fade-in flex-1 flex flex-col min-h-0">
+        <div className="animate-fade-in flex-1 flex flex-col min-h-0 relative">
+          {workspaceSwitching && (
+            <div
+              className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 rounded-lg bg-background/75 dark:bg-background/85 backdrop-blur-[3px] px-4"
+              role="status"
+              aria-live="polite"
+              aria-busy="true"
+            >
+              <Loader2 className="h-9 w-9 shrink-0 animate-spin text-primary" aria-hidden />
+              <span className="text-sm font-medium text-foreground text-center max-w-xs">
+                Cargando espacio de trabajo…
+              </span>
+            </div>
+          )}
           {activeTab === 'gantt' && (
             <div className="flex flex-col flex-1 min-h-0">
               <PulseStatsBar
@@ -1241,6 +1292,7 @@ export function YegoGanttModule() {
                 onChange={setTimelineVisibility}
                 counts={timelineFilterCounts}
                 currentUserId={user?.id}
+                hideEquiposScope={isMySpaceView}
               />
               <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
                 <div className="flex items-center gap-1">
@@ -1329,9 +1381,8 @@ export function YegoGanttModule() {
                   tasks={tasksForTimeline}
                   loading={loading}
                   refreshing={refreshing}
-                  suppressEdgeRefreshPill={workspaceSwitching}
                   timelinePanDays={timelinePanDays}
-                  filterText={ganttTeamFilter}
+                  filterText={isMySpaceView ? '' : ganttTeamFilter}
                   onFilterChange={setGanttTeamFilter}
                   manage={manage}
                   onEditTask={openEdit}
@@ -1340,6 +1391,8 @@ export function YegoGanttModule() {
                   showCriticalPath={showCriticalPath}
                   onTaskSelectNotify={onTaskSelectNotify}
                   collaboratorsForArea={collaboratorsForArea}
+                  mySpaceShowProjectNames={isMySpaceView}
+                  workspaceNameById={workspaceNameById}
                 />
               </div>
             </div>
@@ -1350,7 +1403,6 @@ export function YegoGanttModule() {
               tasks={tasksWithoutPrivate}
               loading={loading}
               refreshing={refreshing}
-              suppressEdgeRefreshPill={workspaceSwitching}
               manage={manage}
               areas={areas}
               workspaces={workspacesInScope}
@@ -1366,16 +1418,17 @@ export function YegoGanttModule() {
 
           {activeTab === 'board' && (
             <TodoBoardTab
-              tasks={displayedTasks}
+              tasks={tasks}
               loading={loading}
               refreshing={refreshing}
-              suppressEdgeRefreshPill={workspaceSwitching}
               manage={manage}
               allCollaborators={allCollaborators}
               onOpenTask={openTaskDetail}
               onStatusChange={changeTaskStatus}
               onAddTask={(status) => openCreate(undefined, undefined, status)}
               currentUserId={user?.id ?? null}
+              showWorkspaceOnCards={isMySpaceView}
+              workspaceNameById={workspaceNameById}
             />
           )}
 
@@ -1384,10 +1437,11 @@ export function YegoGanttModule() {
               tasks={tasksWithoutPrivateInWorkspaceScope}
               workspaces={workspacesInScope}
               manage={manage}
+              canDeleteSprints={ganttIsPlatformAdmin(user)}
               loading={loading}
               refreshing={refreshing}
-              suppressEdgeRefreshPill={workspaceSwitching}
-              onReload={load}
+              onSprintsPayload={applySprintsPayloadFromTab}
+              refreshTasksAndKpis={reloadTasksAndKpis}
               onTaskStatusChange={changeTaskStatus}
               onOpenCreateTask={
                 manage ? (opts) => openCreate(undefined, opts?.workspaceId, undefined, opts?.sprintId) : undefined
@@ -1403,7 +1457,6 @@ export function YegoGanttModule() {
               workspaces={workspacesInScope}
               loading={loading}
               refreshing={refreshing}
-              suppressEdgeRefreshPill={workspaceSwitching}
               onCreateTask={manage ? () => openCreate() : undefined}
             />
           )}
@@ -2229,6 +2282,7 @@ export function YegoGanttModule() {
                 </div>
               </div>
 
+              {!isMySpaceView && (
               <label className="flex items-center gap-2 rounded-md border border-border px-2 py-2 cursor-pointer">
                 <input
                   type="checkbox"
@@ -2260,6 +2314,7 @@ export function YegoGanttModule() {
                 />
                 <span className="text-sm font-medium">Tarea privada</span>
               </label>
+              )}
 
             </div>
 

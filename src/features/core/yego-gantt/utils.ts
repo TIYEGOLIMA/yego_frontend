@@ -73,6 +73,17 @@ export const SPRINT_STATUS_LABEL: Record<'PLANNED' | 'ACTIVE' | 'COMPLETED' | 'C
   CANCELLED: 'Cancelado',
 }
 
+/** Hoy (calendario local) es el día de fin o posterior (`yyyy-mm-dd`). Requisito para marcar sprint como completado. */
+export function sprintEndDateReached(endDateYmd: string): boolean {
+  const parts = endDateYmd.split('-').map((x) => Number(x))
+  if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) return false
+  const [y, mo, d] = parts
+  const endDay = new Date(y, mo - 1, d)
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  return today.getTime() >= endDay.getTime()
+}
+
 // ==================== COLORES DE TAGS ====================
 
 export const TAG_COLORS = [

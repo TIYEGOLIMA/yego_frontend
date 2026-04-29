@@ -59,7 +59,11 @@ export function buildTimelineRange(tasks: TaskRowLike[]): TimelineRange {
   return { anchor, totalDays }
 }
 
-export function taskRowToGanttItem(t: TaskRowLike, range: TimelineRange): GanttTaskItem {
+export function taskRowToGanttItem(
+  t: TaskRowLike,
+  range: TimelineRange,
+  workspaceLabel?: string | null,
+): GanttTaskItem {
   const principalUserId =
     t.assignedUserIds != null && t.assignedUserIds.length > 0
       ? t.assignedUserIds[0]
@@ -84,6 +88,7 @@ export function taskRowToGanttItem(t: TaskRowLike, range: TimelineRange): GanttT
       description: t.description ?? undefined,
       sourceId: t.id,
       areaId: t.areaId,
+      workspaceLabel: workspaceLabel ?? undefined,
     }
   }
   let startDay = differenceInCalendarDays(startOfDay(s), startOfDay(range.anchor))
@@ -109,6 +114,7 @@ export function taskRowToGanttItem(t: TaskRowLike, range: TimelineRange): GanttT
     description: t.description ?? undefined,
     sourceId: t.id,
     areaId: t.areaId,
+    workspaceLabel: workspaceLabel ?? undefined,
   }
 }
 
@@ -130,7 +136,17 @@ export function isTodayAtIndex(anchor: Date, dayIndex: number): boolean {
   return d.getTime() === t.getTime()
 }
 
-export function buildTeamsFromTasks(tasks: TaskRowLike[], range: TimelineRange): GanttTeamItem[] {
+export function buildTeamsFromTasks(
+  tasks: TaskRowLike[],
+  range: TimelineRange,
+  opts?: { workspaceNameById?: Map<number, string>; showProjectNameOnTasks?: boolean },
+): GanttTeamItem[] {
+  const wsMap = opts?.workspaceNameById
+  const showProj = opts?.showProjectNameOnTasks === true && wsMap != null
+  const labelFor = (tr: TaskRowLike): string | null | undefined => {
+    if (!showProj || tr.workspaceId == null) return undefined
+    return wsMap.get(tr.workspaceId) ?? undefined
+  }
   const byArea = new Map<number, TaskRowLike[]>()
   for (const t of tasks) {
     if (!byArea.has(t.areaId)) byArea.set(t.areaId, [])
@@ -147,7 +163,7 @@ export function buildTeamsFromTasks(tasks: TaskRowLike[], range: TimelineRange):
       id: String(areaId),
       name: list[0]?.areaName?.trim() || `Área ${areaId}`,
       capacity: cap,
-      tasks: list.map((tr) => taskRowToGanttItem(tr, range)),
+      tasks: list.map((tr) => taskRowToGanttItem(tr, range, labelFor(tr))),
     }
   })
 }
