@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/dialog'
 import { api } from '../../../../services/core/api'
 import { WorkosRefreshingPill, WorkosTabLoading } from './WorkosLoading'
-import type { PortfolioTabProps, TaskRow, AreaGroup, AreaFull, ColaboradorDto, ProjectDto } from '../types'
+import type { PortfolioTabProps, TaskRow, AreaGroup, AreaFull, ColaboradorDto, WorkspaceDto } from '../types'
 import { PROJECT_ICON_CHOICES, projectIconByKey } from '../projectIcons'
 import {
   STATUS_LABEL,
@@ -35,6 +35,36 @@ import {
   avatarInitials,
 } from '../utils'
 
+/** Vista de cartera: subconjunto de tareas por criterio (p. ej. solo las de un proyecto). */
+function sliceGroupTasks(g: AreaGroup, predicate: (t: TaskRow) => boolean): AreaGroup {
+  const list = g.tasks.filter(predicate)
+  const done = list.filter((t) => t.status === 'DONE').length
+  const total = list.length
+  return {
+    ...g,
+    tasks: list,
+    done,
+    total,
+    progressPct: total > 0 ? Math.round((done / total) * 100) : 0,
+  }
+}
+
+/** Mismo criterio que el Gantt: primer `assignedUserIds` o `assignedUserId`. */
+function taskPrincipalUserId(t: TaskRow): number | undefined {
+  if (t.assignedUserIds?.length) return t.assignedUserIds[0]
+  if (t.assignedUserId != null) return t.assignedUserId
+  return undefined
+}
+
+function principalUserIdsInAreaTasks(tasks: TaskRow[]): Set<number> {
+  const s = new Set<number>()
+  for (const t of tasks) {
+    const p = taskPrincipalUserId(t)
+    if (p != null) s.add(p)
+  }
+  return s
+}
+
 export function PortfolioTab({
   tasks,
   loading,
@@ -42,26 +72,28 @@ export function PortfolioTab({
   suppressEdgeRefreshPill = false,
   manage,
   areas,
-  projects,
+  workspaces,
   collaboratorsForArea,
   onEdit,
   onDelete,
   onCreateTask,
   onDeleteArea,
   onReload,
+  onOpenTask,
 }: PortfolioTabProps) {
   const [expanded, setExpanded] = useState<Set<number>>(() => new Set())
   const [expandedProjects, setExpandedProjects] = useState<Set<number>>(() => new Set())
+  const [unassignedProjectOpen, setUnassignedProjectOpen] = useState(false)
 
   // --- Project dialog ---
   const [projectDialogOpen, setProjectDialogOpen] = useState(false)
-  const [projectEditing, setProjectEditing] = useState<ProjectDto | null>(null)
+  const [projectEditing, setProjectEditing] = useState<WorkspaceDto | null>(null)
   const [projectForm, setProjectForm] = useState({ name: '', description: '', iconKey: 'folder' })
   const [projectSaving, setProjectSaving] = useState(false)
 
   // --- Delete project dialog ---
   const [deleteProjectDialogOpen, setDeleteProjectDialogOpen] = useState(false)
-  const [projectToDelete, setProjectToDelete] = useState<ProjectDto | null>(null)
+  const [projectToDelete, setProjectToDelete] = useState<WorkspaceDto | null>(null)
   const [deletingProject, setDeletingProject] = useState(false)
 
   // --- Collaborator dialog ---
@@ -76,18 +108,6 @@ export function PortfolioTab({
   const [areaForm, setAreaForm] = useState({ name: '', description: '' })
   const [areaSaving, setAreaSaving] = useState(false)
 
-  const areaIdsByProjectId = useMemo(() => {
-    const m = new Map<number, Set<number>>()
-    for (const t of tasks) {
-      if (t.projectId == null) continue
-      if (!m.has(t.projectId)) m.set(t.projectId, new Set())
-      m.get(t.projectId)!.add(t.areaId)
-    }
-    const out = new Map<number, number[]>()
-    m.forEach((set, pid) => out.set(pid, [...set]))
-    return out
-  }, [tasks])
-
   const groups = useMemo<AreaGroup[]>(() => {
     const areaMap = new Map<number, AreaFull>()
     for (const a of areas) areaMap.set(a.id, a)
@@ -98,9 +118,10 @@ export function PortfolioTab({
       taskMap.get(t.areaId)!.push(t)
     }
 
-    const areaIds = new Set([...taskMap.keys(), ...areas.map((a) => a.id)])
+    /** Solo áreas que tienen tareas en la vista de cartera (no todo el catálogo de áreas). */
+    const areaIds = [...taskMap.keys()]
 
-    return [...areaIds]
+    return areaIds
       .map((areaId) => {
         const areaInfo = areaMap.get(areaId)
         const list = taskMap.get(areaId) || []
@@ -126,6 +147,35 @@ export function PortfolioTab({
       })
       .sort((a, b) => a.areaName.localeCompare(b.areaName))
   }, [tasks, areas, collaboratorsForArea])
+
+  const unassignedGroups = useMemo(
+    () =>
+      groups
+        .map((g) => sliceGroupTasks(g, (t) => t.workspaceId == null))
+        .filter((g) => g.tasks.length > 0),
+    [groups],
+  )
+
+  const unassignedStripMeta = useMemo(() => {
+    const orphanTasks = tasks.filter((t) => t.workspaceId == null)
+    const orphanDone = orphanTasks.filter((t) => t.status === 'DONE').length
+    const orphanInProgress = orphanTasks.filter((t) => t.status === 'IN_PROGRESS').length
+    const orphanBlocked = orphanTasks.filter((t) => t.status === 'BLOCKED').length
+    const orphanPct = orphanTasks.length > 0 ? Math.round((orphanDone / orphanTasks.length) * 100) : 0
+    const orphanCollabCount = (() => {
+      const s = new Set<number>()
+      for (const g of unassignedGroups) for (const c of g.collaborators) s.add(c.id)
+      return s.size
+    })()
+    return {
+      orphanTasks,
+      orphanDone,
+      orphanInProgress,
+      orphanBlocked,
+      orphanPct,
+      orphanCollabCount,
+    }
+  }, [tasks, unassignedGroups])
 
   const toggle = (id: number) =>
     setExpanded((prev) => {
@@ -236,7 +286,7 @@ export function PortfolioTab({
     setProjectDialogOpen(true)
   }
 
-  const openProjectEdit = (p: ProjectDto) => {
+  const openProjectEdit = (p: WorkspaceDto) => {
     setProjectEditing(p)
     setProjectForm({
       name: p.name,
@@ -255,9 +305,9 @@ export function PortfolioTab({
         iconKey: projectForm.iconKey || 'folder',
       }
       if (projectEditing) {
-        await api.put(`/yego-gantt/projects/${projectEditing.id}`, payload)
+        await api.put(`/yego-gantt/workspaces/${projectEditing.id}`, payload)
       } else {
-        await api.post('/yego-gantt/projects', payload)
+        await api.post('/yego-gantt/workspaces', payload)
       }
       setProjectDialogOpen(false)
       onReload()
@@ -269,7 +319,7 @@ export function PortfolioTab({
     if (!projectToDelete) return
     setDeletingProject(true)
     try {
-      await api.delete(`/yego-gantt/projects/${projectToDelete.id}`)
+      await api.delete(`/yego-gantt/workspaces/${projectToDelete.id}`)
       setDeleteProjectDialogOpen(false)
       setProjectToDelete(null)
       onReload()
@@ -280,16 +330,17 @@ export function PortfolioTab({
   const renderAreaCard = (g: AreaGroup, gIdx: number) => {
     const isOpen = expanded.has(g.areaId)
     const areaInfo = areas.find((a) => a.id === g.areaId)
+    const principalsInTasks = principalUserIdsInAreaTasks(g.tasks)
 
     return (
       <div
         key={g.areaId}
         style={{ animationDelay: `${gIdx * 0.06}s` }}
-        className="mx-2 sm:mx-3 my-2 rounded-xl border border-border/80 bg-card workos-shadow-soft hover:shadow-md transition-shadow duration-300 gantt-fade-in overflow-hidden"
+        className="mx-2 sm:mx-3 my-2 rounded-xl border border-border bg-card/95 workos-shadow-soft hover:shadow-md transition-shadow duration-300 gantt-fade-in overflow-hidden dark:border-border/90"
       >
         <div
-          className={`flex items-center gap-3 px-5 py-3.5 cursor-pointer select-none transition-colors ${
-            isOpen ? 'bg-muted/10' : 'hover:bg-muted/10'
+          className={`flex items-center gap-3 px-5 py-3.5 cursor-pointer select-none transition-colors border-b border-transparent ${
+            isOpen ? 'bg-muted/25 border-border/40' : 'hover:bg-muted/20'
           }`}
           onClick={() => toggle(g.areaId)}
         >
@@ -323,49 +374,92 @@ export function PortfolioTab({
           )}
         </div>
         {isOpen && (
-          <div className="px-5 pb-5 pt-1 border-t border-border/30 gantt-expand">
-            <div className="grid grid-cols-[280px_1fr] gap-0">
-              <div className="pr-6 border-r-2 border-border/30 pt-4">
-                <h4 className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/60 mb-3 font-semibold flex items-center gap-2">
-                  <span className="w-1 h-3.5 rounded-full bg-red-400/60 inline-block" />Equipo del Área
+          <div className="px-4 pb-4 pt-3 border-t border-border/50 bg-muted/15 dark:bg-muted/25 gantt-expand">
+            <div className="grid grid-cols-1 lg:grid-cols-[minmax(260px,300px)_1fr] gap-4">
+              <div className="rounded-xl border border-border/70 bg-background dark:bg-card/90 shadow-sm p-4 ring-1 ring-border/30">
+                <h4 className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground mb-3 font-semibold flex items-center gap-2 pb-2 border-b border-border/50">
+                  <span className="w-1 h-3.5 rounded-full bg-red-500/70 inline-block" />
+                  Equipo del área
                 </h4>
-                <div className="space-y-0.5">
-                  {g.collaborators.length > 0 ? g.collaborators.map((c, cIdx) => {
-                    const isManager = g.manager?.id === c.id
-                    return (
-                      <div key={c.id} style={{ animationDelay: `${cIdx * 0.05}s` }} className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-muted/40 transition-all duration-200 gantt-fade-in-left">
-                        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${isManager ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800' : 'bg-muted border border-border/60 text-muted-foreground'}`}>{avatarInitials(c.nombreCompleto)}</div>
-                        <div className="flex-1 min-w-0">
-                          <span className="text-xs text-foreground font-semibold">{c.nombreCompleto}</span>
-                          <span className="text-[10px] text-muted-foreground/70 ml-1.5">· {c.rol}</span>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-3">
+                  {g.collaborators.length > 0 ? (
+                    g.collaborators.map((c, cIdx) => {
+                      const isManager = g.manager?.id === c.id
+                      const isTaskPrincipal = principalsInTasks.has(c.id)
+                      const showCrown = isManager || isTaskPrincipal
+                      const crownTitle = isManager && isTaskPrincipal
+                        ? 'Gerente del área y responsable en tareas'
+                        : isManager
+                          ? 'Gerente del área'
+                          : 'Responsable principal (tarea)'
+                      return (
+                        <div
+                          key={c.id}
+                          style={{ animationDelay: `${cIdx * 0.05}s` }}
+                          title={`${c.nombreCompleto} · ${c.rol}${showCrown ? ` · ${crownTitle}` : ''}`}
+                          className="relative shrink-0 gantt-fade-in-left"
+                        >
+                          <div
+                            className={`w-9 h-9 rounded-full flex items-center justify-center text-[10px] font-bold border-2 ${
+                              showCrown
+                                ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 border-amber-300/80 dark:border-amber-700/80 shadow-sm'
+                                : 'bg-muted border-border/70 text-muted-foreground'
+                            }`}
+                          >
+                            {avatarInitials(c.nombreCompleto)}
+                          </div>
+                          {showCrown && (
+                            <Crown
+                              className="absolute -right-0.5 -top-0.5 h-3.5 w-3.5 text-amber-500 drop-shadow-sm dark:text-amber-400"
+                              aria-hidden
+                            />
+                          )}
                         </div>
-                        {isManager && <Crown className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
-                      </div>
-                    )
-                  }) : <p className="text-[11px] text-muted-foreground/50 italic py-3">Sin miembros asignados</p>}
-                </div>
-              </div>
-              <div className="pl-6 pt-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/60 font-semibold flex items-center gap-2">
-                    <span className="w-1 h-3.5 rounded-full bg-red-400/60 inline-block" />Tareas del Área
-                  </h4>
-                  {manage && (
-                    <button type="button" onClick={() => onCreateTask(g.areaId)} className="text-[11px] text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 flex items-center gap-0.5 font-semibold transition-colors">+ Nueva tarea</button>
+                      )
+                    })
+                  ) : (
+                    <p className="text-[11px] text-muted-foreground/60 italic py-2 w-full">Sin miembros asignados</p>
                   )}
                 </div>
-                <div className="space-y-0">
+              </div>
+              <div className="rounded-xl border border-border/70 bg-background dark:bg-card/90 shadow-sm p-4 ring-1 ring-border/30 min-w-0">
+                <div className="flex items-center justify-between mb-3 pb-2 border-b border-border/50">
+                  <h4 className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-semibold flex items-center gap-2">
+                    <span className="w-1 h-3.5 rounded-full bg-red-500/70 inline-block" />
+                    Tareas del área
+                  </h4>
+                  {manage && (
+                    <button
+                      type="button"
+                      onClick={() => onCreateTask(g.areaId)}
+                      className="text-[11px] text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 flex items-center gap-0.5 font-semibold transition-colors"
+                    >
+                      + Nueva tarea
+                    </button>
+                  )}
+                </div>
+                <div className="space-y-2">
                   {g.tasks.map((t, tIdx) => {
                     const pr = norm(t.priority)
                     const assignees = getAssignees(g.areaId, t)
                     const taskTags = t.tags ?? []
+                    const principalId = taskPrincipalUserId(t)
                     return (
-                      <div key={t.id} style={{ animationDelay: `${tIdx * 0.04}s` }} className="flex items-center gap-3 py-2.5 border-b border-border/20 last:border-b-0 hover:bg-red-50/30 dark:hover:bg-red-900/5 transition-all duration-200 cursor-pointer group px-2 rounded-lg gantt-fade-in-left" onClick={() => onEdit(t)}>
+                      <div
+                        key={t.id}
+                        style={{ animationDelay: `${tIdx * 0.04}s` }}
+                        className="flex items-center gap-3 py-2.5 px-3 rounded-lg border border-border/60 bg-muted/25 dark:bg-muted/20 hover:bg-muted/45 dark:hover:bg-muted/35 transition-all duration-200 cursor-pointer group gantt-fade-in-left"
+                        onClick={() => (onOpenTask ?? onEdit)(t)}
+                      >
                         <span className={`text-[10px] px-2.5 py-0.5 rounded-md font-semibold shrink-0 whitespace-nowrap ${STATUS_BG[t.status]}`}>{STATUS_LABEL[t.status]}</span>
                         <span className="text-xs text-foreground font-medium flex-1 min-w-0 truncate">{t.title}</span>
                         {taskTags.length > 0 && (
                           <div className="flex items-center gap-1 shrink-0">
-                            {taskTags.map((tag) => (<span key={tag} className={`text-[9px] px-2 py-0.5 rounded-full font-semibold whitespace-nowrap ${tagColor(tag)}`}>{tag}</span>))}
+                            {taskTags.map((tag, tagIdx) => (
+                              <span key={tag} className={`text-[9px] px-2 py-0.5 rounded-full font-semibold whitespace-nowrap ${tagColor(tag, tagIdx)}`}>
+                                {tag}
+                              </span>
+                            ))}
                           </div>
                         )}
                         <span className="text-[10px] text-muted-foreground/70 shrink-0 tabular-nums flex items-center gap-1">
@@ -373,18 +467,45 @@ export function PortfolioTab({
                           {t.endDate.slice(5)}
                         </span>
                         {assignees.length > 0 ? (
-                          <div className="flex items-center shrink-0 -space-x-1.5">
-                            {assignees.map((a) => (<div key={a.id} className="w-5 h-5 rounded-full bg-red-100 dark:bg-red-900/30 border-2 border-white dark:border-neutral-900 flex items-center justify-center text-[7px] font-bold text-red-600 dark:text-red-400" title={a.name}>{avatarInitials(a.name)}</div>))}
+                          <div className="flex items-center shrink-0 gap-1">
+                            {assignees.map((a) => {
+                              const isPrincipal = principalId != null && a.id === principalId
+                              return (
+                                <div
+                                  key={a.id}
+                                  className="relative shrink-0"
+                                  title={isPrincipal ? `${a.name} · Responsable principal` : a.name}
+                                >
+                                  <div className="w-6 h-6 rounded-full bg-red-100 dark:bg-red-900/30 border-2 border-background dark:border-card flex items-center justify-center text-[7px] font-bold text-red-600 dark:text-red-400">
+                                    {avatarInitials(a.name)}
+                                  </div>
+                                  {isPrincipal && (
+                                    <Crown className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 text-amber-500 drop-shadow-sm dark:text-amber-400" aria-hidden />
+                                  )}
+                                </div>
+                              )
+                            })}
                           </div>
-                        ) : <div className="w-5 shrink-0" />}
+                        ) : (
+                          <div className="w-6 shrink-0" />
+                        )}
                         <span className={`text-[10px] font-semibold shrink-0 min-w-[48px] text-right ${PRIO_COLOR[pr]}`}>{PRIO_LABEL[pr]}</span>
                         {manage && (
-                          <button type="button" onClick={(e) => { e.stopPropagation(); onDelete(t) }} className="opacity-0 group-hover:opacity-100 p-1 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all shrink-0"><Trash2 className="w-3 h-3" /></button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onDelete(t)
+                            }}
+                            className="opacity-0 group-hover:opacity-100 p-1 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all shrink-0"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
                         )}
                       </div>
                     )
                   })}
-                  {g.tasks.length === 0 && <p className="text-[11px] text-muted-foreground/50 italic text-center py-6">Sin tareas asignadas.</p>}
+                  {g.tasks.length === 0 && <p className="text-[11px] text-muted-foreground/60 italic text-center py-8 rounded-lg border border-dashed border-border/60 bg-muted/10">Sin tareas asignadas.</p>}
                 </div>
               </div>
             </div>
@@ -408,11 +529,11 @@ export function PortfolioTab({
         <div className="flex items-center gap-1.5">
           <FolderKanban className="w-3.5 h-3.5 text-primary-600 dark:text-primary-400" />
           <span className="text-xs text-muted-foreground font-medium">Proyectos:</span>
-          <span className="text-xs font-bold tabular-nums">{projects.length}</span>
+          <span className="text-xs font-bold tabular-nums">{workspaces.length}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <Building2 className="w-3.5 h-3.5 text-primary-600 dark:text-primary-400" />
-          <span className="text-xs text-muted-foreground font-medium">Áreas:</span>
+          <span className="text-xs text-muted-foreground font-medium">Áreas con tareas:</span>
           <span className="text-xs font-bold tabular-nums">{totalAreas}</span>
         </div>
         <div className="flex items-center gap-1.5">
@@ -434,7 +555,7 @@ export function PortfolioTab({
               className="h-8 text-xs gap-1.5 rounded-lg workos-gantt-btn-primary border-0"
             >
               <Plus className="w-3 h-3" />
-              Nuevo Proyecto
+              Nuevo espacio de trabajo
             </Button>
             <Button
               size="sm"
@@ -451,34 +572,30 @@ export function PortfolioTab({
 
       {/* Content list */}
       <div className="flex-1 overflow-y-auto py-2 space-y-1">
-        {groups.length === 0 && projects.length === 0 && (
+        {groups.length === 0 && workspaces.length === 0 && unassignedGroups.length === 0 && (
           <div className="text-center py-16">
             <Building2 className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
-            <p className="text-sm text-muted-foreground">No hay áreas ni proyectos.</p>
+            <p className="text-sm text-muted-foreground">No hay proyectos ni tareas en cartera.</p>
           </div>
         )}
 
-        {/* ===== PROJECTS ===== */}
-        {projects.map((proj, pIdx) => {
+        {/* ===== ESPACIOS DE TRABAJO (proyectos): solo áreas con tareas en ese espacio ===== */}
+        {workspaces.map((proj, pIdx) => {
           const isProjectOpen = expandedProjects.has(proj.id)
-          const projAreaIds = areaIdsByProjectId.get(proj.id) ?? []
-          const projectGroups = groups.filter((g) => projAreaIds.includes(g.areaId))
+          const projectGroups = groups
+            .map((g) => sliceGroupTasks(g, (t) => t.workspaceId === proj.id))
+            .filter((g) => g.tasks.length > 0)
 
-          // KPIs directos: tareas con projectId === proj.id
-          const directTasks = tasks.filter((t) => t.projectId === proj.id)
+          // KPIs directos: tareas con workspaceId === proj.id
+          const directTasks = tasks.filter((t) => t.workspaceId === proj.id)
           const directDone = directTasks.filter((t) => t.status === 'DONE').length
           const directInProgress = directTasks.filter((t) => t.status === 'IN_PROGRESS').length
           const directBlocked = directTasks.filter((t) => t.status === 'BLOCKED').length
-          const directAtRisk = directTasks.filter((t) => t.status === 'AT_RISK').length
           const directPct = directTasks.length > 0 ? Math.round((directDone / directTasks.length) * 100) : 0
-          const avgProgress = directTasks.length > 0
-            ? Math.round(directTasks.reduce((s, t) => s + (t.progressPercent ?? 0), 0) / directTasks.length)
-            : 0
 
-          // Fallback a conteo por áreas vinculadas por tareas
-          const projectTaskCount = directTasks.length > 0 ? directTasks.length : projectGroups.reduce((s, g) => s + g.total, 0)
-          const projectDoneCount = directTasks.length > 0 ? directDone : projectGroups.reduce((s, g) => s + g.done, 0)
-          const projectPct = directTasks.length > 0 ? directPct : (projectTaskCount > 0 ? Math.round((projectDoneCount / projectTaskCount) * 100) : 0)
+          const projectTaskCount = directTasks.length
+          const projectDoneCount = directDone
+          const projectPct = directPct
 
           const projectCollabCount = (() => {
             const s = new Set<number>()
@@ -520,7 +637,7 @@ export function PortfolioTab({
                 </div>
 
                 <div className="flex items-center gap-3 shrink-0 text-[11px] text-muted-foreground">
-                  <span className="flex items-center gap-1" title="Personas en áreas con tareas de este proyecto">
+                  <span className="flex items-center gap-1" title="Personas en áreas con tareas de este espacio de trabajo">
                     <UsersIcon className="w-3 h-3" /> {projectCollabCount}
                   </span>
                 </div>
@@ -544,7 +661,7 @@ export function PortfolioTab({
                       type="button"
                       onClick={() => openProjectEdit(proj)}
                       className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                      title="Editar proyecto"
+                      title="Editar espacio de trabajo"
                     >
                       <Pencil className="w-4 h-4" />
                     </button>
@@ -552,7 +669,7 @@ export function PortfolioTab({
                       type="button"
                       onClick={() => { setProjectToDelete(proj); setDeleteProjectDialogOpen(true) }}
                       className="p-1.5 rounded-lg hover:bg-destructive/10 transition-colors text-muted-foreground hover:text-destructive"
-                      title="Eliminar proyecto"
+                      title="Eliminar espacio de trabajo"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -563,7 +680,7 @@ export function PortfolioTab({
               {/* Expanded: KPIs + areas */}
               {isProjectOpen && (
                 <div className="border-t border-red-200/40 dark:border-red-800/30 gantt-expand">
-                  {/* KPIs por proyecto */}
+                  {/* KPIs por espacio de trabajo */}
                   {directTasks.length > 0 && (
                     <div className="px-5 py-3 grid grid-cols-5 gap-3 border-b border-red-100/40 dark:border-red-900/20 bg-red-50/30 dark:bg-red-900/5">
                       <div className="text-center">
@@ -580,17 +697,17 @@ export function PortfolioTab({
                       </div>
                       <div className="text-center">
                         <div className="text-[11px] text-muted-foreground mb-0.5">Bloqueadas</div>
-                        <div className="text-base font-bold tabular-nums text-red-600">{directBlocked + directAtRisk}</div>
+                        <div className="text-base font-bold tabular-nums text-red-600">{directBlocked}</div>
                       </div>
-                      <div className="text-center">
+                      <div className="text-center" title="Tareas en estado Hecha respecto al total del proyecto">
                         <div className="text-[11px] text-muted-foreground mb-0.5">Progreso</div>
-                        <div className="text-base font-bold tabular-nums">{avgProgress}%</div>
+                        <div className="text-base font-bold tabular-nums">{directPct}%</div>
                       </div>
                     </div>
                   )}
                   {projectGroups.length === 0 && directTasks.length === 0 && (
                     <p className="text-xs text-muted-foreground/50 italic text-center py-6">
-                      No hay tareas en este proyecto. Crea tareas y asígnalas a este proyecto desde el formulario de tarea o desde cada área.
+                      No hay tareas en este espacio de trabajo. Crea tareas y asígnalas desde el formulario de tarea o desde cada área.
                     </p>
                   )}
                   {projectGroups.map((g, gIdx) => renderAreaCard(g, gIdx))}
@@ -600,8 +717,91 @@ export function PortfolioTab({
           )
         })}
 
-        {/* ===== ALL AREAS (when no projects) or remaining areas ===== */}
-        {groups.map((g, gIdx) => renderAreaCard(g, gIdx))}
+        {/* Tareas sin espacio de trabajo: no se mezclan con el catálogo global de áreas */}
+        {unassignedGroups.length > 0 && (
+            <div
+              key="proj-sin-espacio"
+              className="mx-2 sm:mx-3 my-3 rounded-xl border border-border/80 bg-card workos-shadow-soft hover:shadow-md transition-shadow duration-300 gantt-fade-in overflow-hidden ring-1 ring-muted/40"
+            >
+              <div
+                className={`flex items-center gap-3 px-5 py-4 cursor-pointer select-none transition-colors ${
+                  unassignedProjectOpen ? 'bg-muted/20' : 'hover:bg-muted/10'
+                }`}
+                onClick={() => setUnassignedProjectOpen((o) => !o)}
+              >
+                <span className="text-muted-foreground shrink-0">
+                  {unassignedProjectOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                </span>
+                <div
+                  className="h-9 w-9 shrink-0 rounded-lg bg-muted flex items-center justify-center text-muted-foreground shadow-sm border border-border/60"
+                  aria-hidden
+                >
+                  <FolderKanban className="w-[18px] h-[18px] stroke-[2]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-bold text-foreground leading-tight">Sin espacio de trabajo</h3>
+                  <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                    Tareas sin proyecto asignado ({unassignedGroups.length}{' '}
+                    {unassignedGroups.length === 1 ? 'área' : 'áreas'})
+                  </p>
+                </div>
+                <div className="flex items-center gap-3 shrink-0 text-[11px] text-muted-foreground">
+                  <span className="flex items-center gap-1" title="Personal en áreas listadas">
+                    <UsersIcon className="w-3 h-3" /> {unassignedStripMeta.orphanCollabCount}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-xs tabular-nums text-muted-foreground font-medium">
+                    {unassignedStripMeta.orphanDone}/{unassignedStripMeta.orphanTasks.length}
+                  </span>
+                  <div className="w-20 h-1.5 rounded-full bg-border/60 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-muted-foreground/60 to-muted-foreground/40 transition-all duration-500"
+                      style={{ width: `${unassignedStripMeta.orphanPct}%` }}
+                    />
+                  </div>
+                  <span className="text-xs tabular-nums text-muted-foreground font-medium">
+                    {unassignedStripMeta.orphanPct}%
+                  </span>
+                </div>
+              </div>
+              {unassignedProjectOpen && (
+                <div className="border-t border-border/40 gantt-expand">
+                  {unassignedStripMeta.orphanTasks.length > 0 && (
+                    <div className="px-5 py-3 grid grid-cols-5 gap-3 border-b border-border/30 bg-muted/10">
+                      <div className="text-center">
+                        <div className="text-[11px] text-muted-foreground mb-0.5">Total</div>
+                        <div className="text-base font-bold tabular-nums">{unassignedStripMeta.orphanTasks.length}</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-[11px] text-muted-foreground mb-0.5">Completadas</div>
+                        <div className="text-base font-bold tabular-nums text-emerald-600">
+                          {unassignedStripMeta.orphanDone}
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-[11px] text-muted-foreground mb-0.5">En curso</div>
+                        <div className="text-base font-bold tabular-nums text-amber-600">
+                          {unassignedStripMeta.orphanInProgress}
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-[11px] text-muted-foreground mb-0.5">Bloqueadas</div>
+                        <div className="text-base font-bold tabular-nums text-red-600">
+                          {unassignedStripMeta.orphanBlocked}
+                        </div>
+                      </div>
+                      <div className="text-center" title="Tareas en estado Hecha respecto al total">
+                        <div className="text-[11px] text-muted-foreground mb-0.5">Progreso</div>
+                        <div className="text-base font-bold tabular-nums">{unassignedStripMeta.orphanPct}%</div>
+                      </div>
+                    </div>
+                  )}
+                  {unassignedGroups.map((g, gIdx) => renderAreaCard(g, gIdx))}
+                </div>
+              )}
+            </div>
+          )}
       </div>
 
       {/* ===== Collaborator dialog ===== */}
@@ -692,10 +892,10 @@ export function PortfolioTab({
       <Dialog open={projectDialogOpen} onOpenChange={setProjectDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{projectEditing ? 'Editar Proyecto' : 'Nuevo Proyecto'}</DialogTitle>
+            <DialogTitle>{projectEditing ? 'Editar espacio de trabajo' : 'Nuevo espacio de trabajo'}</DialogTitle>
           </DialogHeader>
           <p className="text-xs text-muted-foreground -mt-1">
-            {projectEditing ? 'Nombre, descripción e icono.' : 'Elige un icono para reconocer el proyecto en el header y en el portfolio.'}
+            {projectEditing ? 'Nombre, descripción e icono.' : 'Elige un icono para reconocer el espacio de trabajo en el header y en el portfolio.'}
           </p>
           <div className="space-y-4 mt-2">
             <div>
@@ -723,7 +923,7 @@ export function PortfolioTab({
               </div>
             </div>
             <div>
-              <Label>Nombre del Proyecto *</Label>
+              <Label>Nombre del espacio de trabajo *</Label>
               <Input
                 value={projectForm.name}
                 onChange={(e) => setProjectForm((f) => ({ ...f, name: e.target.value }))}
@@ -736,7 +936,7 @@ export function PortfolioTab({
               <Textarea
                 value={projectForm.description}
                 onChange={(e) => setProjectForm((f) => ({ ...f, description: e.target.value }))}
-                placeholder="Descripción del proyecto..."
+                placeholder="Descripción del espacio de trabajo..."
                 className="mt-1 resize-none"
                 rows={3}
               />
@@ -749,7 +949,7 @@ export function PortfolioTab({
               disabled={!projectForm.name.trim() || projectSaving}
               onClick={saveProject}
             >
-              {projectEditing ? 'Guardar Cambios' : 'Crear Proyecto'}
+              {projectEditing ? 'Guardar Cambios' : 'Crear espacio de trabajo'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -759,7 +959,7 @@ export function PortfolioTab({
       <Dialog open={deleteProjectDialogOpen} onOpenChange={(open) => { if (!deletingProject) { setDeleteProjectDialogOpen(open); if (!open) setProjectToDelete(null) } }}>
         <DialogContent className="max-w-md p-6 rounded-xl text-center">
           <DialogHeader className="space-y-1 pb-0">
-            <DialogTitle className="text-lg font-semibold text-center">Eliminar Proyecto</DialogTitle>
+            <DialogTitle className="text-lg font-semibold text-center">Eliminar espacio de trabajo</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground mt-2 leading-relaxed text-center">
             ¿Estás seguro de eliminar <strong>"{projectToDelete?.name}"</strong>? Las áreas seguirán existiendo pero ya no estarán agrupadas. Esta acción no se puede deshacer.

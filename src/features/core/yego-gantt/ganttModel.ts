@@ -9,11 +9,12 @@ import type {
 import {
   startOfDay,
   parseYmd,
-  daysBetween,
+  differenceInCalendarDays,
   mapVisualStatus,
   mapVisualPriority,
   areaBarFill,
   areaLabelColor,
+  timelineTaskBarColor,
 } from './utils'
 
 export type {
@@ -23,7 +24,7 @@ export type {
   TimelineRange,
 }
 
-export { mapVisualStatus, mapVisualPriority, areaBarFill, areaLabelColor }
+export { mapVisualStatus, mapVisualPriority, areaBarFill, areaLabelColor, timelineTaskBarColor }
 
 /** Ancho mínimo por día (px): cabe "sáb" + "25 abr" en dos líneas sin recortar con puntos suspensivos. */
 export const DAY_WIDTH = 46
@@ -36,30 +37,59 @@ export function buildTimelineRange(tasks: TaskRowLike[]): TimelineRange {
     anchor.setDate(anchor.getDate() - pad)
     return { anchor, totalDays: minDays }
   }
-  let min = parseYmd(tasks[0].startDate)
-  let max = parseYmd(tasks[0].endDate)
+  let min: Date | null = parseYmd(tasks[0].startDate)
+  let max: Date | null = parseYmd(tasks[0].endDate)
   for (const t of tasks) {
     const a = parseYmd(t.startDate)
     const b = parseYmd(t.endDate)
-    if (a < min) min = a
-    if (b > max) max = b
+    if (a && (!min || a < min)) min = a
+    if (b && (!max || b > max)) max = b
+  }
+  if (!min || !max) {
+    const anchor = startOfDay(new Date())
+    anchor.setDate(anchor.getDate() - pad)
+    return { anchor, totalDays: minDays }
   }
   const anchor = startOfDay(min)
   anchor.setDate(anchor.getDate() - pad)
   const endPadded = startOfDay(max)
   endPadded.setDate(endPadded.getDate() + pad)
-  let totalDays = daysBetween(anchor, endPadded) + 1
+  let totalDays = differenceInCalendarDays(endPadded, anchor) + 1
   if (totalDays < minDays) totalDays = minDays
   return { anchor, totalDays }
 }
 
 export function taskRowToGanttItem(t: TaskRowLike, range: TimelineRange): GanttTaskItem {
+  const principalUserId =
+    t.assignedUserIds != null && t.assignedUserIds.length > 0
+      ? t.assignedUserIds[0]
+      : t.assignedUserId != null
+        ? t.assignedUserId
+        : undefined
+  const assigneeStr = principalUserId != null ? String(principalUserId) : undefined
+
   const s = parseYmd(t.startDate)
   const e = parseYmd(t.endDate)
-  let startDay = daysBetween(range.anchor, s)
+  if (!s || !e) {
+    return {
+      id: String(t.id),
+      name: t.title,
+      startDay: 0,
+      duration: 1,
+      progress: t.progressPercent ?? 0,
+      status: mapVisualStatus(t.status),
+      priority: mapVisualPriority(t.priority),
+      assignee: assigneeStr,
+      principalUserId,
+      description: t.description ?? undefined,
+      sourceId: t.id,
+      areaId: t.areaId,
+    }
+  }
+  let startDay = differenceInCalendarDays(startOfDay(s), startOfDay(range.anchor))
   if (startDay < 0) startDay = 0
   if (startDay >= range.totalDays) startDay = range.totalDays - 1
-  let duration = daysBetween(s, e) + 1
+  let duration = differenceInCalendarDays(startOfDay(e), startOfDay(s)) + 1
   if (duration < 1) duration = 1
   if (startDay + duration > range.totalDays) {
     duration = range.totalDays - startDay
@@ -74,7 +104,8 @@ export function taskRowToGanttItem(t: TaskRowLike, range: TimelineRange): GanttT
     progress: t.progressPercent ?? 0,
     status: mapVisualStatus(t.status),
     priority: mapVisualPriority(t.priority),
-    assignee: t.assignedUserId != null ? String(t.assignedUserId) : undefined,
+    assignee: assigneeStr,
+    principalUserId,
     description: t.description ?? undefined,
     sourceId: t.id,
     areaId: t.areaId,
@@ -146,7 +177,7 @@ export function computeCriticalPathTaskIds(tasks: GanttTaskItem[]): Set<string> 
   if (tasks.length === 0) return ids
 
   for (const t of tasks) {
-    if (t.priority === "critical" || t.status === "blocked" || t.status === "at-risk") {
+    if (t.priority === "critical" || t.status === "blocked") {
       ids.add(t.id)
     }
   }
@@ -168,7 +199,8 @@ export function computeCriticalPathTaskIds(tasks: GanttTaskItem[]): Set<string> 
 
 export function getTodayOffsetDays(range: TimelineRange): number {
   const today = startOfDay(new Date())
-  return daysBetween(range.anchor, today)
+  const anchor = startOfDay(range.anchor)
+  return differenceInCalendarDays(today, anchor)
 }
 
 export { timelineDayDensity, formatTimelineDayCell, isWeekendDay, formatSpanishDayHeader } from './utils'

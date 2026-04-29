@@ -5,7 +5,7 @@
 
 // ==================== ENUMS/TIPOS BÁSICOS ====================
 
-export type AreaTaskStatus = 'PENDING' | 'IN_PROGRESS' | 'DONE' | 'BLOCKED' | 'AT_RISK'
+export type AreaTaskStatus = 'PENDING' | 'IN_PROGRESS' | 'DONE' | 'BLOCKED'
 export type TaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'
 export type SprintStatus = 'PLANNED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'
 
@@ -26,7 +26,7 @@ export interface ColaboradorDto {
   rol: string
 }
 
-export interface ProjectDto {
+export interface WorkspaceDto {
   id: number
   name: string
   description?: string | null
@@ -38,7 +38,7 @@ export interface ProjectDto {
 
 export interface SprintDto {
   id: number
-  projectId: number
+  workspaceId: number
   name: string
   goal?: string | null
   startDate: string
@@ -54,7 +54,7 @@ export interface TaskRow {
   id: number
   areaId: number
   areaName?: string | null
-  projectId?: number | null
+  workspaceId?: number | null
   sprintId?: number | null
   title: string
   description?: string | null
@@ -66,14 +66,20 @@ export interface TaskRow {
   assignedUserId?: number | null
   assignedUserIds?: number[]
   tags?: string[]
+  /** Flag persistido en API; las etiquetas «privada» siguen siendo respaldo en datos antiguos. */
+  privateTask?: boolean
+  createdByUserId?: number | null
   sortOrder?: number
+  /** Agregados de subtareas (API). */
+  subtaskDone?: number
+  subtaskTotal?: number
 }
 
 export interface TaskRowLike {
   id: number
   areaId: number
   areaName?: string | null
-  projectId?: number | null
+  workspaceId?: number | null
   title: string
   description?: string | null
   startDate: string
@@ -84,6 +90,8 @@ export interface TaskRowLike {
   assignedUserId?: number | null
   assignedUserIds?: number[]
   tags?: string[]
+  privateTask?: boolean
+  createdByUserId?: number | null
 }
 
 // ==================== TIPOS VISUALES DEL GANTT ====================
@@ -100,6 +108,8 @@ export interface GanttTaskItem {
   status: GanttVisualStatus
   priority: GanttVisualPriority
   assignee?: string
+  /** Responsable principal (owner): primer id en `assignedUserIds` o `assignedUserId`. */
+  principalUserId?: number
   description?: string
   sourceId: number
   areaId: number
@@ -123,7 +133,7 @@ export type TimelineDayDensity = 'comfortable' | 'compact' | 'minimal'
 
 export interface DashboardTabProps {
   tasks: TaskRow[]
-  projects: ProjectDto[]
+  workspaces: WorkspaceDto[]
   loading: boolean
   refreshing?: boolean
   /** Si true, no mostrar la pastilla de carga en la esquina (el padre ya muestra aviso, p. ej. cambio de proyecto). */
@@ -138,13 +148,15 @@ export interface PortfolioTabProps {
   suppressEdgeRefreshPill?: boolean
   manage: boolean
   areas: AreaFull[]
-  projects: ProjectDto[]
+  workspaces: WorkspaceDto[]
   collaboratorsForArea: (areaId: number) => ColaboradorDto[]
   onEdit: (t: TaskRow) => void
   onDelete: (t: TaskRow) => void
   onCreateTask: (presetAreaId?: number) => void
   onDeleteArea: (areaId: number) => void
   onReload: (opts?: { refreshCollaborators?: boolean }) => void | Promise<void>
+  /** Vista detalle (subtareas); si no se define, el clic sigue yendo a onEdit. */
+  onOpenTask?: (t: TaskRow) => void
 }
 
 export interface TodoBoardTabProps {
@@ -154,22 +166,24 @@ export interface TodoBoardTabProps {
   suppressEdgeRefreshPill?: boolean
   manage: boolean
   allCollaborators?: ColaboradorDto[]
-  onEdit: (t: TaskRow) => void
-  onDelete: (t: TaskRow) => void
   onStatusChange?: (taskId: number, newStatus: AreaTaskStatus) => Promise<void>
   onAddTask?: (status: AreaTaskStatus) => void
+  /** Abre vista detalle con subtareas (clic en tarjeta). */
+  onOpenTask?: (t: TaskRow) => void
+  /** Id del usuario logueado (filtro «Mis tareas»). */
+  currentUserId?: number | null
 }
 
 export interface SprintsTabProps {
   tasks: TaskRow[]
-  projects: ProjectDto[]
+  workspaces: WorkspaceDto[]
   manage: boolean
   loading: boolean
   refreshing?: boolean
   suppressEdgeRefreshPill?: boolean
   onReload: () => void
   onTaskStatusChange?: (taskId: number, status: AreaTaskStatus) => void
-  onOpenCreateTask?: (opts?: { sprintId?: number; projectId?: number }) => void
+  onOpenCreateTask?: (opts?: { sprintId?: number; workspaceId?: number }) => void
   onEditTask?: (task: TaskRow) => void
   collaboratorNames?: Map<number, string>
 }
@@ -198,7 +212,6 @@ export interface Kpis {
   tareas: number
   progresoPromedioPct: number
   completadas: number
-  enRiesgo: number
   bloqueadas: number
 }
 

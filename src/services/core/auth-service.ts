@@ -26,6 +26,9 @@ export interface AuthUser {
   nombreArea?: string | null;
   esSupervisor?: boolean;
   nombreAreaSupervisor?: string | null;
+  /** Área principal del usuario (users.area_id). */
+  areaId?: number | null;
+  areaNombre?: string | null;
   requirePasswordChange?: boolean;
   sedeId?: number | null;
   sedeNombre?: string | null;

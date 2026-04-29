@@ -19,6 +19,8 @@ export interface User {
   nombreArea?: string | null;
   esSupervisor?: boolean;
   nombreAreaSupervisor?: string | null;
+  areaId?: number | null;
+  areaNombre?: string | null;
   requirePasswordChange?: boolean;
   sedeId?: number | null;
   sedeNombre?: string | null;

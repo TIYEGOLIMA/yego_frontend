@@ -5,21 +5,13 @@
 
 import type { ReactNode } from 'react'
 import { type LucideIcon } from 'lucide-react'
-import type { AreaTaskStatus, TaskPriority, GanttVisualStatus, GanttVisualPriority } from '../../types'
+import type { AreaTaskStatus, TaskPriority } from '../../types'
 import {
-  STATUS_LABEL,
-  STATUS_BG,
   TASK_STATUS_COLOR,
   TASK_STATUS_LABEL,
   PRIO_LABEL,
-  PRIO_COLOR,
   PRIO_BADGE,
-  PRIORITY_LABEL,
-  PRIORITY_BADGE,
-  areaPillClass as getAreaPillClass,
 } from '../../utils'
-
-export { getAreaPillClass }
 
 // ==================== COMPONENTES DE BADGE ====================
 
@@ -39,17 +31,6 @@ export function StatusBadge({ status, size = 'sm' }: StatusBadgeProps) {
   )
 }
 
-export function StatusBadgeAlt({ status, size = 'sm' }: StatusBadgeProps) {
-  const classes = size === 'sm'
-    ? 'text-[10px] px-2 py-0.5 rounded-md font-semibold'
-    : 'text-xs px-2.5 py-1 rounded-md font-semibold'
-  return (
-    <span className={`${classes} ${STATUS_BG[status]}`}>
-      {STATUS_LABEL[status]}
-    </span>
-  )
-}
-
 export interface PriorityBadgeProps {
   priority?: TaskPriority | null
   size?: 'sm' | 'md'
@@ -63,18 +44,6 @@ export function PriorityBadge({ priority, size = 'sm' }: PriorityBadgeProps) {
   return (
     <span className={`${classes} ${PRIO_BADGE[p]}`}>
       {PRIO_LABEL[p]}
-    </span>
-  )
-}
-
-export function PriorityBadgeAlt({ priority, size = 'sm' }: PriorityBadgeProps) {
-  const p = priority ?? 'MEDIUM'
-  const classes = size === 'sm'
-    ? 'text-[10px] px-2 py-0.5 rounded-md font-semibold'
-    : 'text-xs px-2.5 py-1 rounded-md font-semibold'
-  return (
-    <span className={`${classes} ${PRIORITY_BADGE[p]}`}>
-      {PRIORITY_LABEL[p]}
     </span>
   )
 }
@@ -131,46 +100,16 @@ export function ProgressBar({
   )
 }
 
-export function ProgressBarWithContainer({
-  value,
-  max = 100,
-  className = '',
-  variant = 'primary',
-}: ProgressBarProps) {
-  const percentage = Math.min(100, Math.max(0, Math.round((value / max) * 100)))
-
-  const variantClasses = {
-    primary: 'workos-progress-fill',
-    amber: 'bg-amber-500',
-    red: 'bg-red-500',
-    sky: 'bg-sky-500',
-    emerald: 'bg-emerald-500',
-    slate: 'bg-slate-400/90 dark:bg-slate-500/80',
-  }
-
-  return (
-    <div
-      className={`h-2.5 w-full overflow-hidden rounded-full border border-border/60 bg-muted/70 dark:bg-muted/50 shadow-[inset_0_1px_2px_rgba(0,0,0,0.06)] ${className}`}
-    >
-      <div
-        className={`h-full min-w-0 rounded-full transition-all duration-500 ${variantClasses[variant]}`}
-        style={{ width: `${percentage}%` }}
-        title={`${percentage}%`}
-      />
-    </div>
-  )
-}
-
 // ==================== COMPONENTES DE AVATAR ====================
 
 export interface AvatarProps {
   name: string
   size?: 'xs' | 'sm' | 'md' | 'lg'
-  variant?: 'default' | 'primary' | 'red' | 'muted'
+  variant?: 'default' | 'primary' | 'red' | 'muted' | 'owner'
   title?: string
 }
 
-export function getAvatarInitials(name: string): string {
+function getAvatarInitials(name: string): string {
   const parts = name.trim().split(/\s+/)
   if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase()
   return name.slice(0, 2).toUpperCase()
@@ -191,6 +130,8 @@ export function Avatar({ name, size = 'sm', variant = 'default', title }: Avatar
     primary: 'bg-primary/15 border-background text-primary',
     red: 'bg-red-100 dark:bg-red-900/30 border-white dark:border-neutral-900 text-red-600 dark:text-red-400',
     muted: 'bg-muted border-border/60 text-muted-foreground',
+    owner:
+      'bg-amber-100 dark:bg-amber-950/45 border-amber-400 dark:border-amber-500 text-amber-900 dark:text-amber-100',
   }
 
   return (
@@ -392,129 +333,3 @@ export function RowBar({ Icon, color, label, value, pct, barClass }: RowBarProps
   )
 }
 
-// ==================== COMPONENTES DE AREA PILL ====================
-
-export interface AreaPillProps {
-  areaId: number
-  name: string
-  className?: string
-}
-
-export function AreaPill({ areaId, name, className = '' }: AreaPillProps) {
-  return (
-    <span
-      className={`text-[10px] font-medium px-2 py-0.5 rounded-md border truncate ${getAreaPillClass(areaId)} ${className}`}
-    >
-      {name}
-    </span>
-  )
-}
-
-// ==================== COMPONENTES DE TAREA ====================
-
-export interface TaskCardProps {
-  id: number
-  title: string
-  status: AreaTaskStatus
-  priority?: TaskPriority | null
-  progressPercent: number
-  areaName?: string | null
-  endDate: string
-  assignees?: { id: number; name: string }[]
-  tags?: string[]
-  onClick?: () => void
-  className?: string
-}
-
-export function TaskCard({
-  id,
-  title,
-  status,
-  priority,
-  progressPercent,
-  areaName,
-  endDate,
-  assignees,
-  tags,
-  onClick,
-  className = '',
-}: TaskCardProps) {
-  return (
-    <div
-      onClick={onClick}
-      className={`group rounded-lg border border-border/80 bg-card p-3 workos-shadow-soft hover:shadow-md cursor-pointer transition ${className}`}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <StatusBadgeAlt status={status} size="sm" />
-        <span className="text-xs text-foreground font-medium flex-1 min-w-0 truncate">
-          {title}
-        </span>
-      </div>
-      <div className="mt-2 flex items-center justify-between">
-        <span className="text-[10px] text-muted-foreground">{areaName || `Área ${id}`}</span>
-        <PriorityBadge priority={priority} size="sm" />
-      </div>
-      <ProgressBar value={progressPercent} className="mt-2" size="sm" />
-      <div className="mt-2 flex items-center justify-between">
-        {assignees && assignees.length > 0 ? (
-          <AvatarGroup
-            names={assignees.map((a) => a.name)}
-            size="xs"
-            max={3}
-          />
-        ) : (
-          <span className="text-[10px] italic text-muted-foreground">Sin asignar</span>
-        )}
-        <span className="text-[10px] text-muted-foreground">{endDate}</span>
-      </div>
-    </div>
-  )
-}
-
-// ==================== UTILIDADES DE FORMATO ====================
-
-export function formatShortDate(isoDate: string): string {
-  const d = new Date(isoDate + (isoDate.length <= 10 ? 'T12:00:00' : ''))
-  return d.toLocaleDateString('es', { day: 'numeric', month: 'short' })
-}
-
-export function formatDateRange(startDate: string, endDate: string): string {
-  return `${formatShortDate(startDate)} → ${formatShortDate(endDate)}`
-}
-
-export function computeDurationDays(start: string, end: string): number {
-  const a = new Date(start)
-  const b = new Date(end)
-  const ms = b.getTime() - a.getTime()
-  return Math.max(1, Math.round(ms / 86400000) + 1)
-}
-
-// ==================== MAPEO VISUAL PARA GANTT ====================
-
-const STATUS_UI: Record<GanttVisualStatus, { label: string; className: string }> = {
-  'on-track': {
-    label: 'En curso',
-    className: 'text-amber-700 bg-white border-amber-400 dark:bg-transparent dark:border-amber-500/50',
-  },
-  'at-risk': {
-    label: 'En riesgo',
-    className: 'text-orange-700 bg-white border-orange-400 dark:bg-transparent',
-  },
-  blocked: { label: 'Bloqueado', className: 'text-red-700 bg-white border-red-300 dark:bg-transparent' },
-  completed: { label: 'Completado', className: 'text-emerald-700 bg-white border-emerald-400 dark:bg-transparent' },
-}
-
-const PRIORITY_UI: Record<GanttVisualPriority, { label: string; className: string }> = {
-  low: { label: 'Baja', className: 'text-muted-foreground bg-white border-[#e5e7eb]' },
-  medium: { label: 'Media', className: 'text-sky-700 bg-white border-sky-400 dark:text-sky-300' },
-  high: { label: 'Alta', className: 'text-amber-800 bg-white border-amber-500' },
-  critical: { label: 'Urgente', className: 'text-red-700 bg-white border-red-400' },
-}
-
-export function getStatusVisualUI(status: GanttVisualStatus) {
-  return STATUS_UI[status] || STATUS_UI['on-track']
-}
-
-export function getPriorityVisualUI(priority: GanttVisualPriority) {
-  return PRIORITY_UI[priority] || PRIORITY_UI.medium
-}

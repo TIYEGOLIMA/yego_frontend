@@ -12,28 +12,21 @@ import type {
 
 // ==================== CONSTANTES DE MAPEO ====================
 
+/** Etiquetas unificadas: Pendiente / Hecha / Bloqueada (y en curso). */
 export const STATUS_LABEL: Record<AreaTaskStatus, string> = {
-  PENDING: 'Por Hacer',
-  IN_PROGRESS: 'En Progreso',
-  DONE: 'Hecho',
-  BLOCKED: 'Bloqueada',
-  AT_RISK: 'En riesgo',
-}
-
-export const TASK_STATUS_LABEL: Record<AreaTaskStatus, string> = {
   PENDING: 'Pendiente',
   IN_PROGRESS: 'En curso',
   DONE: 'Hecha',
   BLOCKED: 'Bloqueada',
-  AT_RISK: 'En riesgo',
 }
+
+export const TASK_STATUS_LABEL: Record<AreaTaskStatus, string> = STATUS_LABEL
 
 export const TASK_STATUS_COLOR: Record<AreaTaskStatus, string> = {
   PENDING: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
   IN_PROGRESS: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
   DONE: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
   BLOCKED: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
-  AT_RISK: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
 }
 
 export const STATUS_BG: Record<AreaTaskStatus, string> = {
@@ -41,7 +34,6 @@ export const STATUS_BG: Record<AreaTaskStatus, string> = {
   IN_PROGRESS: 'bg-amber-500 text-white',
   DONE: 'bg-emerald-500 text-white',
   BLOCKED: 'bg-zinc-400 text-white',
-  AT_RISK: 'bg-gray-400 text-white',
 }
 
 export const PRIORITY_LABEL: Record<TaskPriority, string> = {
@@ -94,6 +86,9 @@ export const TAG_COLORS = [
   'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
 ]
 
+/** @deprecated alias histórico para chips de área; preferir `TAG_COLORS` / `areaPillClass`. */
+export const AREA_PILL_STYLES = TAG_COLORS
+
 // ==================== FUNCIONES UTILITARIAS ====================
 
 /**
@@ -118,220 +113,142 @@ export function avatarInitials(name: string): string {
 }
 
 /**
- * Determina el color de un tag basado en su nombre (hash consistente)
+ * Devuelve un color de tag estable por índice o hash del texto.
  */
-export function tagColor(tag: string): string {
+export function tagColor(tag: string | undefined | null, idx: number): string {
+  if (!tag) return TAG_COLORS[0]
   let h = 0
-  for (let i = 0; i < tag.length; i++) h = (h * 31 + tag.charCodeAt(i)) | 0
-  return TAG_COLORS[Math.abs(h) % TAG_COLORS.length]
+  for (let i = 0; i < tag.length; i++) h = (h * 31 + tag.charCodeAt(i)) >>> 0
+  return TAG_COLORS[(h + idx) % TAG_COLORS.length]
 }
 
-/**
- * Verifica si una tarea está vencida (endDate < hoy)
- */
-export function isOverdue(endDate: string): boolean {
-  return new Date(endDate + 'T23:59:59') < new Date()
+export function isOverdue(endYmd: string): boolean {
+  const end = parseYmd(endYmd)
+  if (!end) return false
+  const today = startOfDay(new Date())
+  return end < today
 }
 
-/**
- * Calcula la diferencia en días calendario entre dos fechas
- */
-export function differenceInCalendarDays(left: Date, right: Date): number {
-  const sod = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
-  return Math.round((sod(left) - sod(right)) / 86400000)
+export function differenceInCalendarDays(a: Date, b: Date): number {
+  const ua = Date.UTC(a.getFullYear(), a.getMonth(), a.getDate())
+  const ub = Date.UTC(b.getFullYear(), b.getMonth(), b.getDate())
+  return Math.round((ua - ub) / 86400000)
 }
 
-/**
- * Formatea una fecha ISO a formato corto (ej: "25 abr")
- */
-export function fmtShort(isoDate: string): string {
-  const d = new Date(isoDate + (isoDate.length <= 10 ? 'T12:00:00' : ''))
-  return d.toLocaleDateString('es', { day: 'numeric', month: 'short' })
+export function fmtShort(isoYmd: string): string {
+  try {
+    const d = new Date(isoYmd + 'T12:00:00')
+    return d.toLocaleDateString('es', { day: 'numeric', month: 'short' })
+  } catch {
+    return isoYmd
+  }
 }
 
-/**
- * Iniciales a partir de una etiqueta/label
- */
 export function initialsFromLabel(label: string): string {
-  const p = label.trim().split(/\s+/).filter(Boolean)
-  if (p.length >= 2) return (p[0][0] + p[1][0]).toUpperCase()
-  if (p.length === 1 && p[0].length >= 2) return p[0].slice(0, 2).toUpperCase()
-  return label.slice(0, 2).toUpperCase() || '·'
+  return avatarInitials(label)
 }
 
-// ==================== MAPEO VISUAL ====================
-
-/**
- * Mapea el estado de tarea a estado visual del Gantt
- */
-export function mapVisualStatus(s: AreaTaskStatus): GanttVisualStatus {
-  switch (s) {
-    case 'DONE':
-      return 'completed'
-    case 'BLOCKED':
-      return 'blocked'
-    case 'AT_RISK':
-      return 'at-risk'
-    default:
-      return 'on-track'
-  }
-}
-
-/**
- * Mapea la prioridad de tarea a prioridad visual del Gantt
- */
-export function mapVisualPriority(p?: TaskPriority | null): GanttVisualPriority {
-  switch (p) {
-    case 'LOW':
-      return 'low'
-    case 'HIGH':
-      return 'high'
-    case 'URGENT':
-      return 'critical'
-    default:
-      return 'medium'
-  }
-}
-
-// ==================== COLORES DE ÁREA ====================
-
-/** Primero rojo Yego (#EF0000); resto distinguen equipos sin perder identidad Integral. */
-const AREA_HEX = ['#EF0000', '#2563eb', '#ea580c', '#64748b', '#7c3aed', '#0d9488'] as const
-
-/**
- * Obtiene el color de barra para un área específica
- */
-export function areaBarFill(areaId: number, status: GanttVisualStatus): string {
-  if (status === 'completed') return '#94a3b8'
-  if (status === 'blocked') return '#991b1b'
-  if (status === 'at-risk') return '#c2410c'
-  return AREA_HEX[Math.abs(areaId) % AREA_HEX.length]
-}
-
-/**
- * Obtiene el color de etiqueta para un área específica
- */
-export function areaLabelColor(areaId: number): string {
-  return AREA_HEX[Math.abs(areaId) % AREA_HEX.length]
-}
-
-// ==================== ESTILOS DE PILL PARA ÁREAS ====================
-
-export const AREA_PILL_STYLES = [
-  'bg-orange-100 text-orange-900 border-orange-200',
-  'bg-teal-100 text-teal-900 border-teal-200',
-  'bg-violet-100 text-violet-900 border-violet-200',
-  'bg-amber-100 text-amber-900 border-amber-200',
-]
-
-/**
- * Obtiene la clase CSS para un pill de área
- */
-export function areaPillClass(areaId: number): string {
-  return AREA_PILL_STYLES[Math.abs(areaId) % AREA_PILL_STYLES.length]
-}
-
-// ==================== FUNCIONES DE PESO/PUNTOS ====================
-
-/**
- * Peso tipo "story points" por prioridad
- */
 export function taskPoints(priority?: TaskPriority | null): number {
-  switch (normPriority(priority)) {
+  switch (priority) {
     case 'URGENT':
-      return 8
-    case 'HIGH':
       return 5
-    case 'MEDIUM':
+    case 'HIGH':
       return 3
+    case 'MEDIUM':
+      return 2
     case 'LOW':
       return 1
     default:
-      return 3
+      return 2
   }
 }
 
-/**
- * Capacidad heurística por duración del sprint (~2.67 pts/día, mín. 24)
- */
-export function sprintCapacityPts(totalDays: number): number {
-  return Math.max(24, Math.round(totalDays * (8 / 3)))
+export function sprintCapacityPts(days: number): number {
+  return Math.max(1, days) * 4
 }
 
-// ==================== FECHAS ====================
+export function areaBarFill(progressPct: number): string {
+  const p = Math.max(0, Math.min(100, progressPct))
+  if (p >= 85) return 'bg-emerald-500'
+  if (p >= 50) return 'bg-amber-500'
+  if (p >= 25) return 'bg-sky-500'
+  return 'bg-slate-400'
+}
 
-/**
- * Obtiene el inicio del día (00:00:00)
- */
+/** Color sólido (hex) para barras del timeline Gantt (`style.backgroundColor`). */
+export function timelineTaskBarColor(progressPct: number, status: GanttVisualStatus): string {
+  if (status === 'completed') return '#16a34a'
+  if (status === 'blocked') return '#dc2626'
+  const p = Math.max(0, Math.min(100, progressPct))
+  if (p >= 85) return '#10b981'
+  if (p >= 50) return '#f59e0b'
+  if (p >= 25) return '#0ea5e9'
+  return '#94a3b8'
+}
+
+export function areaLabelColor(progressPct: number): string {
+  const p = Math.max(0, Math.min(100, progressPct))
+  if (p >= 85) return 'text-emerald-700 dark:text-emerald-300'
+  if (p >= 50) return 'text-amber-800 dark:text-amber-300'
+  return 'text-foreground'
+}
+
+export function areaPillClass(areaId: number): string {
+  const palette = [
+    'border-sky-200 bg-sky-50 text-sky-800 dark:bg-sky-950/40 dark:text-sky-200 dark:border-sky-800/50',
+    'border-violet-200 bg-violet-50 text-violet-800 dark:bg-violet-950/40 dark:text-violet-200 dark:border-violet-800/50',
+    'border-rose-200 bg-rose-50 text-rose-800 dark:bg-rose-950/40 dark:text-rose-200 dark:border-rose-800/50',
+    'border-teal-200 bg-teal-50 text-teal-800 dark:bg-teal-950/40 dark:text-teal-200 dark:border-teal-800/50',
+  ]
+  return palette[Math.abs(areaId) % palette.length]
+}
+
 export function startOfDay(d: Date): Date {
-  const x = new Date(d)
-  x.setHours(0, 0, 0, 0)
-  return x
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate())
 }
 
-/**
- * Parsea una fecha en formato YMD (YYYY-MM-DD)
- */
-export function parseYmd(s: string): Date {
-  return startOfDay(new Date(s + 'T12:00:00'))
+export function parseYmd(s: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s.trim())
+  if (!m) return null
+  const y = Number(m[1])
+  const mo = Number(m[2]) - 1
+  const day = Number(m[3])
+  return new Date(y, mo, day)
 }
 
-/**
- * Calcula los días entre dos fechas
- */
-export function daysBetween(a: Date, b: Date): number {
-  return Math.round((b.getTime() - a.getTime()) / 86400000)
+export function daysBetween(startYmd: string, endYmd: string): number {
+  const a = parseYmd(startYmd)
+  const b = parseYmd(endYmd)
+  if (!a || !b) return 0
+  return differenceInCalendarDays(b, a) + 1
 }
 
-/**
- * Formatea un encabezado de día en español
- */
-export function formatSpanishDayHeader(d: Date): { weekday: string; label: string } {
-  const weekday = d
-    .toLocaleDateString('es', { weekday: 'short' })
-    .replace(/\./g, '')
-    .trim()
-    .toLowerCase()
-  const month = d
-    .toLocaleDateString('es', { month: 'short' })
-    .replace(/\./g, '')
-    .trim()
-    .toLowerCase()
-  const label = `${d.getDate()} ${month}`
-  return { weekday, label }
+export function formatSpanishDayHeader(d: Date): string {
+  return d.toLocaleDateString('es', { weekday: 'short', day: 'numeric', month: 'short' })
 }
 
-/**
- * Determina la densidad del timeline según el ancho de columna
- */
-export function timelineDayDensity(dayWidth: number): 'comfortable' | 'compact' | 'minimal' {
-  if (dayWidth >= 42) return 'comfortable'
-  if (dayWidth >= 30) return 'compact'
+export type TimelineDayDensity = 'comfortable' | 'compact' | 'minimal'
+
+export function timelineDayDensity(totalDays: number): TimelineDayDensity {
+  if (totalDays <= 45) return 'comfortable'
+  if (totalDays <= 120) return 'compact'
   return 'minimal'
 }
 
-/**
- * Verifica si un día específico es fin de semana
- */
-export function isWeekendDay(anchor: Date, dayIndex: number): boolean {
-  const d = new Date(anchor)
-  d.setDate(d.getDate() + dayIndex)
-  const w = d.getDay()
-  return w === 0 || w === 6
-}
-
-/**
- * Texto por celda del timeline según densidad (cabecera Gantt).
- */
-export function formatTimelineDayCell(
-  anchor: Date,
-  dayIndex: number,
-  density: 'comfortable' | 'compact' | 'minimal',
-): { weekday: string; label: string; title: string } {
+/** Fecha del día `dayIndex` dentro del rango con ancla `anchor` (inicio local 00:00). */
+export function dateAtTimelineIndex(anchor: Date, dayIndex: number): Date {
   const d = new Date(anchor)
   d.setDate(d.getDate() + dayIndex)
   d.setHours(0, 0, 0, 0)
-  const { weekday, label } = formatSpanishDayHeader(d)
+  return d
+}
+
+export function formatTimelineDayCell(
+  anchor: Date,
+  dayIndex: number,
+  density: TimelineDayDensity,
+): { weekday: string; label: string; title: string } {
+  const d = dateAtTimelineIndex(anchor, dayIndex)
   const title = d.toLocaleDateString('es', {
     weekday: 'long',
     day: 'numeric',
@@ -339,10 +256,59 @@ export function formatTimelineDayCell(
     year: 'numeric',
   })
   if (density === 'minimal') {
-    return { weekday: '', label, title }
+    return { weekday: '', label: String(d.getDate()), title }
   }
-  if (density === 'compact') {
-    return { weekday: weekday.slice(0, 3), label, title }
-  }
+  const weekday = d
+    .toLocaleDateString('es', { weekday: 'short' })
+    .replace(/\.$/, '')
+  const label = d.toLocaleDateString('es', { day: 'numeric', month: 'short' })
   return { weekday, label, title }
+}
+
+/** Si `dayOffset` está definido, evalúa el fin de semana en `anchor + dayOffset` (cabecera/celdas del timeline). */
+export function isWeekendDay(d: Date, dayOffset?: number): boolean {
+  const date = dayOffset == null ? d : dateAtTimelineIndex(d, dayOffset)
+  const day = date.getDay()
+  return day === 0 || day === 6
+}
+
+export function mapVisualStatus(status: AreaTaskStatus): GanttVisualStatus {
+  switch (status) {
+    case 'DONE':
+      return 'completed'
+    case 'BLOCKED':
+      return 'blocked'
+    case 'IN_PROGRESS':
+    case 'PENDING':
+    default:
+      return 'on-track'
+  }
+}
+
+export function mapVisualPriority(priority?: TaskPriority | null): GanttVisualPriority {
+  switch (priority) {
+    case 'URGENT':
+      return 'critical'
+    case 'HIGH':
+      return 'high'
+    case 'LOW':
+      return 'low'
+    case 'MEDIUM':
+    default:
+      return 'medium'
+  }
+}
+
+/** Duración inclusiva entre dos fechas ISO (mínimo 1 día). */
+export function computeDurationDays(start: string, end: string): number {
+  const a = new Date(start)
+  const b = new Date(end)
+  const ms = b.getTime() - a.getTime()
+  return Math.max(1, Math.round(ms / 86400000) + 1)
+}
+
+export function workosHeatColorForStatus(status: GanttVisualStatus): string {
+  if (status === 'completed') return '#16a34a'
+  if (status === 'blocked') return '#dc2626'
+  return '#ca8a04'
 }

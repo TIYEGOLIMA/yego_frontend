@@ -439,10 +439,9 @@ body {
   @apply bg-white/15 dark:bg-neutral-900/25 border-white/30 dark:border-neutral-700/60;
 }
 
-/* Eliminar outline por defecto y mejorar focus */
+/* Quitar outline por defecto; no forzar border:none en todos los input (rompe bordes de foco en formularios). */
 input:focus {
   outline: none !important;
-  border: none !important;
   box-shadow: none !important;
 }
 

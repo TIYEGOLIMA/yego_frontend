@@ -1,8 +1,7 @@
-import { useMemo, type ReactNode } from 'react'
+import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   AlertOctagon,
-  AlertTriangle,
   BarChart3,
   CheckCircle2,
   Circle,
@@ -16,14 +15,14 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { WorkosRefreshingPill, WorkosTabLoading } from './WorkosLoading'
-import type { DashboardTabProps, TaskRow, ProjectDto } from '../types'
-import { isOverdue, fmtShort, avatarInitials } from '../utils'
+import type { DashboardTabProps, TaskRow, WorkspaceDto } from '../types'
+import { isOverdue } from '../utils'
 import { useTaskStats } from '../hooks'
-import { Panel, RowBar, ProgressBar, Avatar, AvatarGroup } from './common'
+import { Panel, RowBar, ProgressBar } from './common'
 
 export function DashboardTab({
   tasks,
-  projects,
+  workspaces,
   loading,
   refreshing = false,
   suppressEdgeRefreshPill = false,
@@ -31,16 +30,16 @@ export function DashboardTab({
 }: DashboardTabProps) {
   const navigate = useNavigate()
 
-  const stats = useTaskStats(tasks, isOverdue)
+  const stats = useTaskStats(tasks)
 
-  const projectRows = useMemo(() => {
-    if (projects.length === 0) return []
+  const workspaceRows = useMemo(() => {
+    if (workspaces.length === 0) return []
 
-    const projectIdSet = new Set(projects.map((p) => p.id))
+    const workspaceIdSet = new Set(workspaces.map((p) => p.id))
     const isUnassignedToPortfolio = (t: TaskRow) =>
-      t.projectId == null || t.projectId === undefined || !projectIdSet.has(t.projectId)
+      t.workspaceId == null || t.workspaceId === undefined || !workspaceIdSet.has(t.workspaceId)
 
-    const row = (p: ProjectDto, pt: TaskRow[]) => {
+    const row = (p: WorkspaceDto, pt: TaskRow[]) => {
       const prog = pt.length
         ? Math.round(pt.reduce((s, t) => s + (t.progressPercent ?? 0), 0) / pt.length)
         : 0
@@ -48,28 +47,28 @@ export function DashboardTab({
       return { p, pt, prog, done }
     }
 
-    if (projects.length === 1) {
-      const p = projects[0]
-      const pt = tasks.filter((t) => t.projectId === p.id || isUnassignedToPortfolio(t))
+    if (workspaces.length === 1) {
+      const p = workspaces[0]
+      const pt = tasks.filter((t) => t.workspaceId === p.id || isUnassignedToPortfolio(t))
       return [row(p, pt)]
     }
 
-    const base = projects.map((p) => {
-      const pt = tasks.filter((t) => t.projectId === p.id)
+    const base = workspaces.map((p) => {
+      const pt = tasks.filter((t) => t.workspaceId === p.id)
       return row(p, pt)
     })
     const orphan = tasks.filter(isUnassignedToPortfolio)
     if (orphan.length === 0) return base
-    const synthetic: ProjectDto = {
+    const synthetic: WorkspaceDto = {
       id: -1,
-      name: 'Sin proyecto asignado',
+      name: 'Sin espacio de trabajo asignado',
       description: null,
       activo: true,
       iconKey: 'folder',
       memberUserIds: [],
     }
     return [...base, row(synthetic, orphan)]
-  }, [tasks, projects])
+  }, [tasks, workspaces])
 
   const pct = (n: number) => (stats.total ? Math.round((n / stats.total) * 100) : 0)
 
@@ -78,7 +77,7 @@ export function DashboardTab({
     [tasks],
   )
 
-  if (loading && tasks.length === 0 && projects.length === 0) {
+  if (loading && tasks.length === 0 && workspaces.length === 0) {
     return <WorkosTabLoading srLabel="Cargando dashboard…" />
   }
 
@@ -109,18 +108,10 @@ export function DashboardTab({
           <RowBar
             Icon={CheckCircle2}
             color="text-emerald-600"
-            label="Completada"
+            label="Hecha"
             value={stats.done}
             pct={pct(stats.done)}
             barClass="bg-emerald-500"
-          />
-          <RowBar
-            Icon={AlertTriangle}
-            color="text-primary-700 dark:text-primary-400"
-            label="En riesgo"
-            value={stats.atRisk}
-            pct={pct(stats.atRisk)}
-            barClass="workos-progress-fill"
           />
           <RowBar
             Icon={AlertOctagon}
@@ -137,11 +128,11 @@ export function DashboardTab({
           <RowBar Icon={Flag} color="text-sky-600" label="Media" value={stats.byPriority.MEDIUM} pct={pct(stats.byPriority.MEDIUM)} barClass="bg-sky-500" />
           <RowBar Icon={Flag} color="text-muted-foreground" label="Baja" value={stats.byPriority.LOW} pct={pct(stats.byPriority.LOW)} barClass="bg-slate-400/90 dark:bg-slate-500/80" />
         </Panel>
-        <Panel Icon={FolderKanban} title="Progreso por proyecto">
-          {projectRows.length === 0 ? (
-            <p className="text-sm text-muted-foreground italic text-center py-4">Sin proyectos</p>
+        <Panel Icon={FolderKanban} title="Progreso por espacio de trabajo">
+          {workspaceRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground italic text-center py-4">Sin espacios de trabajo</p>
           ) : (
-            projectRows.map(({ p, pt, prog, done }) => (
+            workspaceRows.map(({ p, pt, prog, done }) => (
               <div key={p.id} className="space-y-1.5">
                 <div className="flex items-center justify-between text-sm">
                   <span className="font-medium truncate">{p.name}</span>

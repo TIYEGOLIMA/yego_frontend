@@ -10,7 +10,7 @@ export {
   fetchGanttTaskSummary,
   fetchGanttMasterData,
   fetchAreaCollaboratorsMap,
-  fetchSprintsByProjects,
+  fetchSprintsByWorkspaces,
   parseGanttLoadError,
 } from './ganttApi'
 
@@ -24,7 +24,7 @@ export type {
   SprintDto,
   AreaFull,
   ColaboradorDto,
-  ProjectDto,
+  WorkspaceDto,
   Kpis,
   GanttVisualStatus,
   GanttVisualPriority,
@@ -77,4 +77,5 @@ export {
   isWeekendDay,
   mapVisualStatus,
   mapVisualPriority,
+  computeDurationDays,
 } from './utils'

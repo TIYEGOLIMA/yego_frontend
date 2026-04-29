@@ -73,80 +73,19 @@ export const AsistenciaListaModule: React.FC = () => {
   const [exportacionExitosa, setExportacionExitosa] = useState(false);
   const [nombreArchivoExportado, setNombreArchivoExportado] = useState<string>('');
 
-  /**
-   * Ventanas de exportación Excel:
-   * - Quincena: días 14 y 15 (desde el día anterior al 15, igual que fin de mes).
-   * - Fin de mes: penúltimo y último día del mes calendario.
-   */
-  const obtenerInfoFecha = () => {
-    const hoy = new Date();
-    const año = hoy.getFullYear();
-    const mes = hoy.getMonth();
-    const dia = hoy.getDate();
-    const ultimoDiaMes = new Date(año, mes + 1, 0).getDate();
-
-    const enVentanaQuincena = dia === 14 || dia === 15;
-    const enVentanaFinMes = dia === ultimoDiaMes - 1 || dia === ultimoDiaMes;
-
-    return {
-      año,
-      mes,
-      dia,
-      ultimoDiaMes,
-      enVentanaQuincena,
-      enVentanaFinMes,
-      /** Rango export 1–15, UI fija inicio en día 1 */
-      enModoPrimeraQuincena: enVentanaQuincena,
-      /** Rango export 16–último día */
-      enModoSegundaMitad: enVentanaFinMes,
-    };
-  };
-
   const formatearFecha = (año: number, mes: number, dia: number): string => {
     return `${año}-${String(mes + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
   };
 
-  const puedeExportar = (): boolean => {
-    const info = obtenerInfoFecha();
-    return info.enVentanaQuincena || info.enVentanaFinMes;
-  };
-
-  const obtenerFechaInicioExportacion = (): string => {
-    const info = obtenerInfoFecha();
-    if (info.enModoPrimeraQuincena) {
-      return formatearFecha(info.año, info.mes, 1);
-    }
-    if (info.enModoSegundaMitad) {
-      return formatearFecha(info.año, info.mes, 16);
-    }
-    return formatearFecha(info.año, info.mes, 1);
-  };
-
-  const obtenerFechaFinExportacion = (): string => {
-    const info = obtenerInfoFecha();
-    if (info.enModoPrimeraQuincena) {
-      return formatearFecha(info.año, info.mes, 15);
-    }
-    if (info.enModoSegundaMitad) {
-      return formatearFecha(info.año, info.mes, info.ultimoDiaMes);
-    }
-    return formatearFecha(info.año, info.mes, 15);
-  };
-
-  const obtenerFechaMaxima = (): string => {
-    const info = obtenerInfoFecha();
-    if (info.enModoPrimeraQuincena) {
-      return formatearFecha(info.año, info.mes, 15);
-    }
-    return formatearFecha(info.año, info.mes, info.ultimoDiaMes);
-  };
-
-  const obtenerFechaMinima = (): string => {
-    const info = obtenerInfoFecha();
-    if (info.enModoSegundaMitad) {
-      return formatearFecha(info.año, info.mes, 16);
-    }
-    return formatearFecha(info.año, info.mes, 1);
+  /** Rango inicial al abrir el modal: todo el mes calendario actual (editable a cualquier mes/rango). */
+  const obtenerRangoMesCalendarioPorDefecto = (ref: Date = new Date()) => {
+    const año = ref.getFullYear();
+    const mes = ref.getMonth();
+    const ultimoDia = new Date(año, mes + 1, 0).getDate();
+    return {
+      inicio: formatearFecha(año, mes, 1),
+      fin: formatearFecha(año, mes, ultimoDia),
+    };
   };
 
   const rolesUnicos = Array.from(
@@ -391,14 +330,8 @@ export const AsistenciaListaModule: React.FC = () => {
               <div className="flex items-center gap-4">
                 <Button
                   onClick={() => setModalExportarAbierto(true)}
-                  variant={puedeExportar() ? 'primary' : 'outline'}
-                  className={!puedeExportar() ? 'cursor-not-allowed opacity-60' : ''}
-                  disabled={!puedeExportar()}
-                  title={
-                    puedeExportar()
-                      ? 'Exportar a Excel'
-                      : 'Exportación disponible solo los días 14 y 15, y desde el penúltimo día del mes hasta el último'
-                  }
+                  variant="primary"
+                  title="Exportar marcaciones a Excel. Elige fechas (p. ej. todo un mes) y el rol."
                 >
                   <Download className="h-4 w-4" />
                   Exportar a Excel
@@ -590,8 +523,9 @@ export const AsistenciaListaModule: React.FC = () => {
           setRolFiltro('');
           setExportando(false);
         } else {
-          setFechaInicio(obtenerFechaInicioExportacion());
-          setFechaFin(obtenerFechaFinExportacion());
+          const { inicio, fin } = obtenerRangoMesCalendarioPorDefecto();
+          setFechaInicio(inicio);
+          setFechaFin(fin);
         }
       }}>
         <DialogContent className="sm:max-w-[500px]">
@@ -625,6 +559,9 @@ export const AsistenciaListaModule: React.FC = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 py-4">
+            <p className="text-xs text-neutral-600 dark:text-neutral-400 -mt-1">
+              Elige el período que necesites (por ejemplo todo un mes calendario). Ya no hay restricción por quincena ni por fin de mes.
+            </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
@@ -634,30 +571,14 @@ export const AsistenciaListaModule: React.FC = () => {
                   type="date"
                   value={fechaInicio}
                   onChange={(e) => {
-                    const info = obtenerInfoFecha();
                     const val = e.target.value;
-                    if (info.enModoPrimeraQuincena) {
-                      setFechaInicio(formatearFecha(info.año, info.mes, 1));
-                      return;
-                    }
-                    const fechaMin = obtenerFechaMinima();
-                    const fechaMax = obtenerFechaMaxima();
-                    if (val < fechaMin) {
-                      setFechaInicio(fechaMin);
-                    } else if (val > fechaMax) {
-                      setFechaInicio(fechaMax);
-                    } else {
-                      setFechaInicio(val);
-                    }
+                    setFechaInicio(val);
                     if (fechaFin && val > fechaFin) {
                       setFechaFin(val);
                     }
                   }}
-                  min={obtenerFechaMinima()}
-                  max={obtenerInfoFecha().enModoPrimeraQuincena ? obtenerFechaMinima() : obtenerFechaMaxima()}
-                  className={obtenerInfoFecha().enModoPrimeraQuincena ? 'w-full cursor-not-allowed bg-neutral-50 dark:bg-neutral-800' : 'w-full'}
+                  className="w-full"
                   required
-                  readOnly={obtenerInfoFecha().enModoPrimeraQuincena}
                 />
               </div>
               <div>
@@ -668,25 +589,16 @@ export const AsistenciaListaModule: React.FC = () => {
                   type="date"
                   value={fechaFin}
                   onChange={(e) => {
-                    const fechaSeleccionada = e.target.value;
-                    const fechaMax = obtenerFechaMaxima();
-                    const inicio = fechaInicio || obtenerFechaMinima();
-                    if (fechaSeleccionada > fechaMax) {
-                      setFechaFin(fechaMax);
-                      alert(
-                        `La fecha de fin no puede ser posterior al ${new Date(fechaMax + 'T12:00:00').toLocaleDateString('es-PE', { day: 'numeric', month: 'long' })}. Se ajustó al máximo permitido.`
-                      );
-                      return;
-                    }
-                    if (fechaSeleccionada < inicio) {
+                    const val = e.target.value;
+                    const inicio = fechaInicio;
+                    if (inicio && val < inicio) {
                       setFechaFin(inicio);
                       alert('La fecha de fin no puede ser anterior a la fecha de inicio.');
                       return;
                     }
-                    setFechaFin(fechaSeleccionada);
+                    setFechaFin(val);
                   }}
-                  min={fechaInicio || obtenerFechaMinima()}
-                  max={obtenerFechaMaxima()}
+                  min={fechaInicio || undefined}
                   className="w-full"
                   required
                 />

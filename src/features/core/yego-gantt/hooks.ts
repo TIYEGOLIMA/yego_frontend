@@ -7,7 +7,7 @@ import type { DragEvent } from 'react'
 import { api } from '../../../services/core/api'
 import type { TaskRow, SprintDto, SprintStatus, AreaTaskStatus } from './types'
 import { normPriority, taskPoints, sprintCapacityPts, differenceInCalendarDays } from './utils'
-import { fetchSprintsByProjects } from './ganttApi'
+import { fetchSprintsByWorkspaces } from './ganttApi'
 
 // ==================== HOOKS DE SPRINTS ====================
 
@@ -38,7 +38,7 @@ export function useSprintMetrics(sprint: SprintDto, tasks: TaskRow[]): SprintMet
     const doneTasks = mtasks.filter((t) => t.status === 'DONE').length
     const inProgress = mtasks.filter((t) => t.status === 'IN_PROGRESS').length
     const blocked = mtasks.filter((t) => t.status === 'BLOCKED').length
-    const risk = mtasks.filter((t) => t.status === 'AT_RISK').length
+    const risk = 0
     const totalPts = mtasks.reduce((a, t) => a + taskPoints(t.priority), 0)
     const donePts = mtasks
       .filter((t) => t.status === 'DONE')
@@ -98,14 +98,14 @@ export function useSprintOperations(onReload: () => void) {
   const sprintsLoadLockRef = useRef<Promise<void> | null>(null)
 
   const loadSprints = useCallback(
-    async (projects: { id: number }[]) => {
+    async (workspaces: { id: number }[]) => {
       if (sprintsLoadLockRef.current) {
         await sprintsLoadLockRef.current
         return
       }
 
       const run = (async () => {
-        if (projects.length === 0) {
+        if (workspaces.length === 0) {
           setSprints({})
           sprintsQuietRef.current = false
           return
@@ -115,7 +115,7 @@ export function useSprintOperations(onReload: () => void) {
         if (!quiet) setSprintsLoading(true)
 
         try {
-          const map = await fetchSprintsByProjects(projects)
+          const map = await fetchSprintsByWorkspaces(workspaces)
 
           setSprints(map)
           sprintsQuietRef.current = true
@@ -171,7 +171,6 @@ export interface UseTaskStatsResult {
   done: number
   inProgress: number
   blocked: number
-  atRisk: number
   pending: number
   overdue: number
   byPriority: Record<'URGENT' | 'HIGH' | 'MEDIUM' | 'LOW', number>
@@ -186,7 +185,6 @@ export function useTaskStats(tasks: TaskRow[]): UseTaskStatsResult {
     const done = tasks.filter((t) => t.status === 'DONE').length
     const inProgress = tasks.filter((t) => t.status === 'IN_PROGRESS').length
     const blocked = tasks.filter((t) => t.status === 'BLOCKED').length
-    const atRisk = tasks.filter((t) => t.status === 'AT_RISK').length
     const pending = tasks.filter((t) => t.status === 'PENDING').length
 
     const isOverdueFn = (endDate: string) =>
@@ -207,7 +205,6 @@ export function useTaskStats(tasks: TaskRow[]): UseTaskStatsResult {
       done,
       inProgress,
       blocked,
-      atRisk,
       pending,
       overdue,
       byPriority,
@@ -322,6 +319,7 @@ export function useDragAndDrop<T extends string | number>(onDrop?: (id: T, targe
 
   return {
     dragId,
+    setDragId,
     dropTarget,
     handleDragStart,
     handleDragEnd,

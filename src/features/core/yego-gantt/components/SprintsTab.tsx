@@ -11,7 +11,6 @@ import {
   Pencil,
   Play,
   Plus,
-  Sparkles,
   Target,
   Trash2,
   TrendingUp,
@@ -52,21 +51,16 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { api } from '../../../../services/core/api'
-import type { SprintsTabProps, TaskRow, SprintDto, SprintStatus, AreaTaskStatus } from '../types'
-import { fetchSprintsByProjects } from '../ganttApi'
+import type { SprintsTabProps, TaskRow, SprintDto, SprintStatus } from '../types'
+import { fetchSprintsByWorkspaces } from '../ganttApi'
 import {
   differenceInCalendarDays,
   fmtShort,
   SPRINT_STATUS_LABEL,
-  TASK_STATUS_LABEL,
-  TASK_STATUS_COLOR,
-  PRIORITY_BADGE,
-  PRIORITY_LABEL,
   normPriority,
   taskPoints,
   sprintCapacityPts,
   areaPillClass,
-  avatarInitials,
 } from '../utils'
 import { useDragAndDrop, useExpansion, useDialog } from '../hooks'
 import {
@@ -104,7 +98,7 @@ function computeSprintMetrics(sprint: SprintDto, tasks: TaskRow[]): SprintMetric
   const doneTasks = mtasks.filter((t) => t.status === 'DONE').length
   const inProgress = mtasks.filter((t) => t.status === 'IN_PROGRESS').length
   const blocked = mtasks.filter((t) => t.status === 'BLOCKED').length
-  const risk = mtasks.filter((t) => t.status === 'AT_RISK').length
+  const risk = 0
   const totalPts = mtasks.reduce((a, t) => a + taskPoints(t.priority), 0)
   const donePts = mtasks.filter((t) => t.status === 'DONE').reduce((a, t) => a + taskPoints(t.priority), 0)
   const start = new Date(sprint.startDate + 'T12:00:00')
@@ -179,10 +173,10 @@ interface SprintTaskCardProps {
   onAdd?: () => void
   showAdd?: boolean
   collaboratorNames?: Map<number, string>
-  projectName?: string | null
+  workspaceName?: string | null
 }
 
-function SprintTaskCard({ task, onDragStart, onAdd, showAdd, collaboratorNames, projectName }: SprintTaskCardProps) {
+function SprintTaskCard({ task, onDragStart, onAdd, showAdd, collaboratorNames, workspaceName }: SprintTaskCardProps) {
   const p = normPriority(task.priority)
   const assigneeIds = task.assignedUserIds?.length
     ? task.assignedUserIds
@@ -191,7 +185,7 @@ function SprintTaskCard({ task, onDragStart, onAdd, showAdd, collaboratorNames, 
       : []
   const firstId = assigneeIds[0]
   const firstLabel = firstId != null ? collaboratorNames?.get(firstId) ?? `#${firstId}` : null
-  const footerLabel = task.areaName || projectName || null
+  const footerLabel = task.areaName || workspaceName || null
 
   return (
     <div
@@ -238,7 +232,7 @@ function SprintTaskCard({ task, onDragStart, onAdd, showAdd, collaboratorNames, 
 
 export function SprintsTab({
   tasks,
-  projects,
+  workspaces,
   manage,
   loading,
   refreshing = false,
@@ -253,22 +247,22 @@ export function SprintsTab({
   const [sprintsLoading, setSprintsLoading] = useState(false)
   const sprintsQuietRef = useRef(false)
   const sprintsLoadLockRef = useRef<Promise<void> | null>(null)
-  const projectIdsKey = useMemo(
+  const workspaceIdsKey = useMemo(
     () =>
-      projects
+      workspaces
         .map((p) => p.id)
         .sort((a, b) => a - b)
         .join(','),
-    [projects],
+    [workspaces],
   )
 
   const [tab, setTab] = useState<SprintViewTab>('active')
   const { expanded: openPlanningIds, toggle: togglePlanning } = useExpansion()
-  const { dragId, setDragId } = useDragAndDrop()
+  const { dragId, setDragId } = useDragAndDrop<number>()
   const { isOpen: dialogOpen, open: openDialog, close: closeDialog, data: editingSprint } = useDialog<SprintDto>()
 
   const [form, setForm] = useState({
-    projectId: '',
+    workspaceId: '',
     name: '',
     goal: '',
     startDate: '',
@@ -283,7 +277,7 @@ export function SprintsTab({
 
   useEffect(() => {
     sprintsQuietRef.current = false
-  }, [projectIdsKey])
+  }, [workspaceIdsKey])
 
   const loadSprints = useCallback(async () => {
     if (sprintsLoadLockRef.current) {
@@ -291,7 +285,7 @@ export function SprintsTab({
       return
     }
     const run = (async () => {
-      if (projects.length === 0) {
+      if (workspaces.length === 0) {
         setSprints({})
         sprintsQuietRef.current = false
         return
@@ -299,7 +293,7 @@ export function SprintsTab({
       const quiet = sprintsQuietRef.current
       if (!quiet) setSprintsLoading(true)
       try {
-        const map = await fetchSprintsByProjects(projects)
+        const map = await fetchSprintsByWorkspaces(workspaces)
         setSprints(map)
         sprintsQuietRef.current = true
       } finally {
@@ -309,7 +303,7 @@ export function SprintsTab({
     })()
     sprintsLoadLockRef.current = run
     await run
-  }, [projects])
+  }, [workspaces])
 
   useEffect(() => {
     void loadSprints()
@@ -362,11 +356,11 @@ export function SprintsTab({
       })
   }, [completed, tasks])
 
-  const projectNameById = useMemo(() => {
+  const workspaceNameById = useMemo(() => {
     const m = new Map<number, string>()
-    projects.forEach((p) => m.set(p.id, p.name))
+    workspaces.forEach((p) => m.set(p.id, p.name))
     return m
-  }, [projects])
+  }, [workspaces])
 
   const areasFromTasks = useMemo(() => {
     const m = new Map<number, string>()
@@ -396,10 +390,10 @@ export function SprintsTab({
     }
   }
 
-  const openCreate = (projectId?: number) => {
+  const openCreate = (workspaceId?: number) => {
     setSaveError(null)
     setForm({
-      projectId: projectId?.toString() || projects[0]?.id?.toString() || '',
+      workspaceId: workspaceId?.toString() || workspaces[0]?.id?.toString() || '',
       name: '',
       goal: '',
       startDate: new Date().toISOString().slice(0, 10),
@@ -412,7 +406,7 @@ export function SprintsTab({
   const openEdit = (s: SprintDto) => {
     setSaveError(null)
     setForm({
-      projectId: String(s.projectId),
+      workspaceId: String(s.workspaceId),
       name: s.name,
       goal: s.goal || '',
       startDate: s.startDate,
@@ -427,7 +421,7 @@ export function SprintsTab({
     setSaveError(null)
     try {
       const payload = {
-        projectId: Number(form.projectId),
+        workspaceId: Number(form.workspaceId),
         name: form.name.trim(),
         goal: form.goal || null,
         startDate: form.startDate,
@@ -465,7 +459,7 @@ export function SprintsTab({
     }
   }
 
-  const sprintBootstrap = projects.length > 0 && sprintsLoading && Object.keys(sprints).length === 0
+  const sprintBootstrap = workspaces.length > 0 && sprintsLoading && Object.keys(sprints).length === 0
   if ((loading && tasks.length === 0) || sprintBootstrap) {
     return <WorkosTabLoading srLabel="Cargando sprints…" />
   }
@@ -782,7 +776,7 @@ export function SprintsTab({
                           size="sm"
                           variant="outline"
                           className="ml-auto gap-1 rounded-lg border-primary-500 text-primary-600 dark:text-primary-400 bg-white hover:bg-primary-50 dark:hover:bg-primary-950/30"
-                          onClick={() => onOpenCreateTask({ sprintId: sprint.id, projectId: sprint.projectId })}
+                          onClick={() => onOpenCreateTask({ sprintId: sprint.id, workspaceId: sprint.workspaceId })}
                         >
                           <Plus className="h-3.5 w-3.5" />
                           Añadir
@@ -790,7 +784,7 @@ export function SprintsTab({
                       )}
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                      {(['PENDING', 'IN_PROGRESS', 'AT_RISK', 'BLOCKED'] as const).map((st) => {
+                      {(['PENDING', 'IN_PROGRESS', 'BLOCKED'] as const).map((st) => {
                         const items = m.mtasks.filter((t) => t.status === st)
                         return (
                           <div
@@ -815,7 +809,7 @@ export function SprintsTab({
                                   task={t}
                                   onDragStart={() => setDragId(t.id)}
                                   collaboratorNames={collaboratorNames}
-                                  projectName={t.projectId != null ? projectNameById.get(t.projectId) : null}
+                                  workspaceName={t.workspaceId != null ? workspaceNameById.get(t.workspaceId) : null}
                                 />
                               ))}
                             </div>
@@ -938,7 +932,7 @@ export function SprintsTab({
                             <Button
                               size="sm"
                               variant="ghost"
-                              onClick={() => onOpenCreateTask({ sprintId: sprint.id, projectId: sprint.projectId })}
+                              onClick={() => onOpenCreateTask({ sprintId: sprint.id, workspaceId: sprint.workspaceId })}
                               className="h-7 gap-1 text-xs"
                             >
                               <Plus className="h-3 w-3" />
@@ -958,7 +952,7 @@ export function SprintsTab({
                                 task={t}
                                 onDragStart={() => setDragId(t.id)}
                                 collaboratorNames={collaboratorNames}
-                                projectName={t.projectId != null ? projectNameById.get(t.projectId) : null}
+                                workspaceName={t.workspaceId != null ? workspaceNameById.get(t.workspaceId) : null}
                               />
                             ))}
                           </div>
@@ -984,7 +978,7 @@ export function SprintsTab({
                                 showAdd
                                 onAdd={() => void moveTaskToSprint(t.id, sprint.id)}
                                 collaboratorNames={collaboratorNames}
-                                projectName={t.projectId != null ? projectNameById.get(t.projectId) : null}
+                                workspaceName={t.workspaceId != null ? workspaceNameById.get(t.workspaceId) : null}
                               />
                             ))}
                           </div>
@@ -1221,17 +1215,17 @@ export function SprintsTab({
           )}
           <div className="space-y-4 pt-2">
             <div className="space-y-1.5">
-              <Label className="text-sm font-medium">Proyecto</Label>
+              <Label className="text-sm font-medium">Espacio de trabajo</Label>
               <Select
-                value={form.projectId}
-                onValueChange={(v) => setForm((f) => ({ ...f, projectId: v }))}
+                value={form.workspaceId}
+                onValueChange={(v) => setForm((f) => ({ ...f, workspaceId: v }))}
                 disabled={!!editingSprint}
               >
                 <SelectTrigger className="h-9 rounded-lg">
                   <SelectValue placeholder="Selecciona proyecto" />
                 </SelectTrigger>
                 <SelectContent>
-                  {projects.map((p) => (
+                  {workspaces.map((p) => (
                     <SelectItem key={p.id} value={String(p.id)}>
                       {p.name}
                     </SelectItem>
@@ -1300,7 +1294,7 @@ export function SprintsTab({
               Cancelar
             </Button>
             <Button
-              disabled={!form.name.trim() || !form.projectId || saving}
+              disabled={!form.name.trim() || !form.workspaceId || saving}
               onClick={saveSprint}
               className="rounded-lg workos-gantt-btn-primary border-0"
             >

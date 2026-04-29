@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Clock, Edit3, FileText, Flag, Route, Trash2, User, X } from 'lucide-react'
+import { Clock, Crown, Edit3, FileText, Flag, Route, Trash2, User, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { WorkosRefreshingPill, WorkosTabLoading } from '../WorkosLoading'
 import {
   DAY_WIDTH,
-  areaBarFill,
+  timelineTaskBarColor,
   areaLabelColor,
   buildTeamsFromTasks,
   buildTimelineRange,
@@ -20,6 +20,7 @@ import {
   type GanttTeamItem,
   type TaskRowLike,
 } from '../../ganttModel'
+import { computeDurationDays } from '../../utils'
 
 const LEFT_COL = 288
 
@@ -51,7 +52,7 @@ export interface GanttTimelineTabProps {
 
 function TimelineHeader({ anchor, totalDays, dayWidth }: { anchor: Date; totalDays: number; dayWidth: number }) {
   const days = Array.from({ length: totalDays }, (_, i) => i)
-  const density = timelineDayDensity(dayWidth)
+  const density = timelineDayDensity(totalDays)
   return (
     <div className="flex border-b border-[#e5e7eb] bg-[#fafafa] sticky top-0 z-30 dark:border-border/80 dark:bg-muted/30 min-h-[48px]">
       {days.map((day) => {
@@ -109,11 +110,36 @@ function TodayLine({ anchor, totalDays, containerHeight, dayWidth }: { anchor: D
   )
 }
 
+function rowSelectionForTask(
+  task: GanttTaskItem,
+  selectedSourceId: number | null,
+  selectedPrincipalUserId: number | null | undefined,
+): 'primary' | 'peer' | null {
+  if (selectedSourceId == null) return null
+  if (task.sourceId === selectedSourceId) return 'primary'
+  if (
+    selectedPrincipalUserId != null &&
+    task.principalUserId != null &&
+    task.principalUserId === selectedPrincipalUserId
+  ) {
+    return 'peer'
+  }
+  return null
+}
+
+/** Fondo de franja (columna equipos + rejilla) para tarea seleccionada o mismo responsable. */
+function selectionLaneTint(sel: 'primary' | 'peer' | null): string {
+  if (sel === 'primary') return 'bg-primary/14 dark:bg-primary/20'
+  if (sel === 'peer') return 'bg-primary/[0.07] dark:bg-primary/12'
+  return ''
+}
+
 function GanttBar({
   task,
   onClick,
   dimmed,
   highlightCritical,
+  selectionEmphasis,
   yOffset,
   barIndex = 0,
   dayWidth,
@@ -123,6 +149,8 @@ function GanttBar({
   dimmed: boolean
   /** Tarea en ruta crítica: contorno para distinguirla del resto. */
   highlightCritical?: boolean
+  /** Resaltado por selección en timeline (fila activa o mismo responsable). */
+  selectionEmphasis?: 'primary' | 'peer' | null
   yOffset?: number
   barIndex?: number
   dayWidth: number
@@ -130,14 +158,25 @@ function GanttBar({
   const left = task.startDay * dayWidth
   const width = task.duration * dayWidth - 4
 
-  const fill = areaBarFill(task.areaId, task.status)
+  const fill = timelineTaskBarColor(task.progress, task.status)
+
+  const criticalRing =
+    highlightCritical && selectionEmphasis == null
+      ? 'ring-2 ring-primary-500 ring-offset-2 ring-offset-white dark:ring-offset-card z-[15]'
+      : ''
+  const selectionRing =
+    selectionEmphasis === 'primary'
+      ? 'ring-2 ring-primary-500 ring-offset-2 ring-offset-white dark:ring-offset-card z-[16]'
+      : selectionEmphasis === 'peer'
+        ? 'ring-1 ring-primary-500/45 z-[14]'
+        : ''
 
   return (
     <button
       type="button"
       className={`absolute z-10 flex items-center px-2 overflow-hidden rounded-lg border border-white/25 text-left cursor-pointer shadow-sm transition-all duration-200 hover:scale-[1.01] hover:z-20 hover:shadow-md hover:ring-2 hover:ring-primary-500/35 gantt-bar-grow ${
         dimmed ? 'opacity-35' : ''
-      } ${highlightCritical ? 'ring-2 ring-primary-500 ring-offset-2 ring-offset-white dark:ring-offset-card z-[15]' : ''}`}
+      } ${criticalRing} ${selectionRing}`}
       style={{
         left,
         width: Math.max(width, 24),
@@ -149,12 +188,13 @@ function GanttBar({
         color: '#fff',
       }}
       onClick={() => onClick(task)}
+      title={task.principalUserId != null ? `${task.name} · Responsable principal` : task.name}
     >
       <div
         className="absolute inset-y-0 left-0 rounded-l-lg bg-black/20"
         style={{ width: `${Math.min(100, Math.max(0, task.progress))}%` }}
       />
-      <span className="relative text-[11px] font-semibold truncate drop-shadow-sm">{task.name}</span>
+      <span className="relative min-w-0 flex-1 truncate text-[11px] font-semibold drop-shadow-sm">{task.name}</span>
       {task.progress > 0 && width > 72 && (
         <span className="relative ml-auto text-[10px] tabular-nums font-bold bg-black/25 rounded px-1 py-0.5 shrink-0">
           {task.progress}%
@@ -202,6 +242,8 @@ function TeamRowWithGrid({
   collaborators,
   staggerIndex = 0,
   dayWidth,
+  selectedSourceId,
+  selectedPrincipalUserId,
 }: {
   team: GanttTeamItem
   totalDays: number
@@ -212,6 +254,8 @@ function TeamRowWithGrid({
   collaborators: TeamCollaborator[]
   staggerIndex?: number
   dayWidth: number
+  selectedSourceId: number | null
+  selectedPrincipalUserId: number | null | undefined
 }) {
   const perDayLoad = useMemo(() => computePerDayTaskLoad(team.tasks, totalDays), [team.tasks, totalDays])
   const maxOverlap = useMemo(() => perDayLoad.reduce((a, b) => Math.max(a, b), 0), [perDayLoad])
@@ -233,7 +277,17 @@ function TeamRowWithGrid({
   const tw = totalDays * dayWidth
   const lead = collaborators[0] || null
   const hasCollabs = collaborators.length > 0
-  const rowHeight = hasCollabs ? 'auto' : undefined
+  const taskLaneMinHeight = Math.max(48, team.tasks.length * 34 + 8)
+
+  const taskLanes = useMemo(
+    () =>
+      team.tasks.map((task, idx) => ({
+        task,
+        idx,
+        laneSel: rowSelectionForTask(task, selectedSourceId, selectedPrincipalUserId),
+      })),
+    [team.tasks, selectedSourceId, selectedPrincipalUserId],
+  )
 
   return (
     <div
@@ -243,7 +297,7 @@ function TeamRowWithGrid({
       {/* Main row: team header + gantt bars */}
       <div className="flex">
         <div
-          className="shrink-0 sticky left-0 z-20 bg-white border-r border-[#e5e7eb] px-4 py-2.5 flex flex-col gap-1 shadow-[2px_0_8px_-4px_rgba(0,0,0,0.06)] dark:bg-card dark:border-border/80"
+          className="shrink-0 sticky left-0 z-20 bg-white border-r border-[#e5e7eb] px-4 py-2.5 flex flex-col gap-2 shadow-[2px_0_8px_-4px_rgba(0,0,0,0.06)] dark:bg-card dark:border-border/80"
           style={{ width: LEFT_COL }}
         >
           <span
@@ -253,23 +307,34 @@ function TeamRowWithGrid({
           >
             {team.name}
           </span>
-          <div className="flex items-center gap-2">
-            {/* Avatar circles */}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            {/* Avatar circles del equipo, en fila separados por coma */}
             {hasCollabs && (
-              <div className="flex -space-x-1.5 mr-1">
-                {collaborators.slice(0, 4).map((c) => (
-                  <div
-                    key={c.id}
-                    className="w-5 h-5 rounded-full bg-muted border border-card flex items-center justify-center text-[8px] font-bold text-muted-foreground"
-                    title={`${c.nombreCompleto} · ${c.rol}`}
-                  >
-                    {avatarInit(c.nombreCompleto)}
-                  </div>
+              <div className="flex flex-wrap items-center mr-1 shrink-0 max-w-full gap-x-0">
+                {collaborators.slice(0, 4).map((c, ci) => (
+                  <React.Fragment key={c.id}>
+                    {ci > 0 ? (
+                      <span className="text-[11px] text-muted-foreground/70 px-px select-none" aria-hidden>
+                        
+                      </span>
+                    ) : null}
+                    <div
+                      className="w-5 h-5 shrink-0 rounded-full bg-muted border border-border/60 flex items-center justify-center text-[8px] font-bold text-muted-foreground"
+                      title={`${c.nombreCompleto} · ${c.rol}`}
+                    >
+                      {avatarInit(c.nombreCompleto)}
+                    </div>
+                  </React.Fragment>
                 ))}
                 {collaborators.length > 4 && (
-                  <div className="w-5 h-5 rounded-full bg-muted border border-card flex items-center justify-center text-[7px] font-bold text-muted-foreground">
-                    +{collaborators.length - 4}
-                  </div>
+                  <>
+                    <span className="text-[11px] text-muted-foreground/70 px-px select-none" aria-hidden>
+                      
+                    </span>
+                    <div className="w-5 h-5 shrink-0 rounded-full bg-muted border border-border/60 flex items-center justify-center text-[7px] font-bold text-muted-foreground">
+                      +{collaborators.length - 4}
+                    </div>
+                  </>
                 )}
               </div>
             )}
@@ -284,9 +349,63 @@ function TeamRowWithGrid({
             </div>
             <span className="text-[10px] tabular-nums text-muted-foreground">{team.capacity}%</span>
           </div>
+          {/* Responsables por tarea en una sola fila, separados por coma (orden = filas del Gantt). */}
+          <div
+            className="flex flex-wrap items-center justify-start content-start w-full shrink-0 pt-1 text-[11px] text-muted-foreground/75 leading-none"
+            style={{ minHeight: taskLaneMinHeight }}
+          >
+            {taskLanes.map(({ task, laneSel }, ti) => {
+              const principal =
+                task.principalUserId != null
+                  ? collaborators.find((c) => c.id === task.principalUserId)
+                  : undefined
+              const principalName =
+                principal?.nombreCompleto ??
+                (task.principalUserId != null ? `Usuario #${task.principalUserId}` : '')
+              const laneBg = selectionLaneTint(laneSel)
+              return (
+                <React.Fragment key={task.id}>
+                  {ti > 0 ? (
+                    <span className="shrink-0 px-0.5 select-none" aria-hidden>
+                      
+                    </span>
+                  ) : null}
+                  <span
+                    className={`inline-flex items-center rounded-md ${laneBg}`}
+                    title={task.name}
+                  >
+                    {task.principalUserId != null ? (
+                      <button
+                        type="button"
+                        onClick={() => onTaskClick(task)}
+                        className="relative shrink-0 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                        title={`${task.name} · Responsable principal · ${principalName}`}
+                      >
+                        <div className="flex h-6 w-6 items-center justify-center rounded-full border border-border/60 bg-muted text-[9px] font-bold text-muted-foreground">
+                          {avatarInit(principalName)}
+                        </div>
+                        <Crown
+                          className="absolute -right-0.5 -top-0.5 h-3 w-3 text-amber-500 drop-shadow-sm dark:text-amber-400"
+                          aria-hidden
+                        />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => onTaskClick(task)}
+                        className="h-6 w-6 shrink-0 rounded-full border border-dashed border-muted-foreground/20 bg-muted/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                        title={`${task.name} · Sin responsable asignado`}
+                        aria-label={`Seleccionar tarea ${task.name}`}
+                      />
+                    )}
+                  </span>
+                </React.Fragment>
+              )
+            })}
+          </div>
         </div>
 
-        <div className="relative flex-1 overflow-hidden" style={{ minWidth: tw, height: rowHeight }}>
+        <div className="relative flex-1 overflow-hidden" style={{ minWidth: tw }}>
           <div className="absolute inset-0 flex">
             {Array.from({ length: totalDays }, (_, i) => (
               <div
@@ -301,18 +420,27 @@ function TeamRowWithGrid({
               />
             ))}
           </div>
-          <div className="relative" style={{ minHeight: Math.max(48, team.tasks.length * 34 + 8) }}>
-            {team.tasks.map((task, idx) => (
-              <GanttBar
-                key={task.id}
-                task={task}
-                onClick={onTaskClick}
-                dimmed={showCriticalPath && criticalIds !== null && !criticalIds.has(task.id)}
-                highlightCritical={showCriticalPath && (criticalIds?.has(task.id) ?? false)}
-                yOffset={idx * 34 + 4}
-                barIndex={idx}
-                dayWidth={dayWidth}
-              />
+          <div className="relative" style={{ minHeight: taskLaneMinHeight }}>
+            {taskLanes.map(({ task, idx, laneSel }) => (
+              <React.Fragment key={task.id}>
+                {laneSel ? (
+                  <div
+                    className={`absolute left-0 right-0 z-[1] rounded-md pointer-events-none ${selectionLaneTint(laneSel)}`}
+                    style={{ top: idx * 34 + 4, height: 28 }}
+                    aria-hidden
+                  />
+                ) : null}
+                <GanttBar
+                  task={task}
+                  onClick={onTaskClick}
+                  dimmed={showCriticalPath && criticalIds !== null && !criticalIds.has(task.id)}
+                  highlightCritical={showCriticalPath && (criticalIds?.has(task.id) ?? false)}
+                  selectionEmphasis={laneSel}
+                  yOffset={idx * 34 + 4}
+                  barIndex={idx}
+                  dayWidth={dayWidth}
+                />
+              </React.Fragment>
             ))}
           </div>
         </div>
@@ -422,13 +550,6 @@ const PRIORITY_UI: Record<string, { label: string; className: string }> = {
   critical: { label: 'Urgente', className: 'text-red-700 bg-white border-red-400' },
 }
 
-function computeDurationDays(start: string, end: string): number {
-  const a = new Date(start)
-  const b = new Date(end)
-  const ms = b.getTime() - a.getTime()
-  return Math.max(1, Math.round(ms / 86400000) + 1)
-}
-
 function formatShortDate(iso: string): string {
   const d = new Date(iso + 'T00:00:00')
   const day = d.getDate()
@@ -472,6 +593,7 @@ function TaskDetailPanel({
       role: c?.rol ?? '',
     }
   })
+  const principalUserId = ganttTask.principalUserId
   const areaLabel = task.areaName || `Área #${task.areaId}`
 
   return (
@@ -542,8 +664,16 @@ function TaskDetailPanel({
             <div className="space-y-2">
               {assignees.map((a) => (
                 <div key={a.id} className="flex items-center gap-3 rounded-lg border border-border/60 bg-muted/20 p-3">
-                  <div className="w-9 h-9 rounded-full bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800 flex items-center justify-center text-[11px] font-bold text-red-600 dark:text-red-400 shrink-0">
-                    {avatarInit(a.name)}
+                  <div className="relative shrink-0">
+                    <div className="w-9 h-9 rounded-full bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800 flex items-center justify-center text-[11px] font-bold text-red-600 dark:text-red-400">
+                      {avatarInit(a.name)}
+                    </div>
+                    {principalUserId != null && a.id === principalUserId && (
+                      <Crown
+                        className="absolute -right-0.5 -top-0.5 h-3.5 w-3.5 text-amber-500 drop-shadow-sm dark:text-amber-400"
+                        aria-hidden
+                      />
+                    )}
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-foreground truncate">{a.name}</p>
@@ -726,6 +856,8 @@ export function GanttTimelineTab({
                       showCriticalPath={showCriticalPath}
                       collaborators={collaboratorsForArea?.(Number(team.id)) ?? []}
                       dayWidth={dayWidth}
+                      selectedSourceId={selectedSourceId}
+                      selectedPrincipalUserId={selectedGantt?.principalUserId}
                     />
                   ))}
                 </div>

@@ -5,18 +5,20 @@
 import { api } from '../../../services/core/api'
 import type {
   AreaFull,
+  AreaTaskStatus,
   ColaboradorDto,
   Kpis,
-  ProjectDto,
   SprintDto,
+  TaskPriority,
   TaskRow,
+  WorkspaceDto,
 } from './types'
 
 /** Prefijos de API usados solo por este módulo. */
 export const yegoGanttPaths = {
   taskSummary: '/yego-gantt/tasks/summary',
-  projects: '/yego-gantt/projects',
-  sprintsByProject: (projectId: number) => `/yego-gantt/sprints/by-project/${projectId}`,
+  workspaces: '/yego-gantt/workspaces',
+  sprintsByWorkspace: (workspaceId: number) => `/yego-gantt/sprints/by-workspace/${workspaceId}`,
 } as const
 
 export const areasPaths = {
@@ -26,17 +28,96 @@ export const areasPaths = {
   collaboratorsByAreas: '/areas/colaboradores-por-areas',
 } as const
 
-/** Query ?areaId=&priority=&projectId= para listado/resumen de tareas. */
+/** Query ?areaId=&priority=&workspaceId=&ownerUserId= para listado/resumen de tareas. */
 export function ganttListParams(
   areaFilter: string,
   priorityFilter: string,
-  projectFilter: string,
+  workspaceFilter: string,
+  ownerUserIdFilter: string,
 ): Record<string, string> {
   const q: Record<string, string> = {}
   if (areaFilter !== 'all') q.areaId = areaFilter
   if (priorityFilter !== 'all') q.priority = priorityFilter
-  if (projectFilter !== 'all') q.projectId = projectFilter
+  if (workspaceFilter !== 'all') q.workspaceId = workspaceFilter
+  if (ownerUserIdFilter !== 'all') q.ownerUserId = ownerUserIdFilter
   return q
+}
+
+/** Quita claves con valor `undefined` para no serializarlas en JSON (Axios). */
+export function omitUndefinedKeys<T extends Record<string, unknown>>(obj: T): T {
+  const out = {} as T
+  for (const key of Object.keys(obj) as (keyof T)[]) {
+    const v = obj[key]
+    if (v !== undefined) {
+      ;(out as Record<string, unknown>)[key as string] = v
+    }
+  }
+  return out
+}
+
+/** Campos del formulario de tarea necesarios para armar el cuerpo de guardado. */
+export type GanttTaskSaveFormFields = {
+  areaId: string
+  workspaceId: string
+  sprintId: string
+  title: string
+  description: string
+  startDate: string
+  endDate: string
+  status: AreaTaskStatus
+  priority: TaskPriority
+  isPrivateTask: boolean
+  assignedUserIds: number[]
+}
+
+/**
+ * POST/PUT tarea Gantt: si es privada, no incluye `sprintId` y solo añade `workspaceId` si hay valor;
+ * si es pública, incluye espacio, sprint y listas de asignación completas.
+ */
+export function buildGanttTaskSavePayload(
+  form: GanttTaskSaveFormFields,
+  progressPercent: number,
+  parsedTags: string[],
+): Record<string, unknown> {
+  const privateTask = form.isPrivateTask
+  const ownerId = form.assignedUserIds[0]
+  const assignedIdsForPayload = privateTask
+    ? ownerId != null
+      ? [ownerId]
+      : []
+    : form.assignedUserIds
+
+  const base: Record<string, unknown> = {
+    areaId: Number(form.areaId),
+    title: form.title.trim(),
+    startDate: form.startDate,
+    endDate: form.endDate,
+    status: form.status,
+    priority: form.priority,
+    progressPercent,
+    privateTask,
+    tags: parsedTags.length > 0 ? parsedTags : null,
+  }
+
+  const desc = form.description?.trim()
+  if (desc) {
+    base.description = desc
+  }
+
+  if (privateTask) {
+    if (form.workspaceId) {
+      base.workspaceId = Number(form.workspaceId)
+    }
+    base.assignedUserId = ownerId ?? null
+    base.assignedUserIds = assignedIdsForPayload.length > 0 ? assignedIdsForPayload : null
+    return omitUndefinedKeys(base)
+  }
+
+  base.workspaceId = form.workspaceId ? Number(form.workspaceId) : null
+  base.sprintId = form.sprintId ? Number(form.sprintId) : null
+  base.assignedUserId = ownerId ?? null
+  base.assignedUserIds = assignedIdsForPayload.length > 0 ? assignedIdsForPayload : null
+  return omitUndefinedKeys(base)
 }
 
 /** Clave estable del conjunto de áreas (caché de colaboradores). */
@@ -57,26 +138,27 @@ export interface GanttTaskSummary {
 export async function fetchGanttTaskSummary(
   areaFilter: string,
   priorityFilter: string,
-  projectFilter: string,
+  workspaceFilter: string,
+  ownerUserIdFilter: string,
 ): Promise<GanttTaskSummary> {
   const res = await api.get<GanttTaskSummary>(yegoGanttPaths.taskSummary, {
-    params: ganttListParams(areaFilter, priorityFilter, projectFilter),
+    params: ganttListParams(areaFilter, priorityFilter, workspaceFilter, ownerUserIdFilter),
   })
   return res.data
 }
 
 export interface GanttMasterData {
   areas: AreaFull[]
-  projects: ProjectDto[]
+  workspaces: WorkspaceDto[]
 }
 
-/** Áreas activas + proyectos Gantt en paralelo. */
+/** Áreas activas + espacios de trabajo Gantt en paralelo. */
 export async function fetchGanttMasterData(): Promise<GanttMasterData> {
-  const [areasRes, projectsRes] = await Promise.all([
+  const [areasRes, workspacesRes] = await Promise.all([
     api.get<AreaFull[]>(areasPaths.findAllActive),
-    api.get<ProjectDto[]>(yegoGanttPaths.projects),
+    api.get<WorkspaceDto[]>(yegoGanttPaths.workspaces),
   ])
-  return { areas: areasRes.data, projects: projectsRes.data }
+  return { areas: areasRes.data, workspaces: workspacesRes.data }
 }
 
 /** Colaboradores por área; una petición en lugar de N GET por área. */
@@ -104,20 +186,59 @@ export async function fetchAreaCollaboratorsMap(
   return map
 }
 
-/** Sprints agrupados por id de proyecto. */
-export async function fetchSprintsByProjects(
-  projects: { id: number }[],
+/** Sprints agrupados por id de espacio de trabajo. */
+export async function fetchSprintsByWorkspaces(
+  workspaces: { id: number }[],
 ): Promise<Record<number, SprintDto[]>> {
-  if (projects.length === 0) return {}
+  if (workspaces.length === 0) return {}
   const results = await Promise.allSettled(
-    projects.map((p) => api.get<SprintDto[]>(yegoGanttPaths.sprintsByProject(p.id))),
+    workspaces.map((w) => api.get<SprintDto[]>(yegoGanttPaths.sprintsByWorkspace(w.id))),
   )
   const map: Record<number, SprintDto[]> = {}
-  projects.forEach((p, i) => {
+  workspaces.forEach((w, i) => {
     const r = results[i]
-    map[p.id] = r.status === 'fulfilled' ? r.value.data : []
+    map[w.id] = r.status === 'fulfilled' ? r.value.data : []
   })
   return map
+}
+
+export interface TaskSubtaskDto {
+  id: number
+  parentTaskId: number
+  title: string
+  sortOrder: number
+  done: boolean
+  weight: string
+}
+
+export async function fetchTaskSubtasks(taskId: number): Promise<TaskSubtaskDto[]> {
+  const res = await api.get<TaskSubtaskDto[]>(`/yego-gantt/tasks/${taskId}/subtasks`)
+  return res.data
+}
+
+export async function createTaskSubtask(
+  taskId: number,
+  body: { title: string; weight: number; done?: boolean },
+): Promise<TaskSubtaskDto> {
+  const res = await api.post(`/yego-gantt/tasks/${taskId}/subtasks`, {
+    title: body.title,
+    weight: body.weight,
+    done: body.done ?? false,
+  })
+  return res.data
+}
+
+export async function updateTaskSubtask(
+  taskId: number,
+  subtaskId: number,
+  body: Partial<{ title: string; weight: number; done: boolean; sortOrder: number }>,
+): Promise<TaskSubtaskDto> {
+  const res = await api.put(`/yego-gantt/tasks/${taskId}/subtasks/${subtaskId}`, body)
+  return res.data
+}
+
+export async function deleteTaskSubtask(taskId: number, subtaskId: number): Promise<void> {
+  await api.delete(`/yego-gantt/tasks/${taskId}/subtasks/${subtaskId}`)
 }
 
 export function parseGanttLoadError(e: unknown): string {

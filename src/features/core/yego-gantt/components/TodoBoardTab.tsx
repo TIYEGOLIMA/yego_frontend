@@ -1,21 +1,27 @@
-import { useMemo, useCallback } from 'react'
+import { useMemo, useCallback, useState } from 'react'
 import {
   AlertOctagon,
-  AlertTriangle,
   CalendarDays,
   CheckCircle2,
   Circle,
   CircleDot,
+  Crown,
   Flag,
-  Pencil,
-  Plus,
-  Trash2,
+  Filter,
+  ListChecks,
+  Lock,
+  UserRound,
+  Users,
 } from 'lucide-react'
 import { WorkosRefreshingPill, WorkosTabLoading } from './WorkosLoading'
 import type { TodoBoardTabProps, TaskRow, AreaTaskStatus, TaskPriority } from '../types'
+import { taskIsMine, taskIsMyPrivate } from '../taskPrivacy'
 import { PRIO_LABEL, norm } from '../utils'
 import { useKanbanDrag } from '../hooks'
 import { Avatar, ProgressBar } from './common'
+import { cn } from '@/utils/cn'
+
+type BoardScopeFilter = 'all' | 'mine' | 'private'
 
 function boardPriorityPillClass(p: TaskPriority): string {
   switch (p) {
@@ -40,9 +46,8 @@ const COLUMNS: {
 }[] = [
   { status: 'PENDING', title: 'Pendiente', Icon: Circle, tone: 'text-muted-foreground border-border' },
   { status: 'IN_PROGRESS', title: 'En progreso', Icon: CircleDot, tone: 'text-amber-600 border-amber-500/30' },
-  { status: 'AT_RISK', title: 'En riesgo', Icon: AlertTriangle, tone: 'text-primary border-primary/30' },
   { status: 'BLOCKED', title: 'Bloqueada', Icon: AlertOctagon, tone: 'text-destructive border-destructive/30' },
-  { status: 'DONE', title: 'Completado', Icon: CheckCircle2, tone: 'text-emerald-600 border-emerald-500/30' },
+  { status: 'DONE', title: 'Hecha', Icon: CheckCircle2, tone: 'text-emerald-600 border-emerald-500/30' },
 ]
 
 export function TodoBoardTab({
@@ -52,11 +57,12 @@ export function TodoBoardTab({
   suppressEdgeRefreshPill = false,
   manage,
   allCollaborators = [],
-  onEdit,
-  onDelete,
   onStatusChange,
   onAddTask,
+  onOpenTask,
+  currentUserId,
 }: TodoBoardTabProps) {
+  const [boardFilter, setBoardFilter] = useState<BoardScopeFilter>('all')
   const collabMap = useMemo(() => {
     const m = new Map<number, { nombreCompleto: string; rol: string }>()
     for (const c of allCollaborators) m.set(c.id, c)
@@ -89,25 +95,105 @@ export function TodoBoardTab({
     isDropTarget,
   } = useKanbanDrag()
 
+  const filterCounts = useMemo(() => {
+    const all = tasks.length
+    const mine =
+      currentUserId != null ? tasks.filter((t) => taskIsMine(t, currentUserId)).length : 0
+    const priv =
+      currentUserId != null ? tasks.filter((t) => taskIsMyPrivate(t, currentUserId)).length : 0
+    return { all, mine, priv }
+  }, [tasks, currentUserId])
+
+  const filteredTasks = useMemo(() => {
+    if (boardFilter === 'all') return tasks
+    if (boardFilter === 'mine') {
+      if (currentUserId == null) return tasks
+      return tasks.filter((t) => taskIsMine(t, currentUserId))
+    }
+    if (boardFilter === 'private') {
+      if (currentUserId == null) return tasks
+      return tasks.filter((t) => taskIsMyPrivate(t, currentUserId))
+    }
+    return tasks
+  }, [tasks, boardFilter, currentUserId])
+
   const columnData = useMemo(
     () =>
       COLUMNS.map((col) => ({
         ...col,
-        tasks: tasks.filter((t) => t.status === col.status),
+        tasks: filteredTasks.filter((t) => t.status === col.status),
       })),
-    [tasks]
+    [filteredTasks]
   )
 
   if (loading && tasks.length === 0) {
     return <WorkosTabLoading srLabel="Cargando tablero…" />
   }
 
+  const scopePill = (active: boolean) =>
+    cn(
+      'ml-0.5 min-w-[1.2rem] rounded-full px-1 py-px text-[10px] font-bold tabular-nums leading-none',
+      active ? 'bg-orange-700/90 text-white' : 'bg-muted text-foreground dark:bg-muted/80',
+    )
+
   return (
     <div className={`space-y-4 relative ${refreshing ? 'opacity-[0.97]' : ''}`}>
       {refreshing && !suppressEdgeRefreshPill && (
         <WorkosRefreshingPill className="absolute top-0 right-0 z-10" />
       )}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+        <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground shrink-0">
+          <Filter className="h-3 w-3 opacity-80" aria-hidden />
+          Filtrar
+        </span>
+        <button
+          type="button"
+          onClick={() => setBoardFilter('all')}
+          className={cn(
+            'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-all border',
+            boardFilter === 'all'
+              ? 'border-orange-500 bg-orange-500 text-white shadow-sm hover:bg-orange-600'
+              : 'border-border/70 bg-background text-muted-foreground hover:bg-muted/50 hover:text-foreground',
+          )}
+        >
+          <Users className="h-3.5 w-3.5 shrink-0" />
+          <span>Todas</span>
+          <span className={scopePill(boardFilter === 'all')}>{filterCounts.all}</span>
+        </button>
+        <button
+          type="button"
+          disabled={currentUserId == null}
+          onClick={() => currentUserId != null && setBoardFilter('mine')}
+          title={currentUserId == null ? 'Inicia sesión para filtrar tus tareas' : undefined}
+          className={cn(
+            'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-all border disabled:opacity-45 disabled:pointer-events-none',
+            boardFilter === 'mine'
+              ? 'border-orange-500 bg-orange-500 text-white shadow-sm hover:bg-orange-600'
+              : 'border-border/70 bg-background text-muted-foreground hover:bg-muted/50 hover:text-foreground',
+          )}
+        >
+          <UserRound className="h-3.5 w-3.5 shrink-0" />
+          <span>Mis tareas</span>
+          <span className={scopePill(boardFilter === 'mine')}>{filterCounts.mine}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setBoardFilter('private')}
+          className={cn(
+            'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-all border',
+            boardFilter === 'private'
+              ? 'border-orange-500 bg-orange-500 text-white shadow-sm hover:bg-orange-600'
+              : 'border-border/70 bg-background text-muted-foreground hover:bg-muted/50 hover:text-foreground',
+          )}
+        >
+          <Lock className="h-3.5 w-3.5 shrink-0" />
+          <span>Privadas</span>
+          <span className={scopePill(boardFilter === 'private')}>{filterCounts.priv}</span>
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {columnData.map((col) => {
           const Icon = col.Icon
           const isOver = isDropTarget(col.status)
@@ -148,10 +234,22 @@ export function TodoBoardTab({
                     return (
                       <div
                         key={t.id}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            onOpenTask?.(t)
+                          }
+                        }}
+                        onClick={() => onOpenTask?.(t)}
                         draggable={manage && !isUpdating}
-                        onDragStart={() => handleDragStart(t)}
+                        onDragStart={(e) => {
+                          e.stopPropagation()
+                          handleDragStart(t)
+                        }}
                         onDragEnd={handleDragEnd}
-                        className={`group rounded-lg border border-border/80 bg-card p-3 workos-shadow-soft hover:shadow-md cursor-grab active:cursor-grabbing transition animate-workos-fade-in ${
+                        className={`group rounded-lg border border-border/80 bg-card p-3 workos-shadow-soft hover:shadow-md cursor-pointer transition animate-workos-fade-in ${
                           dragTaskId === t.id ? 'opacity-50' : ''
                         } ${isUpdating ? 'pointer-events-none opacity-60' : ''}`}
                       >
@@ -177,6 +275,14 @@ export function TodoBoardTab({
                         {t.description && (
                           <div className="mt-0.5 text-xs text-muted-foreground line-clamp-2">{t.description}</div>
                         )}
+                        {(t.subtaskTotal ?? 0) > 0 && (
+                          <div className="mt-2 inline-flex items-center gap-1 rounded-full border border-border/70 bg-muted/40 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                            <ListChecks className="h-3 w-3 shrink-0 opacity-80" aria-hidden />
+                            <span className="tabular-nums">
+                              {(t.subtaskDone ?? 0)}/{(t.subtaskTotal ?? 0)} subtareas
+                            </span>
+                          </div>
+                        )}
                         <div className="mt-3 space-y-1.5">
                           <div className="flex items-center justify-between gap-2">
                             <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -195,12 +301,28 @@ export function TodoBoardTab({
                             />
                           </div>
                         </div>
-                        <div className="mt-2 flex items-center justify-between">
+                        <div className="mt-4 flex items-center justify-between gap-2">
                           {assignees.length ? (
-                            <div className="flex items-center -space-x-1.5">
-                              {assignees.map((a) => (
-                                <Avatar key={a.id} name={a.name} size="xs" title={a.name} />
-                              ))}
+                            <div className="flex min-w-0 items-center gap-1.5">
+                              <div className="relative inline-flex shrink-0" title={assignees[0].name}>
+                                <Crown
+                                  className="pointer-events-none absolute -top-2 left-[58%] z-10 h-3 w-3 -translate-x-1/2 text-amber-500 drop-shadow-sm dark:text-amber-400"
+                                  aria-hidden
+                                />
+                                <Avatar
+                                  name={assignees[0].name}
+                                  size="sm"
+                                  variant="owner"
+                                  title={assignees[0].name}
+                                />
+                              </div>
+                              {assignees.length > 1 ? (
+                                <div className="flex items-center -space-x-1.5 pl-0.5">
+                                  {assignees.slice(1).map((a) => (
+                                    <Avatar key={a.id} name={a.name} size="xs" title={a.name} />
+                                  ))}
+                                </div>
+                              ) : null}
                             </div>
                           ) : (
                             <span className="text-[10px] italic text-muted-foreground">Sin asignar</span>
@@ -210,40 +332,11 @@ export function TodoBoardTab({
                             {t.endDate}
                           </span>
                         </div>
-                        {manage && (
-                          <div className="mt-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition justify-end">
-                            <button
-                              type="button"
-                              onClick={() => onEdit(t)}
-                              className="rounded p-1 hover:bg-muted"
-                              aria-label="Editar"
-                            >
-                              <Pencil className="h-3 w-3" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => onDelete(t)}
-                              className="rounded p-1 hover:bg-destructive/10 text-destructive"
-                              aria-label="Eliminar"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </button>
-                          </div>
-                        )}
                       </div>
                     )
                   })
                 )}
               </div>
-              {manage && onAddTask && (
-                <button
-                  type="button"
-                  onClick={() => onAddTask(col.status)}
-                  className="m-2 mt-0 inline-flex items-center justify-center gap-1 rounded-md border border-dashed py-1.5 text-xs text-muted-foreground hover:border-primary hover:text-primary transition"
-                >
-                  <Plus className="h-3.5 w-3.5" /> Añadir tarea
-                </button>
-              )}
             </div>
           )
         })}

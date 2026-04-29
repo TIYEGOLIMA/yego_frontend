@@ -4,7 +4,6 @@ import {
   AlertOctagon,
   CheckCircle2,
   Users,
-  Zap,
 } from 'lucide-react'
 
 export interface PulseKpis {
@@ -12,7 +11,6 @@ export interface PulseKpis {
   tareas: number
   progresoPromedioPct: number
   completadas: number
-  enRiesgo: number
   bloqueadas: number
 }
 
@@ -57,7 +55,6 @@ export function PulseStatsBar({ kpis, trailing }: { kpis: PulseKpis | null; trai
       <KPI icon={Activity} label="Tareas" value={kpis.tareas} />
       <KPI icon={Activity} label="Progreso" value={`${kpis.progresoPromedioPct}%`} accent="primary" />
       <KPI icon={CheckCircle2} label="Completadas" value={kpis.completadas} accent="success" />
-      <KPI icon={Zap} label="En riesgo" value={kpis.enRiesgo} accent="warning" />
       <KPI icon={AlertOctagon} label="Bloqueadas" value={kpis.bloqueadas} accent="destructive" />
       {trailing ? <div className="ml-auto flex items-center gap-2 flex-wrap">{trailing}</div> : null}
     </div>
