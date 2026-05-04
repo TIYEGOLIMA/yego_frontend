@@ -118,9 +118,15 @@ export const norm = normPriority
  * Ej: "Juan Pérez" -> "JP"
  */
 export function avatarInitials(name: string): string {
-  const parts = name.trim().split(/\s+/)
+  const t = name.trim()
+  if (/^#?\d+$/.test(t)) return '?'
+  if (/^usuario\b/i.test(t)) return '?'
+  const parts = t.split(/\s+/).filter((p) => /^[\p{L}]/u.test(p))
   if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase()
-  return name.slice(0, 2).toUpperCase()
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  const rawParts = t.split(/\s+/)
+  if (rawParts.length >= 2) return (rawParts[0][0] + rawParts[1][0]).toUpperCase()
+  return t.slice(0, 2).toUpperCase() || '?'
 }
 
 /**

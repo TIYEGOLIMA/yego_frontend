@@ -147,3 +147,125 @@
 .dark .workos-gantt-task-modal-scroll::-webkit-scrollbar-thumb:hover {
   background: rgba(212, 212, 212, 0.55);
 }
+
+/* Actas: grilla tipo hoja de cálculo (comité) */
+.excel-acta-sheet table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+}
+
+/* Variante compacta (detalle acta — puntos) */
+.excel-acta-sheet--compact .excel-acta-head th {
+  padding: 0.28rem 0.35rem;
+  font-size: 0.75rem;
+}
+
+.excel-acta-sheet--compact .excel-acta-cell {
+  padding: 0.1rem 0.25rem;
+}
+
+.excel-acta-sheet--compact textarea.excel-acta-input {
+  min-height: 1.6rem;
+  line-height: 1.3;
+  resize: vertical;
+}
+
+.excel-acta-head th {
+  background-color: hsl(220 45% 18%);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 0.45rem 0.5rem;
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+  font-size: 0.75rem; /* text-xs */
+}
+
+.dark .excel-acta-head th {
+  background-color: hsl(220 45% 18%);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.excel-acta-cell {
+  border: 1px solid rgb(203 213 225);
+  padding: 0.3rem 0.4rem;
+  vertical-align: middle;
+  background: #fff;
+}
+
+.dark .excel-acta-cell {
+  border-color: rgb(71 85 105);
+  background: hsl(222 28% 11%);
+}
+
+.excel-acta-row:nth-child(even) .excel-acta-cell {
+  background: rgb(248 250 252);
+}
+
+.dark .excel-acta-row:nth-child(even) .excel-acta-cell {
+  background: hsl(222 24% 13%);
+}
+
+.excel-acta-section-row .excel-acta-cell {
+  background: rgb(224 231 255) !important;
+  border-color: rgb(199 210 254);
+  font-weight: 600;
+  color: #1e1b4b;
+}
+
+.dark .excel-acta-section-row .excel-acta-cell {
+  background: rgba(99, 102, 241, 0.18) !important;
+  border-color: rgba(129, 140, 248, 0.35);
+  color: #e2e8f0;
+}
+
+/* Inputs in-cell (acta tipo Excel) */
+.excel-acta-input {
+  width: 100%;
+  min-height: 1.75rem;
+  padding: 0.2rem 0.35rem;
+  font-size: inherit;
+  line-height: 1.35;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: inherit;
+}
+
+.excel-acta-input::placeholder {
+  color: rgb(148 163 184);
+  opacity: 0.85;
+}
+
+.excel-acta-input:hover {
+  border-color: rgba(148, 163, 184, 0.55);
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.excel-acta-input:focus {
+  outline: none;
+  border-color: var(--yego-primary, #ef0000);
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(239, 0, 0, 0.2);
+}
+
+.dark .excel-acta-input:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.dark .excel-acta-input:focus {
+  background: hsl(222 28% 12%);
+}
+
+textarea.excel-acta-input {
+  min-height: 2.5rem;
+  resize: vertical;
+}
+
+.excel-acta-select {
+  appearance: auto;
+}

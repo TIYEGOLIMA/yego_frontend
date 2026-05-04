@@ -72,6 +72,7 @@ export function PortfolioTab({
   manage,
   areas,
   workspaces,
+  collaboratorNames,
   collaboratorsForArea,
   onEdit,
   onDelete,
@@ -248,11 +249,12 @@ export function PortfolioTab({
 
   const findCollabName = useCallback(
     (areaId: number, userId: number): string | null => {
-      const collabs = collaboratorsForArea(areaId)
-      const c = collabs.find((x) => x.id === userId)
-      return c?.nombreCompleto || null
+      const local = collaboratorsForArea(areaId).find((x) => x.id === userId)?.nombreCompleto?.trim()
+      if (local) return local
+      const global = collaboratorNames?.get(userId)?.trim()
+      return global || null
     },
-    [collaboratorsForArea],
+    [collaboratorsForArea, collaboratorNames],
   )
 
   const getAssignees = useCallback(
@@ -264,7 +266,7 @@ export function PortfolioTab({
           : []
       return ids.map((uid) => ({
         id: uid,
-        name: findCollabName(areaId, uid) || `#${uid}`,
+        name: findCollabName(areaId, uid) || `Usuario #${uid}`,
       }))
     },
     [findCollabName],

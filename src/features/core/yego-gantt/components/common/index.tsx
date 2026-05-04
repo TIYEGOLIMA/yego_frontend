@@ -5,6 +5,7 @@
 
 import type { ReactNode } from 'react'
 import { type LucideIcon } from 'lucide-react'
+import { cn } from '@/utils/cn'
 import type { AreaTaskStatus, TaskPriority } from '../../types'
 import {
   TASK_STATUS_COLOR,
@@ -84,20 +85,31 @@ export function ProgressBar({
     lg: 'h-2.5',
   }
 
-  return (
-    <div className={`w-full overflow-hidden rounded-full bg-muted/70 dark:bg-muted/50 ${className}`}>
+  const track = (
+    <div
+      className={cn(
+        'w-full overflow-hidden rounded-full bg-neutral-200/90 dark:bg-neutral-600/40',
+        heightClasses[size],
+      )}
+    >
       <div
-        className={`${heightClasses[size]} rounded-full transition-all duration-500 ${variantClasses[variant]}`}
+        className={cn('h-full rounded-full transition-all duration-500', variantClasses[variant])}
         style={{ width: `${percentage}%` }}
         title={`${percentage}%`}
       />
-      {showLabel && (
-        <span className="text-xs font-semibold tabular-nums text-muted-foreground">
-          {percentage}%
-        </span>
-      )}
     </div>
   )
+
+  if (showLabel) {
+    return (
+      <div className={cn('flex w-full flex-col gap-1', className)}>
+        {track}
+        <span className="text-xs font-semibold tabular-nums text-muted-foreground">{percentage}%</span>
+      </div>
+    )
+  }
+
+  return <div className={cn('w-full', className)}>{track}</div>
 }
 
 // ==================== COMPONENTES DE AVATAR ====================
@@ -105,8 +117,9 @@ export function ProgressBar({
 export interface AvatarProps {
   name: string
   size?: 'xs' | 'sm' | 'md' | 'lg'
-  variant?: 'default' | 'primary' | 'red' | 'muted' | 'owner'
+  variant?: 'default' | 'primary' | 'red' | 'muted' | 'owner' | 'picker'
   title?: string
+  className?: string
 }
 
 function getAvatarInitials(name: string): string {
@@ -115,28 +128,30 @@ function getAvatarInitials(name: string): string {
   return name.slice(0, 2).toUpperCase()
 }
 
-export function Avatar({ name, size = 'sm', variant = 'default', title }: AvatarProps) {
+export function Avatar({ name, size = 'sm', variant = 'default', title, className }: AvatarProps) {
   const initials = getAvatarInitials(name)
 
   const sizeClasses = {
-    xs: 'w-5 h-5 text-[7px]',
-    sm: 'w-6 h-6 text-[9px]',
-    md: 'w-7 h-7 text-[10px]',
-    lg: 'w-9 h-9 text-[11px]',
+    xs: 'w-5 h-5 text-[8px] leading-none',
+    sm: 'w-6 h-6 text-[9px] leading-none',
+    md: 'w-7 h-7 text-[10px] leading-none',
+    lg: 'w-9 h-9 text-[11px] leading-none',
   }
 
   const variantClasses = {
-    default: 'bg-primary/15 border-background text-primary',
-    primary: 'bg-primary/15 border-background text-primary',
-    red: 'bg-red-100 dark:bg-red-900/30 border-white dark:border-neutral-900 text-red-600 dark:text-red-400',
-    muted: 'bg-muted border-border/60 text-muted-foreground',
+    default: 'bg-primary/15 border-background text-primary shadow-sm',
+    primary: 'bg-primary/15 border-background text-primary shadow-sm',
+    red: 'bg-red-100 dark:bg-red-900/30 border-white dark:border-neutral-900 text-red-600 dark:text-red-400 shadow-sm',
+    muted: 'bg-muted border-border/60 text-muted-foreground shadow-sm',
     owner:
-      'bg-amber-100 dark:bg-amber-950/45 border-amber-400 dark:border-amber-500 text-amber-900 dark:text-amber-100',
+      'bg-amber-100 dark:bg-amber-950/45 border-amber-400 dark:border-amber-500 text-amber-900 dark:text-amber-100 shadow-sm',
+    picker:
+      'bg-gradient-to-br from-primary/28 via-primary/14 to-primary/[0.06] dark:from-primary/32 dark:via-primary/16 dark:to-primary/[0.08] border-white/90 dark:border-border/50 text-primary-900 dark:text-primary-100 shadow-md',
   }
 
   return (
     <div
-      className={`rounded-full border-2 flex items-center justify-center font-bold shrink-0 ${sizeClasses[size]} ${variantClasses[variant]}`}
+      className={`rounded-full border-2 flex items-center justify-center font-semibold tracking-tight shrink-0 antialiased ${sizeClasses[size]} ${variantClasses[variant]} ${className ?? ''}`}
       title={title || name}
     >
       {initials}
@@ -148,7 +163,7 @@ export interface AvatarGroupProps {
   names: string[]
   max?: number
   size?: 'xs' | 'sm' | 'md'
-  variant?: 'default' | 'red'
+  variant?: 'default' | 'red' | 'picker'
 }
 
 export function AvatarGroup({ names, max = 4, size = 'sm', variant = 'default' }: AvatarGroupProps) {
@@ -166,6 +181,34 @@ export function AvatarGroup({ names, max = 4, size = 'sm', variant = 'default' }
         </div>
       )}
     </div>
+  )
+}
+
+/** Una línea «Nombre -- área» (responsable principal en modal). */
+export function PrincipalOwnerLine({
+  nombre,
+  area,
+  className,
+}: {
+  nombre: string
+  area: string
+  className?: string
+}) {
+  const a = area.trim()
+  const lineTitle = a ? `${nombre} -- ${a}` : nombre
+  return (
+    <span
+      className={cn('min-w-0 flex-1 text-sm leading-snug break-words', className)}
+      title={lineTitle}
+    >
+      <span className="text-foreground">{nombre}</span>
+      {a ? (
+        <span className="text-muted-foreground font-normal">
+          {' -- '}
+          {a}
+        </span>
+      ) : null}
+    </span>
   )
 }
 

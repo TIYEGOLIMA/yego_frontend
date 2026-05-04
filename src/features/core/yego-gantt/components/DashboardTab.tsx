@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   AlertOctagon,
@@ -8,6 +8,7 @@ import {
   CircleDot,
   Clock,
   ExternalLink,
+  FileText,
   Flag,
   FolderKanban,
   Plus,
@@ -15,10 +16,11 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { WorkosTabLoading } from './WorkosLoading'
-import type { DashboardTabProps, TaskRow, WorkspaceDto } from '../types'
+import type { DashboardTabProps, MeetingMinutesDashboardKpisResponse, TaskRow, WorkspaceDto } from '../types'
 import { isOverdue } from '../utils'
 import { useTaskStats } from '../hooks'
 import { Panel, RowBar, ProgressBar } from './common'
+import { fetchMeetingMinutesDashboardKpis, parseGanttLoadError } from '../ganttApi'
 
 export function DashboardTab({
   tasks,
@@ -26,8 +28,30 @@ export function DashboardTab({
   loading,
   refreshing = false,
   onCreateTask,
+  onOpenActasTab,
 }: DashboardTabProps) {
   const navigate = useNavigate()
+
+  const [mmKpis, setMmKpis] = useState<MeetingMinutesDashboardKpisResponse | null>(null)
+  const [mmKpisErr, setMmKpisErr] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const k = await fetchMeetingMinutesDashboardKpis()
+        if (!cancelled) {
+          setMmKpis(k)
+          setMmKpisErr(null)
+        }
+      } catch (e) {
+        if (!cancelled) setMmKpisErr(parseGanttLoadError(e))
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [refreshing])
 
   const stats = useTaskStats(tasks)
 
@@ -141,6 +165,78 @@ export function DashboardTab({
           )}
         </Panel>
       </div>
+
+      <Panel Icon={FileText} title="Seguimiento de actas">
+        {mmKpisErr && (
+          <p className="text-sm text-destructive">{mmKpisErr}</p>
+        )}
+        {!mmKpis && !mmKpisErr && (
+          <p className="text-sm text-muted-foreground italic">Cargando métricas de actas…</p>
+        )}
+        {mmKpis && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+              <div className="rounded-lg bg-muted/35 px-3 py-2">
+                <div className="text-xs text-muted-foreground">Actas abiertas</div>
+                <div className="text-lg font-semibold tabular-nums">{mmKpis.openMinutes}</div>
+              </div>
+              <div className="rounded-lg bg-muted/35 px-3 py-2">
+                <div className="text-xs text-muted-foreground">En seguimiento</div>
+                <div className="text-lg font-semibold tabular-nums">{mmKpis.inFollowUpMinutes}</div>
+              </div>
+              <div className="rounded-lg bg-muted/35 px-3 py-2">
+                <div className="text-xs text-muted-foreground">Ítems sin convertir</div>
+                <div className="text-lg font-semibold tabular-nums">{mmKpis.unconvertedItemsGlobal}</div>
+              </div>
+              <div className="rounded-lg bg-muted/35 px-3 py-2">
+                <div className="text-xs text-muted-foreground">Tareas desde actas</div>
+                <div className="text-lg font-semibold tabular-nums">{mmKpis.tasksBornFromMinutes}</div>
+              </div>
+              <div className="rounded-lg bg-muted/35 px-3 py-2">
+                <div className="text-xs text-muted-foreground">Tareas vencidas (actas)</div>
+                <div className="text-lg font-semibold tabular-nums">{mmKpis.overdueTasksFromMinutes}</div>
+              </div>
+              <div className="rounded-lg bg-muted/35 px-3 py-2">
+                <div className="text-xs text-muted-foreground">Completitud derivada</div>
+                <div className="text-lg font-semibold tabular-nums">
+                  {Math.round(mmKpis.completionPercentFromMinutes)}%
+                </div>
+              </div>
+            </div>
+            {mmKpis.topResponsiblesPending && mmKpis.topResponsiblesPending.length > 0 && (
+              <div>
+                <div className="text-xs font-medium text-muted-foreground mb-1">Top responsables (pendientes)</div>
+                <ul className="text-xs space-y-0.5">
+                  {mmKpis.topResponsiblesPending.slice(0, 5).map((r) => (
+                    <li key={r.name} className="flex justify-between gap-2 tabular-nums">
+                      <span className="truncate">{r.name || '—'}</span>
+                      <span>{r.count}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {mmKpis.topAreasBlocked && mmKpis.topAreasBlocked.length > 0 && (
+              <div>
+                <div className="text-xs font-medium text-muted-foreground mb-1">Áreas con más bloqueos</div>
+                <ul className="text-xs space-y-0.5">
+                  {mmKpis.topAreasBlocked.slice(0, 5).map((r) => (
+                    <li key={r.name} className="flex justify-between gap-2 tabular-nums">
+                      <span className="truncate">{r.name || '—'}</span>
+                      <span>{r.count}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+        {onOpenActasTab && (
+          <Button variant="outline" size="sm" className="mt-3 rounded-lg w-full sm:w-auto" onClick={onOpenActasTab}>
+            Ir a Actas
+          </Button>
+        )}
+      </Panel>
 
       <Panel Icon={Clock} title={`Tareas vencidas (${stats.overdue})`}>
         {stats.overdue === 0 ? (

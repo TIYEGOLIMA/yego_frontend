@@ -6,7 +6,6 @@ import {
   Circle,
   CircleDot,
   Crown,
-  Flag,
   Filter,
   ListChecks,
   Lock,
@@ -50,6 +49,9 @@ const COLUMNS: {
   { status: 'BLOCKED', title: 'Bloqueada', Icon: AlertOctagon, tone: 'text-destructive border-destructive/30' },
   { status: 'DONE', title: 'Hecha', Icon: CheckCircle2, tone: 'text-emerald-600 border-emerald-500/30' },
 ]
+
+/** Altura máx. por columna: cabecera Gantt + filtros + `main` padding (~15.5rem). Ajustar si cambia el layout global. */
+const BOARD_COLUMN_MAX_HEIGHT_CLASS = 'max-h-[min(85dvh,calc(100dvh-15.5rem))]'
 
 export function TodoBoardTab({
   tasks,
@@ -139,8 +141,13 @@ export function TodoBoardTab({
     )
 
   return (
-    <div className={`space-y-4 relative ${refreshing ? 'opacity-[0.97]' : ''}`}>
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+    <div
+      className={cn(
+        'flex flex-col flex-1 min-h-0 w-full space-y-4 relative',
+        refreshing ? 'opacity-[0.97]' : '',
+      )}
+    >
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 shrink-0">
         <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground shrink-0">
           <Filter className="h-3 w-3 opacity-80" aria-hidden />
           Filtrar
@@ -191,7 +198,7 @@ export function TodoBoardTab({
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 flex-1 min-h-0">
         {columnData.map((col) => {
           const Icon = col.Icon
           const isOver = isDropTarget(col.status)
@@ -201,12 +208,14 @@ export function TodoBoardTab({
               onDragOver={(e) => handleDragOver(e, col.status)}
               onDragLeave={(e) => handleDragLeave(e, col.status)}
               onDrop={() => onStatusChange && handleDrop(col.status, onStatusChange)}
-              className={`flex flex-col rounded-xl border border-border/80 bg-card workos-shadow-soft min-h-[400px] transition-all ${
-                isOver ? 'ring-2 ring-primary/25 border-primary/40' : ''
-              }`}
+              className={cn(
+                'flex flex-col rounded-xl border border-border/80 bg-card workos-shadow-soft transition-all min-h-0 overflow-hidden',
+                BOARD_COLUMN_MAX_HEIGHT_CLASS,
+                isOver ? 'ring-2 ring-primary/25 border-primary/40' : '',
+              )}
             >
               <div
-                className={`flex items-center gap-2 px-3 py-2.5 border-b border-border/60 ${col.tone} border-t-[3px] rounded-t-xl bg-muted/30`}
+                className={`flex shrink-0 items-center gap-2 px-3 py-2.5 border-b border-border/60 ${col.tone} border-t-[3px] rounded-t-xl bg-muted/30`}
               >
                 <Icon className="h-4 w-4 shrink-0" />
                 <span className="text-sm font-semibold text-foreground">{col.title}</span>
@@ -214,7 +223,7 @@ export function TodoBoardTab({
                   {col.tasks.length}
                 </span>
               </div>
-              <div className="flex-1 p-2 space-y-2 overflow-auto min-h-0">
+              <div className="flex-1 min-h-0 p-2 space-y-2 overflow-y-auto overscroll-contain scroll-smooth touch-pan-y">
                 {col.tasks.length === 0 ? (
                   <div className="w-full text-center text-xs text-muted-foreground py-6 px-2">Sin tareas</div>
                 ) : (
@@ -256,9 +265,8 @@ export function TodoBoardTab({
                             <span className="truncate">{t.areaName || `Área ${t.areaId}`}</span>
                           </span>
                           <span
-                            className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${boardPriorityPillClass(pr)}`}
+                            className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${boardPriorityPillClass(pr)}`}
                           >
-                            <Flag className="h-3 w-3 shrink-0 opacity-75" strokeWidth={2} aria-hidden />
                             {PRIO_LABEL[pr]}
                           </span>
                         </div>

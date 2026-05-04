@@ -848,7 +848,7 @@ export function SprintsTab({
                       )}
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                      {(['PENDING', 'IN_PROGRESS', 'BLOCKED'] as const).map((st) => {
+                      {(['PENDING', 'IN_PROGRESS', 'BLOCKED', 'DONE'] as const).map((st) => {
                         const items = m.mtasks.filter((t) => t.status === st)
                         return (
                           <div

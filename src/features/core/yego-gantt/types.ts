@@ -139,6 +139,8 @@ export interface DashboardTabProps {
   loading: boolean
   refreshing?: boolean
   onCreateTask?: () => void
+  /** Abre la pestaña Actas dentro del mismo módulo WorkOS. */
+  onOpenActasTab?: () => void
 }
 
 export interface PortfolioTabProps {
@@ -148,6 +150,8 @@ export interface PortfolioTabProps {
   manage: boolean
   areas: AreaFull[]
   workspaces: WorkspaceDto[]
+  /** Nombres de usuarios en cualquier equipo cargado (asignación cruzada entre áreas). */
+  collaboratorNames?: Map<number, string>
   collaboratorsForArea: (areaId: number) => ColaboradorDto[]
   onEdit: (t: TaskRow) => void
   onDelete: (t: TaskRow) => void
@@ -204,6 +208,10 @@ export interface GanttTimelineTabProps {
   showHeatmap: boolean
   showCriticalPath: boolean
   onTaskSelectNotify?: (taskTitle: string) => void
+  /** Nombres en todos los equipos cargados (responsables fuera del área de la fila). */
+  collaboratorNames?: Map<number, string>
+  /** Equipo(s) de cada usuario en datos cargados (varios separados por « · »). */
+  collaboratorAreaLabels?: Map<number, string>
   collaboratorsForArea: (areaId: number) => ColaboradorDto[]
   /** Vista «Mi espacio»: nombre de proyecto en barras del timeline. */
   mySpaceShowProjectNames?: boolean
@@ -231,4 +239,129 @@ export interface AreaGroup {
   collaborators: ColaboradorDto[]
   manager: ColaboradorDto | null
   managerName: string
+}
+
+// Actas de reunión (WorkOS) — alineado con enums backend
+export type MeetingMinuteStatus = 'ABIERTA' | 'EN_SEGUIMIENTO' | 'CERRADA' | 'CANCELADA'
+
+export type MeetingMinuteType = 'COMITE' | 'SEGUIMIENTO' | 'OPERATIVA' | 'ESTRATEGICA' | 'OTRO'
+
+export type WorkosMeetingItemType = 'ACCION' | 'DECISION' | 'RIESGO' | 'SEGUIMIENTO' | 'INFORMACION'
+
+export type WorkosMeetingItemStatus =
+  | 'PENDIENTE'
+  | 'EN_PROGRESO'
+  | 'BLOQUEADA'
+  | 'COMPLETADA'
+  | 'CANCELADA'
+
+export interface MeetingMinuteSummaryKpis {
+  totalItems: number
+  convertedItems: number
+  unconvertedItems: number
+  completedTasks: number
+  inProgressTasks: number
+  blockedTasks: number
+  overdueTasks: number
+  pendingWithoutTask: number
+  completionPercentage: number
+}
+
+/** Pista para abrir una tarea que puede estar en otro espacio de trabajo (p. ej. tras convertir desde acta). */
+export type GanttOpenTaskHint = {
+  workspaceId?: number | null
+  privateTask?: boolean
+}
+
+export interface MeetingMinuteItemResponse {
+  id: number
+  meetingMinuteId: number
+  itemOrder: number | null
+  areaId: number | null
+  areaNameSnapshot: string | null
+  projectId: number | null
+  projectName: string | null
+  sprintId: number | null
+  sprintName: string | null
+  itemType: WorkosMeetingItemType
+  situation: string | null
+  decision: string | null
+  taskTitle: string | null
+  taskDescription: string | null
+  responsibleUserId: number | null
+  responsibleNameSnapshot: string | null
+  startDate: string | null
+  deadline: string | null
+  priority: string | null
+  status: WorkosMeetingItemStatus
+  converted: boolean
+  convertedTaskId: number | null
+  convertedAt: string | null
+  convertedByUserId: number | null
+  createdAt: string
+  updatedAt: string
+  taskStatus: AreaTaskStatus | null
+  taskProgress: number | null
+  taskEndDate: string | null
+  taskIsOverdue: boolean | null
+  taskAssigneeIds: number[] | null
+}
+
+export interface MeetingMinuteResponse {
+  id: number
+  title: string
+  meetingDate: string
+  meetingType: MeetingMinuteType
+  summary: string | null
+  createdByUserId: number | null
+  ownerUserId: number | null
+  status: MeetingMinuteStatus
+  nextMeetingDate: string | null
+  createdAt: string
+  updatedAt: string
+  items: MeetingMinuteItemResponse[] | null
+  kpis: MeetingMinuteSummaryKpis | null
+  /** API: solo ítems propios o de su área (no creador/dueño/admin). */
+  partialItemsView?: boolean
+}
+
+export interface NamedCountDto {
+  name: string
+  count: number
+}
+
+export interface MeetingMinutesDashboardKpisResponse {
+  openMinutes: number
+  inFollowUpMinutes: number
+  unconvertedItemsGlobal: number
+  tasksBornFromMinutes: number
+  overdueTasksFromMinutes: number
+  completionPercentFromMinutes: number
+  topResponsiblesPending: NamedCountDto[] | null
+  topAreasBlocked: NamedCountDto[] | null
+}
+
+/** Respuesta mínima de tarea tras conversión desde acta. */
+export interface AreaTaskResponseDto {
+  id: number
+  areaId: number
+  areaName?: string | null
+  workspaceId?: number | null
+  sprintId?: number | null
+  title: string
+  description?: string | null
+  startDate: string
+  endDate: string
+  status: AreaTaskStatus
+  priority: TaskPriority
+  progressPercent?: number | null
+  assignedUserId?: number | null
+  assignedUserIds?: number[] | null
+  tags?: string[] | null
+  privateTask?: boolean
+}
+
+export interface ConvertMeetingItemToTaskResponse {
+  item: MeetingMinuteItemResponse
+  task: AreaTaskResponseDto
 }

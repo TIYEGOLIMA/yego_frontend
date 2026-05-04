@@ -20,7 +20,7 @@ import {
   type GanttTeamItem,
   type TaskRowLike,
 } from '../../ganttModel'
-import { computeDurationDays } from '../../utils'
+import { computeDurationDays, avatarInitials } from '../../utils'
 import type { ColaboradorDto, GanttTimelineTabProps } from '../../types'
 
 const LEFT_COL = 288
@@ -29,7 +29,7 @@ function TimelineHeader({ anchor, totalDays, dayWidth }: { anchor: Date; totalDa
   const days = Array.from({ length: totalDays }, (_, i) => i)
   const density = timelineDayDensity(totalDays)
   return (
-    <div className="flex border-b border-[#e5e7eb] bg-[#fafafa] sticky top-0 z-30 dark:border-border/80 dark:bg-muted/30 min-h-[48px]">
+    <div className="flex border-b border-[#e5e7eb] bg-[#fafafa] sticky top-0 z-30 dark:border-border/80 dark:bg-muted/30 min-h-[40px]">
       {days.map((day) => {
         const { weekday, label, title } = formatTimelineDayCell(anchor, day, density)
         const weekend = isWeekendDay(anchor, day)
@@ -39,7 +39,7 @@ function TimelineHeader({ anchor, totalDays, dayWidth }: { anchor: Date; totalDa
             key={day}
             title={title}
             className={`shrink-0 flex flex-col items-center justify-center border-r border-[#e5e7eb] dark:border-border/40 min-w-0 overflow-hidden px-0.5 ${
-              density === 'minimal' ? 'py-1.5 gap-0' : 'py-1.5 gap-0.5'
+              density === 'minimal' ? 'py-1 gap-0' : 'py-1 gap-0.5'
             } ${
               today
                 ? 'bg-primary-500 text-white'
@@ -190,12 +190,6 @@ function GanttBar({
   )
 }
 
-function avatarInit(name: string): string {
-  const parts = name.trim().split(/\s+/)
-  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase()
-  return name.slice(0, 2).toUpperCase()
-}
-
 /** Fondo de celda día: hoy, heatmap por carga, fin de semana o neutro. */
 function timelineDayCellClass(
   anchor: Date,
@@ -226,6 +220,7 @@ function TeamRowWithGrid({
   showHeatmap,
   showCriticalPath,
   collaborators,
+  collaboratorNames,
   staggerIndex = 0,
   dayWidth,
   selectedSourceId,
@@ -238,6 +233,7 @@ function TeamRowWithGrid({
   showHeatmap: boolean
   showCriticalPath: boolean
   collaborators: ColaboradorDto[]
+  collaboratorNames?: Map<number, string>
   staggerIndex?: number
   dayWidth: number
   selectedSourceId: number | null
@@ -308,7 +304,7 @@ function TeamRowWithGrid({
                       className="w-5 h-5 shrink-0 rounded-full bg-muted border border-border/60 flex items-center justify-center text-[8px] font-bold text-muted-foreground"
                       title={`${c.nombreCompleto} · ${c.rol}`}
                     >
-                      {avatarInit(c.nombreCompleto)}
+                      {avatarInitials(c.nombreCompleto)}
                     </div>
                   </React.Fragment>
                 ))}
@@ -347,7 +343,9 @@ function TeamRowWithGrid({
                   : undefined
               const principalName =
                 principal?.nombreCompleto ??
-                (task.principalUserId != null ? `Usuario #${task.principalUserId}` : '')
+                (task.principalUserId != null
+                  ? collaboratorNames?.get(task.principalUserId) ?? `Usuario #${task.principalUserId}`
+                  : '')
               const laneBg = selectionLaneTint(laneSel)
               return (
                 <React.Fragment key={task.id}>
@@ -368,7 +366,7 @@ function TeamRowWithGrid({
                         title={`${task.name} · Responsable principal · ${principalName}`}
                       >
                         <div className="flex h-6 w-6 items-center justify-center rounded-full border border-border/60 bg-muted text-[9px] font-bold text-muted-foreground">
-                          {avatarInit(principalName)}
+                          {avatarInitials(principalName)}
                         </div>
                         <Crown
                           className="absolute -right-0.5 -top-0.5 h-3 w-3 text-amber-500 drop-shadow-sm dark:text-amber-400"
@@ -440,7 +438,7 @@ function TeamRowWithGrid({
             style={{ width: LEFT_COL }}
           >
             <div className="w-6 h-6 rounded-full bg-muted border border-border/60 flex items-center justify-center text-[9px] font-bold text-muted-foreground shrink-0">
-              {avatarInit(lead.nombreCompleto)}
+              {avatarInitials(lead.nombreCompleto)}
             </div>
             <span className="text-xs text-foreground truncate">{lead.nombreCompleto}</span>
             <span className="text-[10px] text-muted-foreground ml-auto shrink-0">{lead.rol}</span>
@@ -551,6 +549,8 @@ function TaskDetailPanel({
   onDelete,
   manage,
   collaborators,
+  collaboratorNames,
+  collaboratorAreaLabels,
 }: {
   task: TaskRowLike | null
   ganttTask: GanttTaskItem | null
@@ -559,6 +559,8 @@ function TaskDetailPanel({
   onDelete: (t: TaskRowLike) => void
   manage: boolean
   collaborators: ColaboradorDto[]
+  collaboratorNames?: Map<number, string>
+  collaboratorAreaLabels?: Map<number, string>
 }) {
   if (!task || !ganttTask) return null
 
@@ -575,7 +577,7 @@ function TaskDetailPanel({
     const c = collaborators.find((x) => x.id === uid)
     return {
       id: uid,
-      name: c?.nombreCompleto ?? `Usuario #${uid}`,
+      name: c?.nombreCompleto ?? collaboratorNames?.get(uid) ?? `Usuario #${uid}`,
       role: c?.rol ?? '',
     }
   })
@@ -648,11 +650,19 @@ function TaskDetailPanel({
           </span>
           {assignees.length > 0 ? (
             <div className="space-y-2">
-              {assignees.map((a) => (
+              {assignees.map((a) => {
+                const equiposPersona =
+                  collaboratorAreaLabels?.get(a.id)?.trim() || ''
+                const equiposLine = equiposPersona || areaLabel
+                const tareaDistinta =
+                  equiposPersona !== '' &&
+                  areaLabel !== '' &&
+                  !equiposPersona.split(/\s*·\s*/).some((part) => part.trim() === areaLabel.trim())
+                return (
                 <div key={a.id} className="flex items-center gap-3 rounded-lg border border-border/60 bg-muted/20 p-3">
                   <div className="relative shrink-0">
                     <div className="w-9 h-9 rounded-full bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800 flex items-center justify-center text-[11px] font-bold text-red-600 dark:text-red-400">
-                      {avatarInit(a.name)}
+                      {avatarInitials(a.name)}
                     </div>
                     {principalUserId != null && a.id === principalUserId && (
                       <Crown
@@ -661,14 +671,37 @@ function TaskDetailPanel({
                       />
                     )}
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-foreground truncate">{a.name}</p>
-                    <p className="text-[11px] text-muted-foreground truncate">
-                      {a.role ? `${a.role} · ` : ''}{areaLabel}
+                    {a.role ? (
+                      <p className="text-[11px] text-muted-foreground truncate">{a.role}</p>
+                    ) : null}
+                    <p
+                      className="text-[11px] text-muted-foreground/90 truncate"
+                      title={equiposLine + (tareaDistinta ? ` · Tarea en: ${areaLabel}` : '')}
+                    >
+                      {equiposPersona ? (
+                        <>
+                          <span className="text-muted-foreground/70">Equipos: </span>
+                          {equiposPersona}
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-muted-foreground/70">Área tarea: </span>
+                          {areaLabel}
+                        </>
+                      )}
+                      {tareaDistinta ? (
+                        <span className="text-muted-foreground/80">
+                          {' '}
+                          · <span className="italic">Tarea en {areaLabel}</span>
+                        </span>
+                      ) : null}
                     </p>
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           ) : (
             <p className="text-xs text-muted-foreground italic">Sin asignar</p>
@@ -727,6 +760,8 @@ export function GanttTimelineTab({
   showCriticalPath,
   onTaskSelectNotify,
   collaboratorsForArea,
+  collaboratorNames,
+  collaboratorAreaLabels,
   mySpaceShowProjectNames = false,
   workspaceNameById,
 }: GanttTimelineTabProps) {
@@ -822,9 +857,9 @@ export function GanttTimelineTab({
           <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
             <div ref={scrollRef} className="flex-1 overflow-auto" onScroll={handleScroll}>
               <div style={{ minWidth: totalWidth }}>
-                <div className="flex sticky top-0 z-30 items-stretch min-h-[48px]">
+                <div className="flex sticky top-0 z-30 items-stretch min-h-[40px]">
                   <div
-                    className="shrink-0 sticky left-0 z-40 bg-[#fafafa] border-b border-r border-[#e5e7eb] px-4 py-1.5 flex items-end shadow-[2px_0_8px_-4px_rgba(0,0,0,0.06)] dark:bg-muted/30 dark:border-border/80 min-h-[48px] box-border"
+                    className="shrink-0 sticky left-0 z-40 bg-[#fafafa] border-b border-r border-[#e5e7eb] px-3 py-1 flex items-end shadow-[2px_0_8px_-4px_rgba(0,0,0,0.06)] dark:bg-muted/30 dark:border-border/80 min-h-[40px] box-border"
                     style={{ width: LEFT_COL }}
                   >
                     <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">Equipos</span>
@@ -846,6 +881,7 @@ export function GanttTimelineTab({
                       showHeatmap={showHeatmap}
                       showCriticalPath={showCriticalPath}
                       collaborators={collaboratorsForArea(Number(team.id))}
+                      collaboratorNames={collaboratorNames}
                       dayWidth={dayWidth}
                       selectedSourceId={selectedSourceId}
                       selectedPrincipalUserId={selectedGantt?.principalUserId}
@@ -874,6 +910,8 @@ export function GanttTimelineTab({
             onDelete={onDeleteTask}
             manage={manage}
             collaborators={selectedTask ? (collaboratorsForArea?.(selectedTask.areaId) ?? []) : []}
+            collaboratorNames={collaboratorNames}
+            collaboratorAreaLabels={collaboratorAreaLabels}
           />
         </div>
       )}

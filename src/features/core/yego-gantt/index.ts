@@ -1,5 +1,14 @@
 export { YegoGanttModule } from './yego-gantt.module'
 
+export type { AssigneePickerRow } from './ganttCollaborators'
+export {
+  buildAssigneePickerRows,
+  buildAllCollaboratorsDeduped,
+  buildCollaboratorNameMap,
+  buildCollaboratorAreaLabelMap,
+  collaboratorAreaLabel,
+} from './ganttCollaborators'
+
 /** Contratos y funciones HTTP del módulo (rutas + fetch). */
 export type { GanttTaskSummary, GanttMasterData } from './ganttApi'
 export {

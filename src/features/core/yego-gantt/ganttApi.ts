@@ -8,10 +8,18 @@ import type {
   AreaTaskStatus,
   ColaboradorDto,
   Kpis,
+  MeetingMinuteItemResponse,
+  MeetingMinuteResponse,
+  MeetingMinutesDashboardKpisResponse,
+  MeetingMinuteStatus,
+  MeetingMinuteType,
+  ConvertMeetingItemToTaskResponse,
   SprintDto,
   TaskPriority,
   TaskRow,
   WorkspaceDto,
+  WorkosMeetingItemStatus,
+  WorkosMeetingItemType,
 } from './types'
 
 /** Prefijos de API usados solo por este módulo. */
@@ -19,6 +27,16 @@ export const yegoGanttPaths = {
   taskSummary: '/yego-gantt/tasks/summary',
   workspaces: '/yego-gantt/workspaces',
   sprintsByWorkspace: (workspaceId: number) => `/yego-gantt/sprints/by-workspace/${workspaceId}`,
+  meetingMinutes: '/yego-gantt/meeting-minutes',
+  meetingMinuteById: (id: number) => `/yego-gantt/meeting-minutes/${id}`,
+  meetingMinuteStatus: (id: number) => `/yego-gantt/meeting-minutes/${id}/status`,
+  meetingMinuteItems: (id: number) => `/yego-gantt/meeting-minutes/${id}/items`,
+  meetingMinuteItem: (minuteId: number, itemId: number) =>
+    `/yego-gantt/meeting-minutes/${minuteId}/items/${itemId}`,
+  meetingMinuteConvert: (minuteId: number, itemId: number) =>
+    `/yego-gantt/meeting-minutes/${minuteId}/items/${itemId}/convert-to-task`,
+  meetingMinutesDashboardKpis: '/yego-gantt/meeting-minutes/dashboard-kpis',
+  meetingMinutesUnconverted: '/yego-gantt/meeting-minutes/unconverted-items',
 } as const
 
 export const areasPaths = {
@@ -253,4 +271,163 @@ export function parseGanttLoadError(e: unknown): string {
     return String(data.message)
   }
   return 'Error al cargar'
+}
+
+// --- Actas de reunión (meeting minutes) ---
+
+export interface SpringPage<T> {
+  content: T[]
+  totalElements: number
+  totalPages: number
+  size: number
+  number: number
+}
+
+export type CreateMeetingMinutePayload = {
+  title: string
+  meetingDate: string
+  meetingType?: MeetingMinuteType
+  summary?: string | null
+  ownerUserId?: number | null
+  nextMeetingDate?: string | null
+  status?: MeetingMinuteStatus
+}
+
+export type UpdateMeetingMinutePayload = Partial<CreateMeetingMinutePayload>
+
+export type CreateMeetingMinuteItemPayload = {
+  itemOrder?: number | null
+  areaId?: number | null
+  areaNameSnapshot?: string | null
+  projectId?: number | null
+  sprintId?: number | null
+  itemType?: WorkosMeetingItemType
+  situation?: string | null
+  decision?: string | null
+  taskTitle?: string | null
+  taskDescription?: string | null
+  responsibleUserId?: number | null
+  responsibleNameSnapshot?: string | null
+  startDate?: string | null
+  deadline?: string | null
+  priority?: string | null
+  status?: WorkosMeetingItemStatus
+}
+
+export type UpdateMeetingMinuteItemPayload = Omit<CreateMeetingMinuteItemPayload, 'itemOrder'>
+
+export type ConvertMeetingItemPayload = {
+  title?: string | null
+  description?: string | null
+  areaId?: number | null
+  workspaceId?: number | null
+  sprintId?: number | null
+  startDate?: string | null
+  endDate?: string | null
+  status?: AreaTaskStatus
+  priority?: TaskPriority
+  assignedUserId?: number | null
+  assignedUserIds?: number[] | null
+  privateTask?: boolean
+  tags?: string[] | null
+}
+
+export interface MeetingMinutesListParams {
+  status?: MeetingMinuteStatus
+  meetingType?: MeetingMinuteType
+  dateFrom?: string
+  dateTo?: string
+  ownerUserId?: number
+  projectId?: number
+  areaId?: number
+  page?: number
+  size?: number
+  sort?: string
+}
+
+export async function fetchMeetingMinutesPage(
+  params: MeetingMinutesListParams,
+): Promise<SpringPage<MeetingMinuteResponse>> {
+  const q: Record<string, string | number> = {}
+  if (params.status) q.status = params.status
+  if (params.meetingType) q.meetingType = params.meetingType
+  if (params.dateFrom) q.dateFrom = params.dateFrom
+  if (params.dateTo) q.dateTo = params.dateTo
+  if (params.ownerUserId != null) q.ownerUserId = params.ownerUserId
+  if (params.projectId != null) q.projectId = params.projectId
+  if (params.areaId != null) q.areaId = params.areaId
+  if (params.page != null) q.page = params.page
+  if (params.size != null) q.size = params.size
+  if (params.sort) q.sort = params.sort
+  const res = await api.get<SpringPage<MeetingMinuteResponse>>(yegoGanttPaths.meetingMinutes, { params: q })
+  return res.data
+}
+
+export async function fetchMeetingMinuteById(id: number): Promise<MeetingMinuteResponse> {
+  const res = await api.get<MeetingMinuteResponse>(yegoGanttPaths.meetingMinuteById(id))
+  return res.data
+}
+
+export async function createMeetingMinute(body: CreateMeetingMinutePayload): Promise<MeetingMinuteResponse> {
+  const res = await api.post<MeetingMinuteResponse>(yegoGanttPaths.meetingMinutes, body)
+  return res.data
+}
+
+export async function updateMeetingMinute(
+  id: number,
+  body: UpdateMeetingMinutePayload,
+): Promise<MeetingMinuteResponse> {
+  const res = await api.put<MeetingMinuteResponse>(yegoGanttPaths.meetingMinuteById(id), body)
+  return res.data
+}
+
+export async function patchMeetingMinuteStatus(id: number, status: MeetingMinuteStatus): Promise<void> {
+  await api.patch(yegoGanttPaths.meetingMinuteStatus(id), { status })
+}
+
+export async function softDeleteMeetingMinute(id: number): Promise<void> {
+  await api.delete(yegoGanttPaths.meetingMinuteById(id))
+}
+
+export async function addMeetingMinuteItems(
+  minuteId: number,
+  items: CreateMeetingMinuteItemPayload[],
+): Promise<MeetingMinuteResponse> {
+  const res = await api.post<MeetingMinuteResponse>(yegoGanttPaths.meetingMinuteItems(minuteId), items)
+  return res.data
+}
+
+export async function updateMeetingMinuteItem(
+  minuteId: number,
+  itemId: number,
+  body: UpdateMeetingMinuteItemPayload,
+): Promise<MeetingMinuteResponse> {
+  const res = await api.put<MeetingMinuteResponse>(yegoGanttPaths.meetingMinuteItem(minuteId, itemId), body)
+  return res.data
+}
+
+export async function deleteMeetingMinuteItem(minuteId: number, itemId: number): Promise<void> {
+  await api.delete(yegoGanttPaths.meetingMinuteItem(minuteId, itemId))
+}
+
+export async function convertMeetingItemToTask(
+  minuteId: number,
+  itemId: number,
+  body: ConvertMeetingItemPayload,
+): Promise<ConvertMeetingItemToTaskResponse> {
+  const res = await api.post<ConvertMeetingItemToTaskResponse>(
+    yegoGanttPaths.meetingMinuteConvert(minuteId, itemId),
+    omitUndefinedKeys({ ...(body as Record<string, unknown>) }),
+  )
+  return res.data
+}
+
+export async function fetchMeetingMinutesUnconverted(): Promise<MeetingMinuteItemResponse[]> {
+  const res = await api.get<MeetingMinuteItemResponse[]>(yegoGanttPaths.meetingMinutesUnconverted)
+  return res.data
+}
+
+export async function fetchMeetingMinutesDashboardKpis(): Promise<MeetingMinutesDashboardKpisResponse> {
+  const res = await api.get<MeetingMinutesDashboardKpisResponse>(yegoGanttPaths.meetingMinutesDashboardKpis)
+  return res.data
 }
