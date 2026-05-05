@@ -35,7 +35,7 @@ export function taskRowIsPrivate(t: { privateTask?: boolean; tags?: string[] | n
   return tagsIndicatePrivate(t.tags)
 }
 
-export function taskAssigneeIds(t: { assignedUserIds?: number[]; assignedUserId?: number | null }): number[] {
+function taskAssigneeIds(t: { assignedUserIds?: number[]; assignedUserId?: number | null }): number[] {
   if (t.assignedUserIds?.length) return t.assignedUserIds
   if (t.assignedUserId != null) return [t.assignedUserId]
   return []

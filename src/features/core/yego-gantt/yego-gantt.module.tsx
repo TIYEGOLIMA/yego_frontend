@@ -1,15 +1,7 @@
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type Dispatch,
-  type SetStateAction,
-} from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import axios from 'axios'
 import { api } from '../../../services/core/api'
-import { useAuthStore, type User } from '../../../store/auth-store'
+import { useAuthStore } from '../../../store/auth-store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -33,11 +25,10 @@ import {
   Boxes,
   CalendarRange,
   CheckCircle2,
+  Circle,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Circle,
-  CircleDot,
   Crown,
   FileText,
   Flame,
@@ -46,7 +37,6 @@ import {
   KanbanSquare,
   LayoutDashboard,
   Loader2,
-  Octagon,
   PencilLine,
   Plus,
   Route,
@@ -67,6 +57,7 @@ import { DashboardTab } from './components/DashboardTab'
 import { SprintsTab } from './components/SprintsTab'
 import { MeetingMinutesTab } from './components/MeetingMinutesTab'
 import { WorkosCalendarTab } from './components/WorkosCalendarTab'
+import { WorkosTaskChatPanel } from './components/WorkosTaskChatPanel'
 import type {
   AreaTaskStatus,
   TaskPriority,
@@ -124,139 +115,20 @@ import {
   principalSelectItemTextValue,
   type AssigneePickerRow,
 } from './ganttCollaborators'
-
-/** Fechas del modal detalle (estilo sprint-master-pro: «26 abr 2026»). */
-function formatDetailModalDate(iso: string): string {
-  const d = new Date(iso + (iso.length <= 10 ? 'T12:00:00' : ''))
-  return d.toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })
-}
-
-function normalizeSubtaskDto(raw: TaskSubtaskDto): TaskSubtaskDto {
-  const w = raw.weight as string | number | undefined
-  return {
-    ...raw,
-    weight: typeof w === 'string' ? w : String(w ?? '1'),
-  }
-}
-
-/** Misma lógica que el agregado ponderado del backend (`computeWeightedProgressPercent`). */
-function weightedProgressPercentFromSubtasks(list: TaskSubtaskDto[]): number {
-  let sumW = 0
-  let sumDoneW = 0
-  for (const s of list) {
-    const raw = Number(s.weight)
-    const w = Number.isFinite(raw) && raw > 0 ? raw : 1
-    sumW += w
-    if (s.done) sumDoneW += w
-  }
-  if (sumW <= 0) return 0
-  return Math.min(100, Math.max(0, Math.round((sumDoneW / sumW) * 100)))
-}
-
-/** Tras mutar subtareas en el modal: barra de progreso + contadores en la grilla sin esperar `GET /summary`. */
-function patchGanttParentFromSubtasks(
-  parentId: number,
-  list: TaskSubtaskDto[],
-  setTasks: Dispatch<SetStateAction<TaskRow[]>>,
-  setKpis: Dispatch<SetStateAction<Kpis | null>>,
-): void {
-  const pct = weightedProgressPercentFromSubtasks(list)
-  const doneN = list.reduce((n, s) => n + (s.done ? 1 : 0), 0)
-  const totalN = list.length
-  setTasks((pt) => {
-    const nt = pt.map((t) =>
-      t.id === parentId
-        ? { ...t, progressPercent: pct, subtaskDone: doneN, subtaskTotal: totalN }
-        : t,
-    )
-    const avg = nt.reduce((sum, t) => sum + (t.progressPercent ?? 0), 0) / Math.max(1, nt.length)
-    setKpis((k) => (k ? { ...k, progresoPromedioPct: Math.round(avg * 10) / 10 } : k))
-    return nt
-  })
-}
-
-/** Fecha local `yyyy-mm-dd` para `min` en `<input type="date">` y validación. */
-function todayYmdLocal(): string {
-  const d = new Date()
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
-/**
- * Id de área/equipo del usuario para precargar tareas privadas (perfil vs lista Gantt).
- */
-function resolveUserDefaultAreaId(user: User | null | undefined, areas: AreaFull[]): string {
-  if (!user || areas.length === 0) return ''
-  if (user.areaId != null) {
-    const sid = String(user.areaId)
-    if (areas.some((a) => String(a.id) === sid)) return sid
-  }
-  const matchLabel = (label: string | null | undefined): string => {
-    const raw = (label || '').trim()
-    if (!raw) return ''
-    const parts = raw.split(',').map((p) => p.trim()).filter(Boolean)
-    for (const part of parts) {
-      const pl = part.toLowerCase()
-      const hit = areas.find((a) => (a.name || '').trim().toLowerCase() === pl)
-      if (hit) return String(hit.id)
-    }
-    return ''
-  }
-  const fromPrincipal = matchLabel(user.nombreArea)
-  if (fromPrincipal) return fromPrincipal
-  const fromSupervisor = matchLabel(user.nombreAreaSupervisor)
-  if (fromSupervisor) return fromSupervisor
-  if (areas.length === 1) return String(areas[0].id)
-  return ''
-}
-
-const FORM_SUBTASK_CHECKBOX_CLASS =
-  'h-3.5 w-3.5 shrink-0 rounded-[3px] border-2 border-primary-500 text-primary-600 accent-primary-600 focus:ring-2 focus:ring-primary-500/35 focus:ring-offset-0 disabled:opacity-50'
-
-/** Foco: borde primary al enfocar. */
-const TASK_MODAL_FOCUS =
-  'focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 focus:border-primary-500 dark:focus:border-primary-400 focus-visible:border-primary-500 dark:focus-visible:border-primary-400'
-
-/** Bloqueo de acciones de subtareas en el modal: alta vs. edición (checkbox, título, borrar). */
-type SubtaskModalBusy = 'idle' | 'adding' | 'updating'
-
-const DETAIL_STATUS_PILL: Record<
-  AreaTaskStatus,
-  { Icon: typeof Circle; label: string; cls: string }
-> = {
-  PENDING: { Icon: Circle, label: STATUS_LABEL.PENDING, cls: 'bg-muted/80 text-muted-foreground border-border' },
-  IN_PROGRESS: { Icon: CircleDot, label: STATUS_LABEL.IN_PROGRESS, cls: 'bg-warning/10 text-warning border-warning/20' },
-  DONE: { Icon: CheckCircle2, label: STATUS_LABEL.DONE, cls: 'bg-emerald-50 text-emerald-800 border-emerald-200/80 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/60' },
-  BLOCKED: { Icon: Octagon, label: STATUS_LABEL.BLOCKED, cls: 'bg-red-50 text-red-800 border-red-200/80 dark:bg-red-950/40 dark:text-red-300 dark:border-red-800/60' },
-}
-
-/** Meta bajo el título del detalle: misma altura en todas las pastillas. */
-const DETAIL_TITLE_META_PILL =
-  'inline-flex items-center justify-center gap-1.5 h-7 px-2.5 rounded-md border text-[11px] font-medium leading-none shrink-0'
-
-/**
- * Todas las pestañas: admin/jefe, supervisores (rol o área) y supervisor lead.
- * El resto solo Timeline y Board.
- */
-function ganttHasFullTabAccess(u: User | null | undefined): boolean {
-  if (!u) return false
-  const r = (u.role || '').toUpperCase().trim()
-  const roleNorm = r.replace(/[\s-]+/g, '_')
-  if (r === 'ADMIN' || r === 'SUPERADMIN') return true
-  if (r === 'SUPERVISOR' || roleNorm === 'SUPERVISOR_LEAD') return true
-  if (u.esJefe === true) return true
-  if (u.esSupervisor === true) return true
-  return false
-}
-
-/** Eliminar sprints en API: solo ADMIN / SUPERADMIN. */
-function ganttIsPlatformAdmin(u: User | null | undefined): boolean {
-  if (!u) return false
-  const r = (u.role || '').toUpperCase().trim()
-  return r === 'ADMIN' || r === 'SUPERADMIN'
-}
+import {
+  DETAIL_STATUS_PILL,
+  DETAIL_TITLE_META_PILL,
+  FORM_SUBTASK_CHECKBOX_CLASS,
+  TASK_MODAL_FOCUS,
+  formatDetailModalDate,
+  ganttHasFullTabAccess,
+  ganttIsPlatformAdmin,
+  normalizeSubtaskDto,
+  patchGanttParentFromSubtasks,
+  resolveUserDefaultAreaId,
+  type SubtaskModalBusy,
+  todayYmdLocal,
+} from './lib'
 
 export function YegoGanttModule() {
   const user = useAuthStore((s) => s.user)
@@ -341,6 +213,9 @@ export function YegoGanttModule() {
   const [subtaskDrivenProgress, setSubtaskDrivenProgress] = useState(false)
   const [taskDetailOpen, setTaskDetailOpen] = useState(false)
   const [detailTaskId, setDetailTaskId] = useState<number | null>(null)
+  /** Subtareas del modal de solo lectura (detalle desde board, etc.). */
+  const [detailModalSubtasks, setDetailModalSubtasks] = useState<TaskSubtaskDto[]>([])
+  const [detailModalSubtasksLoading, setDetailModalSubtasksLoading] = useState(false)
   /** Tras cambiar el filtro de espacio para abrir una tarea: esperar a que `load()` traiga la lista nueva. */
   const pendingOpenTaskIdRef = useRef<number | null>(null)
   const pendingSawWorkspaceSwitchingRef = useRef(false)
@@ -973,6 +848,28 @@ export function YegoGanttModule() {
     }
   }, [tasks, taskDetailOpen, detailTaskId])
 
+  useEffect(() => {
+    if (!taskDetailOpen || detailTaskId == null) {
+      setDetailModalSubtasks([])
+      setDetailModalSubtasksLoading(false)
+      return
+    }
+    const ac = new AbortController()
+    setDetailModalSubtasksLoading(true)
+    void fetchTaskSubtasks(detailTaskId, { signal: ac.signal })
+      .then((rows) => {
+        setDetailModalSubtasks(Array.isArray(rows) ? rows : [])
+      })
+      .catch((e: unknown) => {
+        if (axios.isCancel(e)) return
+        setDetailModalSubtasks([])
+      })
+      .finally(() => {
+        if (!ac.signal.aborted) setDetailModalSubtasksLoading(false)
+      })
+    return () => ac.abort()
+  }, [taskDetailOpen, detailTaskId])
+
   const deleteArea = (areaId: number) => {
     const areaInfo = areas.find((a) => a.id === areaId)
     setAreaToDelete({ id: areaId, name: areaInfo?.name || `Área ${areaId}` })
@@ -1580,10 +1477,12 @@ export function YegoGanttModule() {
             }
           }}
         >
-          <DialogContent className="max-w-xl w-[calc(100vw-1.5rem)] max-h-[min(90vh,880px)] overflow-y-auto gap-0 sm:rounded-xl p-6">
+          <DialogContent className="max-w-5xl w-[calc(100vw-1.5rem)] max-h-[min(92vh,940px)] overflow-hidden gap-0 sm:rounded-xl p-6 flex flex-col">
             {detailLiveTask ? (
               <>
-                <DialogHeader className="text-left space-y-0 pr-10">
+                <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0 mt-0">
+                  <div className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
+                <DialogHeader className="text-left space-y-0 pr-10 shrink-0">
                   <DialogTitle className="text-xl font-bold tracking-tight leading-snug">{detailLiveTask.title}</DialogTitle>
                   <div className="flex items-center gap-2 flex-wrap pt-1 text-foreground text-sm">
                     {(() => {
@@ -1664,7 +1563,7 @@ export function YegoGanttModule() {
                   </div>
                 </DialogHeader>
 
-                <div className="space-y-4 mt-2">
+                <div className="space-y-4 mt-2 flex-1 overflow-y-auto min-h-0 pr-1">
                   <div>
                     <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">
                       Descripción
@@ -1699,6 +1598,61 @@ export function YegoGanttModule() {
                       />
                     </div>
                   </div>
+
+                  {(detailModalSubtasksLoading ||
+                    detailModalSubtasks.length > 0 ||
+                    (detailLiveTask.subtaskTotal ?? 0) > 0) && (
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2 inline-flex items-center gap-1.5">
+                        <KanbanSquare className="h-3 w-3 shrink-0 opacity-80" aria-hidden />
+                        Subtareas
+                        {!detailModalSubtasksLoading && detailModalSubtasks.length > 0 ? (
+                          <span className="tabular-nums font-normal normal-case text-[11px] text-muted-foreground/90">
+                            ({detailModalSubtasks.filter((s) => s.done).length}/{detailModalSubtasks.length})
+                          </span>
+                        ) : null}
+                      </div>
+                      {detailModalSubtasksLoading ? (
+                        <div
+                          className="flex items-center gap-2 text-xs text-muted-foreground py-2 px-0.5 rounded-lg border border-border/60 bg-muted/20"
+                          role="status"
+                          aria-live="polite"
+                        >
+                          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary-600" aria-hidden />
+                          <span>Cargando subtareas…</span>
+                        </div>
+                      ) : detailModalSubtasks.length > 0 ? (
+                        <ul className="space-y-1.5 max-h-[min(40vh,240px)] overflow-y-auto pr-0.5">
+                          {detailModalSubtasks.map((st) => (
+                            <li
+                              key={st.id}
+                              className="flex items-start gap-2 rounded-lg border border-border/80 bg-card/80 dark:bg-card/50 px-2.5 py-2 text-sm"
+                            >
+                              <span className="shrink-0 mt-0.5" title={st.done ? 'Hecha' : 'Pendiente'}>
+                                {st.done ? (
+                                  <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-500" aria-hidden />
+                                ) : (
+                                  <Circle className="h-4 w-4 text-muted-foreground/70" aria-hidden />
+                                )}
+                              </span>
+                              <span
+                                className={cn(
+                                  'min-w-0 flex-1 leading-snug',
+                                  st.done && 'text-muted-foreground line-through decoration-muted-foreground/60',
+                                )}
+                              >
+                                {st.title?.trim() || `Subtarea #${st.id}`}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-xs text-muted-foreground italic px-0.5">
+                          No hay ítems de subtarea en esta tarea (el progreso puede venir de datos anteriores).
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-3 gap-3 text-xs rounded-lg border border-border/80 bg-muted/30 p-3 dark:bg-muted/20">
                     <div>
@@ -1827,8 +1781,20 @@ export function YegoGanttModule() {
                   })()}
 
                 </div>
+                  </div>
 
-                <div className="flex items-center justify-end gap-2 pt-4 mt-2 border-t border-border/60">
+                  <div className="shrink-0 w-full lg:w-[min(22rem,36vw)] lg:min-w-[260px] flex flex-col border-t lg:border-t-0 lg:border-l border-border/60 pt-4 lg:pt-0 lg:pl-4 lg:max-h-full min-h-[220px] lg:min-h-[min(68vh,620px)]">
+                    <WorkosTaskChatPanel
+                      key={detailLiveTask.id}
+                      taskId={detailLiveTask.id}
+                      currentUserId={user?.id ?? null}
+                      subtasks={detailModalSubtasks}
+                      subtasksLoading={detailModalSubtasksLoading}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-4 mt-4 border-t border-border/60 shrink-0">
                   {manage && (
                     <>
                       <Button

@@ -29,8 +29,11 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
+    /** Si es false no se muestra la X (ej. durante operaciones que deben impedir cerrar). */
+    closable?: boolean
+  }
+>(({ className, children, closable = true, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
@@ -42,10 +45,12 @@ const DialogContent = React.forwardRef<
       {...props}
     >
       {children}
-      <DialogPrimitive.Close className="absolute right-3 top-3 sm:right-4 sm:top-4 flex items-center justify-center min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 sm:p-0 rounded-lg sm:rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none disabled:pointer-events-none data-[state=open]:bg-neutral-100 dark:data-[state=open]:bg-neutral-700 data-[state=open]:text-neutral-500 touch-manipulation">
-        <X className="h-5 w-5 sm:h-4 sm:w-4" />
-        <span className="sr-only">Cerrar</span>
-      </DialogPrimitive.Close>
+      {closable ? (
+        <DialogPrimitive.Close className="absolute right-3 top-3 sm:right-4 sm:top-4 flex items-center justify-center min-h-11 min-w-11 sm:min-h-0 sm:min-w-0 sm:p-0 rounded-lg sm:rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none disabled:pointer-events-none data-[state=open]:bg-neutral-100 dark:data-[state=open]:bg-neutral-700 data-[state=open]:text-neutral-500 touch-manipulation">
+          <X className="h-5 w-5 sm:h-4 sm:w-4" />
+          <span className="sr-only">Cerrar</span>
+        </DialogPrimitive.Close>
+      ) : null}
     </DialogPrimitive.Content>
   </DialogPortal>
 ))

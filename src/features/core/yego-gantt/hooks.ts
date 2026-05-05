@@ -4,167 +4,7 @@
 
 import { useCallback, useMemo, useRef, useState } from 'react'
 import type { DragEvent } from 'react'
-import { api } from '../../../services/core/api'
-import type { TaskRow, SprintDto, SprintStatus, AreaTaskStatus } from './types'
-import { normPriority, taskPoints, sprintCapacityPts, differenceInCalendarDays } from './utils'
-import { fetchSprintsByWorkspaces } from './ganttApi'
-
-// ==================== HOOKS DE SPRINTS ====================
-
-export interface SprintMetrics {
-  mtasks: TaskRow[]
-  totalTasks: number
-  doneTasks: number
-  inProgress: number
-  blocked: number
-  risk: number
-  totalPts: number
-  donePts: number
-  capacityPts: number
-  completion: number
-  totalDays: number
-  elapsed: number
-  remaining: number
-  burndown: { day: string; ideal: number; real: number | null }[]
-}
-
-/**
- * Calcula métricas de un sprint
- */
-export function useSprintMetrics(sprint: SprintDto, tasks: TaskRow[]): SprintMetrics {
-  return useMemo(() => {
-    const mtasks = tasks.filter((t) => t.sprintId === sprint.id)
-    const totalTasks = mtasks.length
-    const doneTasks = mtasks.filter((t) => t.status === 'DONE').length
-    const inProgress = mtasks.filter((t) => t.status === 'IN_PROGRESS').length
-    const blocked = mtasks.filter((t) => t.status === 'BLOCKED').length
-    const risk = 0
-    const totalPts = mtasks.reduce((a, t) => a + taskPoints(t.priority), 0)
-    const donePts = mtasks
-      .filter((t) => t.status === 'DONE')
-      .reduce((a, t) => a + taskPoints(t.priority), 0)
-
-    const start = new Date(sprint.startDate + 'T12:00:00')
-    const end = new Date(sprint.endDate + 'T12:00:00')
-    const now = new Date()
-    const totalDays = Math.max(1, differenceInCalendarDays(end, start) + 1)
-    const elapsedRaw = differenceInCalendarDays(now, start) + 1
-    const elapsed = Math.max(0, Math.min(totalDays, elapsedRaw))
-    const remaining = Math.max(0, differenceInCalendarDays(end, now))
-    const completion = totalPts ? Math.round((donePts / totalPts) * 100) : 0
-    const capacityPts = sprintCapacityPts(totalDays)
-
-    const burndown = Array.from({ length: totalDays + 1 }, (_, i) => {
-      const day = new Date(start)
-      day.setDate(day.getDate() + i)
-      const ideal = Math.max(0, Math.round(totalPts - (totalPts / totalDays) * i))
-      let real: number | null = null
-      if (i <= elapsed) {
-        real = Math.max(0, totalPts - Math.round((donePts * i) / Math.max(1, elapsed)))
-      }
-      return {
-        day: day.toLocaleDateString('es', { day: 'numeric', month: 'short' }),
-        ideal,
-        real,
-      }
-    })
-
-    return {
-      mtasks,
-      totalTasks,
-      doneTasks,
-      inProgress,
-      blocked,
-      risk,
-      totalPts,
-      donePts,
-      capacityPts,
-      completion,
-      totalDays,
-      elapsed,
-      remaining,
-      burndown,
-    }
-  }, [sprint, tasks])
-}
-
-/**
- * Hook para operaciones de sprints
- */
-export function useSprintOperations(onReload: () => void) {
-  const [sprints, setSprints] = useState<Record<number, SprintDto[]>>({})
-  const [sprintsLoading, setSprintsLoading] = useState(false)
-  const sprintsQuietRef = useRef(false)
-  const sprintsLoadLockRef = useRef<Promise<void> | null>(null)
-
-  const loadSprints = useCallback(
-    async (workspaces: { id: number }[]) => {
-      if (sprintsLoadLockRef.current) {
-        await sprintsLoadLockRef.current
-        return
-      }
-
-      const run = (async () => {
-        if (workspaces.length === 0) {
-          setSprints({})
-          sprintsQuietRef.current = false
-          return
-        }
-
-        const quiet = sprintsQuietRef.current
-        if (!quiet) setSprintsLoading(true)
-
-        try {
-          const map = await fetchSprintsByWorkspaces(workspaces)
-
-          setSprints(map)
-          sprintsQuietRef.current = true
-        } finally {
-          if (!quiet) setSprintsLoading(false)
-          sprintsLoadLockRef.current = null
-        }
-      })()
-
-      sprintsLoadLockRef.current = run
-      await run
-    },
-    []
-  )
-
-  const moveTaskToSprint = useCallback(
-    async (taskId: number, sprintId: number) => {
-      try {
-        await api.put(`/yego-gantt/tasks/${taskId}`, { sprintId })
-        await onReload()
-      } catch {
-        /* ignore */
-      }
-    },
-    [onReload]
-  )
-
-  const setSprintStatus = useCallback(
-    async (sprint: SprintDto, status: SprintStatus) => {
-      try {
-        await api.put(`/yego-gantt/sprints/${sprint.id}`, { status })
-        onReload()
-      } catch {
-        /* ignore */
-      }
-    },
-    [onReload]
-  )
-
-  return {
-    sprints,
-    sprintsLoading,
-    loadSprints,
-    moveTaskToSprint,
-    setSprintStatus,
-  }
-}
-
-// ==================== HOOKS DE TAREAS ====================
+import type { AreaTaskStatus, TaskRow } from './types'
 
 export interface UseTaskStatsResult {
   total: number
@@ -211,60 +51,6 @@ export function useTaskStats(tasks: TaskRow[]): UseTaskStatsResult {
     }
   }, [tasks])
 }
-
-/**
- * Calcula métricas de carga por miembro
- */
-export function useMemberLoad(
-  tasks: TaskRow[],
-  names: Map<number, string> | undefined
-): { id: number; label: string; pts: number; done: number }[] {
-  return useMemo(() => {
-    const map = new Map<number, { pts: number; done: number }>()
-
-    for (const t of tasks) {
-      const ids = t.assignedUserIds?.length
-        ? t.assignedUserIds
-        : t.assignedUserId != null
-          ? [t.assignedUserId]
-          : []
-      const w = taskPoints(t.priority)
-
-      for (const id of ids) {
-        const cur = map.get(id) ?? { pts: 0, done: 0 }
-        cur.pts += w
-        if (t.status === 'DONE') cur.done += w
-        map.set(id, cur)
-      }
-    }
-
-    return Array.from(map.entries())
-      .map(([id, v]) => ({
-        id,
-        label: names?.get(id) ?? `#${id}`,
-        ...v,
-      }))
-      .sort((a, b) => b.pts - a.pts)
-  }, [tasks, names])
-}
-
-// ==================== HOOKS DE FILTROS ====================
-
-export function useTaskFiltering(tasks: TaskRow[], options: { areaFilter?: string; prioFilter?: string }) {
-  return useMemo(() => {
-    return tasks.filter((t) => {
-      if (options.areaFilter && options.areaFilter !== 'all' && String(t.areaId) !== options.areaFilter) {
-        return false
-      }
-      if (options.prioFilter && options.prioFilter !== 'all' && normPriority(t.priority) !== options.prioFilter) {
-        return false
-      }
-      return true
-    })
-  }, [tasks, options.areaFilter, options.prioFilter])
-}
-
-// ==================== HOOKS DE DRAG & DROP ====================
 
 export function useDragAndDrop<T extends string | number>(onDrop?: (id: T, target: string) => void | Promise<void>) {
   const [dragId, setDragId] = useState<T | null>(null)
@@ -407,8 +193,6 @@ export function useKanbanDrag() {
   }
 }
 
-// ==================== HOOKS DE EXPANSION ====================
-
 export function useExpansion<T extends number | string>(initial?: Iterable<T>) {
   const [expanded, setExpanded] = useState<Set<T>>(new Set(initial))
 
@@ -448,42 +232,6 @@ export function useExpansion<T extends number | string>(initial?: Iterable<T>) {
     reset,
   }
 }
-
-// ==================== HOOKS DE FORMULARIOS ====================
-
-interface FormErrors {
-  [key: string]: string
-}
-
-export function useFormErrors() {
-  const [errors, setErrors] = useState<FormErrors>({})
-
-  const clearError = useCallback((field: string) => {
-    setErrors((prev) => {
-      const next = { ...prev }
-      delete next[field]
-      return next
-    })
-  }, [])
-
-  const clearAll = useCallback(() => {
-    setErrors({})
-  }, [])
-
-  const setError = useCallback((field: string, message: string) => {
-    setErrors((prev) => ({ ...prev, [field]: message }))
-  }, [])
-
-  return {
-    errors,
-    setErrors,
-    clearError,
-    clearAll,
-    setError,
-  }
-}
-
-// ==================== HOOKS DE DIÁLOGOS ====================
 
 export function useDialog<T = void>(options?: { onClose?: () => void }) {
   const [isOpen, setIsOpen] = useState(false)

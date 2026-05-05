@@ -41,7 +41,6 @@ export const yegoGanttPaths = {
 
 export const areasPaths = {
   findAllActive: '/areas/find-all-active',
-  collaborators: (areaId: number) => `/areas/${areaId}/colaboradores`,
   /** Un solo GET con ?ids= &ids=… (lista repetida; compatible con Spring MVC). */
   collaboratorsByAreas: '/areas/colaboradores-por-areas',
 } as const
@@ -233,8 +232,10 @@ export interface TaskSubtaskDto {
   weight: string
 }
 
-export async function fetchTaskSubtasks(taskId: number): Promise<TaskSubtaskDto[]> {
-  const res = await api.get<TaskSubtaskDto[]>(`/yego-gantt/tasks/${taskId}/subtasks`)
+export async function fetchTaskSubtasks(taskId: number, opts?: { signal?: AbortSignal }): Promise<TaskSubtaskDto[]> {
+  const res = await api.get<TaskSubtaskDto[]>(`/yego-gantt/tasks/${taskId}/subtasks`, {
+    signal: opts?.signal,
+  })
   return res.data
 }
 
@@ -275,7 +276,7 @@ export function parseGanttLoadError(e: unknown): string {
 
 // --- Actas de reunión (meeting minutes) ---
 
-export interface SpringPage<T> {
+interface SpringPage<T> {
   content: T[]
   totalElements: number
   totalPages: number
@@ -293,7 +294,7 @@ export type CreateMeetingMinutePayload = {
   status?: MeetingMinuteStatus
 }
 
-export type UpdateMeetingMinutePayload = Partial<CreateMeetingMinutePayload>
+type UpdateMeetingMinutePayload = Partial<CreateMeetingMinutePayload>
 
 export type CreateMeetingMinuteItemPayload = {
   itemOrder?: number | null
@@ -332,7 +333,7 @@ export type ConvertMeetingItemPayload = {
   tags?: string[] | null
 }
 
-export interface MeetingMinutesListParams {
+interface MeetingMinutesListParams {
   status?: MeetingMinuteStatus
   meetingType?: MeetingMinuteType
   dateFrom?: string
