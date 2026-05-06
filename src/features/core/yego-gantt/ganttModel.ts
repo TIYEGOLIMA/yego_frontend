@@ -89,6 +89,8 @@ export function taskRowToGanttItem(
       sourceId: t.id,
       areaId: t.areaId,
       workspaceLabel: workspaceLabel ?? undefined,
+      subtaskDone: t.subtaskDone,
+      subtaskTotal: t.subtaskTotal,
     }
   }
   let startDay = differenceInCalendarDays(startOfDay(s), startOfDay(range.anchor))
@@ -115,6 +117,8 @@ export function taskRowToGanttItem(
     sourceId: t.id,
     areaId: t.areaId,
     workspaceLabel: workspaceLabel ?? undefined,
+    subtaskDone: t.subtaskDone,
+    subtaskTotal: t.subtaskTotal,
   }
 }
 

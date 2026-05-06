@@ -1,4 +1,4 @@
-import { Loader2, MessageSquareText, SendHorizontal, Trash2 } from 'lucide-react'
+import { Loader2, MessageSquareText, SendHorizontal, Sparkles, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -43,7 +43,9 @@ function ThreadPicker({
 
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Hilo</span>
+      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+        Chat sobre
+      </span>
       <Select value={threadKey} disabled={loadingSubtasks} onValueChange={onChange}>
         <SelectTrigger className="h-9 text-xs">
           <SelectValue placeholder="Elegir hilo" />
@@ -74,6 +76,40 @@ function ChatBubbleRow({
   trashDisabled: boolean
   onRequestDelete: (msg: WorkosTaskMessageDto) => void
 }) {
+  /** Feed compacto tipo Bitrix: fila corta + barra lateral, sin tarjeta ámbar. */
+  if (m.messageType === 'SYSTEM' || m.messageType === 'RESOLUTION') {
+    const isRes = m.messageType === 'RESOLUTION'
+    return (
+      <li className="flex flex-col gap-0">
+        <div
+          className={cn(
+            'relative max-w-[98%] flex gap-2 rounded-md border-l-[3px] py-1.5 pl-2.5 pr-2 leading-snug',
+            'border border-border/50 bg-muted/35 text-foreground/90 shadow-none',
+            'dark:border-border/55 dark:bg-muted/25',
+            isRes
+              ? 'border-l-emerald-600/85 dark:border-l-emerald-500/80'
+              : 'border-l-blue-600/85 dark:border-l-blue-500/80',
+          )}
+          title={`${messageSenderLabel(m.authorName, m.messageType)} · ${formatChatWhen(m.createdAt)}`}
+        >
+          <Sparkles
+            className={cn(
+              'h-3.5 w-3.5 shrink-0 mt-0.5 opacity-90',
+              isRes
+                ? 'text-emerald-600 dark:text-emerald-400'
+                : 'text-blue-600 dark:text-blue-400',
+            )}
+            aria-hidden
+          />
+          <div className="min-w-0 flex-1 text-[11.5px] tracking-tight">{m.content}</div>
+          <time className="shrink-0 self-start text-[10px] tabular-nums text-muted-foreground pt-px whitespace-nowrap">
+            {formatChatWhen(m.createdAt)}
+          </time>
+        </div>
+      </li>
+    )
+  }
+
   return (
     <li className={cn('flex flex-col gap-0.5', isMine && 'items-end')}>
       <div
@@ -118,7 +154,7 @@ export function WorkosTaskChatPanel({
     <div className="flex min-h-0 flex-1 flex-col gap-2">
       <div className="flex items-center gap-2 text-sm font-semibold text-neutral-800 dark:text-neutral-100">
         <MessageSquareText className="h-4 w-4 shrink-0 text-primary-600 dark:text-primary-400" aria-hidden />
-        Conversación
+        Chat de la tarea
       </div>
 
       <ThreadPicker
@@ -136,7 +172,7 @@ export function WorkosTaskChatPanel({
 
       <div
         className={cn(
-          'min-h-[140px] flex-1 overflow-y-auto rounded-lg border border-neutral-200/90 bg-neutral-50/60 p-2 dark:border-neutral-700 dark:bg-neutral-950/40',
+          'min-h-[140px] flex-1 overflow-y-auto rounded-lg border border-neutral-200/90 bg-neutral-50/60 p-1.5 sm:p-2 dark:border-neutral-700 dark:bg-neutral-950/40',
           chat.loadingMessages && 'flex items-center justify-center',
         )}
       >
@@ -145,7 +181,7 @@ export function WorkosTaskChatPanel({
         ) : chat.messages.length === 0 ? (
           <p className="px-2 py-6 text-center text-xs text-neutral-500 dark:text-neutral-400">{chat.emptyLabel}</p>
         ) : (
-          <ul className="flex flex-col gap-2">
+          <ul className="flex flex-col gap-1.5">
             {chat.messages.map((m) => {
               const isMine =
                 m.messageType === 'USER' && currentUserId != null && m.authorUserId === currentUserId

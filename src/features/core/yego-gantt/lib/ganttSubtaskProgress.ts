@@ -1,13 +1,29 @@
 import type { Dispatch, SetStateAction } from 'react'
-import type { TaskSubtaskDto } from '../ganttApi'
-import type { Kpis, TaskRow } from '../types'
+import type { Kpis, TaskRow, TaskSubtaskDto } from '../types'
+import { updateTaskSubtask } from '../ganttApi'
 
 export function normalizeSubtaskDto(raw: TaskSubtaskDto): TaskSubtaskDto {
   const w = raw.weight as string | number | undefined
   return {
     ...raw,
     weight: typeof w === 'string' ? w : String(w ?? '1'),
+    assignedUserId: raw.assignedUserId ?? null,
+    dueDate: raw.dueDate ?? null,
+    createdByUserId: raw.createdByUserId ?? null,
   }
+}
+
+export function normalizeSubtaskDtoList(rows: unknown): TaskSubtaskDto[] {
+  if (!Array.isArray(rows)) return []
+  return rows.map((row) => normalizeSubtaskDto(row as TaskSubtaskDto))
+}
+
+export async function updateTaskSubtaskNormalized(
+  taskId: number,
+  subtaskId: number,
+  body: Parameters<typeof updateTaskSubtask>[2],
+): Promise<TaskSubtaskDto> {
+  return normalizeSubtaskDto(await updateTaskSubtask(taskId, subtaskId, body))
 }
 
 /** Misma lógica que el agregado ponderado del backend (`computeWeightedProgressPercent`). */

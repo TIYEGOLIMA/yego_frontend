@@ -1,7 +1,27 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Clock, Crown, Edit3, FileText, Flag, Route, Trash2, User, X } from 'lucide-react'
+import {
+  Clock,
+  CornerDownRight,
+  Crown,
+  Calendar,
+  Edit3,
+  FileText,
+  Flag,
+  ListChecks,
+  Loader2,
+  Route,
+  Trash2,
+  User,
+  X,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { WorkosTabLoading } from '../WorkosLoading'
+import { SubtaskDoneToggle } from '../SubtaskFormFields'
+import type { TaskSubtaskDto } from '../../types'
+import { canUserToggleSubtaskDone } from '../../lib/ganttSubtaskPermissions'
+import { updateTaskSubtaskNormalized } from '../../lib/ganttSubtaskProgress'
+import { useTaskSubtasks } from '../../hooks/useTaskSubtasks'
+import { useTimelineTasksSubtasks } from '../../hooks/useTimelineTasksSubtasks'
 import {
   DAY_WIDTH,
   timelineTaskBarColor,
@@ -20,7 +40,13 @@ import {
   type GanttTeamItem,
   type TaskRowLike,
 } from '../../ganttModel'
-import { computeDurationDays, avatarInitials } from '../../utils'
+import {
+  computeDurationDays,
+  avatarInitials,
+  differenceInCalendarDays,
+  parseYmd,
+  startOfDay,
+} from '../../utils'
 import type { ColaboradorDto, GanttTimelineTabProps } from '../../types'
 
 const LEFT_COL = 288
@@ -132,6 +158,9 @@ function GanttBar({
 }) {
   const left = task.startDay * dayWidth
   const width = task.duration * dayWidth - 4
+  const barW = Math.max(width, 24)
+  const stTotal = task.subtaskTotal ?? 0
+  const stDone = task.subtaskDone ?? 0
 
   const fill = timelineTaskBarColor(task.progress, task.status)
 
@@ -154,7 +183,7 @@ function GanttBar({
       } ${criticalRing} ${selectionRing}`}
       style={{
         left,
-        width: Math.max(width, 24),
+        width: barW,
         height: 28,
         top: yOffset ?? '50%',
         transform: yOffset == null ? 'translateY(-50%)' : undefined,
@@ -167,6 +196,7 @@ function GanttBar({
         task.name,
         task.principalUserId != null ? '· Responsable principal' : '',
         task.workspaceLabel ? `· ${task.workspaceLabel}` : '',
+        stTotal > 0 ? `· Subtareas ${stDone}/${stTotal}` : '',
       ]
         .filter(Boolean)
         .join(' ')}
@@ -181,11 +211,86 @@ function GanttBar({
           <span className="font-normal opacity-85"> · {task.workspaceLabel}</span>
         ) : null}
       </span>
+      {stTotal > 0 && (
+        <span
+          className={`relative shrink-0 tabular-nums font-bold bg-black/35 text-white/95 ${
+            barW >= 48 ? 'mr-1 inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[9px]' : 'rounded px-0.5 py-px text-[8px]'
+          }`}
+          title={`${stDone} de ${stTotal} subtareas`}
+        >
+          {barW >= 48 ? <ListChecks className="h-2.5 w-2.5 shrink-0 opacity-90" aria-hidden /> : null}
+          {stDone}/{stTotal}
+        </span>
+      )}
       {task.progress > 0 && width > 72 && (
         <span className="relative ml-auto text-[10px] tabular-nums font-bold bg-black/25 rounded px-1 py-0.5 shrink-0">
           {task.progress}%
         </span>
       )}
+    </button>
+  )
+}
+
+const TIMELINE_LANE_H = 34
+
+function subtaskTimelineSpan(
+  parent: GanttTaskItem,
+  dueDate: string | null | undefined,
+  anchor: Date,
+  totalDays: number,
+): { startDay: number; duration: number } {
+  const d = dueDate ? parseYmd(dueDate) : null
+  if (d) {
+    let dayIdx = differenceInCalendarDays(startOfDay(d), startOfDay(anchor))
+    if (dayIdx < 0) dayIdx = 0
+    if (dayIdx >= totalDays) dayIdx = totalDays - 1
+    return { startDay: dayIdx, duration: 1 }
+  }
+  return { startDay: parent.startDay, duration: Math.max(1, parent.duration) }
+}
+
+function SubtaskGanttBar({
+  parent,
+  sub,
+  anchor,
+  totalDays,
+  laneIdx,
+  dayWidth,
+  onOpenParent,
+}: {
+  parent: GanttTaskItem
+  sub: TaskSubtaskDto
+  anchor: Date
+  totalDays: number
+  laneIdx: number
+  dayWidth: number
+  onOpenParent: (t: GanttTaskItem) => void
+}) {
+  const { startDay, duration } = subtaskTimelineSpan(parent, sub.dueDate, anchor, totalDays)
+  const left = startDay * dayWidth
+  const width = Math.max(duration * dayWidth - 4, 20)
+  const base = timelineTaskBarColor(parent.progress, parent.status)
+  const fade = sub.done ? 'opacity-45' : 'opacity-80'
+  const top = laneIdx * TIMELINE_LANE_H + 6
+
+  return (
+    <button
+      type="button"
+      title={`${sub.title?.trim() || 'Subtarea'} · Tarea: ${parent.name}`}
+      className={`absolute z-[9] flex items-center px-1.5 overflow-hidden rounded-md border border-dashed border-white/40 text-left cursor-pointer shadow-sm transition-all duration-150 hover:opacity-100 hover:z-[19] hover:ring-2 hover:ring-primary-500/35 ${fade}`}
+      style={{
+        left,
+        width,
+        height: 22,
+        top,
+        backgroundColor: base,
+        color: '#fff',
+      }}
+      onClick={() => onOpenParent(parent)}
+    >
+      <span className="relative min-w-0 flex-1 truncate text-[10px] font-medium drop-shadow-sm leading-tight">
+        {sub.title?.trim() || `Sub #${sub.id}`}
+      </span>
     </button>
   )
 }
@@ -212,6 +317,10 @@ function timelineDayCellClass(
   return `${base} bg-white dark:bg-transparent`
 }
 
+type TimelineLane =
+  | { kind: 'parent'; task: GanttTaskItem; laneIdx: number }
+  | { kind: 'sub'; parent: GanttTaskItem; parentRow: TaskRowLike; sub: TaskSubtaskDto; laneIdx: number }
+
 function TeamRowWithGrid({
   team,
   totalDays,
@@ -225,6 +334,11 @@ function TeamRowWithGrid({
   dayWidth,
   selectedSourceId,
   selectedPrincipalUserId,
+  tasksBySourceId,
+  subtasksByParentId,
+  manage,
+  currentUserId,
+  onParentSubtasksSynced,
 }: {
   team: GanttTeamItem
   totalDays: number
@@ -238,7 +352,34 @@ function TeamRowWithGrid({
   dayWidth: number
   selectedSourceId: number | null
   selectedPrincipalUserId: number | null | undefined
+  tasksBySourceId: Map<number, TaskRowLike>
+  subtasksByParentId: Map<number, TaskSubtaskDto[]>
+  manage: boolean
+  currentUserId: number | null | undefined
+  onParentSubtasksSynced?: (parentId: number, nextList: TaskSubtaskDto[]) => void
 }) {
+  const [subBusyId, setSubBusyId] = useState<number | null>(null)
+
+  const lanes = useMemo(() => {
+    const out: TimelineLane[] = []
+    let laneIdx = 0
+    for (const task of team.tasks) {
+      out.push({ kind: 'parent', task, laneIdx })
+      laneIdx++
+      const subs = subtasksByParentId.get(task.sourceId)
+      const parentRow = tasksBySourceId.get(task.sourceId)
+      if (!subs?.length || !parentRow) continue
+      for (const sub of subs) {
+        out.push({ kind: 'sub', parent: task, parentRow, sub, laneIdx })
+        laneIdx++
+      }
+    }
+    return out
+  }, [team.tasks, subtasksByParentId, tasksBySourceId])
+
+  const laneCount = lanes.length > 0 ? lanes.length : team.tasks.length
+  const taskLaneMinHeight = Math.max(48, laneCount * TIMELINE_LANE_H + 8)
+
   const perDayLoad = useMemo(() => computePerDayTaskLoad(team.tasks, totalDays), [team.tasks, totalDays])
   const maxOverlap = useMemo(() => perDayLoad.reduce((a, b) => Math.max(a, b), 0), [perDayLoad])
 
@@ -259,17 +400,6 @@ function TeamRowWithGrid({
   const tw = totalDays * dayWidth
   const lead = collaborators[0] || null
   const hasCollabs = collaborators.length > 0
-  const taskLaneMinHeight = Math.max(48, team.tasks.length * 34 + 8)
-
-  const taskLanes = useMemo(
-    () =>
-      team.tasks.map((task, idx) => ({
-        task,
-        idx,
-        laneSel: rowSelectionForTask(task, selectedSourceId, selectedPrincipalUserId),
-      })),
-    [team.tasks, selectedSourceId, selectedPrincipalUserId],
-  )
 
   return (
     <div
@@ -290,7 +420,6 @@ function TeamRowWithGrid({
             {team.name}
           </span>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            {/* Avatar circles del equipo, en fila separados por coma */}
             {hasCollabs && (
               <div className="flex flex-wrap items-center mr-1 shrink-0 max-w-full gap-x-0">
                 {collaborators.slice(0, 4).map((c, ci) => (
@@ -320,7 +449,6 @@ function TeamRowWithGrid({
                 )}
               </div>
             )}
-            {/* Progress bar */}
             <div className="w-12 h-1.5 rounded-full bg-muted overflow-hidden">
               <div
                 className={`h-full rounded-full ${
@@ -331,39 +459,40 @@ function TeamRowWithGrid({
             </div>
             <span className="text-[10px] tabular-nums text-muted-foreground">{team.capacity}%</span>
           </div>
-          {/* Responsables por tarea en una sola fila, separados por coma (orden = filas del Gantt). */}
           <div
-            className="flex flex-wrap items-center justify-start content-start w-full shrink-0 pt-1 text-[11px] text-muted-foreground/75 leading-none"
+            className="flex flex-col gap-0 w-full shrink-0 pt-1 text-[11px] text-muted-foreground/75 leading-tight"
             style={{ minHeight: taskLaneMinHeight }}
           >
-            {taskLanes.map(({ task, laneSel }, ti) => {
-              const principal =
-                task.principalUserId != null
-                  ? collaborators.find((c) => c.id === task.principalUserId)
-                  : undefined
-              const principalName =
-                principal?.nombreCompleto ??
-                (task.principalUserId != null
-                  ? collaboratorNames?.get(task.principalUserId) ?? `Usuario #${task.principalUserId}`
-                  : '')
+            {lanes.map((lane) => {
+              const laneSel =
+                lane.kind === 'parent'
+                  ? rowSelectionForTask(lane.task, selectedSourceId, selectedPrincipalUserId)
+                  : rowSelectionForTask(lane.parent, selectedSourceId, selectedPrincipalUserId)
               const laneBg = selectionLaneTint(laneSel)
-              return (
-                <React.Fragment key={task.id}>
-                  {ti > 0 ? (
-                    <span className="shrink-0 px-0.5 select-none" aria-hidden>
-                      
-                    </span>
-                  ) : null}
-                  <span
-                    className={`inline-flex items-center rounded-md ${laneBg}`}
-                    title={task.name}
+
+              if (lane.kind === 'parent') {
+                const task = lane.task
+                const principal =
+                  task.principalUserId != null ? collaborators.find((c) => c.id === task.principalUserId) : undefined
+                const principalName =
+                  principal?.nombreCompleto ??
+                  (task.principalUserId != null
+                    ? collaboratorNames?.get(task.principalUserId) ?? `Usuario #${task.principalUserId}`
+                    : '')
+                const stHint =
+                  (task.subtaskTotal ?? 0) > 0 ? ` · Subtareas ${task.subtaskDone ?? 0}/${task.subtaskTotal}` : ''
+                return (
+                  <div
+                    key={`p-${task.id}`}
+                    className={`flex items-center shrink-0 h-[34px] rounded-md px-0.5 -mx-0.5 ${laneBg}`}
+                    title={`${task.name}${stHint}`}
                   >
                     {task.principalUserId != null ? (
                       <button
                         type="button"
                         onClick={() => onTaskClick(task)}
                         className="relative shrink-0 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-                        title={`${task.name} · Responsable principal · ${principalName}`}
+                        title={`${task.name} · Responsable principal · ${principalName}${stHint}`}
                       >
                         <div className="flex h-6 w-6 items-center justify-center rounded-full border border-border/60 bg-muted text-[9px] font-bold text-muted-foreground">
                           {avatarInitials(principalName)}
@@ -378,12 +507,78 @@ function TeamRowWithGrid({
                         type="button"
                         onClick={() => onTaskClick(task)}
                         className="h-6 w-6 shrink-0 rounded-full border border-dashed border-muted-foreground/20 bg-muted/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-                        title={`${task.name} · Sin responsable asignado`}
+                        title={`${task.name} · Sin responsable asignado${stHint}`}
                         aria-label={`Seleccionar tarea ${task.name}`}
                       />
                     )}
-                  </span>
-                </React.Fragment>
+                    <span className="ml-2 min-w-0 flex-1 truncate text-[11px] font-medium text-foreground/90 dark:text-foreground/95">
+                      {task.name}
+                    </span>
+                  </div>
+                )
+              }
+
+              const { parent, parentRow, sub } = lane
+              const canToggle = canUserToggleSubtaskDone(parentRow, sub, currentUserId, manage)
+              const rn = subtaskResponsibleLabel(sub.assignedUserId, collaboratorNames)
+              return (
+                <div
+                  key={`s-${parent.sourceId}-${sub.id}`}
+                  className={`flex items-center gap-1.5 shrink-0 h-[34px] rounded-md pl-0.5 pr-0.5 -mx-0.5 ${laneBg}`}
+                >
+                  <CornerDownRight className="w-3.5 h-3.5 shrink-0 text-muted-foreground/60" aria-hidden />
+                  <div className="shrink-0" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+                    <SubtaskDoneToggle
+                      done={sub.done}
+                      canToggle={canToggle}
+                      disabled={subBusyId === sub.id}
+                      checkboxClassName="mt-0"
+                      onCommitted={async (next) => {
+                        setSubBusyId(sub.id)
+                        try {
+                          const updated = await updateTaskSubtaskNormalized(parent.sourceId, sub.id, { done: next })
+                          const prev = subtasksByParentId.get(parent.sourceId) ?? []
+                          const nextList = prev.map((x) => (x.id === sub.id ? updated : x))
+                          onParentSubtasksSynced?.(parent.sourceId, nextList)
+                        } catch {
+                          /* mismo criterio que panel lateral */
+                        } finally {
+                          setSubBusyId(null)
+                        }
+                      }}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onTaskClick(parent)}
+                    className="min-w-0 flex-1 text-left"
+                    title={`${sub.title?.trim() || `Subtarea #${sub.id}`} · Tarea maestra: ${parent.name}`}
+                  >
+                    <span
+                      className={`block truncate text-[11px] font-medium ${
+                        sub.done ? 'text-muted-foreground line-through decoration-muted-foreground/45' : 'text-foreground'
+                      }`}
+                    >
+                      {sub.title?.trim() || `Subtarea #${sub.id}`}
+                    </span>
+                    {(rn || sub.dueDate) && (
+                      <span className="flex flex-wrap gap-x-2 gap-y-px text-[9px] text-muted-foreground/90 mt-px">
+                        {rn ? (
+                          <span className="inline-flex items-center gap-0.5 min-w-0">
+                            <User className="h-2.5 w-2.5 shrink-0 opacity-80" aria-hidden />
+                            <span className="truncate">{rn}</span>
+                          </span>
+                        ) : null}
+                        {sub.dueDate ? (
+                          <span className="inline-flex items-center gap-0.5 tabular-nums shrink-0">
+                            <Calendar className="h-2.5 w-2.5 opacity-80" aria-hidden />
+                            {formatShortDate(sub.dueDate)}
+                          </span>
+                        ) : null}
+                      </span>
+                    )}
+                  </button>
+                </div>
               )
             })}
           </div>
@@ -405,32 +600,63 @@ function TeamRowWithGrid({
             ))}
           </div>
           <div className="relative" style={{ minHeight: taskLaneMinHeight }}>
-            {taskLanes.map(({ task, idx, laneSel }) => (
-              <React.Fragment key={task.id}>
-                {laneSel ? (
-                  <div
-                    className={`absolute left-0 right-0 z-[1] rounded-md pointer-events-none ${selectionLaneTint(laneSel)}`}
-                    style={{ top: idx * 34 + 4, height: 28 }}
-                    aria-hidden
+            {lanes.map((lane) => {
+              const laneSel =
+                lane.kind === 'parent'
+                  ? rowSelectionForTask(lane.task, selectedSourceId, selectedPrincipalUserId)
+                  : rowSelectionForTask(lane.parent, selectedSourceId, selectedPrincipalUserId)
+              if (lane.kind === 'parent') {
+                const task = lane.task
+                const idx = lane.laneIdx
+                return (
+                  <React.Fragment key={`g-p-${task.id}`}>
+                    {laneSel ? (
+                      <div
+                        className={`absolute left-0 right-0 z-[1] rounded-md pointer-events-none ${selectionLaneTint(laneSel)}`}
+                        style={{ top: idx * TIMELINE_LANE_H + 4, height: 28 }}
+                        aria-hidden
+                      />
+                    ) : null}
+                    <GanttBar
+                      task={task}
+                      onClick={onTaskClick}
+                      dimmed={showCriticalPath && criticalIds !== null && !criticalIds.has(task.id)}
+                      highlightCritical={showCriticalPath && (criticalIds?.has(task.id) ?? false)}
+                      selectionEmphasis={laneSel}
+                      yOffset={idx * TIMELINE_LANE_H + 4}
+                      barIndex={idx}
+                      dayWidth={dayWidth}
+                    />
+                  </React.Fragment>
+                )
+              }
+              const { parent, sub } = lane
+              const idx = lane.laneIdx
+              return (
+                <React.Fragment key={`g-s-${parent.sourceId}-${sub.id}`}>
+                  {laneSel ? (
+                    <div
+                      className={`absolute left-0 right-0 z-[1] rounded-md pointer-events-none ${selectionLaneTint(laneSel)}`}
+                      style={{ top: idx * TIMELINE_LANE_H + 4, height: 24 }}
+                      aria-hidden
+                    />
+                  ) : null}
+                  <SubtaskGanttBar
+                    parent={parent}
+                    sub={sub}
+                    anchor={anchor}
+                    totalDays={totalDays}
+                    laneIdx={idx}
+                    dayWidth={dayWidth}
+                    onOpenParent={onTaskClick}
                   />
-                ) : null}
-                <GanttBar
-                  task={task}
-                  onClick={onTaskClick}
-                  dimmed={showCriticalPath && criticalIds !== null && !criticalIds.has(task.id)}
-                  highlightCritical={showCriticalPath && (criticalIds?.has(task.id) ?? false)}
-                  selectionEmphasis={laneSel}
-                  yOffset={idx * 34 + 4}
-                  barIndex={idx}
-                  dayWidth={dayWidth}
-                />
-              </React.Fragment>
-            ))}
+                </React.Fragment>
+              )
+            })}
           </div>
         </div>
       </div>
 
-      {/* Lead member row */}
       {lead && (
         <div className="flex">
           <div
@@ -541,6 +767,156 @@ function formatShortDate(iso: string): string {
   return `${day} ${months[d.getMonth()]}`
 }
 
+function subtaskResponsibleLabel(
+  userId: number | null | undefined,
+  collaboratorNames?: Map<number, string>,
+): string | null {
+  if (userId == null) return null
+  return collaboratorNames?.get(userId) ?? `#${userId}`
+}
+
+function TimelineDetailSubtasksSection({
+  parentTask,
+  loading,
+  items,
+  setItems,
+  manage,
+  currentUserId,
+  summaryDone,
+  summaryTotal,
+  collaboratorNames,
+  onParentSubtasksSynced,
+}: {
+  parentTask: TaskRowLike
+  loading: boolean
+  items: TaskSubtaskDto[]
+  setItems: React.Dispatch<React.SetStateAction<TaskSubtaskDto[]>>
+  manage: boolean
+  currentUserId: number | null | undefined
+  summaryDone: number
+  summaryTotal: number
+  collaboratorNames?: Map<number, string>
+  onParentSubtasksSynced?: (parentId: number, nextList: TaskSubtaskDto[]) => void
+}) {
+  const [busyId, setBusyId] = useState<number | null>(null)
+
+  if (!loading && items.length === 0 && summaryTotal <= 0) return null
+
+  const doneInList = items.reduce((n, s) => n + (s.done ? 1 : 0), 0)
+  const listPct = items.length > 0 ? Math.round((100 * doneInList) / items.length) : null
+
+  const subtitle =
+    !loading && items.length > 0 ? (
+      <div className="text-[10px] text-muted-foreground">
+        {doneInList} de {items.length} completadas
+      </div>
+    ) : !loading && summaryTotal > 0 ? (
+      <div className="text-[10px] text-muted-foreground tabular-nums">
+        {summaryDone}/{summaryTotal} · resumen
+      </div>
+    ) : null
+
+  return (
+    <div className="rounded-lg border border-border/60 bg-muted/15 overflow-hidden dark:border-border/50">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-border/50 bg-muted/25 dark:bg-muted/15">
+        <div
+          className="h-7 w-7 shrink-0 rounded-md bg-primary/12 text-primary flex items-center justify-center border border-primary/15 dark:bg-primary/15"
+          aria-hidden
+        >
+          <ListChecks className="h-3.5 w-3.5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-xs font-semibold text-foreground">Subtareas</div>
+          {subtitle}
+        </div>
+        {listPct != null ? (
+          <span className="shrink-0 text-[10px] font-semibold tabular-nums rounded-full bg-primary/12 text-primary px-2 py-0.5 border border-primary/15">
+            {listPct}%
+          </span>
+        ) : null}
+      </div>
+      <div className="p-2">
+        {loading ? (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground py-2 px-1" role="status">
+            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary-600" aria-hidden />
+            <span>Cargando subtareas…</span>
+          </div>
+        ) : items.length > 0 ? (
+          <ul className="space-y-0.5 max-h-[min(32vh,220px)] overflow-y-auto overscroll-contain">
+            {items.map((pst) => {
+              const rn = subtaskResponsibleLabel(pst.assignedUserId, collaboratorNames)
+              const canToggle = canUserToggleSubtaskDone(parentTask, pst, currentUserId, manage)
+              return (
+              <li
+                key={pst.id}
+                className="rounded-md px-2 py-1 text-[13px] leading-snug border border-transparent hover:border-border/40 hover:bg-muted/25"
+              >
+                <div className="flex items-start gap-2">
+                  <SubtaskDoneToggle
+                    done={pst.done}
+                    canToggle={canToggle}
+                    disabled={loading || busyId === pst.id}
+                    checkboxClassName="mt-px"
+                    onCommitted={async (next) => {
+                      setBusyId(pst.id)
+                      try {
+                        const updated = await updateTaskSubtaskNormalized(parentTask.id, pst.id, {
+                          done: next,
+                        })
+                        setItems((prev) => {
+                          const nextList = prev.map((x) => (x.id === pst.id ? updated : x))
+                          onParentSubtasksSynced?.(parentTask.id, nextList)
+                          return nextList
+                        })
+                      } catch {
+                        /* sidebar: sin mensaje modal */
+                      } finally {
+                        setBusyId(null)
+                      }
+                    }}
+                  />
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <span
+                      className={`block ${
+                        pst.done
+                          ? 'text-muted-foreground line-through decoration-muted-foreground/45'
+                          : 'text-foreground'
+                      }`}
+                    >
+                      {pst.title?.trim() || `Subtarea #${pst.id}`}
+                    </span>
+                    {(rn || pst.dueDate) ? (
+                      <div className="flex flex-wrap gap-x-2 gap-y-px text-[10px] text-muted-foreground">
+                        {rn ? (
+                          <span className="inline-flex items-center gap-0.5 min-w-0">
+                            <User className="h-3 w-3 shrink-0 opacity-80" aria-hidden />
+                            <span className="truncate">{rn}</span>
+                          </span>
+                        ) : null}
+                        {pst.dueDate ? (
+                          <span className="inline-flex items-center gap-0.5 tabular-nums shrink-0">
+                            <Calendar className="h-3 w-3 opacity-80" aria-hidden />
+                            {formatShortDate(pst.dueDate)}
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </li>
+              )
+            })}
+          </ul>
+        ) : (
+          <p className="text-[11px] text-muted-foreground py-1 px-1 leading-snug">
+            Sin subtareas. Gestión en <strong className="font-medium text-foreground/85">Editar</strong>.
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function TaskDetailPanel({
   task,
   ganttTask,
@@ -548,9 +924,11 @@ function TaskDetailPanel({
   onEdit,
   onDelete,
   manage,
+  currentUserId,
   collaborators,
   collaboratorNames,
   collaboratorAreaLabels,
+  onParentSubtasksSynced,
 }: {
   task: TaskRowLike | null
   ganttTask: GanttTaskItem | null
@@ -558,10 +936,16 @@ function TaskDetailPanel({
   onEdit: (t: TaskRowLike) => void
   onDelete: (t: TaskRowLike) => void
   manage: boolean
+  currentUserId?: number | null
   collaborators: ColaboradorDto[]
   collaboratorNames?: Map<number, string>
   collaboratorAreaLabels?: Map<number, string>
+  onParentSubtasksSynced?: (parentId: number, nextList: TaskSubtaskDto[]) => void
 }) {
+  const { items: subtasks, loading: subtasksLoading, setItems: setSubtasks } = useTaskSubtasks(
+    task?.id ?? null,
+  )
+
   if (!task || !ganttTask) return null
 
   const st = STATUS_UI[ganttTask.status] || STATUS_UI['on-track']
@@ -642,6 +1026,19 @@ function TaskDetailPanel({
             {task.description?.trim() ? task.description : <span className="italic text-muted-foreground">Sin descripción</span>}
           </p>
         </div>
+
+        <TimelineDetailSubtasksSection
+          parentTask={task}
+          loading={subtasksLoading}
+          items={subtasks}
+          setItems={setSubtasks}
+          manage={manage}
+          currentUserId={currentUserId}
+          summaryDone={task.subtaskDone ?? 0}
+          summaryTotal={task.subtaskTotal ?? 0}
+          collaboratorNames={collaboratorNames}
+          onParentSubtasksSynced={onParentSubtasksSynced}
+        />
 
         {/* Assigned */}
         <div className="space-y-2">
@@ -764,6 +1161,8 @@ export function GanttTimelineTab({
   collaboratorAreaLabels,
   mySpaceShowProjectNames = false,
   workspaceNameById,
+  currentUserId = null,
+  onParentSubtasksSynced,
 }: GanttTimelineTabProps) {
   const [selectedSourceId, setSelectedSourceId] = useState<number | null>(null)
   const [selectedGantt, setSelectedGantt] = useState<GanttTaskItem | null>(null)
@@ -773,6 +1172,7 @@ export function GanttTimelineTab({
 
   const baseRange = useMemo(() => buildTimelineRange(tasks), [tasks])
   const range = useMemo(() => shiftTimelineRange(baseRange, timelinePanDays), [baseRange, timelinePanDays])
+  const { subtasksByParentId, setSubtasksByParentId } = useTimelineTasksSubtasks(tasks)
   const teamsAll = useMemo(
     () =>
       buildTeamsFromTasks(tasks, range, {
@@ -792,14 +1192,31 @@ export function GanttTimelineTab({
   const availableForTimeline = viewportW - LEFT_COL
   const dayWidth = Math.max(DAY_WIDTH, Math.floor(availableForTimeline / totalDays))
   const totalWidth = LEFT_COL + totalDays * dayWidth
-  const rowApproxHeight = 73
-  const todayLineHeight = Math.max(120, filteredTeams.length * rowApproxHeight)
+  const todayLineHeight = useMemo(() => {
+    let h = 48
+    for (const tm of filteredTeams) {
+      let lc = tm.tasks.length
+      for (const gt of tm.tasks) {
+        lc += subtasksByParentId.get(gt.sourceId)?.length ?? 0
+      }
+      h += Math.max(72, lc * TIMELINE_LANE_H + 52)
+    }
+    return Math.max(160, h)
+  }, [filteredTeams, subtasksByParentId])
 
   const taskById = useMemo(() => {
     const m = new Map<number, TaskRowLike>()
     for (const t of tasks) m.set(t.id, t)
     return m
   }, [tasks])
+
+  const handleSubtasksSyncedFromUi = useCallback(
+    (parentId: number, nextList: TaskSubtaskDto[]) => {
+      setSubtasksByParentId((prev) => new Map(prev).set(parentId, nextList))
+      onParentSubtasksSynced?.(parentId, nextList)
+    },
+    [onParentSubtasksSynced, setSubtasksByParentId],
+  )
 
   const selectedTask = selectedSourceId != null ? taskById.get(selectedSourceId) ?? null : null
 
@@ -885,6 +1302,11 @@ export function GanttTimelineTab({
                       dayWidth={dayWidth}
                       selectedSourceId={selectedSourceId}
                       selectedPrincipalUserId={selectedGantt?.principalUserId}
+                      tasksBySourceId={taskById}
+                      subtasksByParentId={subtasksByParentId}
+                      manage={manage}
+                      currentUserId={currentUserId}
+                      onParentSubtasksSynced={handleSubtasksSyncedFromUi}
                     />
                   ))}
                 </div>
@@ -909,9 +1331,11 @@ export function GanttTimelineTab({
             onEdit={onEditTask}
             onDelete={onDeleteTask}
             manage={manage}
+            currentUserId={currentUserId}
             collaborators={selectedTask ? (collaboratorsForArea?.(selectedTask.areaId) ?? []) : []}
             collaboratorNames={collaboratorNames}
             collaboratorAreaLabels={collaboratorAreaLabels}
+            onParentSubtasksSynced={handleSubtasksSyncedFromUi}
           />
         </div>
       )}

@@ -7,6 +7,12 @@ export type SubtaskModalBusy = 'idle' | 'adding' | 'updating'
 export const FORM_SUBTASK_CHECKBOX_CLASS =
   'h-3.5 w-3.5 shrink-0 rounded-[3px] border-2 border-primary-500 text-primary-600 accent-primary-600 focus:ring-2 focus:ring-primary-500/35 focus:ring-offset-0 disabled:opacity-50'
 
+export const SUBTASK_FORM_SELECT_CLASS =
+  'h-7 flex-1 min-w-[9rem] max-w-[14rem] text-[11px] rounded border border-neutral-200 dark:border-border bg-white dark:bg-card px-1.5'
+
+export const SUBTASK_FORM_DATE_CLASS =
+  'h-7 text-[11px] rounded border border-neutral-200 dark:border-border bg-white dark:bg-card px-1 min-w-0 w-[10rem]'
+
 /** Foco: borde primary al enfocar. */
 export const TASK_MODAL_FOCUS =
   'focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 focus:border-primary-500 dark:focus:border-primary-400 focus-visible:border-primary-500 dark:focus-visible:border-primary-400'

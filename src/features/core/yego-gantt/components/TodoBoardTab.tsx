@@ -280,17 +280,20 @@ export function TodoBoardTab({
                             </span>
                           </div>
                         )}
-                        <div className="mt-2 font-medium text-sm text-foreground leading-tight">{t.title}</div>
+                        <div className="mt-2 flex items-start justify-between gap-2">
+                          <span className="min-w-0 flex-1 font-medium text-sm text-foreground leading-tight">{t.title}</span>
+                          {(t.subtaskTotal ?? 0) > 0 && (
+                            <span
+                              className="inline-flex shrink-0 items-center gap-0.5 rounded-md border border-border/70 bg-muted/45 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground"
+                              title="Subtareas"
+                            >
+                              <ListChecks className="h-3 w-3 shrink-0 opacity-80" aria-hidden />
+                              {(t.subtaskDone ?? 0)}/{(t.subtaskTotal ?? 0)}
+                            </span>
+                          )}
+                        </div>
                         {t.description && (
                           <div className="mt-0.5 text-xs text-muted-foreground line-clamp-2">{t.description}</div>
-                        )}
-                        {(t.subtaskTotal ?? 0) > 0 && (
-                          <div className="mt-2 inline-flex items-center gap-1 rounded-full border border-border/70 bg-muted/40 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                            <ListChecks className="h-3 w-3 shrink-0 opacity-80" aria-hidden />
-                            <span className="tabular-nums">
-                              {(t.subtaskDone ?? 0)}/{(t.subtaskTotal ?? 0)} subtareas
-                            </span>
-                          </div>
                         )}
                         <div className="mt-3 space-y-1.5">
                           <div className="flex items-center justify-between gap-2">

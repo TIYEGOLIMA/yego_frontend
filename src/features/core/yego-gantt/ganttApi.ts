@@ -17,10 +17,13 @@ import type {
   SprintDto,
   TaskPriority,
   TaskRow,
+  TaskSubtaskDto,
   WorkspaceDto,
   WorkosMeetingItemStatus,
   WorkosMeetingItemType,
 } from './types'
+
+export type { TaskSubtaskDto }
 
 /** Prefijos de API usados solo por este módulo. */
 export const yegoGanttPaths = {
@@ -223,15 +226,6 @@ export async function fetchSprintsByWorkspaces(
   return map
 }
 
-export interface TaskSubtaskDto {
-  id: number
-  parentTaskId: number
-  title: string
-  sortOrder: number
-  done: boolean
-  weight: string
-}
-
 export async function fetchTaskSubtasks(taskId: number, opts?: { signal?: AbortSignal }): Promise<TaskSubtaskDto[]> {
   const res = await api.get<TaskSubtaskDto[]>(`/yego-gantt/tasks/${taskId}/subtasks`, {
     signal: opts?.signal,
@@ -241,20 +235,39 @@ export async function fetchTaskSubtasks(taskId: number, opts?: { signal?: AbortS
 
 export async function createTaskSubtask(
   taskId: number,
-  body: { title: string; weight: number; done?: boolean },
+  body: {
+    title: string
+    weight: number
+    done?: boolean
+    assignedUserId?: number | null
+    dueDate?: string | null
+  },
 ): Promise<TaskSubtaskDto> {
-  const res = await api.post(`/yego-gantt/tasks/${taskId}/subtasks`, {
+  const payload: Record<string, unknown> = {
     title: body.title,
     weight: body.weight,
     done: body.done ?? false,
-  })
+  }
+  if (body.assignedUserId != null) payload.assignedUserId = body.assignedUserId
+  const d = body.dueDate?.trim()
+  if (d) payload.dueDate = d
+  const res = await api.post<TaskSubtaskDto>(`/yego-gantt/tasks/${taskId}/subtasks`, payload)
   return res.data
 }
 
 export async function updateTaskSubtask(
   taskId: number,
   subtaskId: number,
-  body: Partial<{ title: string; weight: number; done: boolean; sortOrder: number }>,
+  body: Partial<{
+    title: string
+    weight: number
+    done: boolean
+    sortOrder: number
+    assignedUserId: number
+    unassignUser: boolean
+    dueDate: string | null
+    clearDueDate: boolean
+  }>,
 ): Promise<TaskSubtaskDto> {
   const res = await api.put(`/yego-gantt/tasks/${taskId}/subtasks/${subtaskId}`, body)
   return res.data

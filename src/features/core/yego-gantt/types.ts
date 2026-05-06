@@ -92,6 +92,22 @@ export interface TaskRowLike {
   tags?: string[]
   privateTask?: boolean
   createdByUserId?: number | null
+  /** Agregados de subtareas cuando el origen los expone (p. ej. TaskRow desde API). */
+  subtaskDone?: number
+  subtaskTotal?: number
+}
+
+/** Subtarea (checklist); alineado con `/yego-gantt/tasks/:id/subtasks`. */
+export interface TaskSubtaskDto {
+  id: number
+  parentTaskId: number
+  title: string
+  sortOrder: number
+  done: boolean
+  weight: string
+  assignedUserId?: number | null
+  dueDate?: string | null
+  createdByUserId?: number | null
 }
 
 // ==================== TIPOS VISUALES DEL GANTT ====================
@@ -115,6 +131,8 @@ export interface GanttTaskItem {
   areaId: number
   /** Nombre del espacio de trabajo (vista «Mi espacio»). */
   workspaceLabel?: string | null
+  subtaskDone?: number
+  subtaskTotal?: number
 }
 
 export interface GanttTeamItem {
@@ -217,6 +235,10 @@ export interface GanttTimelineTabProps {
   /** Vista «Mi espacio»: nombre de proyecto en barras del timeline. */
   mySpaceShowProjectNames?: boolean
   workspaceNameById?: Map<number, string>
+  /** Usuario sesión (checkbox de subtareas sin ser gestor). */
+  currentUserId?: number | null
+  /** Tras togglear subtareas en panel lateral del timeline (sincronizar KPIs/grid). */
+  onParentSubtasksSynced?: (parentId: number, list: TaskSubtaskDto[]) => void
 }
 
 // ==================== OTRAS INTERFACES ====================
