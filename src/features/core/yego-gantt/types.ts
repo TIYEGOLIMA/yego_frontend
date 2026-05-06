@@ -146,8 +146,9 @@ export interface DashboardTabProps {
 export interface PortfolioTabProps {
   tasks: TaskRow[]
   loading: boolean
-  refreshing?: boolean
   manage: boolean
+  /** Crear/editar/borrar espacios de trabajo (proyectos Gantt): rol operativo exclusivo (no el jefe de área por sí solo). */
+  canManageWorkspaces: boolean
   areas: AreaFull[]
   workspaces: WorkspaceDto[]
   /** Nombres de usuarios en cualquier equipo cargado (asignación cruzada entre áreas). */

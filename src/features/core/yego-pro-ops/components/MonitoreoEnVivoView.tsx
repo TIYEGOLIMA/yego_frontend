@@ -17,6 +17,12 @@ const OBSERVER_THRESHOLD = 0.1
 const TIMELINE_HOURS = 48
 const HOURS_PER_DAY = 24
 
+/** Contenedor alineado con Detalle (yego-pro-ops): lectura clara en claro y oscuro */
+const CARD_SHELL =
+  'bg-white dark:bg-neutral-900/90 border border-gray-200 dark:border-neutral-700 shadow-sm rounded-lg'
+const PANEL_INNER =
+  'rounded-lg border border-gray-200 dark:border-neutral-700 bg-gray-50/90 dark:bg-neutral-950/50'
+
 type OrderInfo = { bookedAt: string; endedAt: string; status: string; hourIndex: number }
 type ViajePorFecha = {
   status: string
@@ -100,27 +106,31 @@ const getStatusInfo = (status: string | undefined) => {
   if (normalizedStatus === 'completed' || normalizedStatus === 'complete') {
     return {
       label: 'Completado',
-      className: 'bg-green-500/20 text-green-300 border border-green-500/30'
+      className:
+        'bg-green-100 text-green-800 border border-green-200 dark:bg-green-500/15 dark:text-green-300 dark:border-green-500/35',
     }
   }
   
   if (normalizedStatus === 'cancelled' || normalizedStatus === 'canceled') {
     return {
       label: 'Cancelado',
-      className: 'bg-red-500/20 text-red-300 border border-red-500/30'
+      className:
+        'bg-red-100 text-red-800 border border-red-200 dark:bg-red-500/15 dark:text-red-300 dark:border-red-500/35',
     }
   }
   
   if (normalizedStatus === 'in_progress' || normalizedStatus === 'in progress') {
     return {
       label: 'En curso',
-      className: 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+      className:
+        'bg-blue-100 text-blue-800 border border-blue-200 dark:bg-blue-500/15 dark:text-blue-300 dark:border-blue-500/35',
     }
   }
   
   return {
     label: status || 'Desconocido',
-    className: 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30'
+    className:
+      'bg-amber-100 text-amber-900 border border-amber-200 dark:bg-amber-500/15 dark:text-amber-200 dark:border-amber-500/35',
   }
 }
 
@@ -198,12 +208,12 @@ const processTimelineCompact = (trips: ViajePorFecha[]): boolean[] => {
 }
 
 const LoadingState = () => (
-  <Card className="h-full bg-[#1A1A1A]">
+  <Card className={cn('h-full', CARD_SHELL)}>
     <CardContent className="p-6">
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-gray-400 text-lg">Cargando conductores en orden...</p>
+          <div className="w-12 h-12 border-4 border-red-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-gray-600 dark:text-gray-400 text-lg">Cargando conductores en orden...</p>
         </div>
       </div>
     </CardContent>
@@ -211,19 +221,19 @@ const LoadingState = () => (
 )
 
 const EmptyState = ({ searchQuery, isConnected }: { searchQuery: string; isConnected: boolean }) => (
-  <Card className="h-full bg-[#1A1A1A]">
+  <Card className={cn('h-full', CARD_SHELL)}>
     <CardContent className="p-6">
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-700 flex items-center justify-center">
-            <Activity className="w-8 h-8 text-gray-400" />
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-neutral-800 flex items-center justify-center border border-gray-200 dark:border-neutral-700">
+            <Activity className="w-8 h-8 text-gray-500 dark:text-gray-400" />
           </div>
-          <p className="text-gray-400 text-lg">
+          <p className="text-gray-700 dark:text-gray-300 text-lg">
             {searchQuery ? 'No se encontraron conductores' : 'No hay conductores en orden'}
           </p>
           {!isConnected && !searchQuery && (
-            <p className="text-red-400 text-xs mt-4">
-              ⚠️ Sin conexión WebSocket. Los datos se actualizarán cada 30 segundos.
+            <p className="text-amber-700 dark:text-amber-400 text-sm mt-4 max-w-md mx-auto">
+              Sin conexión en tiempo real. Los datos pueden actualizarse con menos frecuencia.
             </p>
           )}
         </div>
@@ -238,15 +248,15 @@ const StatsCard = ({ icon: Icon, label, value, iconColor }: {
   value: string | number
   iconColor: string
 }) => (
-  <Card className="bg-[#2A2A2A] border-gray-700">
-    <CardContent className="p-4">
+  <Card className={CARD_SHELL}>
+    <CardContent className="p-4 sm:p-5">
       <div className="flex items-center gap-3">
-        <div className={cn("w-12 h-12 rounded-lg flex items-center justify-center", iconColor)}>
+        <div className={cn('w-12 h-12 rounded-lg flex items-center justify-center shrink-0', iconColor)}>
           <Icon className="w-6 h-6" />
         </div>
-        <div>
-          <p className="text-sm text-gray-400">{label}</p>
-          <p className="text-2xl font-bold text-white">{value}</p>
+        <div className="min-w-0">
+          <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">{label}</p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 tabular-nums truncate">{value}</p>
         </div>
       </div>
     </CardContent>
@@ -265,43 +275,43 @@ const ConductorCard = ({
   const currentHour = new Date().getHours()
 
   return (
-    <Card className="bg-[#2A2A2A] border-gray-700 hover:border-orange-500 transition-colors">
-      <CardContent className="p-3">
+    <Card className={cn(CARD_SHELL, 'hover:border-primary-500/40 dark:hover:border-primary-500/30 transition-colors')}>
+      <CardContent className="p-3 sm:p-4">
         {/* Header */}
-        <div className="flex items-start gap-2 mb-2">
-          <div className="relative">
+        <div className="flex items-start gap-3 mb-2">
+          <div className="relative shrink-0">
             {conductor.avatar_url ? (
               <img
                 src={conductor.avatar_url}
                 alt={`${conductor.first_name} ${conductor.last_name}`}
-                className="w-12 h-12 rounded-lg object-cover border-2 border-orange-500"
+                className="w-12 h-12 rounded-lg object-cover border-2 border-gray-200 dark:border-neutral-600"
               />
             ) : (
-              <div className="w-12 h-12 rounded-lg bg-gray-600 flex items-center justify-center border-2 border-orange-500">
-                <User className="w-6 h-6 text-gray-400" />
+              <div className="w-12 h-12 rounded-lg bg-gray-100 dark:bg-neutral-800 flex items-center justify-center border-2 border-gray-200 dark:border-neutral-600">
+                <User className="w-6 h-6 text-gray-500 dark:text-gray-400" />
               </div>
             )}
-            <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-orange-500 rounded-full border-2 border-[#2A2A2A] flex items-center justify-center">
+            <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-red-600 rounded-full border-2 border-white dark:border-neutral-900 flex items-center justify-center">
               <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
             </div>
           </div>
           
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2 mb-1">
-              <h3 className="text-white font-bold text-sm line-clamp-1 flex-1 pt-0.5">
+              <h3 className="text-gray-900 dark:text-gray-100 font-semibold text-sm line-clamp-1 flex-1 pt-0.5">
                 {conductor.first_name} {conductor.last_name}
               </h3>
               <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
                 {conductor.completed_trips_total_price !== undefined && (
-                  <div className="px-1.5 py-0 rounded-md bg-green-500/10 border border-green-500/30">
-                    <span className="text-[10px] font-semibold text-green-300 leading-tight">
+                  <div className="px-1.5 py-0.5 rounded-md bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800/50">
+                    <span className="text-[10px] font-semibold text-green-800 dark:text-green-300 leading-tight">
                       {formatBalance(conductor.completed_trips_total_price)}
                     </span>
                   </div>
                 )}
                 {conductor.completed_trips_count !== undefined && (
-                  <div className="px-1.5 py-0 rounded-md bg-orange-500/10 border border-orange-500/30">
-                    <span className="text-[10px] font-semibold text-orange-300 leading-tight">
+                  <div className="px-1.5 py-0.5 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50">
+                    <span className="text-[10px] font-semibold text-red-800 dark:text-red-300 leading-tight">
                       {conductor.completed_trips_count} viajes
                     </span>
                   </div>
@@ -312,7 +322,7 @@ const ConductorCard = ({
             {/* Badge de vehículo */}
             {conductor.vehicle_number && (
               <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                <Badge variant="outline" className="text-[10px] border-gray-500/50 text-gray-200 px-2 py-1 bg-gray-700/30">
+                <Badge variant="outline" className="text-[10px] border-gray-300 dark:border-neutral-600 text-gray-700 dark:text-gray-200 px-2 py-1 bg-gray-50 dark:bg-neutral-800/50">
                   <Car className="w-3 h-3 mr-1" />
                   {conductor.vehicle_number}
                 </Badge>
@@ -322,25 +332,25 @@ const ConductorCard = ({
             {/* Métricas */}
             <div className="flex items-center gap-1.5 flex-wrap">
               {conductor.summary_distance?.free !== undefined && conductor.summary_distance.free > 0 && (
-                <Badge variant="outline" className="text-[10px] border-yellow-500/40 text-yellow-300 px-2 py-1 bg-yellow-500/15">
+                <Badge variant="outline" className="text-[10px] border-amber-200 dark:border-amber-800/60 text-amber-900 dark:text-amber-200 px-2 py-1 bg-amber-50 dark:bg-amber-950/30">
                   <Navigation className="w-3 h-3 mr-1" />
                   {formatDistance(conductor.summary_distance.free)} km libre
                 </Badge>
               )}
               {conductor.summary_distance?.not_active !== undefined && conductor.summary_distance.not_active > 0 && (
-                <Badge variant="outline" className="text-[10px] border-gray-500/40 text-gray-300 px-2 py-1 bg-gray-500/15">
+                <Badge variant="outline" className="text-[10px] border-gray-300 dark:border-neutral-600 text-gray-700 dark:text-gray-300 px-2 py-1 bg-gray-50 dark:bg-neutral-800/50">
                   <Navigation className="w-3 h-3 mr-1" />
                   {formatDistance(conductor.summary_distance.not_active)} km inactivo
                 </Badge>
               )}
               {conductor.summary_distance?.active !== undefined && conductor.summary_distance.active > 0 && (
-                <Badge variant="outline" className="text-[10px] border-blue-500/40 text-blue-300 px-2 py-1 bg-blue-500/15">
+                <Badge variant="outline" className="text-[10px] border-blue-200 dark:border-blue-800/60 text-blue-900 dark:text-blue-300 px-2 py-1 bg-blue-50 dark:bg-blue-950/30">
                   <Navigation className="w-3 h-3 mr-1" />
                   {formatDistance(conductor.summary_distance.active)} km activo
                 </Badge>
               )}
               {conductor.total_activity_time !== undefined && conductor.total_activity_time !== null && (
-                <Badge variant="outline" className="text-[10px] border-purple-500/40 text-purple-300 px-2 py-1 bg-purple-500/15">
+                <Badge variant="outline" className="text-[10px] border-violet-200 dark:border-violet-800/60 text-violet-900 dark:text-violet-300 px-2 py-1 bg-violet-50 dark:bg-violet-950/30">
                   <Activity className="w-3 h-3 mr-1" />
                   {formatActivityTime(conductor.total_activity_time)}
                 </Badge>
@@ -350,13 +360,18 @@ const ConductorCard = ({
         </div>
 
         {/* Timeline compacto */}
-        <div className="mt-3 pt-3 border-t border-gray-700">
+        <div className="mt-3 pt-3 border-t border-gray-200 dark:border-neutral-700">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-gray-300">Hoy</span>
+            <span className="text-xs font-semibold text-gray-600 dark:text-gray-400">Actividad hoy (por hora)</span>
+            <span className="text-[10px] text-gray-500 dark:text-gray-500">Clic para 48 h</span>
           </div>
           <div 
             onClick={onOpenModal}
-            className="relative bg-gradient-to-br from-[#2A2A2A] to-[#1F1F1F] rounded-lg p-2 border border-gray-800/50 cursor-pointer hover:border-orange-500/50 transition-colors"
+            className={cn(
+              'relative rounded-lg p-2 cursor-pointer transition-colors',
+              PANEL_INNER,
+              'hover:border-primary-500/35 dark:hover:border-primary-500/25',
+            )}
           >
             <div className="flex justify-between mb-1 px-1">
               {Array.from({ length: 24 }, (_, hourIndex) => {
@@ -369,9 +384,9 @@ const ConductorCard = ({
                     className={cn(
                       'text-[10px] w-[calc(100%/24)] text-center transition-all',
                       isCurrentHour
-                        ? 'text-blue-400 font-bold'
+                        ? 'text-blue-600 dark:text-blue-400 font-bold'
                         : hour % 6 === 0
-                          ? 'text-gray-400 font-medium'
+                          ? 'text-gray-600 dark:text-gray-400 font-medium'
                           : 'text-transparent'
                     )}
                   >
@@ -395,13 +410,13 @@ const ConductorCard = ({
                     className={cn(
                       'flex-1 rounded-sm transition-all relative group',
                       hourIsActive
-                        ? 'bg-gradient-to-b from-green-500 to-green-600 hover:from-green-400 hover:to-green-500'
+                        ? 'bg-gradient-to-b from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 dark:from-green-600 dark:to-green-700'
                         : isPastHour
-                          ? 'bg-gray-700/60'
+                          ? 'bg-gray-200/90 dark:bg-neutral-700/70'
                           : isFutureHour
-                            ? 'bg-gray-800/40'
-                            : 'bg-gray-600/60',
-                      isCurrentHour && 'ring-1 ring-blue-400'
+                            ? 'bg-gray-100 dark:bg-neutral-800/50'
+                            : 'bg-gray-300/80 dark:bg-neutral-600/60',
+                      isCurrentHour && 'ring-1 ring-blue-500 dark:ring-blue-400'
                     )}
                     style={{ height: '24px' }}
                     title={`Hoy ${hour.toString().padStart(2, '0')}:00${hourIsActive ? ' - Con viajes' : ''}`}
@@ -438,8 +453,8 @@ const InfiniteScrollObserver = ({
   return (
     <div ref={observerRef} className="flex items-center justify-center py-6">
       {isFetchingNextPage ? (
-        <div className="flex items-center gap-2 text-gray-400">
-          <div className="w-5 h-5 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+        <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+          <div className="w-5 h-5 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
           <span className="text-sm">Cargando más conductores...</span>
         </div>
       ) : (
@@ -690,28 +705,30 @@ export function MonitoreoEnVivoView() {
     <div className="relative">
       <NotificationContainer notifications={notifications} onRemove={removeNotification} />
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <h2 className="text-2xl font-bold text-white">Monitoreo en Vivo</h2>
+        {/* Header secundario (coherente con pestaña Detalle; título principal está en el módulo) */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100">Monitoreo en vivo</h2>
             <Badge 
               variant="outline"
               className={cn(
-                "flex items-center gap-2",
-                isConnected ? "border-green-500 text-green-400" : "border-red-500 text-red-400"
+                'flex items-center gap-2 font-medium',
+                isConnected
+                  ? 'border-green-300 text-green-800 bg-green-50 dark:border-green-600 dark:text-green-400 dark:bg-green-950/30'
+                  : 'border-red-300 text-red-800 bg-red-50 dark:border-red-600 dark:text-red-400 dark:bg-red-950/30'
               )}
             >
               <div className={cn(
-                "w-2 h-2 rounded-full",
-                isConnected ? "bg-green-500 animate-pulse" : "bg-red-500"
+                'w-2 h-2 rounded-full shrink-0',
+                isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'
               )} />
-              {isConnected ? "En Vivo" : "Desconectado"}
+              {isConnected ? 'En vivo' : 'Desconectado'}
             </Badge>
           </div>
           {conductoresEnOrden?.timestamp && (
-            <div className="flex items-center gap-2 text-sm text-gray-400">
-              <Activity className="w-4 h-4" />
-              <span>Última actualización: {formatTimestamp(conductoresEnOrden.timestamp)}</span>
+            <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+              <Activity className="w-4 h-4 shrink-0" />
+              <span>Actualizado: {formatTimestamp(conductoresEnOrden.timestamp)}</span>
             </div>
           )}
         </div>
@@ -721,37 +738,39 @@ export function MonitoreoEnVivoView() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <StatsCard
               icon={Activity}
-              label="Conductores en Orden"
+              label="Conductores en orden"
               value={stats.total}
-              iconColor="bg-orange-500/20 text-orange-400"
+              iconColor="bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400"
             />
             <StatsCard
               icon={Car}
-              label="Cantidad de Viajes"
+              label="Viajes completados"
               value={stats.totalViajes}
-              iconColor="bg-blue-500/20 text-blue-400"
+              iconColor="bg-blue-100 text-blue-800 dark:bg-blue-500/15 dark:text-blue-400"
             />
             <StatsCard
               icon={DollarSign}
-              label="Plata Generada"
+              label="Efectivo viajes (total)"
               value={formatBalance(stats.totalPlata)}
-              iconColor="bg-green-500/20 text-green-400"
+              iconColor="bg-green-100 text-green-800 dark:bg-green-500/15 dark:text-green-400"
             />
           </div>
         )}
 
         {/* Búsqueda */}
-        <div className="flex items-center gap-4 flex-wrap justify-between">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 sm:justify-between">
           <Input
+            variant="plain"
             placeholder="Buscar por nombre, vehículo o ID..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            leftIcon={<Search className="w-4 h-4" />}
+            leftIcon={<Search className="w-4 h-4 text-gray-500" />}
             className="w-full max-w-md"
           />
           {conductoresEnOrden && (
-            <div className="text-sm text-gray-400">
-              Mostrando {conductoresFiltrados.length} de {conductoresEnOrden.total} conductores
+            <div className="text-sm text-gray-600 dark:text-gray-400 sm:text-right">
+              Mostrando <span className="font-semibold text-gray-900 dark:text-gray-100">{conductoresFiltrados.length}</span>
+              {' '}de {conductoresEnOrden.total} conductores
             </div>
           )}
         </div>
@@ -765,7 +784,7 @@ export function MonitoreoEnVivoView() {
           <EmptyState searchQuery={searchQuery} isConnected={isConnected} />
         ) : (
           <>
-            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
               {conductoresFiltrados.map((conductor) => (
                 <ConductorCard 
                   key={conductor.id} 
@@ -798,36 +817,44 @@ export function MonitoreoEnVivoView() {
               setHoveredHourIndex(null) // Limpiar hover al cerrar el modal
             }
           }}>
-            <DialogContent className="max-w-5xl max-h-[90vh] bg-[#1A1A1A] border-gray-700" style={{ overflow: 'visible' }}>
-              <DialogHeader>
-                <DialogTitle className="text-white flex items-center gap-3">
+            <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col gap-0 sm:p-6" style={{ overflow: 'visible' }}>
+              <DialogHeader className="pb-2 border-b border-gray-200 dark:border-neutral-700 shrink-0">
+                <DialogTitle className="text-gray-900 dark:text-gray-100 flex items-center gap-3 text-left">
                   {conductor.avatar_url ? (
                     <img
                       src={conductor.avatar_url}
                       alt={`${conductor.first_name} ${conductor.last_name}`}
-                      className="w-10 h-10 rounded-lg object-cover border-2 border-orange-500"
+                      className="w-11 h-11 rounded-lg object-cover border border-gray-200 dark:border-neutral-600 shrink-0"
                     />
                   ) : (
-                    <div className="w-10 h-10 rounded-lg bg-gray-600 flex items-center justify-center border-2 border-orange-500">
-                      <User className="w-5 h-5 text-gray-400" />
+                    <div className="w-11 h-11 rounded-lg bg-gray-100 dark:bg-neutral-800 flex items-center justify-center border border-gray-200 dark:border-neutral-600 shrink-0">
+                      <User className="w-5 h-5 text-gray-500 dark:text-gray-400" />
                     </div>
                   )}
-                  <div>
-                    <div className="text-lg font-bold">{conductor.first_name} {conductor.last_name}</div>
-                    <div className="text-sm text-gray-400">{conductor.vehicle_number || 'Sin vehículo'}</div>
+                  <div className="min-w-0">
+                    <div className="text-lg font-bold truncate">{conductor.first_name} {conductor.last_name}</div>
+                    <div className="text-sm text-gray-500 dark:text-gray-400 font-normal">
+                      {conductor.vehicle_number || 'Sin vehículo'}
+                    </div>
                   </div>
                 </DialogTitle>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 pl-0 sm:pl-14">
+                  Franja de 48 h: <span className="font-medium text-gray-700 dark:text-gray-300">{day1Label}</span>
+                  {' → '}
+                  <span className="font-medium text-gray-700 dark:text-gray-300">{day2Label}</span>
+                  . Verde = hora con viaje. Azul = hora actual.
+                </p>
               </DialogHeader>
 
-              <div className="mt-4">
-                <div className="relative overflow-visible bg-gradient-to-br from-[#2A2A2A] to-[#1F1F1F] rounded-lg p-4 border border-gray-800/50">
+              <div className="mt-3 overflow-y-auto flex-1 min-h-0 pr-1">
+                <div className={cn('relative overflow-visible p-3 sm:p-4', PANEL_INNER)}>
                   {/* Loading overlay solo para la parte de AYER (lado izquierdo) */}
                   {isLoadingViajesAyer && (
-                    <div className="absolute left-0 top-0 bottom-0 w-1/2 z-30 bg-black/60 rounded-l-lg flex items-center justify-center">
+                    <div className="absolute left-0 top-0 bottom-0 w-1/2 z-30 bg-white/85 dark:bg-neutral-950/70 rounded-l-lg flex items-center justify-center backdrop-blur-[1px]">
                       <div className="flex flex-col items-center gap-2">
-                        <div className="w-6 h-6 border-3 border-orange-500 border-t-transparent rounded-full animate-spin" />
-                        <p className="text-orange-400 text-xs font-medium">
-                          Cargando viajes del día anterior...
+                        <div className="w-6 h-6 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
+                        <p className="text-red-700 dark:text-red-400 text-xs font-medium text-center px-2">
+                          Cargando viajes del día anterior…
                         </p>
                       </div>
                     </div>
@@ -835,14 +862,14 @@ export function MonitoreoEnVivoView() {
                   
                   {/* Mensaje cuando no hay viajes de ayer */}
                   {!isLoadingViajesAyer && hasNoViajesAyer && (
-                    <div className="absolute left-0 top-0 bottom-0 w-1/2 z-30 bg-black/40 rounded-l-lg flex items-center justify-center">
-                      <p className="text-gray-400 text-sm font-medium">
-                        No hay viajes
+                    <div className="absolute left-0 top-0 bottom-0 w-1/2 z-30 bg-gray-100/90 dark:bg-neutral-950/50 rounded-l-lg flex items-center justify-center">
+                      <p className="text-gray-600 dark:text-gray-400 text-sm font-medium px-2 text-center">
+                        Sin viajes en {day1Label}
                       </p>
                     </div>
                   )}
                   
-                  <div className="absolute left-1/2 top-0 bottom-0 w-px z-10 bg-blue-500/30" />
+                  <div className="absolute left-1/2 top-0 bottom-0 w-px z-10 bg-blue-400/40 dark:bg-blue-500/30" aria-hidden />
                   
                   <div className="flex justify-between mb-2 px-1">
                     {Array.from({ length: TIMELINE_HOURS }, (_, hourIndex) => {
@@ -856,9 +883,9 @@ export function MonitoreoEnVivoView() {
                           className={cn(
                             'text-xs w-[calc(100%/48)] text-center transition-all',
                             isCurrentHour
-                              ? 'text-blue-400 font-bold text-sm'
+                              ? 'text-blue-600 dark:text-blue-400 font-bold'
                               : hour % 6 === 0
-                                ? 'text-gray-400 font-medium'
+                                ? 'text-gray-600 dark:text-gray-400 font-medium'
                                 : 'text-transparent'
                           )}
                         >
@@ -866,8 +893,8 @@ export function MonitoreoEnVivoView() {
                             <div className="flex flex-col items-center">
                               {(isDay1 && hourIndex === 0) || (!isDay1 && hourIndex === HOURS_PER_DAY) ? (
                                 <span className={cn(
-                                  "text-[10px] font-semibold mb-0.5",
-                                  isDay1 ? "text-gray-500" : "text-blue-400"
+                                  'text-[10px] font-semibold mb-0.5',
+                                  isDay1 ? 'text-gray-500 dark:text-gray-500' : 'text-blue-600 dark:text-blue-400'
                                 )}>
                                   {isDay1 ? day1Label : day2Label}
                                 </span>
@@ -896,15 +923,15 @@ export function MonitoreoEnVivoView() {
                           className={cn(
                             'flex-1 rounded-sm transition-all relative cursor-pointer group',
                             hourIsActive
-                              ? 'bg-gradient-to-b from-green-500 to-green-600 hover:from-green-400 hover:to-green-500 shadow-md'
+                              ? 'bg-gradient-to-b from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 shadow-sm dark:from-green-600 dark:to-green-700'
                               : isPastHour
-                                ? 'bg-gray-700/60'
+                                ? 'bg-gray-200/90 dark:bg-neutral-700/70'
                                 : isFutureHour
-                                  ? 'bg-gray-800/40'
-                                  : 'bg-gray-600/60',
-                            isCurrentHour && 'ring-2 ring-blue-400 ring-offset-1 ring-offset-[#2A2A2A]',
-                            isDay2 && 'opacity-90',
-                            hourIndex === HOURS_PER_DAY && 'border-l-2 border-blue-500/50'
+                                  ? 'bg-gray-100 dark:bg-neutral-800/50'
+                                  : 'bg-gray-300/80 dark:bg-neutral-600/60',
+                            isCurrentHour && 'ring-2 ring-blue-500 dark:ring-blue-400 ring-offset-1 ring-offset-gray-50 dark:ring-offset-neutral-950',
+                            isDay2 && 'opacity-95',
+                            hourIndex === HOURS_PER_DAY && 'border-l-2 border-blue-400/60 dark:border-blue-500/50'
                           )}
                           style={{ height: '40px' }}
                           onMouseEnter={() => hourIsActive && ordersInHour.length > 0 && setHoveredHourIndex(hourIndex)}
@@ -918,27 +945,27 @@ export function MonitoreoEnVivoView() {
                             </div>
                           )}
                           {hourIndex === HOURS_PER_DAY && (
-                            <div className="absolute -left-0.5 top-0 bottom-0 w-0.5 bg-purple-500/50 z-20" />
+                            <div className="absolute -left-0.5 top-0 bottom-0 w-0.5 bg-violet-500/40 dark:bg-violet-400/40 z-20" />
                           )}
                           
                           {/* Tooltip con información de viajes */}
                           {hoveredHourIndex === hourIndex && ordersInHour.length > 0 && (
-                            <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 z-[100] w-64 pointer-events-auto">
-                              <div className="bg-[#1A1A1A] border border-gray-600 rounded-lg shadow-xl p-3">
-                                <div className="text-xs text-gray-400 mb-2 font-semibold">
-                                  {isDay2 ? day2Label : day1Label} - {hour.toString().padStart(2, '0')}:00
+                            <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 z-[100] w-64 max-w-[90vw] pointer-events-auto">
+                              <div className="bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-600 rounded-lg shadow-lg p-3">
+                                <div className="text-xs text-gray-500 dark:text-gray-400 mb-2 font-semibold">
+                                  {isDay2 ? day2Label : day1Label} · {hour.toString().padStart(2, '0')}:00
                                 </div>
                                 <div className="space-y-2 max-h-64 overflow-y-auto pr-1 tooltip-scroll">
                                   {ordersInHour.map((order, idx) => (
-                                    <div key={idx} className="bg-[#2A2A2A] rounded-md p-2 border border-gray-700">
-                                      <div className="flex items-center justify-between mb-1">
-                                        <span className="text-xs font-semibold text-white">
+                                    <div key={idx} className="bg-gray-50 dark:bg-neutral-800/80 rounded-md p-2 border border-gray-200 dark:border-neutral-700">
+                                      <div className="flex items-center justify-between mb-1 gap-2">
+                                        <span className="text-xs font-semibold text-gray-900 dark:text-gray-100">
                                           Viaje #{idx + 1}
                                         </span>
                                         {(() => {
                                           const statusInfo = getStatusInfo(order.status)
                                           return (
-                                            <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-medium", statusInfo.className)}>
+                                            <span className={cn('text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0', statusInfo.className)}>
                                               {statusInfo.label}
                                             </span>
                                           )
@@ -946,26 +973,26 @@ export function MonitoreoEnVivoView() {
                                       </div>
                                       <div className="space-y-1">
                                         <div className="flex items-center gap-2 text-xs">
-                                          <span className="text-gray-400">Inicio:</span>
-                                          <span className="text-white font-medium">{order.bookedAt}</span>
+                                          <span className="text-gray-500 dark:text-gray-400 shrink-0">Inicio</span>
+                                          <span className="text-gray-900 dark:text-gray-100 font-medium tabular-nums">{order.bookedAt}</span>
                                         </div>
                                         <div className="flex items-center gap-2 text-xs">
-                                          <span className="text-gray-400">Fin:</span>
-                                          <span className="text-white font-medium">{order.endedAt}</span>
+                                          <span className="text-gray-500 dark:text-gray-400 shrink-0">Fin</span>
+                                          <span className="text-gray-900 dark:text-gray-100 font-medium tabular-nums">{order.endedAt}</span>
                                         </div>
                                       </div>
                                     </div>
                                   ))}
                                 </div>
                                 {ordersInHour.length > 1 && (
-                                  <div className="text-xs text-gray-500 mt-2 text-center">
-                                    {ordersInHour.length} viaje{ordersInHour.length > 1 ? 's' : ''} en esta hora
+                                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">
+                                    {ordersInHour.length} viajes en esta hora
                                   </div>
                                 )}
                               </div>
                               {/* Flecha del tooltip */}
                               <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 -mb-1">
-                                <div className="w-3 h-3 bg-[#1A1A1A] border-l border-t border-gray-600 transform rotate-45"></div>
+                                <div className="w-3 h-3 bg-white dark:bg-neutral-900 border-l border-t border-gray-200 dark:border-neutral-600 transform rotate-45" />
                               </div>
                             </div>
                           )}
@@ -974,9 +1001,9 @@ export function MonitoreoEnVivoView() {
                     })}
                   </div>
 
-                  <div className="flex justify-between text-xs text-gray-400 px-1">
-                    <span>{day1Label} 00:00</span>
-                    <span>{day2Label} 23:59</span>
+                  <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 px-1 mt-2 pt-2 border-t border-gray-200 dark:border-neutral-700">
+                    <span>{day1Label} · inicio</span>
+                    <span>{day2Label} · fin del día</span>
                   </div>
                 </div>
               </div>

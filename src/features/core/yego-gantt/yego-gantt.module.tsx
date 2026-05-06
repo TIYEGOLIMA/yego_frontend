@@ -16,6 +16,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
@@ -83,7 +84,7 @@ import {
   parseGanttLoadError,
 } from './ganttApi'
 import type { TaskSubtaskDto } from './ganttApi'
-import { projectIconByKey } from './projectIcons'
+import { projectIconByKey, PROJECT_ICON_CHOICES } from './projectIcons'
 import {
   normPriority,
   STATUS_LABEL,
@@ -122,6 +123,7 @@ import {
   TASK_MODAL_FOCUS,
   formatDetailModalDate,
   ganttHasFullTabAccess,
+  ganttCanManageWorkspaces,
   ganttIsPlatformAdmin,
   normalizeSubtaskDto,
   patchGanttParentFromSubtasks,
@@ -130,12 +132,21 @@ import {
   todayYmdLocal,
 } from './lib'
 
+const HEADER_WORKSPACE_CREATE_VALUE = '__create_workspace__'
+
 export function YegoGanttModule() {
   const user = useAuthStore((s) => s.user)
   const [tasks, setTasks] = useState<TaskRow[]>([])
   const [kpis, setKpis] = useState<Kpis | null>(null)
   const [areas, setAreas] = useState<AreaFull[]>([])
   const [workspaces, setWorkspaces] = useState<WorkspaceDto[]>([])
+  const [headerWorkspaceDialogOpen, setHeaderWorkspaceDialogOpen] = useState(false)
+  const [headerWorkspaceForm, setHeaderWorkspaceForm] = useState({
+    name: '',
+    description: '',
+    iconKey: 'folder',
+  })
+  const [headerWorkspaceSaving, setHeaderWorkspaceSaving] = useState(false)
   const [sprintById, setSprintById] = useState<Map<number, SprintDto>>(() => new Map())
   /** Por defecto «Mi espacio»; el usuario elige proyecto en el selector. */
   const [workspaceFilter, setWorkspaceFilter] = useState<string>('my_space')
@@ -221,6 +232,7 @@ export function YegoGanttModule() {
   const pendingSawWorkspaceSwitchingRef = useRef(false)
 
   const manage = useMemo(() => ganttHasFullTabAccess(user), [user])
+  const canManageWorkspaces = useMemo(() => ganttCanManageWorkspaces(user), [user])
 
   const loadCollaborators = useCallback(async (areaList: AreaFull[], requestId: number) => {
     const map = await fetchAreaCollaboratorsMap(areaList)
@@ -364,6 +376,12 @@ export function YegoGanttModule() {
 
   const handleWorkspaceFilterChange = useCallback(
     (next: string) => {
+      if (next === HEADER_WORKSPACE_CREATE_VALUE) {
+        if (workspacePickerBusy || !canManageWorkspaces) return
+        setHeaderWorkspaceForm({ name: '', description: '', iconKey: 'folder' })
+        setHeaderWorkspaceDialogOpen(true)
+        return
+      }
       if (next === workspaceFilter) return
       if (workspacePickerBusy) return
       if (hasLoadedOnceRef.current) {
@@ -371,8 +389,30 @@ export function YegoGanttModule() {
       }
       setWorkspaceFilter(next)
     },
-    [workspaceFilter, workspacePickerBusy],
+    [workspaceFilter, workspacePickerBusy, canManageWorkspaces],
   )
+
+  const saveHeaderWorkspace = useCallback(async () => {
+    const name = headerWorkspaceForm.name.trim()
+    if (!name) return
+    setHeaderWorkspaceSaving(true)
+    setErr(null)
+    try {
+      const res = await api.post<WorkspaceDto>('/yego-gantt/workspaces', {
+        name,
+        description: headerWorkspaceForm.description.trim() || undefined,
+        iconKey: headerWorkspaceForm.iconKey?.trim() || 'folder',
+      })
+      const created = res.data
+      setHeaderWorkspaceDialogOpen(false)
+      await load()
+      setWorkspaceFilter(String(created.id))
+    } catch (e: unknown) {
+      setErr(parseGanttLoadError(e))
+    } finally {
+      setHeaderWorkspaceSaving(false)
+    }
+  }, [headerWorkspaceForm, load])
 
   /** Espacio por defecto: siempre «Mi espacio». Solo se ajusta el filtro si el proyecto elegido dejó de existir. */
   useEffect(() => {
@@ -1203,6 +1243,20 @@ export function YegoGanttModule() {
                     </SelectItem>
                   )
                 })}
+                {canManageWorkspaces && (
+                  <>
+                    <SelectSeparator />
+                    <SelectItem
+                      value={HEADER_WORKSPACE_CREATE_VALUE}
+                      className="text-primary focus:text-primary cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2 font-medium">
+                        <Plus className="h-3.5 w-3.5 shrink-0 opacity-90" />
+                        Crear espacio de trabajo…
+                      </span>
+                    </SelectItem>
+                  </>
+                )}
               </SelectContent>
             </Select>
           {activeTab === 'gantt' && !isMySpaceView && (
@@ -1247,6 +1301,76 @@ export function YegoGanttModule() {
           </div>
         </div>
       </header>
+
+      <Dialog open={headerWorkspaceDialogOpen} onOpenChange={setHeaderWorkspaceDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Nuevo espacio de trabajo</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground -mt-1">
+            Crea un espacio desde el selector del header. Podrás elegirlo en el combo y asociar tareas y sprints.
+          </p>
+          <div className="space-y-4 mt-2">
+            <div>
+              <Label>Icono</Label>
+              <p className="text-[11px] text-muted-foreground mb-2">
+                Se muestra en el selector y en Cartera.
+              </p>
+              <div className="grid grid-cols-8 gap-1.5 sm:grid-cols-8">
+                {PROJECT_ICON_CHOICES.map(({ key, label, Icon }) => {
+                  const sel = headerWorkspaceForm.iconKey === key
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      title={label}
+                      onClick={() => setHeaderWorkspaceForm((f) => ({ ...f, iconKey: key }))}
+                      className={`h-9 w-9 rounded-lg flex items-center justify-center transition-colors border ${
+                        sel
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                          : 'bg-muted/50 text-muted-foreground border-border/60 hover:bg-muted hover:text-foreground'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4 stroke-[2]" />
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            <div>
+              <Label>Nombre del espacio de trabajo *</Label>
+              <Input
+                value={headerWorkspaceForm.name}
+                onChange={(e) => setHeaderWorkspaceForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="Ej: Migración Cloud"
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label>Descripción</Label>
+              <Textarea
+                value={headerWorkspaceForm.description}
+                onChange={(e) => setHeaderWorkspaceForm((f) => ({ ...f, description: e.target.value }))}
+                placeholder="Descripción opcional…"
+                className="mt-1 resize-none"
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setHeaderWorkspaceDialogOpen(false)} disabled={headerWorkspaceSaving}>
+              Cancelar
+            </Button>
+            <Button
+              className="workos-gantt-btn-primary border-0"
+              disabled={!headerWorkspaceForm.name.trim() || headerWorkspaceSaving}
+              onClick={() => void saveHeaderWorkspace()}
+            >
+              {headerWorkspaceSaving ? 'Creando…' : 'Crear espacio'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <main className="mx-auto w-full max-w-[1680px] px-4 lg:px-6 py-5 flex-1 flex flex-col min-h-0 bg-[#f9fafb] dark:bg-transparent">
         {err && (
@@ -1377,8 +1501,8 @@ export function YegoGanttModule() {
             <PortfolioTab
               tasks={tasksWithoutPrivate}
               loading={loading}
-              refreshing={refreshing}
               manage={manage}
+              canManageWorkspaces={canManageWorkspaces}
               areas={areas}
               workspaces={workspacesInScope}
               collaboratorNames={collaboratorNames}

@@ -10,6 +10,7 @@ import { Badge } from '../../../../components/ui/badge'
 import { Button } from '../../../../components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../../../components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../../../components/ui/dialog'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../../components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../../components/ui/select'
 import { User, Search, DollarSign, CreditCard, MapPin, TrendingUp, Calendar, ChevronLeft, ChevronRight, ChevronDown, Car, ChevronsLeft, ChevronsRight, Table2, LayoutGrid, Eye, Pencil, Save, X, CheckCircle2, Clock, AlertCircle } from 'lucide-react'
 import { cn } from '../../../../utils/cn'
@@ -19,6 +20,11 @@ const DIAS_SEMANA = ['L', 'M', 'M', 'J', 'V', 'S', 'D']
 const ITEMS_PER_PAGE_OPTIONS = [5, 10] as const
 const DEFAULT_ITEMS_PER_PAGE = 10
 const SECTION_CARD_CIERRE_CLASS = "rounded-lg p-3 border border-gray-200 dark:border-gray-700"
+/** Secciones del modal «Registrar cierre» con más aire y lectura cómoda */
+const SECTION_CARD_REGISTRAR_CIERRE_CLASS =
+  "rounded-xl p-4 sm:p-5 border border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-950/30 shadow-sm"
+
+type PestanaRegistrarCierre = 'combustible' | 'liquidacion' | 'vehiculo' | 'resumen'
 const formatBalance = (balance: number): string => {
   const formatted = new Intl.NumberFormat('es-PE', {
     minimumFractionDigits: 2,
@@ -361,6 +367,7 @@ export const DetalleView = () => {
   const [vistaTabla, setVistaTabla] = useState(true)
   const [itemsPerPage, setItemsPerPage] = useState(DEFAULT_ITEMS_PER_PAGE)
   const [showModalCierre, setShowModalCierre] = useState(false)
+  const [pestanaRegistrarCierre, setPestanaRegistrarCierre] = useState<PestanaRegistrarCierre>('combustible')
   const [showModalVerCierre, setShowModalVerCierre] = useState(false)
   const [showModalTurnos, setShowModalTurnos] = useState(false)
   const [conductorParaTurnos, setConductorParaTurnos] = useState<ConductorResumenPagos | null>(null)
@@ -781,6 +788,8 @@ export const DetalleView = () => {
     setOtrosGastosDescripcion('')
     setOdometroInicial('')
     setOdometroFinal('')
+    setPlaca('')
+    setPestanaRegistrarCierre('combustible')
     setShowModalCierre(true)
   }
 
@@ -1969,20 +1978,26 @@ export const DetalleView = () => {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showModalCierre} onOpenChange={setShowModalCierre}>
-        <DialogContent className="max-w-xl max-h-[85vh] overflow-hidden flex flex-col">
-          <DialogHeader className="pb-2 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-            <DialogTitle className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-1.5">
+      <Dialog
+        open={showModalCierre}
+        onOpenChange={(open) => {
+          setShowModalCierre(open)
+          if (!open) setPestanaRegistrarCierre('combustible')
+        }}
+      >
+        <DialogContent className="max-w-2xl max-h-[88vh] overflow-hidden flex flex-col sm:p-7 gap-0">
+          <DialogHeader className="pb-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 space-y-2">
+            <DialogTitle className="text-xl font-bold text-gray-900 dark:text-gray-100">
               Registrar Cierre de Día
             </DialogTitle>
-            <div className="flex flex-wrap items-center gap-3 text-xs">
-              <div className="flex items-center gap-1.5">
-                <User className="w-3 h-3 text-gray-500 dark:text-gray-400" />
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+              <div className="flex items-center gap-2">
+                <User className="w-4 h-4 text-gray-500 dark:text-gray-400 shrink-0" />
                 <span className="text-gray-600 dark:text-gray-400">Conductor:</span>
                 <span className="font-semibold text-gray-900 dark:text-gray-100">{selectedDriver?.full_name}</span>
               </div>
-              <div className="flex items-center gap-1.5">
-                <Calendar className="w-3 h-3 text-gray-500 dark:text-gray-400" />
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-gray-500 dark:text-gray-400 shrink-0" />
                 <span className="text-gray-600 dark:text-gray-400">Fecha:</span>
                 <span className="font-semibold text-gray-900 dark:text-gray-100">
                   {fechaInicio ? formatearFechaConDia(fechaInicio) : 'No seleccionada'}
@@ -1991,371 +2006,400 @@ export const DetalleView = () => {
             </div>
           </DialogHeader>
 
-          <div className="space-y-2.5 mt-2.5 overflow-y-auto flex-1 pr-1">
-            <div className={SECTION_CARD_CIERRE_CLASS}>
-              <h3 className="text-xs font-semibold text-gray-900 dark:text-gray-100 mb-2 pb-1 border-b border-gray-200 dark:border-gray-700 flex items-center gap-1.5">
-                <Car className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+          <Tabs
+            value={pestanaRegistrarCierre}
+            onValueChange={(v) => setPestanaRegistrarCierre(v as PestanaRegistrarCierre)}
+            className="mt-4 flex flex-col flex-1 min-h-0 gap-0"
+          >
+            <TabsList className="w-full h-auto shrink-0 grid grid-cols-2 sm:grid-cols-4 gap-1 p-1 rounded-lg">
+              <TabsTrigger value="combustible" className="gap-1.5 text-xs sm:text-sm py-2">
+                <Car className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
                 Combustible
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    GNV Combustible (M³)
-                  </label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={gnvM3}
-                    onChange={(e) => {
-                      const value = e.target.value
-                      if (value === '' || parseFloat(value) >= 0) {
-                        setGnvM3(value)
-                      }
-                    }}
-                    placeholder="0.00"
-                    className="w-full h-8 text-xs"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    GNV Combustible (S/.) <span className="text-red-600">*</span>
-                  </label>
-                  <Input
-                    type="text"
-                    inputMode="decimal"
-                    value={gnvSoles}
-                    onChange={(e) => {
-                      const value = validarNumeroPositivo(e.target.value)
-                        setGnvSoles(value)
-                    }}
-                    placeholder="0.00"
-                    className="w-full h-8 text-xs"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Gasolina Combustible (Galones)
-                  </label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={gasolinaGalones}
-                    onChange={(e) => {
-                      const value = e.target.value
-                      if (value === '' || parseFloat(value) >= 0) {
-                        setGasolinaGalones(value)
-                      }
-                    }}
-                    placeholder="0.00"
-                    className="w-full h-8 text-xs"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Gasolina Combustible (S/.) <span className="text-gray-500 text-xs font-normal">(Opcional)</span>
-                  </label>
-                  <Input
-                    type="text"
-                    inputMode="decimal"
-                    value={gasolinaSoles}
-                    onChange={(e) => {
-                      const value = validarNumeroPositivo(e.target.value)
-                        setGasolinaSoles(value)
-                    }}
-                    placeholder="0.00"
-                    className="w-full h-8 text-xs"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className={SECTION_CARD_CIERRE_CLASS}>
-              <h3 className="text-xs font-semibold text-gray-900 dark:text-gray-100 mb-2 pb-1 border-b border-gray-200 dark:border-gray-700 flex items-center gap-1.5">
-                <DollarSign className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
+              </TabsTrigger>
+              <TabsTrigger value="liquidacion" className="gap-1.5 text-xs sm:text-sm py-2">
+                <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
                 Liquidación
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Cuanto Liquida en Efectivo (S/.) <span className="text-red-600">*</span>
-                  </label>
-                  <Input
-                    type="text"
-                    inputMode="decimal"
-                    value={liquidaEfectivo}
-                    onChange={(e) => {
-                      const value = validarNumeroPositivo(e.target.value)
-                        setLiquidaEfectivo(value)
-                    }}
-                    placeholder="0.00"
-                    className="w-full h-8 text-xs"
-                    required
-                  />
-                </div>
+              </TabsTrigger>
+              <TabsTrigger value="vehiculo" className="gap-1.5 text-xs sm:text-sm py-2">
+                <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                Vehículo
+              </TabsTrigger>
+              <TabsTrigger value="resumen" className="gap-1.5 text-xs sm:text-sm py-2">
+                <TrendingUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                Resumen
+              </TabsTrigger>
+            </TabsList>
 
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Cuanto Liquida en Yape (S/.) <span className="text-red-600">*</span>
-                  </label>
-                  <Input
-                    type="text"
-                    inputMode="decimal"
-                    value={liquidaYape}
-                    onChange={(e) => {
-                      const value = validarNumeroPositivo(e.target.value)
-                        setLiquidaYape(value)
-                    }}
-                    placeholder="0.00"
-                    className="w-full h-8 text-xs"
-                    required
-                  />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Otros Gastos (S/.) <span className="text-gray-500 text-xs font-normal">(Opcional)</span>
-                  </label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={otrosGastos}
-                    onChange={(e) => {
-                      const value = e.target.value
-                      if (value === '' || parseFloat(value) >= 0) {
-                        setOtrosGastos(value)
-                      }
-                    }}
-                    placeholder="0.00"
-                    className="w-full h-8 text-xs"
-                  />
-                  {otrosGastos && parseNumber(otrosGastos) > 0 && (
-                    <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-800">
-                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                        Descripción del gasto <span className="text-red-600">*</span>
+            <div className="overflow-y-auto flex-1 min-h-0 mt-4 pr-1 -mr-1">
+              <TabsContent value="combustible" className="mt-0 pb-2 focus-visible:ring-0 focus-visible:ring-offset-0">
+                <div className={SECTION_CARD_REGISTRAR_CIERRE_CLASS}>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        GNV Combustible (M³)
                       </label>
                       <Input
+                        variant="plain"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={gnvM3}
+                        onChange={(e) => {
+                          const value = e.target.value
+                          if (value === '' || parseFloat(value) >= 0) {
+                            setGnvM3(value)
+                          }
+                        }}
+                        placeholder="0.00"
+                        className="w-full"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        GNV Combustible (S/.) <span className="text-red-600">*</span>
+                      </label>
+                      <Input
+                        variant="plain"
                         type="text"
-                        value={otrosGastosDescripcion}
-                        onChange={(e) => setOtrosGastosDescripcion(e.target.value)}
-                        placeholder="Ej: Mantenimiento, Reparación, etc."
-                        className="w-full h-8 text-xs bg-white dark:bg-gray-800"
+                        inputMode="decimal"
+                        value={gnvSoles}
+                        onChange={(e) => {
+                          const value = validarNumeroPositivo(e.target.value)
+                            setGnvSoles(value)
+                        }}
+                        placeholder="0.00"
+                        className="w-full"
                         required
                       />
                     </div>
-                  )}
-                </div>
-              </div>
-            </div>
 
-            <div className={SECTION_CARD_CIERRE_CLASS}>
-              <h3 className="text-xs font-semibold text-gray-900 dark:text-gray-100 mb-3 pb-1 border-b border-gray-200 dark:border-gray-700 flex items-center gap-1.5">
-                <Car className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                Placa y Odómetro
-              </h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Placa del vehículo
-                  </label>
-                  <Input
-                    type="text"
-                    value={placa}
-                    onChange={(e) => setPlaca(validarPlaca(e.target.value))}
-                    placeholder="Ej. ABC-123"
-                    className="w-[180px] h-9 text-sm"
-                    maxLength={PLACA_MAX_LENGTH}
-                  />
-                </div>
-                <div>
-                  <span className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Odómetro (km)</span>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
-                      <label className="block text-[11px] text-gray-500 dark:text-gray-400 mb-0.5">Inicial</label>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Gasolina Combustible (Galones)
+                      </label>
                       <Input
-                        type="text"
-                        inputMode="numeric"
-                        value={odometroInicial}
+                        variant="plain"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={gasolinaGalones}
                         onChange={(e) => {
-                          const value = validarNumeroPositivo(e.target.value)
-                          setOdometroInicial(value)
+                          const value = e.target.value
+                          if (value === '' || parseFloat(value) >= 0) {
+                            setGasolinaGalones(value)
+                          }
                         }}
-                        placeholder="0"
-                        className="w-full h-9 text-sm"
+                        placeholder="0.00"
+                        className="w-full"
                       />
                     </div>
+
                     <div>
-                      <label className="block text-[11px] text-gray-500 dark:text-gray-400 mb-0.5">Final</label>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Gasolina Combustible (S/.) <span className="text-gray-500 text-sm font-normal">(Opcional)</span>
+                      </label>
                       <Input
+                        variant="plain"
                         type="text"
-                        inputMode="numeric"
-                        value={odometroFinal}
+                        inputMode="decimal"
+                        value={gasolinaSoles}
                         onChange={(e) => {
                           const value = validarNumeroPositivo(e.target.value)
-                          setOdometroFinal(value)
+                            setGasolinaSoles(value)
                         }}
-                        placeholder="0"
-                        className="w-full h-9 text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] text-gray-500 dark:text-gray-400 mb-0.5">Diferencia</label>
-                      <Input
-                        type="text"
-                        value={(() => {
-                          const inicial = parseNumber(odometroInicial)
-                          const final = parseNumber(odometroFinal)
-                          const diferencia = final - inicial
-                          return diferencia > 0 ? diferencia.toFixed(0) : '0'
-                        })()}
-                        disabled
-                        className="w-full h-9 text-sm"
+                        placeholder="0.00"
+                        className="w-full"
                       />
                     </div>
                   </div>
                 </div>
-              </div>
-            </div>
+              </TabsContent>
 
-            {valoresCierre ? (
-              <div className={SECTION_CARD_CIERRE_CLASS}>
-                <h4 className="text-xs font-semibold text-gray-900 dark:text-gray-100 mb-2 flex items-center gap-1.5 pb-1 border-b border-gray-200 dark:border-gray-700">
-                  <TrendingUp className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                  Resumen de Cálculo
-                </h4>
-                <div className="space-y-1.5">
-                  <div className="flex justify-between items-center py-1.5 px-2.5 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-300 dark:border-blue-700">
-                    <span className="text-xs font-semibold text-gray-900 dark:text-gray-100">Monto Total a Pagar:</span>
-                    <span className="text-sm font-bold text-blue-600 dark:text-blue-400">
-                      {formatBalance(valoresCierre.montoTotalPagar)}
-                    </span>
-                  </div>
-
-                  <div className="space-y-1">
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs text-gray-600 dark:text-gray-400">Gastos Combustible:</span>
-                      <span className="text-xs font-semibold text-red-600 dark:text-red-400">
-                        {formatBalance(valoresCierre.totalGastosCombustible)}
-                      </span>
+              <TabsContent value="liquidacion" className="mt-0 pb-2 focus-visible:ring-0 focus-visible:ring-offset-0">
+                <div className={SECTION_CARD_REGISTRAR_CIERRE_CLASS}>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Cuanto Liquida en Efectivo (S/.) <span className="text-red-600">*</span>
+                      </label>
+                      <Input
+                        variant="plain"
+                        type="text"
+                        inputMode="decimal"
+                        value={liquidaEfectivo}
+                        onChange={(e) => {
+                          const value = validarNumeroPositivo(e.target.value)
+                            setLiquidaEfectivo(value)
+                        }}
+                        placeholder="0.00"
+                        className="w-full"
+                        required
+                      />
                     </div>
-                    {valoresCierre.totalOtrosGastos > 0 && (
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs text-gray-600 dark:text-gray-400">Otros Gastos:</span>
-                        <span className="text-xs font-semibold text-red-600 dark:text-red-400">
-                          {formatBalance(valoresCierre.totalOtrosGastos)}
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Cuanto Liquida en Yape (S/.) <span className="text-red-600">*</span>
+                      </label>
+                      <Input
+                        variant="plain"
+                        type="text"
+                        inputMode="decimal"
+                        value={liquidaYape}
+                        onChange={(e) => {
+                          const value = validarNumeroPositivo(e.target.value)
+                            setLiquidaYape(value)
+                        }}
+                        placeholder="0.00"
+                        className="w-full"
+                        required
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Otros Gastos (S/.) <span className="text-gray-500 text-sm font-normal">(Opcional)</span>
+                      </label>
+                      <Input
+                        variant="plain"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={otrosGastos}
+                        onChange={(e) => {
+                          const value = e.target.value
+                          if (value === '' || parseFloat(value) >= 0) {
+                            setOtrosGastos(value)
+                          }
+                        }}
+                        placeholder="0.00"
+                        className="w-full"
+                      />
+                      {otrosGastos && parseNumber(otrosGastos) > 0 && (
+                        <div className="mt-4 p-4 bg-blue-50/90 dark:bg-blue-900/25 rounded-lg border border-blue-200 dark:border-blue-800">
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            Descripción del gasto <span className="text-red-600">*</span>
+                          </label>
+                          <Input
+                            variant="plain"
+                            type="text"
+                            value={otrosGastosDescripcion}
+                            onChange={(e) => setOtrosGastosDescripcion(e.target.value)}
+                            placeholder="Ej: Mantenimiento, Reparación, etc."
+                            className="w-full"
+                            required
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="vehiculo" className="mt-0 pb-2 focus-visible:ring-0 focus-visible:ring-offset-0">
+                <div className={SECTION_CARD_REGISTRAR_CIERRE_CLASS}>
+                  <div className="space-y-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Placa del vehículo
+                      </label>
+                      <Input
+                        variant="plain"
+                        type="text"
+                        value={placa}
+                        onChange={(e) => setPlaca(validarPlaca(e.target.value))}
+                        placeholder="Ej. ABC-123"
+                        className="w-full max-w-md"
+                        maxLength={PLACA_MAX_LENGTH}
+                      />
+                    </div>
+                    <div>
+                      <span className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Odómetro (km)</span>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1.5">Inicial</label>
+                          <Input
+                            variant="plain"
+                            type="text"
+                            inputMode="numeric"
+                            value={odometroInicial}
+                            onChange={(e) => {
+                              const value = validarNumeroPositivo(e.target.value)
+                              setOdometroInicial(value)
+                            }}
+                            placeholder="0"
+                            className="w-full"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1.5">Final</label>
+                          <Input
+                            variant="plain"
+                            type="text"
+                            inputMode="numeric"
+                            value={odometroFinal}
+                            onChange={(e) => {
+                              const value = validarNumeroPositivo(e.target.value)
+                              setOdometroFinal(value)
+                            }}
+                            placeholder="0"
+                            className="w-full"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1.5">Diferencia</label>
+                          <Input
+                            variant="plain"
+                            type="text"
+                            value={(() => {
+                              const inicial = parseNumber(odometroInicial)
+                              const final = parseNumber(odometroFinal)
+                              const diferencia = final - inicial
+                              return diferencia > 0 ? diferencia.toFixed(0) : '0'
+                            })()}
+                            disabled
+                            className="w-full"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="resumen" className="mt-0 pb-2 focus-visible:ring-0 focus-visible:ring-offset-0">
+                {valoresCierre ? (
+                  <div className={SECTION_CARD_REGISTRAR_CIERRE_CLASS}>
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center gap-3 py-2.5 px-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-300 dark:border-blue-700">
+                        <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Monto Total a Pagar:</span>
+                        <span className="text-base font-bold text-blue-600 dark:text-blue-400 tabular-nums">
+                          {formatBalance(valoresCierre.montoTotalPagar)}
                         </span>
                       </div>
-                    )}
-                    <div className="flex justify-between items-center pt-1 border-t border-gray-300 dark:border-gray-600">
-                      <span className="text-xs font-semibold text-gray-900 dark:text-gray-100">Total Gastos:</span>
-                      <span className="text-xs font-bold text-red-600 dark:text-red-400">
-                        {formatBalance(valoresCierre.totalGastos)}
-                      </span>
-                    </div>
-                  </div>
 
-                  <div className={`py-1 px-2 rounded border ${
-                    valoresCierre.montoRestante >= 0 
-                      ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700' 
-                      : 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700'
-                  }`}>
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-semibold text-gray-900 dark:text-gray-100">
-                        {valoresCierre.montoRestante >= 0 ? 'Monto que Debe Liquidarse:' : 'Los gastos exceden el monto a pagar:'}
-                      </span>
-                      <span className={`text-xs font-bold ${
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center gap-3 py-0.5">
+                          <span className="text-sm text-gray-600 dark:text-gray-400">Gastos Combustible:</span>
+                          <span className="text-sm font-semibold text-red-600 dark:text-red-400 tabular-nums">
+                            {formatBalance(valoresCierre.totalGastosCombustible)}
+                          </span>
+                        </div>
+                        {valoresCierre.totalOtrosGastos > 0 && (
+                          <div className="flex justify-between items-center gap-3 py-0.5">
+                            <span className="text-sm text-gray-600 dark:text-gray-400">Otros Gastos:</span>
+                            <span className="text-sm font-semibold text-red-600 dark:text-red-400 tabular-nums">
+                              {formatBalance(valoresCierre.totalOtrosGastos)}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex justify-between items-center gap-3 pt-2 border-t border-gray-300 dark:border-gray-600">
+                          <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Total Gastos:</span>
+                          <span className="text-sm font-bold text-red-600 dark:text-red-400 tabular-nums">
+                            {formatBalance(valoresCierre.totalGastos)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className={`py-2.5 px-3 rounded-lg border ${
                         valoresCierre.montoRestante >= 0 
-                          ? 'text-green-600 dark:text-green-400' 
-                          : 'text-red-600 dark:text-red-400'
+                          ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700' 
+                          : 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700'
                       }`}>
-                        {formatBalance(Math.abs(valoresCierre.montoRestante))}
-                      </span>
-                    </div>
-                    <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
-                      (Monto Total - Total Gastos)
+                        <div className="flex justify-between items-center gap-3">
+                          <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                            {valoresCierre.montoRestante >= 0 ? 'Monto que Debe Liquidarse:' : 'Los gastos exceden el monto a pagar:'}
+                          </span>
+                          <span className={`text-sm font-bold tabular-nums ${
+                            valoresCierre.montoRestante >= 0 
+                              ? 'text-green-600 dark:text-green-400' 
+                              : 'text-red-600 dark:text-red-400'
+                          }`}>
+                            {formatBalance(Math.abs(valoresCierre.montoRestante))}
+                          </span>
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          (Monto Total - Total Gastos)
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center gap-3 py-0.5">
+                          <span className="text-sm text-gray-600 dark:text-gray-400">Liquida en Efectivo:</span>
+                          <span className="text-sm font-medium text-gray-900 dark:text-gray-100 tabular-nums">
+                            {formatBalance(parseNumber(liquidaEfectivo))}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center gap-3 py-0.5">
+                          <span className="text-sm text-gray-600 dark:text-gray-400">Liquida en Yape:</span>
+                          <span className="text-sm font-medium text-gray-900 dark:text-gray-100 tabular-nums">
+                            {formatBalance(parseNumber(liquidaYape))}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center gap-3 pt-2 border-t border-gray-300 dark:border-gray-600">
+                          <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Total Liquidado:</span>
+                          <span className="text-sm font-bold text-blue-600 dark:text-blue-400 tabular-nums">
+                            {formatBalance(valoresCierre.totalLiquidacion)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {valoresCierre.totalLiquidacion > 0 && (
+                        <div className={`flex justify-between items-center gap-3 py-2.5 px-3 rounded-lg border ${
+                          valoresCierre.calza 
+                            ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700' 
+                            : valoresCierre.diferencia > 0
+                            ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-300 dark:border-orange-700'
+                            : 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700'
+                        }`}>
+                          <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                            {valoresCierre.calza 
+                              ? 'Calza Correctamente' 
+                              : valoresCierre.diferencia > 0
+                              ? 'Falta Liquidar:'
+                              : 'Excede la Liquidación:'
+                            }
+                          </span>
+                          <span className={`text-sm font-bold tabular-nums ${
+                            valoresCierre.calza 
+                              ? 'text-green-600 dark:text-green-400' 
+                              : valoresCierre.diferencia > 0
+                              ? 'text-orange-600 dark:text-orange-400'
+                              : 'text-red-600 dark:text-red-400'
+                          }`}>
+                            {valoresCierre.calza ? 'S/. 0.00' : formatBalance(Math.abs(valoresCierre.diferencia))}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
-
-                  <div className="space-y-1">
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs text-gray-600 dark:text-gray-400">Liquida en Efectivo:</span>
-                      <span className="text-xs font-medium text-gray-900 dark:text-gray-100">
-                        {formatBalance(parseNumber(liquidaEfectivo))}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs text-gray-600 dark:text-gray-400">Liquida en Yape:</span>
-                      <span className="text-xs font-medium text-gray-900 dark:text-gray-100">
-                        {formatBalance(parseNumber(liquidaYape))}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center pt-1 border-t border-gray-300 dark:border-gray-600">
-                      <span className="text-xs font-semibold text-gray-900 dark:text-gray-100">Total Liquidado:</span>
-                      <span className="text-xs font-bold text-blue-600 dark:text-blue-400">
-                        {formatBalance(valoresCierre.totalLiquidacion)}
-                      </span>
+                ) : (
+                  <div className={SECTION_CARD_REGISTRAR_CIERRE_CLASS}>
+                    <div className="text-center py-8 px-4 text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
+                      {selectedConductorResumen?.monto_total_pagar ?? selectedConductorResumen?.monto_total_pagado 
+                        ? 'Ingrese los datos para ver el cálculo' 
+                        : 'No hay monto disponible para calcular'}
                     </div>
                   </div>
+                )}
+              </TabsContent>
+            </div>
+          </Tabs>
 
-                  {valoresCierre.totalLiquidacion > 0 && (
-                    <div className={`flex justify-between items-center py-1 px-2 rounded border ${
-                      valoresCierre.calza 
-                        ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700' 
-                        : valoresCierre.diferencia > 0
-                        ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-300 dark:border-orange-700'
-                        : 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700'
-                    }`}>
-                      <span className="text-xs font-semibold text-gray-900 dark:text-gray-100">
-                        {valoresCierre.calza 
-                          ? 'Calza Correctamente' 
-                          : valoresCierre.diferencia > 0
-                          ? 'Falta Liquidar:'
-                          : 'Excede la Liquidación:'
-                        }
-                      </span>
-                      <span className={`text-xs font-bold ${
-                        valoresCierre.calza 
-                          ? 'text-green-600 dark:text-green-400' 
-                          : valoresCierre.diferencia > 0
-                          ? 'text-orange-600 dark:text-orange-400'
-                          : 'text-red-600 dark:text-red-400'
-                      }`}>
-                        {valoresCierre.calza ? 'S/. 0.00' : formatBalance(Math.abs(valoresCierre.diferencia))}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className={SECTION_CARD_CIERRE_CLASS}>
-                <div className="text-center py-4 text-sm text-gray-500 dark:text-gray-400">
-                  {selectedConductorResumen?.monto_total_pagar ?? selectedConductorResumen?.monto_total_pagado 
-                    ? 'Ingrese los datos para ver el cálculo' 
-                    : 'No hay monto disponible para calcular'}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="flex justify-end gap-2 mt-2 pt-2 border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
+          <div className="flex justify-end gap-3 mt-5 pt-5 border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
             <Button
               variant="outline"
               onClick={() => setShowModalCierre(false)}
               disabled={registrandoCierre}
-              className="px-6"
+              className="px-7 min-h-10"
             >
               Cancelar
             </Button>
             <Button
               onClick={handleRegistrarCierre}
               disabled={registrandoCierre || !gnvSoles || !liquidaEfectivo || !liquidaYape}
-              className="bg-red-600 text-white px-6"
+              className="bg-red-600 text-white px-7 min-h-10"
             >
               {registrandoCierre ? 'Registrando...' : 'Registrar Cierre'}
             </Button>
@@ -2835,6 +2879,7 @@ value={editOtrosGastos}
                     </span>
                   )}
                 </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {conductorParaTurnos.turnos.map((turno, index) => {
                 const duracionHoras = Math.floor(turno.duracion_minutos / 60)
                 const duracionMinutos = turno.duracion_minutos % 60
@@ -2842,12 +2887,24 @@ value={editOtrosGastos}
                 const isTarde = turno.tipo_turno === 'tarde'
                 const tipoTurnoLabel = turno.tipo_turno === 'manana' ? 'Mañana' : 'Tarde'
 
+                const inicioTxt = fechaPart(turno.hora_inicio)
+                  ? `${formatearFechaLegible(fechaPart(turno.hora_inicio) ?? turno.fecha)} ${formatHoraAmPm(turno.hora_inicio)}`
+                  : formatHoraAmPm(turno.hora_inicio)
+                const finTxt = fechaPart(turno.hora_fin)
+                  ? `${formatearFechaLegible(fechaPart(turno.hora_fin) ?? turno.fecha)} ${formatHoraAmPm(turno.hora_fin)}`
+                  : formatHoraAmPm(turno.hora_fin)
+
+                const duracionPartes: string[] = []
+                if (duracionHoras > 0) duracionPartes.push(`${duracionHoras}h`)
+                if (duracionMinutos > 0) duracionPartes.push(`${duracionMinutos}min`)
+                const duracionStr = turno.duracion_minutos === 0 ? '0min' : duracionPartes.join(' ') || '0min'
+
                 return (
-                  <Card key={turno.id || index} className="border overflow-hidden">
-                    <CardContent className="p-4 pt-2">
-                      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 mb-3">
+                  <Card key={turno.id || index} className="border overflow-hidden py-0 shadow-sm min-w-0">
+                    <CardContent className="p-2 sm:p-2">
+                      <div className="flex items-center justify-between gap-2">
                         <span
-                          className={`text-sm font-medium shrink-0 px-2.5 py-1 rounded-md ${
+                          className={`text-[11px] font-semibold shrink-0 px-1.5 py-0.5 rounded ${
                             isTarde
                               ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/50'
                               : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/50'
@@ -2855,50 +2912,31 @@ value={editOtrosGastos}
                         >
                           {tipoTurnoLabel}
                         </span>
-                        <span className={`text-sm font-semibold tabular-nums shrink-0 ${isTarde ? 'text-indigo-600 dark:text-indigo-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                        <span className={`text-xs font-bold tabular-nums shrink-0 leading-none ${isTarde ? 'text-indigo-600 dark:text-indigo-400' : 'text-amber-600 dark:text-amber-400'}`}>
                           {formatBalance(turno.monto_total)}
                         </span>
                       </div>
 
-                      <div className="space-y-3 text-sm">
-                        <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <Calendar className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 shrink-0" />
-                            <div>
-                              <p className="text-[11px] uppercase tracking-wide text-gray-400 dark:text-gray-500">Fecha de inicio</p>
-                              <p className="font-medium text-gray-900 dark:text-gray-100">
-                                {fechaPart(turno.hora_inicio)
-                                  ? `${formatearFechaLegible(fechaPart(turno.hora_inicio) ?? turno.fecha)} · ${formatHoraAmPm(turno.hora_inicio)}`
-                                  : formatHoraAmPm(turno.hora_inicio)}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2 min-w-0">
-                            <Calendar className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 shrink-0" />
-                            <div>
-                              <p className="text-[11px] uppercase tracking-wide text-gray-400 dark:text-gray-500">Fecha de fin</p>
-                              <p className="font-medium text-gray-900 dark:text-gray-100">
-                                {fechaPart(turno.hora_fin)
-                                  ? `${formatearFechaLegible(fechaPart(turno.hora_fin) ?? turno.fecha)} · ${formatHoraAmPm(turno.hora_fin)}`
-                                  : formatHoraAmPm(turno.hora_fin)}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 border-t border-gray-100 dark:border-gray-700/70 text-xs text-gray-600 dark:text-gray-400">
-                          <span className="inline-flex items-center gap-1.5">
-                            <Clock className="w-3 h-3 text-gray-400" />
-                            {duracionHoras > 0 && `${duracionHoras}h `}
-                            {duracionMinutos > 0 && `${duracionMinutos}min`}
-                            {turno.duracion_minutos === 0 && '0min'}
-                          </span>
-                        </div>
+                      <div className="mt-1 space-y-0.5 text-[11px] leading-snug text-gray-800 dark:text-gray-200">
+                        <p className="min-w-0">
+                          <span className="text-gray-500 dark:text-gray-400">Inicio </span>
+                          <span className="font-medium">{inicioTxt}</span>
+                        </p>
+                        <p className="min-w-0">
+                          <span className="text-gray-500 dark:text-gray-400">Fin </span>
+                          <span className="font-medium">{finTxt}</span>
+                        </p>
                       </div>
+
+                      <p className="mt-0.5 flex items-center gap-1 text-[10px] leading-tight text-gray-500 dark:text-gray-400">
+                        <Clock className="w-3 h-3 shrink-0 opacity-80" />
+                        <span>{duracionStr}</span>
+                      </p>
                     </CardContent>
                   </Card>
                 )
               })}
+                </div>
               </>
             ) : (
               <div className="text-center py-6 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">

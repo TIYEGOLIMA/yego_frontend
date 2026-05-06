@@ -323,9 +323,3 @@ export function computeDurationDays(start: string, end: string): number {
   const ms = b.getTime() - a.getTime()
   return Math.max(1, Math.round(ms / 86400000) + 1)
 }
-
-export function workosHeatColorForStatus(status: GanttVisualStatus): string {
-  if (status === 'completed') return '#16a34a'
-  if (status === 'blocked') return '#dc2626'
-  return '#ca8a04'
-}

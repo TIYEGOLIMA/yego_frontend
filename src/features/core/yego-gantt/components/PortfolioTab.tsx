@@ -68,8 +68,8 @@ function principalUserIdsInAreaTasks(tasks: TaskRow[]): Set<number> {
 export function PortfolioTab({
   tasks,
   loading,
-  refreshing = false,
   manage,
+  canManageWorkspaces,
   areas,
   workspaces,
   collaboratorNames,
@@ -281,12 +281,6 @@ export function PortfolioTab({
       return next
     })
 
-  const openProjectCreate = () => {
-    setProjectEditing(null)
-    setProjectForm({ name: '', description: '', iconKey: 'folder' })
-    setProjectDialogOpen(true)
-  }
-
   const openProjectEdit = (p: WorkspaceDto) => {
     setProjectEditing(p)
     setProjectForm({
@@ -298,6 +292,8 @@ export function PortfolioTab({
   }
 
   const saveProject = async () => {
+    const workspace = projectEditing
+    if (!workspace) return
     setProjectSaving(true)
     try {
       const payload = {
@@ -305,11 +301,7 @@ export function PortfolioTab({
         description: projectForm.description || null,
         iconKey: projectForm.iconKey || 'folder',
       }
-      if (projectEditing) {
-        await api.put(`/yego-gantt/workspaces/${projectEditing.id}`, payload)
-      } else {
-        await api.post('/yego-gantt/workspaces', payload)
-      }
+      await api.put(`/yego-gantt/workspaces/${workspace.id}`, payload)
       setProjectDialogOpen(false)
       onReload()
     } catch { /* ignore */ }
@@ -548,12 +540,15 @@ export function PortfolioTab({
         {manage && (
           <div className="ml-auto flex items-center gap-2">
             <Button
+              type="button"
               size="sm"
-              onClick={openProjectCreate}
-              className="h-8 text-xs gap-1.5 rounded-lg workos-gantt-btn-primary border-0"
+              variant="outline"
+              onClick={() => onCreateTask()}
+              className="h-8 text-xs gap-1.5 rounded-lg border-red-200/90 dark:border-red-800/60 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/40"
+              title="Abre el formulario de nueva tarea (equipo y espacio se eligen en el modal)"
             >
               <Plus className="w-3 h-3" />
-              Nuevo espacio de trabajo
+              Nueva tarea
             </Button>
             <Button
               size="sm"
@@ -653,7 +648,7 @@ export function PortfolioTab({
                   <span className="text-xs tabular-nums text-muted-foreground font-medium">{projectPct}%</span>
                 </div>
 
-                {manage && (
+                {canManageWorkspaces && (
                   <div className="flex items-center gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                     <button
                       type="button"
@@ -886,14 +881,20 @@ export function PortfolioTab({
         </DialogContent>
       </Dialog>
 
-      {/* ===== Project create/edit dialog ===== */}
-      <Dialog open={projectDialogOpen} onOpenChange={setProjectDialogOpen}>
+      {/* Edición de espacio de trabajo (la creación está en el selector del header WorkOS). */}
+      <Dialog
+        open={projectDialogOpen}
+        onOpenChange={(open) => {
+          setProjectDialogOpen(open)
+          if (!open) setProjectEditing(null)
+        }}
+      >
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{projectEditing ? 'Editar espacio de trabajo' : 'Nuevo espacio de trabajo'}</DialogTitle>
+            <DialogTitle>Editar espacio de trabajo</DialogTitle>
           </DialogHeader>
           <p className="text-xs text-muted-foreground -mt-1">
-            {projectEditing ? 'Nombre, descripción e icono.' : 'Elige un icono para reconocer el espacio de trabajo en el header y en el portfolio.'}
+            Nombre, descripción e icono. Se muestran en Cartera y en el selector superior.
           </p>
           <div className="space-y-4 mt-2">
             <div>
@@ -944,10 +945,10 @@ export function PortfolioTab({
             <Button variant="outline" onClick={() => setProjectDialogOpen(false)}>Cancelar</Button>
             <Button
               className="bg-red-600 hover:bg-red-700 text-white"
-              disabled={!projectForm.name.trim() || projectSaving}
+              disabled={!projectForm.name.trim() || projectSaving || !projectEditing}
               onClick={saveProject}
             >
-              {projectEditing ? 'Guardar Cambios' : 'Crear espacio de trabajo'}
+              Guardar cambios
             </Button>
           </DialogFooter>
         </DialogContent>
