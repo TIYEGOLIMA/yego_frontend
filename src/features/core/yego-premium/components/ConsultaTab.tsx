@@ -26,6 +26,7 @@ import {
   Search,
   Star,
   Target,
+  TrendingDown,
   TrendingUp,
   Trophy,
   Wallet,
@@ -58,6 +59,13 @@ const formatCurrency = (value: number | null | undefined) => {
     currency: 'PEN',
     minimumFractionDigits: 2,
   }).format(value)
+}
+
+const chargeAmountClass = (value: number | null | undefined) => {
+  if (value == null) return 'text-neutral-700 dark:text-neutral-300'
+  return value < 0
+    ? 'text-rose-600 dark:text-rose-400 font-semibold'
+    : 'text-neutral-700 dark:text-neutral-300'
 }
 
 const formatGoalStepPercent = (value: number | null | undefined) => {
@@ -265,6 +273,28 @@ const IncomeBlock: React.FC<{
               </p>
             </div>
           )}
+          <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-900/40 sm:col-span-2">
+            <p className="text-[11px] font-medium uppercase text-slate-600 dark:text-slate-400">
+              Total neto (Yango)
+            </p>
+            <p className="mt-1 text-lg font-bold text-slate-800 dark:text-slate-200">
+              {formatCurrency(income?.total)}
+            </p>
+            <p className="mt-1 text-[10px] leading-tight text-slate-500 dark:text-slate-500">
+              Neto según balances de la API de ingresos de Yango.
+            </p>
+          </div>
+          <div className="rounded-lg border border-sky-200/90 bg-sky-50/70 p-3 dark:border-sky-900/60 dark:bg-sky-950/35 sm:col-span-2">
+            <p className="text-[11px] font-semibold uppercase text-sky-700 dark:text-sky-300">
+              Price Yango Pro
+            </p>
+            <p className="mt-1 text-2xl font-bold text-sky-800 dark:text-sky-100">
+              {formatCurrency(income?.price_yango_pro)}
+            </p>
+            <p className="mt-1 text-[10px] leading-tight text-sky-700/90 dark:text-sky-400/90">
+              Efectivo + no efectivo + corporativo + propinas + compensación promoción + bonificación.
+            </p>
+          </div>
           <div className="rounded-lg border border-neutral-200 bg-neutral-50/50 p-3 dark:border-neutral-800 dark:bg-neutral-900/50">
             <p className="text-[11px] font-medium uppercase text-neutral-500 dark:text-neutral-400">
               Efectivo recaudado
@@ -296,6 +326,76 @@ const IncomeBlock: React.FC<{
             <p className="mt-1 text-lg font-semibold text-amber-600 dark:text-amber-400">
               {formatCurrency(income?.promotion_compensation)}
             </p>
+          </div>
+          <div className="rounded-lg border border-neutral-200 bg-neutral-50/50 p-3 dark:border-neutral-800 dark:bg-neutral-900/50">
+            <p className="text-[11px] font-medium uppercase text-neutral-500 dark:text-neutral-400">
+              Bonificación (plataforma)
+            </p>
+            <p className="mt-1 text-lg font-semibold text-teal-600 dark:text-teal-400">
+              {formatCurrency(income?.bonificacion)}
+            </p>
+          </div>
+          <div className="rounded-lg border border-neutral-200 bg-neutral-50/50 p-3 dark:border-neutral-800 dark:bg-neutral-900/50">
+            <p className="text-[11px] font-medium uppercase text-neutral-500 dark:text-neutral-400">
+              Propinas
+            </p>
+            <p className="mt-1 text-lg font-semibold text-fuchsia-600 dark:text-fuchsia-400">
+              {formatCurrency(income?.tips)}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 space-y-2 border-t border-neutral-200 pt-4 dark:border-neutral-700">
+          <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+            <TrendingDown className="h-3.5 w-3.5" aria-hidden />
+            Cargos y comisiones (balances Yango)
+          </p>
+          <p className="text-[10px] text-neutral-500 dark:text-neutral-500">
+            Comisiones de servicio, impuestos y otros conceptos; suelen mostrarse como montos negativos.
+          </p>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="rounded-md border border-neutral-200/80 bg-white/40 p-2.5 dark:border-neutral-800 dark:bg-neutral-950/30">
+              <p className="text-[10px] font-medium uppercase text-neutral-500">Comisión plataforma</p>
+              <p className={`mt-0.5 text-sm ${chargeAmountClass(income?.platform_fees)}`}>
+                {formatCurrency(income?.platform_fees)}
+              </p>
+            </div>
+            <div className="rounded-md border border-neutral-200/80 bg-white/40 p-2.5 dark:border-neutral-800 dark:bg-neutral-950/30">
+              <p className="text-[10px] font-medium uppercase text-neutral-500">Comisión empresa asociada</p>
+              <p className={`mt-0.5 text-sm ${chargeAmountClass(income?.partner_fees)}`}>
+                {formatCurrency(income?.partner_fees)}
+              </p>
+            </div>
+            <div className="rounded-md border border-neutral-200/80 bg-white/40 p-2.5 dark:border-neutral-800 dark:bg-neutral-950/30">
+              <p className="text-[10px] font-medium uppercase text-neutral-500">Combustible (plataforma)</p>
+              <p className={`mt-0.5 text-sm ${chargeAmountClass(income?.platform_gas)}`}>
+                {formatCurrency(income?.platform_gas)}
+              </p>
+            </div>
+            <div className="rounded-md border border-neutral-200/80 bg-white/40 p-2.5 dark:border-neutral-800 dark:bg-neutral-950/30">
+              <p className="text-[10px] font-medium uppercase text-neutral-500">Otros (plataforma)</p>
+              <p className={`mt-0.5 text-sm ${chargeAmountClass(income?.platform_other)}`}>
+                {formatCurrency(income?.platform_other)}
+              </p>
+            </div>
+            <div className="rounded-md border border-neutral-200/80 bg-white/40 p-2.5 dark:border-neutral-800 dark:bg-neutral-950/30">
+              <p className="text-[10px] font-medium uppercase text-neutral-500">Impuestos obligatorios</p>
+              <p className={`mt-0.5 text-sm ${chargeAmountClass(income?.mandatory_taxes_fee)}`}>
+                {formatCurrency(income?.mandatory_taxes_fee)}
+              </p>
+            </div>
+            <div className="rounded-md border border-neutral-200/80 bg-white/40 p-2.5 dark:border-neutral-800 dark:bg-neutral-950/30">
+              <p className="text-[10px] font-medium uppercase text-neutral-500">Marketing otros (plataforma)</p>
+              <p className={`mt-0.5 text-sm ${chargeAmountClass(income?.platform_marketing_other)}`}>
+                {formatCurrency(income?.platform_marketing_other)}
+              </p>
+            </div>
+            <div className="rounded-md border border-neutral-200/80 bg-white/40 p-2.5 dark:border-neutral-800 dark:bg-neutral-950/30 sm:col-span-2">
+              <p className="text-[10px] font-medium uppercase text-neutral-500">Otros (empresa asociada)</p>
+              <p className={`mt-0.5 text-sm ${chargeAmountClass(income?.partner_contractor_other)}`}>
+                {formatCurrency(income?.partner_contractor_other)}
+              </p>
+            </div>
           </div>
         </div>
       </CardContent>
@@ -465,7 +565,10 @@ const ConsultaTab: React.FC<ConsultaTabProps> = ({ showProcessing = false, visit
       setError(null)
       setResult(null)
 
-      const data = await yegoPremiumService.fetchDriverSummary(trimmed, selectedParkId)
+      const data = await yegoPremiumService.fetchDriverSummary({
+        text: trimmed,
+        park_id: selectedParkId,
+      })
       setResult(data)
       setLastSearchText(trimmed)
       setHasSearched(true)

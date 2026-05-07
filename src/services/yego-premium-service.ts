@@ -146,6 +146,18 @@ export interface DriverSummaryIncome {
   non_cash_payment?: number | null
   corporate?: number | null
   promotion_compensation?: number | null
+  /** Bonificación de plataforma (balances.platform_bonus). */
+  bonificacion?: number | null
+  tips?: number | null
+  /** Efectivo + no efectivo + corporativo + propinas + promoción + bonificación. */
+  price_yango_pro?: number | null
+  platform_fees?: number | null
+  partner_fees?: number | null
+  platform_gas?: number | null
+  platform_other?: number | null
+  mandatory_taxes_fee?: number | null
+  platform_marketing_other?: number | null
+  partner_contractor_other?: number | null
 }
 
 export interface DriverSummaryPeriod {
@@ -195,16 +207,29 @@ export interface DriverSummaryResponse {
   previous_goals?: DriverSummaryGoal[]
 }
 
-const fetchDriverSummary = async (
-  text: string,
-  parkId: string,
+export interface FetchDriverSummaryParams {
+  text: string
+  park_id: string
+  /** Omite suggestions si ya conoces el id (respuesta anterior: resolved_contractor_id). */
+  contractor_id?: string | null
+  date?: string | null
   signal?: AbortSignal
-): Promise<DriverSummaryResponse> => {
-  const response = await api.post(
-    '/yango-external/summary',
-    { text, park_id: parkId },
-    { signal }
-  )
+}
+
+const fetchDriverSummary = async (params: FetchDriverSummaryParams): Promise<DriverSummaryResponse> => {
+  const body: Record<string, string> = {
+    text: params.text.trim(),
+    park_id: params.park_id,
+  }
+  if (params.contractor_id?.trim()) {
+    body.contractor_id = params.contractor_id.trim()
+  }
+  if (params.date?.trim()) {
+    body.date = params.date.trim()
+  }
+  const response = await api.post('/yango-external/summary', body, {
+    signal: params.signal,
+  })
   return response.data as DriverSummaryResponse
 }
 

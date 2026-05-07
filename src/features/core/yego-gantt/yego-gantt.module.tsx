@@ -2232,7 +2232,7 @@ export function YegoGanttModule() {
                         setAssigneeSearchQuery('')
                         setFormErrors((p) => ({ ...p, areaId: '' }))
                       }}
-                      disabled={!!editing || taskFormSaving}
+                      disabled={taskFormSaving || (!!editing && !manage)}
                     >
                       <SelectTrigger
                         className={cn(

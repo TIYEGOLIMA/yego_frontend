@@ -46,4 +46,5 @@ export {
   type DailyTripsPoint,
   type DriverTripsYearResponse,
   type MonthlyTripsAggregate,
+  type FetchDriverSummaryParams,
 } from './yego-premium-service';
