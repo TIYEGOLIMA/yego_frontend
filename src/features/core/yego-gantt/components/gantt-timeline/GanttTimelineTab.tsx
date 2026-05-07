@@ -22,6 +22,7 @@ import { canUserToggleSubtaskDone } from '../../lib/ganttSubtaskPermissions'
 import { updateTaskSubtaskNormalized } from '../../lib/ganttSubtaskProgress'
 import { useTaskSubtasks } from '../../hooks/useTaskSubtasks'
 import { useTimelineTasksSubtasks } from '../../hooks/useTimelineTasksSubtasks'
+import { canCollaboratorManageTaskBasics } from '../../taskPrivacy'
 import {
   DAY_WIDTH,
   timelineTaskBarColor,
@@ -983,7 +984,7 @@ function TaskDetailPanel({
         </div>
 
         {/* Actions */}
-        {manage && (
+        {(manage || canCollaboratorManageTaskBasics(task, currentUserId)) && (
           <div className="flex gap-2">
             <Button
               variant="outline"
@@ -994,14 +995,16 @@ function TaskDetailPanel({
               <Edit3 className="w-3.5 h-3.5" />
               Editar
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9 w-9 p-0 rounded-lg text-destructive border-destructive/30 hover:bg-destructive/10"
-              onClick={() => onDelete(task)}
-            >
-              <Trash2 className="w-4 h-4" />
-            </Button>
+            {manage && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 w-9 p-0 rounded-lg text-destructive border-destructive/30 hover:bg-destructive/10"
+                onClick={() => onDelete(task)}
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            )}
           </div>
         )}
 

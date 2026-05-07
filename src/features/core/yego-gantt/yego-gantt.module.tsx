@@ -83,7 +83,7 @@ import {
   fetchTaskSubtasks,
   parseGanttLoadError,
 } from './ganttApi'
-import type { TaskSubtaskDto } from './ganttApi'
+import type { GanttMasterData, TaskSubtaskDto } from './ganttApi'
 import { projectIconByKey, PROJECT_ICON_CHOICES } from './projectIcons'
 import {
   normPriority,
@@ -101,6 +101,7 @@ import {
   taskRowIsPrivate,
   taskIsMine,
   taskIsMyPrivate,
+  canCollaboratorManageTaskBasics,
   type TimelineVisibilityFilter,
 } from './taskPrivacy'
 import { cn } from '@/utils/cn'
@@ -128,6 +129,7 @@ import {
   canUserToggleSubtaskDone,
   formatDetailModalDate,
   ganttHasFullTabAccess,
+  ganttCanCreateTasks,
   ganttCanManageWorkspaces,
   ganttIsPlatformAdmin,
   normalizeSubtaskDto,
@@ -181,6 +183,9 @@ export function YegoGanttModule() {
   const loadInFlightRef = useRef<Promise<void> | null>(null)
   /** Último `workspaceFilter` con el que terminó un `load()` completo (para detectar cambio de espacio). */
   const prevWorkspaceFilterForLoadRef = useRef<string | null>(null)
+  /** Copia estable para `load()` sin repetir `/master`: no depender solo del estado en el closure. */
+  const areasRef = useRef<AreaFull[]>([])
+  const workspacesRef = useRef<WorkspaceDto[]>([])
   const [dismissedTaskIds, setDismissedTaskIds] = useState<number[]>([])
 
   const setIntegralItems = useIntegralNotificationsStore((s) => s.setItems)
@@ -242,13 +247,20 @@ export function YegoGanttModule() {
   const pendingSawWorkspaceSwitchingRef = useRef(false)
 
   const manage = useMemo(() => ganttHasFullTabAccess(user), [user])
+  const canCreateTasks = useMemo(() => ganttCanCreateTasks(user), [user])
   const canManageWorkspaces = useMemo(() => ganttCanManageWorkspaces(user), [user])
 
+  const canEditSubtasksInTaskModal = useMemo(() => {
+    if (manage) return true
+    if (!editing) return canCreateTasks
+    return canCollaboratorManageTaskBasics(editing, user?.id)
+  }, [manage, editing, user?.id, canCreateTasks])
+
   const subtaskAssigneeReadOnlyLabel = useMemo(() => {
-    if (manage || !user) return null
+    if (canEditSubtasksInTaskModal || !user) return null
     const label = (user.name || user.username || '').trim()
     return label || `Usuario ${user.id}`
-  }, [manage, user])
+  }, [canEditSubtasksInTaskModal, user])
 
   const loadCollaborators = useCallback(async (areaList: AreaFull[], requestId: number) => {
     const map = await fetchAreaCollaboratorsMap(areaList)
@@ -322,7 +334,8 @@ export function YegoGanttModule() {
     }
   }, [dialogOpen, reloadTasksAndKpis])
 
-  const load = useCallback(async (opts?: { refreshCollaborators?: boolean }) => {
+  const load = useCallback(
+    async (opts?: { refreshCollaborators?: boolean; refreshMaster?: boolean }) => {
     if (loadInFlightRef.current) {
       await loadInFlightRef.current
       return
@@ -330,6 +343,10 @@ export function YegoGanttModule() {
     const requestId = ++ganttFullLoadSeqRef.current
     const run = (async () => {
       const isFirstLoad = !hasLoadedOnceRef.current
+      let refreshMaster = isFirstLoad || opts?.refreshMaster === true
+      if (!refreshMaster && areasRef.current.length === 0) {
+        refreshMaster = true
+      }
       const prevPf = prevWorkspaceFilterForLoadRef.current
       const isWorkspaceChangeRefresh =
         !isFirstLoad && prevPf !== null && prevPf !== workspaceFilter
@@ -343,29 +360,43 @@ export function YegoGanttModule() {
       }
       setErr(null)
       try {
-        const [{ tasks: nextTasks, kpis: nextKpis }, { areas: ar, workspaces: ws }] = await Promise.all([
+        const [summaryPack, masterOpt] = await Promise.all([
           fetchGanttTaskSummary('all', 'all', workspaceFilter, 'all'),
-          fetchGanttMasterData(),
+          refreshMaster ? fetchGanttMasterData() : Promise.resolve<GanttMasterData | null>(null),
         ])
         if (requestId !== ganttFullLoadSeqRef.current) return
-        setTasks(nextTasks)
-        setKpis(nextKpis)
-        setAreas(ar)
-        setWorkspaces(ws)
+        setTasks(summaryPack.tasks)
+        setKpis(summaryPack.kpis)
 
-        const sprintMap = new Map<number, SprintDto>()
-        try {
-          const byWs = await fetchSprintsByWorkspaces(ws)
-          for (const list of Object.values(byWs)) {
-            for (const sp of list) {
-              sprintMap.set(sp.id, sp)
-            }
-          }
-        } catch {
-          /* resumen de tareas sigue válido sin sprints */
+        let ar: AreaFull[]
+        let ws: WorkspaceDto[]
+        if (masterOpt) {
+          ar = masterOpt.areas
+          ws = masterOpt.workspaces
+          setAreas(ar)
+          setWorkspaces(ws)
+        } else {
+          ar = areasRef.current
+          ws = workspacesRef.current
         }
-        if (requestId !== ganttFullLoadSeqRef.current) return
-        setSprintById(sprintMap)
+        areasRef.current = ar
+        workspacesRef.current = ws
+
+        if (refreshMaster) {
+          const sprintMap = new Map<number, SprintDto>()
+          try {
+            const byWs = await fetchSprintsByWorkspaces(ws)
+            for (const list of Object.values(byWs)) {
+              for (const sp of list) {
+                sprintMap.set(sp.id, sp)
+              }
+            }
+          } catch {
+            /* resumen de tareas sigue válido sin sprints */
+          }
+          if (requestId !== ganttFullLoadSeqRef.current) return
+          setSprintById(sprintMap)
+        }
 
         const areaKey = areasStableKey(ar)
         const forceCollabs = opts?.refreshCollaborators === true
@@ -395,6 +426,7 @@ export function YegoGanttModule() {
     loadInFlightRef.current = run
     await run
   }, [workspaceFilter, loadCollaborators])
+
 
   const workspacePickerBusy = loading || workspaceSwitching
 
@@ -429,7 +461,7 @@ export function YegoGanttModule() {
       })
       const created = res.data
       setHeaderWorkspaceDialogOpen(false)
-      await load()
+      await load({ refreshMaster: true })
       setWorkspaceFilter(String(created.id))
     } catch (e: unknown) {
       setErr(parseGanttLoadError(e))
@@ -653,16 +685,15 @@ export function YegoGanttModule() {
     setEditing(null)
     const start = presetDates?.startDate ?? new Date().toISOString().slice(0, 10)
     const end = presetDates?.endDate ?? new Date().toISOString().slice(0, 10)
-    const isPrivateNew = workspaceFilter === 'my_space'
+    const vistaMiEspacio = workspaceFilter === 'my_space'
     const areaFromProfile = resolveUserDefaultAreaId(user, areas)
     const areaIdStr =
       presetAreaId != null
         ? String(presetAreaId)
-        : isPrivateNew
+        : vistaMiEspacio
           ? areaFromProfile || areas[0]?.id?.toString() || ''
           : areas[0]?.id?.toString() || ''
-    const assignedUserIdsNew =
-      isPrivateNew && user?.id != null ? [user.id] : ([] as number[])
+    const assignedUserIdsNew = user?.id != null ? [user.id] : ([] as number[])
     setForm({
       areaId: areaIdStr,
       workspaceId:
@@ -681,7 +712,7 @@ export function YegoGanttModule() {
       progressPercent: '0',
       assignedUserIds: assignedUserIdsNew,
       tagsInput: '',
-      isPrivateTask: isPrivateNew,
+      isPrivateTask: false,
     })
     setFormErrors({})
     setPendingSubtasks([])
@@ -708,19 +739,20 @@ export function YegoGanttModule() {
     setEditing(t)
     setPendingSubtasks([])
     const privateTask = Boolean(t.privateTask) || tagsIndicatePrivate(t.tags)
-    const effectivePrivate = isMySpaceView || privateTask
+    const effectivePrivate = privateTask
     const rawIds = t.assignedUserIds?.length
       ? [...t.assignedUserIds]
       : t.assignedUserId != null
         ? [t.assignedUserId]
         : []
-    const assignedIds = effectivePrivate
-      ? rawIds[0] != null
-        ? [rawIds[0]]
-        : user?.id != null && t.createdByUserId === user.id
-          ? [user.id]
-          : []
-      : rawIds
+    const assignedIds =
+      effectivePrivate && rawIds.length > 0
+        ? rawIds
+        : effectivePrivate
+          ? user?.id != null && t.createdByUserId === user.id
+            ? [user.id]
+            : []
+          : rawIds
     setForm({
       areaId: String(t.areaId),
       workspaceId: t.workspaceId != null ? String(t.workspaceId) : '',
@@ -775,8 +807,7 @@ export function YegoGanttModule() {
       progressFromFormSubtasks != null
         ? progressFromFormSubtasks
         : Math.min(100, Math.max(0, Number(form.progressPercent) || 0))
-    const isMySpace = workspaceFilter === 'my_space'
-    const effectivePrivate = isMySpace || form.isPrivateTask
+    const effectivePrivate = form.isPrivateTask
     let parsedTags = form.tagsInput
       .split(',')
       .map((t) => t.trim())
@@ -819,7 +850,10 @@ export function YegoGanttModule() {
             const st = row.title.trim()
             if (!st) continue
             const subtaskAssigneePersist =
-              !manage && user?.id != null ? user.id : row.assignedUserId
+              row.assignedUserId ??
+              formSnapshot.assignedUserIds[0] ??
+              user?.id ??
+              null
             await createTaskSubtask(newTaskId, {
               title: st,
               weight: 1,
@@ -989,7 +1023,7 @@ export function YegoGanttModule() {
       await api.delete(`/areas/delete/${areaToDelete.id}`)
       setDeleteAreaDialogOpen(false)
       setAreaToDelete(null)
-      await load()
+      await load({ refreshMaster: true })
     } catch {
       setErr('No se pudo eliminar el área')
     } finally {
@@ -1096,9 +1130,8 @@ export function YegoGanttModule() {
     if (editing) {
       setSubtaskModalBusy('adding')
       try {
-        const ownerForSubtask = manage
-          ? form.assignedUserIds[0] ?? null
-          : user?.id ?? null
+        const ownerForSubtask =
+          form.assignedUserIds[0] ?? user?.id ?? null
         const createdRaw = await createTaskSubtask(editing.id, {
           title: t,
           weight: 1,
@@ -1125,9 +1158,8 @@ export function YegoGanttModule() {
       typeof crypto !== 'undefined' && 'randomUUID' in crypto
         ? crypto.randomUUID()
         : `p-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
-    const ownerForSubtaskPending = manage
-      ? form.assignedUserIds[0] ?? null
-      : user?.id ?? null
+    const ownerForSubtaskPending =
+      form.assignedUserIds[0] ?? user?.id ?? null
     setPendingSubtasks((s) => [
       ...s,
       {
@@ -1145,7 +1177,6 @@ export function YegoGanttModule() {
     subtaskModalBusy,
     editing,
     form.assignedUserIds,
-    manage,
     user?.id,
     scheduleReloadTasksAndKpisAfterSubtasks,
   ])
@@ -1195,11 +1226,12 @@ export function YegoGanttModule() {
   }, [manage, activeTab])
 
   const taskFormWorkspaceTagsSection = useMemo(() => {
-    const sideBySide = form.isPrivateTask && workspaces.length > 0
-    const workspaceCol =
-      workspaces.length > 0 ? (
-        <div className={cn('space-y-1.5', sideBySide && 'min-w-0')}>
-          <Label className="text-sm font-medium">Espacio de trabajo</Label>
+    const hasWorkspaces = workspaces.length > 0
+    const sideBySide = form.isPrivateTask && hasWorkspaces
+    const workspaceCol = (
+      <div className={cn('space-y-1.5', sideBySide && 'min-w-0')}>
+        <Label className="text-sm font-medium">Espacio de trabajo</Label>
+        {hasWorkspaces ? (
           <Select
             value={form.workspaceId || 'none'}
             disabled={taskFormSaving}
@@ -1217,15 +1249,14 @@ export function YegoGanttModule() {
               ))}
             </SelectContent>
           </Select>
-        </div>
-      ) : (
-        <div className={cn('space-y-1.5', sideBySide && 'min-w-0')}>
-          <Label className="text-sm font-medium">Espacio de trabajo</Label>
+        ) : (
           <div className="rounded-lg border border-dashed border-border/80 bg-muted/25 px-3 py-2 text-xs text-muted-foreground leading-snug">
-            No hay espacios de trabajo en el sistema. La tarea quedará solo en el <strong className="text-foreground font-medium">equipo</strong> (sin proyecto). Podrás asignarla a un espacio cuando exista uno.
+            No hay espacios de trabajo en el sistema. La tarea quedará solo en el{' '}
+            <strong className="text-foreground font-medium">equipo</strong> (sin proyecto). Podrás asignarla a un espacio cuando exista uno.
           </div>
-        </div>
-      )
+        )}
+      </div>
+    )
 
     const tagsCol = (
       <div className={cn('space-y-1.5', sideBySide && 'min-w-0')}>
@@ -1364,7 +1395,7 @@ export function YegoGanttModule() {
               />
             </div>
           )}
-          {manage && (
+          {canCreateTasks && (
             <Button
               type="button"
               onClick={() => openCreate()}
@@ -2098,45 +2129,44 @@ export function YegoGanttModule() {
 
                 <div className="flex items-center justify-end gap-2 pt-4 mt-4 border-t border-border/60 shrink-0">
                   {manage && (
-                    <>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="gap-1.5 rounded-lg border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                        onClick={() => {
-                          removeTask(detailLiveTask)
-                        }}
-                      >
-                        <Trash2 className="h-3.5 w-3.5 shrink-0" />
-                        Eliminar
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="gap-1.5 rounded-lg workos-gantt-btn-primary text-white border-0 shadow-sm"
-                        onClick={() => {
-                          setTaskDetailOpen(false)
-                          setDetailTaskId(null)
-                          openEdit(detailLiveTask)
-                        }}
-                      >
-                        <PencilLine className="h-3.5 w-3.5 shrink-0" />
-                        Editar
-                      </Button>
-                    </>
-                  )}
-                  {!manage && (
                     <Button
                       type="button"
-                      variant="secondary"
+                      variant="outline"
                       size="sm"
-                      className="rounded-lg"
-                      onClick={() => setTaskDetailOpen(false)}
+                      className="gap-1.5 rounded-lg border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => {
+                        removeTask(detailLiveTask)
+                      }}
                     >
-                      Cerrar
+                      <Trash2 className="h-3.5 w-3.5 shrink-0" />
+                      Eliminar
                     </Button>
                   )}
+                  {(manage ||
+                    canCollaboratorManageTaskBasics(detailLiveTask, user?.id)) && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="gap-1.5 rounded-lg workos-gantt-btn-primary text-white border-0 shadow-sm"
+                      onClick={() => {
+                        setTaskDetailOpen(false)
+                        setDetailTaskId(null)
+                        openEdit(detailLiveTask)
+                      }}
+                    >
+                      <PencilLine className="h-3.5 w-3.5 shrink-0" />
+                      Editar
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="rounded-lg"
+                    onClick={() => setTaskDetailOpen(false)}
+                  >
+                    Cerrar
+                  </Button>
                 </div>
               </>
             ) : null}
@@ -2213,45 +2243,36 @@ export function YegoGanttModule() {
                   <Label className="text-sm font-medium">
                     Equipo <span className="text-red-500">*</span>
                   </Label>
-                  {form.isPrivateTask ? (
-                    <div
+                  <Select
+                    value={form.areaId}
+                    onValueChange={(v) => {
+                      setForm((f) =>
+                        f.isPrivateTask
+                          ? { ...f, areaId: v }
+                          : { ...f, areaId: v, assignedUserIds: [] },
+                      )
+                      setAssigneeSearchQuery('')
+                      setFormErrors((p) => ({ ...p, areaId: '' }))
+                    }}
+                    disabled={taskFormSaving || (!!editing && !manage && !form.isPrivateTask)}
+                  >
+                    <SelectTrigger
                       className={cn(
-                        'h-10 rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 flex items-center text-sm bg-muted/40 dark:bg-muted/25 text-foreground',
-                        formErrors.areaId && 'border-red-500',
+                        'h-10 rounded-lg',
+                        TASK_MODAL_FOCUS,
+                        formErrors.areaId && 'border-red-500 focus:border-red-500',
                       )}
                     >
-                      {areas.find((a) => String(a.id) === form.areaId)?.name ??
-                        user?.areaNombre ??
-                        (form.areaId ? `Área ${form.areaId}` : '—')}
-                    </div>
-                  ) : (
-                    <Select
-                      value={form.areaId}
-                      onValueChange={(v) => {
-                        setForm((f) => ({ ...f, areaId: v, assignedUserIds: [] }))
-                        setAssigneeSearchQuery('')
-                        setFormErrors((p) => ({ ...p, areaId: '' }))
-                      }}
-                      disabled={taskFormSaving || (!!editing && !manage)}
-                    >
-                      <SelectTrigger
-                        className={cn(
-                          'h-10 rounded-lg',
-                          TASK_MODAL_FOCUS,
-                          formErrors.areaId && 'border-red-500 focus:border-red-500',
-                        )}
-                      >
-                        <SelectValue placeholder="Selecciona" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {areas.map((a) => (
-                          <SelectItem key={a.id} value={String(a.id)}>
-                            {a.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
+                      <SelectValue placeholder="Selecciona" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {areas.map((a) => (
+                        <SelectItem key={a.id} value={String(a.id)}>
+                          {a.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   {formErrors.areaId && <p className="text-[11px] text-red-500 mt-0.5">{formErrors.areaId}</p>}
                 </div>
                 {!form.isPrivateTask && (
@@ -2432,12 +2453,20 @@ export function YegoGanttModule() {
                   />
                   Responsable principal
                 </Label>
-                {form.isPrivateTask ? (
-                  <div className="min-h-10 rounded-lg border border-neutral-300 dark:border-neutral-600 px-3 py-2 flex items-start gap-2 text-sm bg-muted/40 dark:bg-muted/25 text-foreground">
-                    {!taskPrincipalOwnerRow ? (
-                      <span className="text-muted-foreground">—</span>
-                    ) : (
-                      <>
+                <Select
+                  value={form.assignedUserIds[0] != null ? String(form.assignedUserIds[0]) : 'none'}
+                  onValueChange={setOwnerPrincipal}
+                  disabled={taskFormSaving || (!form.isPrivateTask && !form.areaId)}
+                >
+                  <SelectTrigger
+                    className={cn(
+                      'relative min-h-10 h-auto min-w-0 py-2 rounded-lg items-center text-left [&>svg]:shrink-0',
+                      TASK_MODAL_FOCUS,
+                    )}
+                    aria-label={taskPrincipalOwnerRow?.lineTitle}
+                  >
+                    {taskPrincipalOwnerRow ? (
+                      <span className="flex min-w-0 flex-1 items-start gap-2 text-left">
                         <Avatar
                           name={taskPrincipalOwnerRow.nombre}
                           size="xs"
@@ -2448,158 +2477,129 @@ export function YegoGanttModule() {
                           nombre={taskPrincipalOwnerRow.nombre}
                           area={taskPrincipalOwnerRow.area}
                         />
-                      </>
+                      </span>
+                    ) : (
+                      <SelectValue
+                        placeholder="Selecciona un responsable"
+                        className="block min-w-0 flex-1 text-left"
+                      />
                     )}
-                  </div>
-                ) : (
-                  <Select
-                    value={form.assignedUserIds[0] != null ? String(form.assignedUserIds[0]) : 'none'}
-                    onValueChange={setOwnerPrincipal}
-                    disabled={taskFormSaving || !form.areaId}
-                  >
-                    <SelectTrigger
-                      className={cn(
-                        'relative min-h-10 h-auto min-w-0 py-2 rounded-lg items-center text-left [&>svg]:shrink-0',
-                        TASK_MODAL_FOCUS,
-                      )}
-                      aria-label={taskPrincipalOwnerRow?.lineTitle}
-                    >
-                      {taskPrincipalOwnerRow ? (
-                        <span className="flex min-w-0 flex-1 items-start gap-2 text-left">
-                          <Avatar
-                            name={taskPrincipalOwnerRow.nombre}
-                            size="xs"
-                            variant="owner"
-                            className="mt-0.5 shrink-0"
-                          />
-                          <PrincipalOwnerLine
-                            nombre={taskPrincipalOwnerRow.nombre}
-                            area={taskPrincipalOwnerRow.area}
-                          />
-                        </span>
-                      ) : (
-                        <SelectValue
-                          placeholder="Selecciona un responsable"
-                          className="block min-w-0 flex-1 text-left"
-                        />
-                      )}
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Sin responsable</SelectItem>
-                      {assigneePickerFiltered.map((c) => {
-                        const textValue = principalSelectItemTextValue(c)
-                        return (
-                          <SelectItem key={c.id} value={String(c.id)} textValue={textValue}>
-                            <span className="flex items-start gap-2 w-full min-w-0 py-0.5">
-                              <Avatar
-                                name={c.nombreCompleto}
-                                size="xs"
-                                variant="owner"
-                                className="mt-0.5 shrink-0"
-                              />
-                              <PrincipalOwnerLine
-                                nombre={c.nombreCompleto}
-                                area={c.areaNamesLabel ?? ''}
-                                className="text-left"
-                              />
-                            </span>
-                          </SelectItem>
-                        )
-                      })}
-                    </SelectContent>
-                  </Select>
-                )}
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sin responsable</SelectItem>
+                    {assigneePickerFiltered.map((c) => {
+                      const textValue = principalSelectItemTextValue(c)
+                      return (
+                        <SelectItem key={c.id} value={String(c.id)} textValue={textValue}>
+                          <span className="flex items-start gap-2 w-full min-w-0 py-0.5">
+                            <Avatar
+                              name={c.nombreCompleto}
+                              size="xs"
+                              variant="owner"
+                              className="mt-0.5 shrink-0"
+                            />
+                            <PrincipalOwnerLine
+                              nombre={c.nombreCompleto}
+                              area={c.areaNamesLabel ?? ''}
+                              className="text-left"
+                            />
+                          </span>
+                        </SelectItem>
+                      )
+                    })}
+                  </SelectContent>
+                </Select>
               </div>
 
-              {!form.isPrivateTask && (
-                <div className="space-y-1.5">
-                  <Label className="text-sm font-medium">Colaboradores</Label>
-                  <div className="flex gap-1.5 items-stretch">
-                    <Input
-                      variant="plain"
-                      type="text"
-                      autoComplete="off"
-                      placeholder="Buscar por nombre, equipo o rol…"
-                      value={assigneeSearchQuery}
-                      disabled={taskFormSaving || !form.areaId}
-                      onChange={(e) => setAssigneeSearchQuery(e.target.value)}
-                      className={cn(
-                        'h-8 flex-1 min-w-0 rounded-none border border-neutral-200 dark:border-border bg-white dark:bg-background text-xs px-2.5',
-                        TASK_MODAL_FOCUS,
-                      )}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-8 shrink-0 rounded-none border-neutral-200 dark:border-border bg-white dark:bg-background px-2.5 text-xs font-medium gap-1.5"
-                      disabled={
-                        taskFormSaving || !form.areaId || !assigneeSearchQuery.trim()
-                      }
-                      onClick={() => setAssigneeSearchQuery('')}
-                    >
-                      Limpiar
-                    </Button>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 rounded-lg border border-border/80 bg-muted/10 dark:bg-muted/20 p-3 max-h-44 overflow-y-auto">
-                    {!form.areaId ? (
-                      <p className="text-xs text-muted-foreground col-span-2">Selecciona un equipo primero.</p>
-                    ) : assigneePickerList.filter((c) => c.id !== form.assignedUserIds[0]).length === 0 ? (
-                      <p className="text-xs text-muted-foreground col-span-2">
-                        No hay más personas en los equipos cargados.
-                      </p>
-                    ) : assigneePickerFiltered.filter((c) => c.id !== form.assignedUserIds[0]).length === 0 ? (
-                      <p className="text-xs text-muted-foreground col-span-2">
-                        Nadie coincide con la búsqueda. Prueba con otro nombre o equipo.
-                      </p>
-                    ) : (
-                      assigneePickerFiltered
-                        .filter((c) => c.id !== form.assignedUserIds[0])
-                        .map((c) => {
-                          const selected = form.assignedUserIds.slice(1).includes(c.id)
-                          return (
-                            <label
-                              key={c.id}
-                              className={cn(
-                                'flex items-center gap-2.5 cursor-pointer rounded-lg border px-2 py-1.5 transition-all duration-150',
-                                selected
-                                  ? 'border-primary/35 bg-primary/[0.07] shadow-sm dark:bg-primary/10'
-                                  : 'border-transparent hover:border-border/50 hover:bg-muted/40',
-                              )}
-                            >
-                              <input
-                                type="checkbox"
-                                className="h-4 w-4 rounded border-border text-primary-600 accent-primary-600 shrink-0"
-                                checked={selected}
-                                disabled={taskFormSaving}
-                                onChange={() => toggleCollaborator(c.id)}
-                              />
-                              <Avatar
-                                name={c.nombreCompleto}
-                                size="md"
-                                variant="picker"
-                                className={cn(
-                                  selected &&
-                                    'ring-2 ring-primary/45 ring-offset-2 ring-offset-background dark:ring-offset-background',
-                                )}
-                              />
-                              <span className="text-xs truncate min-w-0 flex flex-col items-start gap-0 leading-tight">
-                                <span className="truncate w-full font-medium">{c.nombreCompleto}</span>
-                                {c.areaNamesLabel ? (
-                                  <span
-                                    className="text-[10px] text-muted-foreground truncate w-full"
-                                    title={c.areaNamesLabel}
-                                  >
-                                    {c.areaNamesLabel}
-                                  </span>
-                                ) : null}
-                              </span>
-                            </label>
-                          )
-                        })
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Colaboradores</Label>
+                <div className="flex gap-1.5 items-stretch">
+                  <Input
+                    variant="plain"
+                    type="text"
+                    autoComplete="off"
+                    placeholder="Buscar por nombre, equipo o rol…"
+                    value={assigneeSearchQuery}
+                    disabled={taskFormSaving || (!form.isPrivateTask && !form.areaId)}
+                    onChange={(e) => setAssigneeSearchQuery(e.target.value)}
+                    className={cn(
+                      'h-8 flex-1 min-w-0 rounded-none border border-neutral-200 dark:border-border bg-white dark:bg-background text-xs px-2.5',
+                      TASK_MODAL_FOCUS,
                     )}
-                  </div>
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-8 shrink-0 rounded-none border-neutral-200 dark:border-border bg-white dark:bg-background px-2.5 text-xs font-medium gap-1.5"
+                    disabled={
+                      taskFormSaving ||
+                      (!form.isPrivateTask && !form.areaId) ||
+                      !assigneeSearchQuery.trim()
+                    }
+                    onClick={() => setAssigneeSearchQuery('')}
+                  >
+                    Limpiar
+                  </Button>
                 </div>
-              )}
+                <div className="grid grid-cols-2 gap-2 rounded-lg border border-border/80 bg-muted/10 dark:bg-muted/20 p-3 max-h-44 overflow-y-auto">
+                  {!form.areaId && !form.isPrivateTask ? (
+                    <p className="text-xs text-muted-foreground col-span-2">Selecciona un equipo primero.</p>
+                  ) : assigneePickerList.filter((c) => c.id !== form.assignedUserIds[0]).length === 0 ? (
+                    <p className="text-xs text-muted-foreground col-span-2">
+                      No hay más personas en los equipos cargados.
+                    </p>
+                  ) : assigneePickerFiltered.filter((c) => c.id !== form.assignedUserIds[0]).length === 0 ? (
+                    <p className="text-xs text-muted-foreground col-span-2">
+                      Nadie coincide con la búsqueda. Prueba con otro nombre o equipo.
+                    </p>
+                  ) : (
+                    assigneePickerFiltered
+                      .filter((c) => c.id !== form.assignedUserIds[0])
+                      .map((c) => {
+                        const selected = form.assignedUserIds.slice(1).includes(c.id)
+                        return (
+                          <label
+                            key={c.id}
+                            className={cn(
+                              'flex items-center gap-2.5 cursor-pointer rounded-lg border px-2 py-1.5 transition-all duration-150',
+                              selected
+                                ? 'border-primary/35 bg-primary/[0.07] shadow-sm dark:bg-primary/10'
+                                : 'border-transparent hover:border-border/50 hover:bg-muted/40',
+                            )}
+                          >
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 rounded border-border text-primary-600 accent-primary-600 shrink-0"
+                              checked={selected}
+                              disabled={taskFormSaving}
+                              onChange={() => toggleCollaborator(c.id)}
+                            />
+                            <Avatar
+                              name={c.nombreCompleto}
+                              size="md"
+                              variant="picker"
+                              className={cn(
+                                selected &&
+                                  'ring-2 ring-primary/45 ring-offset-2 ring-offset-background dark:ring-offset-background',
+                              )}
+                            />
+                            <span className="text-xs truncate min-w-0 flex flex-col items-start gap-0 leading-tight">
+                              <span className="truncate w-full font-medium">{c.nombreCompleto}</span>
+                              {c.areaNamesLabel ? (
+                                <span
+                                  className="text-[10px] text-muted-foreground truncate w-full"
+                                  title={c.areaNamesLabel}
+                                >
+                                  {c.areaNamesLabel}
+                                </span>
+                              ) : null}
+                            </span>
+                          </label>
+                        )
+                      })
+                  )}
+                </div>
+              </div>
 
               <div className="rounded-lg border border-border px-2 py-2 space-y-2">
                 <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
@@ -2663,14 +2663,19 @@ export function YegoGanttModule() {
                           <Input
                             variant="plain"
                             value={st.title}
-                            disabled={taskFormSaving || subtaskModalBusy !== 'idle' || !manage}
+                            disabled={taskFormSaving || subtaskModalBusy !== 'idle' || !canEditSubtasksInTaskModal}
                             onChange={(e) =>
                               setSubtasks((prev) =>
                                 prev.map((x) => (x.id === st.id ? { ...x, title: e.target.value } : x)),
                               )
                             }
                             onBlur={async () => {
-                              if (!editing || taskFormSaving || subtaskModalBusy !== 'idle' || !manage)
+                              if (
+                                !editing ||
+                                taskFormSaving ||
+                                subtaskModalBusy !== 'idle' ||
+                                !canEditSubtasksInTaskModal
+                              )
                                 return
                               const row = subtasks.find((x) => x.id === st.id)
                               const v = row?.title?.trim() ?? ''
@@ -2700,11 +2705,16 @@ export function YegoGanttModule() {
                           />
                           <button
                             type="button"
-                            disabled={taskFormSaving || subtaskModalBusy !== 'idle' || !manage}
+                            disabled={taskFormSaving || subtaskModalBusy !== 'idle' || !canEditSubtasksInTaskModal}
                             className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10"
                             aria-label="Eliminar subtarea"
                             onClick={async () => {
-                              if (!editing || subtaskModalBusy !== 'idle' || !manage) return
+                              if (
+                                !editing ||
+                                subtaskModalBusy !== 'idle' ||
+                                !canEditSubtasksInTaskModal
+                              )
+                                return
                               setSubtaskModalBusy('updating')
                               try {
                                 await deleteTaskSubtask(editing.id, st.id)
@@ -2730,10 +2740,15 @@ export function YegoGanttModule() {
                           dueDate={st.dueDate}
                           min={form.startDate || undefined}
                           max={form.endDate || undefined}
-                          disabled={taskFormSaving || subtaskModalBusy !== 'idle' || !manage}
+                          disabled={taskFormSaving || subtaskModalBusy !== 'idle' || !canEditSubtasksInTaskModal}
                           readOnlyAssigneeLabel={subtaskAssigneeReadOnlyLabel}
                           onAssigneeCommit={async (nextAssignee) => {
-                            if (!editing || subtaskModalBusy !== 'idle' || !manage) return
+                            if (
+                              !editing ||
+                              subtaskModalBusy !== 'idle' ||
+                              !canEditSubtasksInTaskModal
+                            )
+                              return
                             setSubtaskModalBusy('updating')
                             try {
                               const body =
@@ -2750,7 +2765,12 @@ export function YegoGanttModule() {
                             }
                           }}
                           onDueDateCommit={async (v) => {
-                            if (!editing || subtaskModalBusy !== 'idle' || !manage) return
+                            if (
+                              !editing ||
+                              subtaskModalBusy !== 'idle' ||
+                              !canEditSubtasksInTaskModal
+                            )
+                              return
                             setSubtaskModalBusy('updating')
                             try {
                               const body = v == null ? { clearDueDate: true as const } : { dueDate: v }
@@ -2894,19 +2914,19 @@ export function YegoGanttModule() {
               <label
                 className={cn(
                   'flex items-center gap-2 rounded-md border border-border px-2 py-2',
-                  isMySpaceView ? 'cursor-default' : 'cursor-pointer',
+                  taskFormSaving ? 'cursor-default' : 'cursor-pointer',
                 )}
               >
                 <input
                   type="checkbox"
                   className="h-3.5 w-3.5 rounded border-primary-500 text-primary-600 accent-primary-600 shrink-0"
-                  checked={isMySpaceView || form.isPrivateTask}
-                  disabled={taskFormSaving || isMySpaceView}
+                  checked={form.isPrivateTask}
+                  disabled={taskFormSaving}
                   onChange={(e) => {
-                    if (isMySpaceView) return
                     const checked = e.target.checked
                     if (!checked) {
                       setForm((f) => ({ ...f, isPrivateTask: false }))
+                      setAssigneeSearchQuery('')
                       return
                     }
                     setForm((f) => {

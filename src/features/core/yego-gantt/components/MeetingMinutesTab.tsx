@@ -75,6 +75,7 @@ import {
 } from './meeting-minutes/labels'
 import { parseMeetingItemsTsv } from './meeting-minutes/parseMeetingItemsTsv'
 import { WorkosTabLoading } from './WorkosLoading'
+import { todayYmdLocal } from '../lib'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -97,6 +98,15 @@ import {
 import { cn } from '@/utils/cn'
 import { ArrowLeft, ClipboardPaste, ChevronRight, FileText, Loader2, PencilLine, Plus, Trash2 } from 'lucide-react'
 import { Avatar, AvatarGroup, ProgressBar } from './common'
+
+function actaCalendarErrorIfPast(ymd: string | undefined | null, label: string): string | null {
+  const raw = typeof ymd === 'string' ? ymd.trim() : ''
+  if (!raw) return null
+  const v = raw.slice(0, 10)
+  const min = todayYmdLocal()
+  if (v < min) return `${label} no puede ser anterior al día de hoy`
+  return null
+}
 
 export interface MeetingMinutesTabProps {
   areas: AreaFull[]
@@ -136,13 +146,13 @@ export function MeetingMinutesTab({
   const [minuteDialogOpen, setMinuteDialogOpen] = useState(false)
   const [minuteSaving, setMinuteSaving] = useState(false)
   const [editingMinuteId, setEditingMinuteId] = useState<number | null>(null)
-  const [minuteForm, setMinuteForm] = useState<CreateMeetingMinutePayload>({
+  const [minuteForm, setMinuteForm] = useState<CreateMeetingMinutePayload>(() => ({
     title: '',
-    meetingDate: new Date().toISOString().slice(0, 10),
+    meetingDate: todayYmdLocal(),
     meetingType: 'OPERATIVA',
     summary: '',
     status: 'ABIERTA',
-  })
+  }))
 
   const [draftNewRow, setDraftNewRow] = useState({
     areaId: undefined as number | undefined,
@@ -189,6 +199,8 @@ export function MeetingMinutesTab({
     () => new Map(collaboratorsAll.map((c) => [c.id, c])),
     [collaboratorsAll],
   )
+
+  const minActaCalendarYmd = todayYmdLocal()
 
   /** KPI: solo `GET` detalle (incluye kpis); sin conversiones → avance 0 %. */
   const detailKpiDisplay = useMemo(() => {
@@ -273,10 +285,12 @@ export function MeetingMinutesTab({
 
   useEffect(() => {
     if (initialMeetingDate) {
+      const min = todayYmdLocal()
+      const d = initialMeetingDate.slice(0, 10) < min ? min : initialMeetingDate.slice(0, 10)
       setMinuteForm((f) => ({
         ...f,
-        meetingDate: initialMeetingDate,
-        title: f.title || `Acta ${formatShortDate(initialMeetingDate)}`,
+        meetingDate: d,
+        title: f.title || `Acta ${formatShortDate(d)}`,
       }))
       setEditingMinuteId(null)
       setMinuteDialogOpen(true)
@@ -319,6 +333,15 @@ export function MeetingMinutesTab({
     async (itemId: number, patch: UpdateMeetingMinuteItemPayload) => {
       if (detailId == null) return
       if (!actaPerms.canEditRows) return
+      const pastErr =
+        actaCalendarErrorIfPast(
+          patch.startDate as string | undefined,
+          'La fecha de inicio',
+        ) ?? actaCalendarErrorIfPast(patch.deadline as string | undefined, 'La fecha fin')
+      if (pastErr) {
+        setErr(pastErr)
+        return
+      }
       setSheetBusy(true)
       setErr(null)
       try {
@@ -349,6 +372,13 @@ export function MeetingMinutesTab({
       const r = draft.responsibleNameSnapshot.trim()
       const sd = draft.startDate.trim()
       const dl = draft.deadline.trim()
+      const dateErr =
+        actaCalendarErrorIfPast(sd, 'La fecha de inicio') ??
+        actaCalendarErrorIfPast(dl, 'La fecha fin')
+      if (dateErr) {
+        setErr(dateErr)
+        return null
+      }
       const isSection = s.startsWith('##') && !t
       const areaName =
         a || (aid != null ? areas.find((ar) => ar.id === aid)?.name?.trim() : '') || undefined
@@ -458,8 +488,15 @@ export function MeetingMinutesTab({
           sprintId = undefined
         }
       }
-      const start = it.startDate ?? detail?.meetingDate ?? new Date().toISOString().slice(0, 10)
-      const end = it.deadline ?? start
+      const minY = todayYmdLocal()
+      const rawStart = (
+        it.startDate ??
+        detail?.meetingDate ??
+        minY
+      ).slice(0, 10)
+      const start = rawStart < minY ? minY : rawStart
+      const rawEnd = (it.deadline ?? start).slice(0, 10)
+      const end = rawEnd < minY ? start : rawEnd < start ? start : rawEnd
       setConvertItem(it)
       setConvertForm(
         omitUndefinedKeys({
@@ -499,6 +536,13 @@ export function MeetingMinutesTab({
 
   const saveMinute = async () => {
     if (!minuteForm.title.trim() || !minuteForm.meetingDate) return
+    const pastCab =
+      actaCalendarErrorIfPast(minuteForm.meetingDate, 'La fecha del acta') ??
+      actaCalendarErrorIfPast(minuteForm.nextMeetingDate, 'La fecha de próxima reunión')
+    if (pastCab) {
+      setErr(pastCab)
+      return
+    }
     setMinuteSaving(true)
     setErr(null)
     try {
@@ -582,6 +626,13 @@ export function MeetingMinutesTab({
 
   const submitConvert = async () => {
     if (detailId == null || convertItem == null) return
+    const cvErr =
+      actaCalendarErrorIfPast(convertForm.startDate, 'La fecha de inicio') ??
+      actaCalendarErrorIfPast(convertForm.endDate, 'La fecha fin')
+    if (cvErr) {
+      setErr(cvErr)
+      return
+    }
     setConvertBusy(true)
     setErr(null)
     try {
@@ -1122,6 +1173,7 @@ export function MeetingMinutesTab({
                               <input
                                 key={`${it.id}-sd-${it.updatedAt}`}
                                 type="date"
+                                min={minActaCalendarYmd}
                                 className={EXCEL_ACTA_DATE_INPUT}
                                 defaultValue={it.startDate ? it.startDate.slice(0, 10) : ''}
                                 disabled={sheetBusy}
@@ -1142,6 +1194,7 @@ export function MeetingMinutesTab({
                               <input
                                 key={`${it.id}-dl-${it.updatedAt}`}
                                 type="date"
+                                min={minActaCalendarYmd}
                                 className={EXCEL_ACTA_DATE_INPUT}
                                 defaultValue={it.deadline ? it.deadline.slice(0, 10) : ''}
                                 disabled={sheetBusy}
@@ -1262,6 +1315,7 @@ export function MeetingMinutesTab({
                             areas={areas}
                             collaboratorsForArea={collaboratorsForArea}
                             collaboratorsAll={collaboratorsAll}
+                            minActaCalendarYmd={minActaCalendarYmd}
                             discardAriaLabel="Quitar esta fila (solo vista local; sin servidor)"
                           />
                         ))}
@@ -1279,6 +1333,7 @@ export function MeetingMinutesTab({
                             areas={areas}
                             collaboratorsForArea={collaboratorsForArea}
                             collaboratorsAll={collaboratorsAll}
+                            minActaCalendarYmd={minActaCalendarYmd}
                             discardAriaLabel="Quitar fila de entrada (solo en pantalla; sin llamar al servidor)"
                           />
                         ) : null}
@@ -1389,7 +1444,7 @@ export function MeetingMinutesTab({
                   setEditingMinuteId(null)
                   setMinuteForm({
                     title: '',
-                    meetingDate: new Date().toISOString().slice(0, 10),
+                    meetingDate: todayYmdLocal(),
                     meetingType: 'OPERATIVA',
                     summary: '',
                     status: 'ABIERTA',
@@ -1567,6 +1622,7 @@ export function MeetingMinutesTab({
                 <Label>Fecha reunión</Label>
                 <Input
                   type="date"
+                  min={minActaCalendarYmd}
                   value={minuteForm.meetingDate}
                   onChange={(e) => setMinuteForm((f) => ({ ...f, meetingDate: e.target.value }))}
                 />
@@ -1575,6 +1631,7 @@ export function MeetingMinutesTab({
                 <Label>Próxima reunión</Label>
                 <Input
                   type="date"
+                  min={minActaCalendarYmd}
                   value={minuteForm.nextMeetingDate ?? ''}
                   onChange={(e) =>
                     setMinuteForm((f) => ({ ...f, nextMeetingDate: e.target.value || undefined }))
@@ -1870,6 +1927,7 @@ export function MeetingMinutesTab({
                   <Label>Inicio</Label>
                   <Input
                     type="date"
+                    min={minActaCalendarYmd}
                     value={convertForm.startDate ?? ''}
                     onChange={(e) => setConvertForm((f) => ({ ...f, startDate: e.target.value }))}
                   />
@@ -1878,6 +1936,7 @@ export function MeetingMinutesTab({
                   <Label>Fin</Label>
                   <Input
                     type="date"
+                    min={minActaCalendarYmd}
                     value={convertForm.endDate ?? ''}
                     onChange={(e) => setConvertForm((f) => ({ ...f, endDate: e.target.value }))}
                   />

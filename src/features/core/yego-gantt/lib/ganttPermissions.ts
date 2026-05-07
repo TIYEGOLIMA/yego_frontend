@@ -16,6 +16,11 @@ export function ganttHasFullTabAccess(u: User | null | undefined): boolean {
   return false
 }
 
+/** Crear tareas y usar asignación/subtareas donde el backend lo permita (usuario autenticado). */
+export function ganttCanCreateTasks(u: User | null | undefined): boolean {
+  return u != null && u.id != null && u.active !== false
+}
+
 /** Crear/editar/eliminar espacios de trabajo (gantt_projects): solo roles operativos (ver backend). */
 export function ganttCanManageWorkspaces(u: User | null | undefined): boolean {
   if (!u) return false

@@ -1,4 +1,9 @@
-export { ganttHasFullTabAccess, ganttIsPlatformAdmin, ganttCanManageWorkspaces } from './ganttPermissions'
+export {
+  ganttHasFullTabAccess,
+  ganttCanCreateTasks,
+  ganttIsPlatformAdmin,
+  ganttCanManageWorkspaces,
+} from './ganttPermissions'
 export {
   formatDetailModalDate,
   todayYmdLocal,

@@ -46,6 +46,28 @@ export function taskIsMine(t: TaskRow, userId: number | null | undefined): boole
   return taskAssigneeIds(t).includes(userId)
 }
 
+/** Editar contenido del modal de tarea (p. ej. subtareas): creador o alguien en assignedUserIds. */
+export function canCollaboratorManageTaskBasics(
+  t: {
+    createdByUserId?: number | null
+    assignedUserIds?: number[]
+    assignedUserId?: number | null
+  },
+  userId: number | null | undefined,
+): boolean {
+  if (userId == null) return false
+  const uid = Number(userId)
+  const cr = t.createdByUserId != null ? Number(t.createdByUserId) : null
+  if (cr != null && !Number.isNaN(cr) && cr === uid) return true
+  const ids =
+    t.assignedUserIds?.length != null && t.assignedUserIds.length > 0
+      ? t.assignedUserIds
+      : t.assignedUserId != null
+        ? [t.assignedUserId]
+        : []
+  return ids.some((id) => id != null && Number(id) === uid)
+}
+
 /**
  * Arrastrar tarjeta en el tablero Kanban: gestores o participantes (asignado/creador en padre).
  * El backend acepta cambio solo de estado para responsables de subtareas sin rol de gestión.

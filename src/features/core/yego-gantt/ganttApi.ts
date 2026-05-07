@@ -96,7 +96,7 @@ export type GanttTaskSaveFormFields = {
 
 /**
  * POST/PUT tarea Gantt: si es privada, no incluye `sprintId` y solo añade `workspaceId` si hay valor;
- * si es pública, incluye espacio, sprint y listas de asignación completas.
+ * listas de asignación (principal + colaboradores) se envían igual en privada y pública.
  */
 export function buildGanttTaskSavePayload(
   form: GanttTaskSaveFormFields,
@@ -105,11 +105,8 @@ export function buildGanttTaskSavePayload(
 ): Record<string, unknown> {
   const privateTask = form.isPrivateTask
   const ownerId = form.assignedUserIds[0]
-  const assignedIdsForPayload = privateTask
-    ? ownerId != null
-      ? [ownerId]
-      : []
-    : form.assignedUserIds
+  const assignedIdsForPayload =
+    form.assignedUserIds.length > 0 ? [...form.assignedUserIds] : []
 
   const base: Record<string, unknown> = {
     areaId: Number(form.areaId),

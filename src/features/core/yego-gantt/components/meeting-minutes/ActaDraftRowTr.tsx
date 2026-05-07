@@ -32,6 +32,7 @@ export function ActaDraftRowTr({
   areas,
   collaboratorsForArea,
   collaboratorsAll,
+  minActaCalendarYmd,
   discardAriaLabel,
 }: {
   rowIndex: number
@@ -43,6 +44,7 @@ export function ActaDraftRowTr({
   areas: AreaFull[]
   collaboratorsForArea: (areaId: number) => ColaboradorDto[]
   collaboratorsAll: ColaboradorDto[]
+  minActaCalendarYmd: string
   discardAriaLabel: string
 }) {
   const draftRespOptions = useMemo(
@@ -193,6 +195,7 @@ export function ActaDraftRowTr({
         <input
           type="date"
           className={EXCEL_ACTA_DATE_INPUT}
+          min={minActaCalendarYmd}
           value={value.startDate}
           onChange={(e) => onChange({ ...value, startDate: e.target.value })}
           onKeyDown={keyDown}
@@ -203,6 +206,7 @@ export function ActaDraftRowTr({
         <input
           type="date"
           className={EXCEL_ACTA_DATE_INPUT}
+          min={minActaCalendarYmd}
           value={value.deadline}
           onChange={(e) => onChange({ ...value, deadline: e.target.value })}
           onKeyDown={keyDown}
