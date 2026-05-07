@@ -68,7 +68,7 @@ function TimelineHeader({ anchor, totalDays, dayWidth }: { anchor: Date; totalDa
               density === 'minimal' ? 'py-1 gap-0' : 'py-1 gap-0.5'
             } ${
               today
-                ? 'bg-primary-500 text-white'
+                ? 'bg-sky-600/[0.12] text-sky-900 ring-1 ring-inset ring-sky-500/25 dark:bg-sky-500/15 dark:text-sky-100 dark:ring-sky-400/30'
                 : weekend
                   ? 'bg-[#f3f4f6] text-muted-foreground dark:bg-muted/40'
                   : 'bg-white text-muted-foreground dark:bg-card'
@@ -79,7 +79,7 @@ function TimelineHeader({ anchor, totalDays, dayWidth }: { anchor: Date; totalDa
               <span
                 className={`leading-none font-medium whitespace-nowrap max-w-full truncate text-center normal-case tracking-normal ${
                   density === 'compact' ? 'text-[9px]' : 'text-[10px]'
-                } ${today ? 'text-white/90' : ''}`}
+                } ${today ? 'text-sky-900/90 dark:text-sky-100/90' : ''}`}
               >
                 {weekday}
               </span>
@@ -87,7 +87,7 @@ function TimelineHeader({ anchor, totalDays, dayWidth }: { anchor: Date; totalDa
             <span
               className={`leading-none font-semibold whitespace-nowrap max-w-full truncate text-center normal-case tabular-nums ${
                 density === 'minimal' ? 'text-[11px]' : density === 'compact' ? 'text-[10px]' : 'text-[11px]'
-              } ${today ? 'text-white' : 'text-foreground'}`}
+              } ${today ? 'text-sky-950 dark:text-sky-50' : 'text-foreground'}`}
             >
               {label}
             </span>
@@ -105,7 +105,8 @@ function TodayLine({ anchor, totalDays, containerHeight, dayWidth }: { anchor: D
   if (offset < 0 || offset >= totalDays) return null
   return (
     <div
-      className="absolute top-0 pointer-events-none z-[5] w-0.5 bg-red-600 shadow-[0_0_10px_rgba(220,38,38,0.55)]"
+      aria-hidden
+      className="absolute top-0 z-0 w-px -translate-x-1/2 pointer-events-none bg-gradient-to-b from-sky-600/40 via-sky-500/22 to-transparent dark:from-sky-400/35 dark:via-sky-500/18"
       style={{ left, height: containerHeight }}
     />
   )
@@ -130,8 +131,8 @@ function rowSelectionForTask(
 
 /** Fondo de franja (columna equipos + rejilla) para tarea seleccionada o mismo responsable. */
 function selectionLaneTint(sel: 'primary' | 'peer' | null): string {
-  if (sel === 'primary') return 'bg-primary/14 dark:bg-primary/20'
-  if (sel === 'peer') return 'bg-primary/[0.07] dark:bg-primary/12'
+  if (sel === 'primary') return 'bg-sky-500/14 dark:bg-sky-500/20'
+  if (sel === 'peer') return 'bg-sky-500/[0.07] dark:bg-sky-500/12'
   return ''
 }
 
@@ -166,19 +167,19 @@ function GanttBar({
 
   const criticalRing =
     highlightCritical && selectionEmphasis == null
-      ? 'ring-2 ring-primary-500 ring-offset-2 ring-offset-white dark:ring-offset-card z-[15]'
+      ? 'ring-2 ring-white/80 ring-offset-2 ring-offset-white dark:ring-white/55 dark:ring-offset-card z-[15]'
       : ''
   const selectionRing =
     selectionEmphasis === 'primary'
-      ? 'ring-2 ring-primary-500 ring-offset-2 ring-offset-white dark:ring-offset-card z-[16]'
+      ? 'ring-2 ring-white ring-offset-2 ring-offset-white dark:ring-white/90 dark:ring-offset-card z-[16]'
       : selectionEmphasis === 'peer'
-        ? 'ring-1 ring-primary-500/45 z-[14]'
+        ? 'ring-1 ring-white/55 z-[14]'
         : ''
 
   return (
     <button
       type="button"
-      className={`absolute z-10 flex items-center px-2 overflow-hidden rounded-lg border border-white/25 text-left cursor-pointer shadow-sm transition-all duration-200 hover:scale-[1.01] hover:z-20 hover:shadow-md hover:ring-2 hover:ring-primary-500/35 gantt-bar-grow ${
+      className={`absolute z-10 flex items-center px-2 overflow-hidden rounded-lg border border-white/25 text-left cursor-pointer shadow-sm transition-all duration-200 hover:scale-[1.01] hover:z-20 hover:shadow-md hover:ring-2 hover:ring-white/45 dark:hover:ring-white/35 gantt-bar-grow ${
         dimmed ? 'opacity-35' : ''
       } ${criticalRing} ${selectionRing}`}
       style={{
@@ -277,7 +278,7 @@ function SubtaskGanttBar({
     <button
       type="button"
       title={`${sub.title?.trim() || 'Subtarea'} · Tarea: ${parent.name}`}
-      className={`absolute z-[9] flex items-center px-1.5 overflow-hidden rounded-md border border-dashed border-white/40 text-left cursor-pointer shadow-sm transition-all duration-150 hover:opacity-100 hover:z-[19] hover:ring-2 hover:ring-primary-500/35 ${fade}`}
+      className={`absolute z-[9] flex items-center px-1.5 overflow-hidden rounded-md border border-dashed border-white/40 text-left cursor-pointer shadow-sm transition-all duration-150 hover:opacity-100 hover:z-[19] hover:ring-2 hover:ring-white/45 dark:hover:ring-white/35 ${fade}`}
       style={{
         left,
         width,
@@ -304,7 +305,7 @@ function timelineDayCellClass(
 ): string {
   const base = 'shrink-0 border-r border-[#e5e7eb]/80 h-full dark:border-border/30'
   if (isTodayAtIndex(anchor, dayIndex)) {
-    return `${base} bg-primary-500/[0.07] dark:bg-primary-500/12`
+    return `${base} bg-sky-500/[0.08] dark:bg-sky-500/14`
   }
   if (showHeatmap) {
     if (concurrentTasks >= 3) return `${base} bg-red-500/15 dark:bg-red-500/25`
@@ -491,7 +492,7 @@ function TeamRowWithGrid({
                       <button
                         type="button"
                         onClick={() => onTaskClick(task)}
-                        className="relative shrink-0 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                        className="relative shrink-0 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
                         title={`${task.name} · Responsable principal · ${principalName}${stHint}`}
                       >
                         <div className="flex h-6 w-6 items-center justify-center rounded-full border border-border/60 bg-muted text-[9px] font-bold text-muted-foreground">
@@ -506,7 +507,7 @@ function TeamRowWithGrid({
                       <button
                         type="button"
                         onClick={() => onTaskClick(task)}
-                        className="h-6 w-6 shrink-0 rounded-full border border-dashed border-muted-foreground/20 bg-muted/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                        className="h-6 w-6 shrink-0 rounded-full border border-dashed border-muted-foreground/20 bg-muted/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
                         title={`${task.name} · Sin responsable asignado${stHint}`}
                         aria-label={`Seleccionar tarea ${task.name}`}
                       />
@@ -584,7 +585,7 @@ function TeamRowWithGrid({
           </div>
         </div>
 
-        <div className="relative flex-1 overflow-hidden" style={{ minWidth: tw }}>
+        <div className="relative z-[4] flex-1 overflow-hidden" style={{ minWidth: tw }}>
           <div className="absolute inset-0 flex">
             {Array.from({ length: totalDays }, (_, i) => (
               <div
@@ -721,7 +722,7 @@ function Minimap({
           team.tasks.map((task) => (
             <div
               key={task.id}
-              className="absolute rounded-sm bg-red-500/50 dark:bg-red-600/45"
+              className="absolute rounded-sm bg-sky-500/45 dark:bg-sky-500/40"
               style={{
                 left: task.startDay * scale * dayWidth,
                 width: Math.max(task.duration * scale * dayWidth, 2),
@@ -732,7 +733,7 @@ function Minimap({
           )),
         )}
         <div
-          className="absolute top-0 h-full border border-red-500/50 bg-red-500/10 rounded pointer-events-none"
+          className="absolute top-0 h-full border border-sky-500/45 bg-sky-500/10 rounded pointer-events-none dark:border-sky-400/40"
           style={{ left: thumbLeft, width: thumbW }}
         />
       </button>
@@ -804,7 +805,6 @@ function TimelineDetailSubtasksSection({
 
   const doneInList = items.reduce((n, s) => n + (s.done ? 1 : 0), 0)
   const listPct = items.length > 0 ? Math.round((100 * doneInList) / items.length) : null
-
   const subtitle =
     !loading && items.length > 0 ? (
       <div className="text-[10px] text-muted-foreground">
@@ -1284,7 +1284,7 @@ export function GanttTimelineTab({
                   <TimelineHeader anchor={range.anchor} totalDays={totalDays} dayWidth={dayWidth} />
                 </div>
                 <div className="relative">
-                  <div className="absolute top-0 pointer-events-none" style={{ left: LEFT_COL, width: totalDays * dayWidth }}>
+                  <div className="absolute top-0 z-0 pointer-events-none" style={{ left: LEFT_COL, width: totalDays * dayWidth }}>
                     <TodayLine anchor={range.anchor} totalDays={totalDays} containerHeight={todayLineHeight} dayWidth={dayWidth} />
                   </div>
                   {filteredTeams.map((team, tIdx) => (

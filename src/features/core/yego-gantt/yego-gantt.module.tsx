@@ -244,6 +244,12 @@ export function YegoGanttModule() {
   const manage = useMemo(() => ganttHasFullTabAccess(user), [user])
   const canManageWorkspaces = useMemo(() => ganttCanManageWorkspaces(user), [user])
 
+  const subtaskAssigneeReadOnlyLabel = useMemo(() => {
+    if (manage || !user) return null
+    const label = (user.name || user.username || '').trim()
+    return label || `Usuario ${user.id}`
+  }, [manage, user])
+
   const loadCollaborators = useCallback(async (areaList: AreaFull[], requestId: number) => {
     const map = await fetchAreaCollaboratorsMap(areaList)
     if (requestId !== ganttFullLoadSeqRef.current) return
@@ -647,8 +653,18 @@ export function YegoGanttModule() {
     setEditing(null)
     const start = presetDates?.startDate ?? new Date().toISOString().slice(0, 10)
     const end = presetDates?.endDate ?? new Date().toISOString().slice(0, 10)
+    const isPrivateNew = workspaceFilter === 'my_space'
+    const areaFromProfile = resolveUserDefaultAreaId(user, areas)
+    const areaIdStr =
+      presetAreaId != null
+        ? String(presetAreaId)
+        : isPrivateNew
+          ? areaFromProfile || areas[0]?.id?.toString() || ''
+          : areas[0]?.id?.toString() || ''
+    const assignedUserIdsNew =
+      isPrivateNew && user?.id != null ? [user.id] : ([] as number[])
     setForm({
-      areaId: presetAreaId?.toString() || areas[0]?.id?.toString() || '',
+      areaId: areaIdStr,
       workspaceId:
         presetWorkspaceId != null
           ? String(presetWorkspaceId)
@@ -663,15 +679,29 @@ export function YegoGanttModule() {
       status: presetStatus ?? 'PENDING',
       priority: 'MEDIUM',
       progressPercent: '0',
-      assignedUserIds: [],
+      assignedUserIds: assignedUserIdsNew,
       tagsInput: '',
-      isPrivateTask: workspaceFilter === 'my_space',
+      isPrivateTask: isPrivateNew,
     })
     setFormErrors({})
     setPendingSubtasks([])
     setAssigneeSearchQuery('')
     setDialogOpen(true)
   }
+
+  /** Tras cargar `areas`, rellena equipo/responsable en creación privada si iban vacíos. */
+  useEffect(() => {
+    if (!dialogOpen || editing != null || areas.length === 0 || !form.isPrivateTask) return
+    const myArea = resolveUserDefaultAreaId(user, areas)
+    const uid = user?.id
+    setForm((f) => {
+      if (!f.isPrivateTask) return f
+      const patch: Partial<typeof f> = {}
+      if (!f.areaId && myArea) patch.areaId = myArea
+      if (uid != null && f.assignedUserIds.length === 0) patch.assignedUserIds = [uid]
+      return Object.keys(patch).length > 0 ? { ...f, ...patch } : f
+    })
+  }, [dialogOpen, editing, areas, form.isPrivateTask, user])
 
   const openEdit = (t: TaskRow) => {
     setTaskFormSaving(false)
@@ -684,7 +714,13 @@ export function YegoGanttModule() {
       : t.assignedUserId != null
         ? [t.assignedUserId]
         : []
-    const assignedIds = effectivePrivate ? (rawIds[0] != null ? [rawIds[0]] : []) : rawIds
+    const assignedIds = effectivePrivate
+      ? rawIds[0] != null
+        ? [rawIds[0]]
+        : user?.id != null && t.createdByUserId === user.id
+          ? [user.id]
+          : []
+      : rawIds
     setForm({
       areaId: String(t.areaId),
       workspaceId: t.workspaceId != null ? String(t.workspaceId) : '',
@@ -782,11 +818,13 @@ export function YegoGanttModule() {
           for (const row of pendingSubtasks) {
             const st = row.title.trim()
             if (!st) continue
+            const subtaskAssigneePersist =
+              !manage && user?.id != null ? user.id : row.assignedUserId
             await createTaskSubtask(newTaskId, {
               title: st,
               weight: 1,
               done: row.done,
-              ...(row.assignedUserId != null ? { assignedUserId: row.assignedUserId } : {}),
+              ...(subtaskAssigneePersist != null ? { assignedUserId: subtaskAssigneePersist } : {}),
               ...(row.dueDate != null && row.dueDate.trim() !== '' ? { dueDate: row.dueDate } : {}),
             })
           }
@@ -1058,11 +1096,13 @@ export function YegoGanttModule() {
     if (editing) {
       setSubtaskModalBusy('adding')
       try {
-        const principalId = form.assignedUserIds[0]
+        const ownerForSubtask = manage
+          ? form.assignedUserIds[0] ?? null
+          : user?.id ?? null
         const createdRaw = await createTaskSubtask(editing.id, {
           title: t,
           weight: 1,
-          ...(principalId != null ? { assignedUserId: principalId } : {}),
+          ...(ownerForSubtask != null ? { assignedUserId: ownerForSubtask } : {}),
         })
         const row = normalizeSubtaskDto(createdRaw)
         setSubtaskDraft({ title: '' })
@@ -1085,13 +1125,16 @@ export function YegoGanttModule() {
       typeof crypto !== 'undefined' && 'randomUUID' in crypto
         ? crypto.randomUUID()
         : `p-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+    const ownerForSubtaskPending = manage
+      ? form.assignedUserIds[0] ?? null
+      : user?.id ?? null
     setPendingSubtasks((s) => [
       ...s,
       {
         tempId,
         title: t,
         done: false,
-        assignedUserId: form.assignedUserIds[0] ?? null,
+        assignedUserId: ownerForSubtaskPending,
         dueDate: null,
       },
     ])
@@ -1102,6 +1145,8 @@ export function YegoGanttModule() {
     subtaskModalBusy,
     editing,
     form.assignedUserIds,
+    manage,
+    user?.id,
     scheduleReloadTasksAndKpisAfterSubtasks,
   ])
 
@@ -2686,6 +2731,7 @@ export function YegoGanttModule() {
                           min={form.startDate || undefined}
                           max={form.endDate || undefined}
                           disabled={taskFormSaving || subtaskModalBusy !== 'idle' || !manage}
+                          readOnlyAssigneeLabel={subtaskAssigneeReadOnlyLabel}
                           onAssigneeCommit={async (nextAssignee) => {
                             if (!editing || subtaskModalBusy !== 'idle' || !manage) return
                             setSubtaskModalBusy('updating')
@@ -2782,6 +2828,7 @@ export function YegoGanttModule() {
                           min={form.startDate || undefined}
                           max={form.endDate || undefined}
                           disabled={taskFormSaving}
+                          readOnlyAssigneeLabel={subtaskAssigneeReadOnlyLabel}
                           onAssigneeCommit={(nextAssignee) => {
                             setPendingSubtasks((prev) =>
                               prev.map((x) =>
@@ -2844,14 +2891,19 @@ export function YegoGanttModule() {
                 </div>
               </div>
 
-              {!isMySpaceView && (
-              <label className="flex items-center gap-2 rounded-md border border-border px-2 py-2 cursor-pointer">
+              <label
+                className={cn(
+                  'flex items-center gap-2 rounded-md border border-border px-2 py-2',
+                  isMySpaceView ? 'cursor-default' : 'cursor-pointer',
+                )}
+              >
                 <input
                   type="checkbox"
                   className="h-3.5 w-3.5 rounded border-primary-500 text-primary-600 accent-primary-600 shrink-0"
-                  checked={form.isPrivateTask}
-                  disabled={taskFormSaving}
+                  checked={isMySpaceView || form.isPrivateTask}
+                  disabled={taskFormSaving || isMySpaceView}
                   onChange={(e) => {
+                    if (isMySpaceView) return
                     const checked = e.target.checked
                     if (!checked) {
                       setForm((f) => ({ ...f, isPrivateTask: false }))
@@ -2876,7 +2928,6 @@ export function YegoGanttModule() {
                 />
                 <span className="text-sm font-medium">Tarea privada</span>
               </label>
-              )}
 
             </div>
 

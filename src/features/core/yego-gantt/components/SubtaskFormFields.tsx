@@ -95,6 +95,7 @@ export function SubtaskAssigneeDateGrid({
   disabled,
   onAssigneeCommit,
   onDueDateCommit,
+  readOnlyAssigneeLabel,
 }: {
   assignees: ColaboradorDto[]
   assignedUserId: number | null | undefined
@@ -104,17 +105,31 @@ export function SubtaskAssigneeDateGrid({
   disabled?: boolean
   onAssigneeCommit: (next: number | null) => void | Promise<void>
   onDueDateCommit: (next: string | null) => void | Promise<void>
+  readOnlyAssigneeLabel?: string | null
 }) {
+  const assigneeCell =
+    readOnlyAssigneeLabel != null && readOnlyAssigneeLabel !== '' ? (
+      <div
+        className={cn(
+          'h-8 w-full min-w-0 rounded-md border border-neutral-200 dark:border-border bg-muted/40 dark:bg-muted/25 px-2 flex items-center text-[11px] text-foreground truncate',
+          disabled && 'opacity-50 pointer-events-none',
+        )}
+        title={readOnlyAssigneeLabel}
+      >
+        {readOnlyAssigneeLabel}
+      </div>
+    ) : (
+      <SubtaskAssigneeSelect
+        assignees={assignees}
+        value={assignedUserId ?? null}
+        disabled={disabled}
+        onCommit={onAssigneeCommit}
+      />
+    )
+
   return (
     <div className="grid grid-cols-2 gap-2 pl-7 min-w-0 items-start">
-      <div className="min-w-0">
-        <SubtaskAssigneeSelect
-          assignees={assignees}
-          value={assignedUserId ?? null}
-          disabled={disabled}
-          onCommit={onAssigneeCommit}
-        />
-      </div>
+      <div className="min-w-0">{assigneeCell}</div>
       <div className="min-w-0">
         <SubtaskDueDateField
           value={dueDate ?? null}

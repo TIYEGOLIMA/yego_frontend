@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 import { WorkosTabLoading } from './WorkosLoading'
 import type { TodoBoardTabProps, TaskRow, AreaTaskStatus, TaskPriority } from '../types'
-import { taskIsMine, taskIsMyPrivate } from '../taskPrivacy'
+import { taskIsMine, taskIsMyPrivate, canUserMoveTaskOnBoard } from '../taskPrivacy'
 import { PRIO_LABEL, norm } from '../utils'
 import { useKanbanDrag } from '../hooks'
 import { Avatar, ProgressBar } from './common'
@@ -243,7 +243,7 @@ export function TodoBoardTab({
                           }
                         }}
                         onClick={() => onOpenTask?.(t)}
-                        draggable={manage && !isUpdating}
+                        draggable={canUserMoveTaskOnBoard(t, currentUserId, manage) && !isUpdating}
                         onDragStart={(e) => {
                           e.stopPropagation()
                           handleDragStart(t)

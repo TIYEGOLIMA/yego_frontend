@@ -73,6 +73,8 @@ export interface TaskRow {
   /** Agregados de subtareas (API). */
   subtaskDone?: number
   subtaskTotal?: number
+  /** Resumen Gantt: el usuario actual tiene alguna subtarea asignada bajo esta tarea. */
+  subtaskAssignedToViewer?: boolean
 }
 
 export interface TaskRowLike {
@@ -95,6 +97,7 @@ export interface TaskRowLike {
   /** Agregados de subtareas cuando el origen los expone (p. ej. TaskRow desde API). */
   subtaskDone?: number
   subtaskTotal?: number
+  subtaskAssignedToViewer?: boolean
 }
 
 /** Subtarea (checklist); alineado con `/yego-gantt/tasks/:id/subtasks`. */
@@ -382,6 +385,7 @@ export interface AreaTaskResponseDto {
   assignedUserIds?: number[] | null
   tags?: string[] | null
   privateTask?: boolean
+  subtaskAssignedToViewer?: boolean
 }
 
 export interface ConvertMeetingItemToTaskResponse {

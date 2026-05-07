@@ -46,6 +46,23 @@ export function taskIsMine(t: TaskRow, userId: number | null | undefined): boole
   return taskAssigneeIds(t).includes(userId)
 }
 
+/**
+ * Arrastrar tarjeta en el tablero Kanban: gestores o participantes (asignado/creador en padre).
+ * El backend acepta cambio solo de estado para responsables de subtareas sin rol de gestión.
+ */
+export function canUserMoveTaskOnBoard(
+  t: TaskRow,
+  userId: number | null | undefined,
+  hasFullManage: boolean,
+): boolean {
+  if (hasFullManage) return true
+  if (userId == null) return false
+  if (t.subtaskAssignedToViewer === true) return true
+  if (taskIsMine(t, userId)) return true
+  const cr = t.createdByUserId != null ? Number(t.createdByUserId) : null
+  return cr != null && !Number.isNaN(cr) && cr === Number(userId)
+}
+
 /** Privadas que el usuario ve en API (creadas por él si no es admin global). */
 export function taskIsMyPrivate(t: TaskRow, userId: number | null | undefined): boolean {
   if (userId == null) return false
