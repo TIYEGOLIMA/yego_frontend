@@ -31,15 +31,25 @@ import type {
   WorkosMeetingItemStatus,
   WorkosMeetingItemType,
 } from '../types'
+import {
+  buildAssigneePickerRows,
+  principalOwnerPublicParts,
+  principalSelectItemTextValue,
+  type AssigneePickerRow,
+} from '../ganttCollaborators'
 import { PRIORITY_LABEL, STATUS_LABEL } from '../utils'
 import { ActaDraftRowTr } from './meeting-minutes/ActaDraftRowTr'
 import {
+  actaDeadlineInputMin,
+  actaItemDeadlineBeforeStartMessage,
   actaListAssigneeDisplayNames,
   actaResponsibleAvatarMeta,
+  buildConvertTaskDescriptionDraft,
   displayActaArea,
   fetchAllActasFromApi,
   isActaSectionHeaderRow,
   meetingItemDeletePreviewLine,
+  sliceActaIsoDateYmd,
   sortActasByMeetingDateDesc,
 } from './meeting-minutes/actaHelpers'
 import { actaDetailPermissions } from './meeting-minutes/actaDetailPermissions'
@@ -75,7 +85,7 @@ import {
 } from './meeting-minutes/labels'
 import { parseMeetingItemsTsv } from './meeting-minutes/parseMeetingItemsTsv'
 import { WorkosTabLoading } from './WorkosLoading'
-import { todayYmdLocal } from '../lib'
+import { todayYmdLocal, TASK_MODAL_FOCUS } from '../lib'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -96,8 +106,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/utils/cn'
-import { ArrowLeft, ClipboardPaste, ChevronRight, FileText, Loader2, PencilLine, Plus, Trash2 } from 'lucide-react'
-import { Avatar, AvatarGroup, ProgressBar } from './common'
+import { ArrowLeft, ClipboardPaste, ChevronRight, Crown, FileText, Loader2, PencilLine, Plus, Trash2 } from 'lucide-react'
+import { Avatar, AvatarGroup, PrincipalOwnerLine, ProgressBar } from './common'
 
 function actaCalendarErrorIfPast(ymd: string | undefined | null, label: string): string | null {
   const raw = typeof ymd === 'string' ? ymd.trim() : ''
@@ -106,6 +116,14 @@ function actaCalendarErrorIfPast(ymd: string | undefined | null, label: string):
   const min = todayYmdLocal()
   if (v < min) return `${label} no puede ser anterior al día de hoy`
   return null
+}
+
+function assigneeRowsExcludingPrincipal(
+  rows: AssigneePickerRow[],
+  principalUserId: number | undefined | null,
+): AssigneePickerRow[] {
+  if (principalUserId == null) return rows
+  return rows.filter((r) => r.id !== principalUserId)
 }
 
 export interface MeetingMinutesTabProps {
@@ -178,6 +196,9 @@ export function MeetingMinutesTab({
   const [convertItem, setConvertItem] = useState<MeetingMinuteItemResponse | null>(null)
   const [convertBusy, setConvertBusy] = useState(false)
   const [convertForm, setConvertForm] = useState<ConvertMeetingItemPayload>({})
+  /** Ids extra (colaboradores) además del responsable titular (`convertForm.assignedUserId`). */
+  const [convertCollaboratorIds, setConvertCollaboratorIds] = useState<number[]>([])
+  const [convertAssigneeSearchQuery, setConvertAssigneeSearchQuery] = useState('')
   const [deleteItemTarget, setDeleteItemTarget] = useState<MeetingMinuteItemResponse | null>(null)
   const [deleteItemBusy, setDeleteItemBusy] = useState(false)
   const [softDeleteActaOpen, setSoftDeleteActaOpen] = useState(false)
@@ -329,19 +350,115 @@ export function MeetingMinutesTab({
     )
   }, [allSprints, convertForm.workspaceId])
 
+  const areaCollaboratorsMap = useMemo(() => {
+    const m = new Map<number, ColaboradorDto[]>()
+    for (const ar of areas) {
+      const list = collaboratorsForArea(ar.id)
+      if (list.length > 0) m.set(ar.id, list)
+    }
+    return m
+  }, [areas, collaboratorsForArea])
+
+  const assigneePickerRowsFull = useMemo(
+    () => buildAssigneePickerRows(areas, areaCollaboratorsMap),
+    [areas, areaCollaboratorsMap],
+  )
+
+  const convertAssigneeFiltered = useMemo(() => {
+    const q = convertAssigneeSearchQuery.trim().toLowerCase()
+    const pid = convertForm.assignedUserId
+    const picked = new Set<number>(convertCollaboratorIds)
+    if (pid != null) picked.add(pid)
+    const matches = (c: AssigneePickerRow) => {
+      if (!q) return true
+      const name = (c.nombreCompleto || '').toLowerCase()
+      const areaL = (c.areaNamesLabel || '').toLowerCase()
+      const role = (c.rol || '').toLowerCase()
+      return name.includes(q) || areaL.includes(q) || role.includes(q)
+    }
+    return assigneePickerRowsFull.filter((c) => matches(c) || picked.has(c.id))
+  }, [
+    assigneePickerRowsFull,
+    convertAssigneeSearchQuery,
+    convertForm.assignedUserId,
+    convertCollaboratorIds,
+  ])
+
+  const convertPrincipalOwnerRow = useMemo(() => {
+    const oid = convertForm.assignedUserId
+    if (oid == null) return null
+    const row = assigneePickerRowsFull.find((c) => c.id === oid)
+    return principalOwnerPublicParts(row, oid)
+  }, [assigneePickerRowsFull, convertForm.assignedUserId])
+
+  const convertCollaboratorPickerRows = useMemo(
+    () => assigneeRowsExcludingPrincipal(assigneePickerRowsFull, convertForm.assignedUserId),
+    [assigneePickerRowsFull, convertForm.assignedUserId],
+  )
+
+  const convertCollaboratorPickerRowsFiltered = useMemo(
+    () => assigneeRowsExcludingPrincipal(convertAssigneeFiltered, convertForm.assignedUserId),
+    [convertAssigneeFiltered, convertForm.assignedUserId],
+  )
+
+  const setConvertOwnerPrincipal = useCallback((userIdRaw: string) => {
+    if (userIdRaw === ACTA_SELECT_NONE) {
+      setConvertForm((f) => ({ ...f, assignedUserId: undefined }))
+      return
+    }
+    const oid = Number(userIdRaw)
+    setConvertForm((f) => ({ ...f, assignedUserId: oid }))
+    setConvertCollaboratorIds((prev) => prev.filter((id) => id !== oid))
+  }, [])
+
+  const toggleConvertCollaborator = useCallback((userId: number) => {
+    setConvertCollaboratorIds((prev) =>
+      prev.includes(userId) ? prev.filter((x) => x !== userId) : [...prev, userId],
+    )
+  }, [])
+
+  const resetConvertAssigneeUi = useCallback(() => {
+    setConvertCollaboratorIds([])
+    setConvertAssigneeSearchQuery('')
+  }, [])
+
+  const closeConvertDialog = useCallback(() => {
+    setConvertItem(null)
+    resetConvertAssigneeUi()
+  }, [resetConvertAssigneeUi])
+
   const persistItemPatch = useCallback(
     async (itemId: number, patch: UpdateMeetingMinuteItemPayload) => {
       if (detailId == null) return
       if (!actaPerms.canEditRows) return
+
+      const row = detail?.items?.find((i) => i.id === itemId)
+      if (!row) {
+        setErr('No se encontró la fila del ítem')
+        return
+      }
+      const pr = patch as Record<string, unknown>
+
       const pastErr =
-        actaCalendarErrorIfPast(
-          patch.startDate as string | undefined,
-          'La fecha de inicio',
-        ) ?? actaCalendarErrorIfPast(patch.deadline as string | undefined, 'La fecha fin')
+        (pr.startDate !== undefined
+          ? actaCalendarErrorIfPast(String(pr.startDate), 'La fecha de inicio')
+          : null) ??
+        (pr.deadline !== undefined ? actaCalendarErrorIfPast(String(pr.deadline), 'La fecha fin') : null)
       if (pastErr) {
         setErr(pastErr)
         return
       }
+
+      const nextStart =
+        pr.startDate !== undefined ? sliceActaIsoDateYmd(pr.startDate) : sliceActaIsoDateYmd(row.startDate)
+      const nextDl =
+        pr.deadline !== undefined ? sliceActaIsoDateYmd(pr.deadline) : sliceActaIsoDateYmd(row.deadline)
+      const orderErr = actaItemDeadlineBeforeStartMessage(nextStart, nextDl)
+      if (orderErr) {
+        setErr(orderErr)
+        return
+      }
+
       setSheetBusy(true)
       setErr(null)
       try {
@@ -357,7 +474,7 @@ export function MeetingMinutesTab({
         setSheetBusy(false)
       }
     },
-    [detailId, actaPerms.canEditRows, applyMeetingMinuteFromMutation],
+    [detailId, detail?.items, actaPerms.canEditRows, applyMeetingMinuteFromMutation],
   )
 
   const commitActaNewRowDraft = useCallback(
@@ -374,7 +491,8 @@ export function MeetingMinutesTab({
       const dl = draft.deadline.trim()
       const dateErr =
         actaCalendarErrorIfPast(sd, 'La fecha de inicio') ??
-        actaCalendarErrorIfPast(dl, 'La fecha fin')
+        actaCalendarErrorIfPast(dl, 'La fecha fin') ??
+        actaItemDeadlineBeforeStartMessage(sd, dl)
       if (dateErr) {
         setErr(dateErr)
         return null
@@ -382,7 +500,7 @@ export function MeetingMinutesTab({
       const isSection = s.startsWith('##') && !t
       const areaName =
         a || (aid != null ? areas.find((ar) => ar.id === aid)?.name?.trim() : '') || undefined
-      const respList = aid != null ? collaboratorsForArea(aid) : collaboratorsAll
+      const respList = collaboratorsAll
       const respName =
         r ||
         (rid != null ? respList.find((c) => c.id === rid)?.nombreCompleto?.trim() : '') ||
@@ -418,7 +536,7 @@ export function MeetingMinutesTab({
         setSheetBusy(false)
       }
     },
-    [detailId, manage, applyMeetingMinuteFromMutation, areas, collaboratorsForArea, collaboratorsAll],
+    [detailId, manage, applyMeetingMinuteFromMutation, areas, collaboratorsAll],
   )
 
   const tryCommitDraftNewRow = useCallback(async () => {
@@ -498,10 +616,12 @@ export function MeetingMinutesTab({
       const rawEnd = (it.deadline ?? start).slice(0, 10)
       const end = rawEnd < minY ? start : rawEnd < start ? start : rawEnd
       setConvertItem(it)
+      resetConvertAssigneeUi()
+      const descDraft = buildConvertTaskDescriptionDraft(it)
       setConvertForm(
         omitUndefinedKeys({
-          title: it.taskTitle ?? undefined,
-          description: it.taskDescription ?? undefined,
+          title: it.taskTitle?.trim() ? it.taskTitle.trim() : 'Tarea desde acta',
+          description: descDraft.length > 0 ? descDraft : undefined,
           areaId: areaId ?? undefined,
           workspaceId,
           sprintId,
@@ -514,7 +634,7 @@ export function MeetingMinutesTab({
         } as ConvertMeetingItemPayload),
       )
     },
-    [areas, allSprints, detail?.meetingDate],
+    [areas, allSprints, detail?.meetingDate, resetConvertAssigneeUi],
   )
 
   const confirmDeleteMeetingItem = useCallback(async () => {
@@ -626,18 +746,28 @@ export function MeetingMinutesTab({
 
   const submitConvert = async () => {
     if (detailId == null || convertItem == null) return
-    const cvErr =
+    const cvErrPast =
       actaCalendarErrorIfPast(convertForm.startDate, 'La fecha de inicio') ??
-      actaCalendarErrorIfPast(convertForm.endDate, 'La fecha fin')
-    if (cvErr) {
-      setErr(cvErr)
+      actaCalendarErrorIfPast(convertForm.endDate, 'La fecha fin') ??
+      actaItemDeadlineBeforeStartMessage(convertForm.startDate, convertForm.endDate)
+    if (cvErrPast) {
+      setErr(cvErrPast)
       return
     }
     setConvertBusy(true)
     setErr(null)
     try {
-      const conv = await convertMeetingItemToTask(detailId, convertItem.id, convertForm)
-      setConvertItem(null)
+      const pid = convertForm.assignedUserId
+      const extras = [...new Set(convertCollaboratorIds)].filter((id) => id !== pid)
+      const mergedAssignees = pid != null ? [pid, ...extras] : extras.length > 0 ? extras : undefined
+      const payload = omitUndefinedKeys({
+        ...convertForm,
+        assignedUserId: pid,
+        assignedUserIds: mergedAssignees != null && mergedAssignees.length > 0 ? mergedAssignees : undefined,
+      } as Record<string, unknown>) as ConvertMeetingItemPayload
+
+      const conv = await convertMeetingItemToTask(detailId, convertItem.id, payload)
+      closeConvertDialog()
       const updated = await fetchMeetingMinuteById(detailId)
       applyMeetingMinuteFromMutation(updated)
       await onOpenTaskById(conv.task.id, {
@@ -839,7 +969,7 @@ export function MeetingMinutesTab({
                       {detailKpiDisplay.totalItems}
                     </div>
                   </div>
-                  <div className="rounded-lg border border-border/70 bg-muted/25 dark:bg-muted/15 px-4 py-3 border-l-[3px] border-l-violet-500 shadow-sm">
+                  <div className="rounded-lg border border-border/70 bg-muted/25 dark:bg-muted/15 px-4 py-3 border-l-[3px] border-l-teal-500 shadow-sm">
                     <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                       Convertidos
                     </div>
@@ -992,8 +1122,7 @@ export function MeetingMinutesTab({
                         const canEdit = actaPerms.canEditRows && !it.converted
                         const canDeleteRow = actaPerms.canManageFullActa
                       const inicioText = it.startDate ? formatShortDate(it.startDate) : null
-                      const respOptions =
-                        it.areaId != null ? collaboratorsForArea(it.areaId) : collaboratorsAll
+                      const respOptions = collaboratorsAll
                       const rspMeta = actaResponsibleAvatarMeta(it, respOptions, collaboratorsById)
 
                       return (
@@ -1194,7 +1323,7 @@ export function MeetingMinutesTab({
                               <input
                                 key={`${it.id}-dl-${it.updatedAt}`}
                                 type="date"
-                                min={minActaCalendarYmd}
+                                min={actaDeadlineInputMin(minActaCalendarYmd, it.startDate)}
                                 className={EXCEL_ACTA_DATE_INPUT}
                                 defaultValue={it.deadline ? it.deadline.slice(0, 10) : ''}
                                 disabled={sheetBusy}
@@ -1313,7 +1442,6 @@ export function MeetingMinutesTab({
                             onDiscard={() => removeLocalDraftRow(lr.tempId)}
                             sheetBusy={sheetBusy}
                             areas={areas}
-                            collaboratorsForArea={collaboratorsForArea}
                             collaboratorsAll={collaboratorsAll}
                             minActaCalendarYmd={minActaCalendarYmd}
                             discardAriaLabel="Quitar esta fila (solo vista local; sin servidor)"
@@ -1331,7 +1459,6 @@ export function MeetingMinutesTab({
                             }}
                             sheetBusy={sheetBusy}
                             areas={areas}
-                            collaboratorsForArea={collaboratorsForArea}
                             collaboratorsAll={collaboratorsAll}
                             minActaCalendarYmd={minActaCalendarYmd}
                             discardAriaLabel="Quitar fila de entrada (solo en pantalla; sin llamar al servidor)"
@@ -1469,12 +1596,7 @@ export function MeetingMinutesTab({
                 const nItems = row.kpis?.totalItems ?? 0
                 const nConverted = row.kpis?.convertedItems ?? 0
                 const pct = nConverted === 0 ? 0 : (row.kpis?.completionPercentage ?? 0)
-                const listAssignees = actaListAssigneeDisplayNames(
-                  row.items,
-                  collaboratorsById,
-                  collaboratorsForArea,
-                  collaboratorsAll,
-                )
+                const listAssignees = actaListAssigneeDisplayNames(row.items, collaboratorsById, collaboratorsAll)
                 return (
                   <li key={row.id}>
                     <button
@@ -1829,39 +1951,46 @@ export function MeetingMinutesTab({
       <Dialog
         open={convertItem != null}
         onOpenChange={(open) => {
-          if (!open && !convertBusy) setConvertItem(null)
+          if (!open && !convertBusy) closeConvertDialog()
         }}
       >
-        <DialogContent className="max-w-lg rounded-xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Convertir ítem en tarea</DialogTitle>
+        <DialogContent className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-xl p-6 sm:p-8 gap-4 border-border/80 shadow-lg">
+          <DialogHeader className="space-y-1">
+            <DialogTitle className="text-lg font-semibold tracking-tight">Convertir ítem en tarea</DialogTitle>
+            <p className="text-sm text-muted-foreground font-normal leading-snug">
+              Misma asignación que en el alta de tarea Gantt: titular con corona y colaboradores con avatar.
+            </p>
           </DialogHeader>
           {convertItem && (
-            <div className="space-y-3 py-1">
-              <div className="space-y-1.5">
-                <Label>Título</Label>
+            <div className="space-y-4 py-0">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Título</Label>
                 <Input
                   value={convertForm.title ?? ''}
+                  disabled={convertBusy}
                   onChange={(e) => setConvertForm((f) => ({ ...f, title: e.target.value }))}
+                  className={cn('h-10 rounded-lg px-3', TASK_MODAL_FOCUS)}
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label>Descripción</Label>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Descripción</Label>
                 <Textarea
                   value={convertForm.description ?? ''}
+                  disabled={convertBusy}
                   onChange={(e) => setConvertForm((f) => ({ ...f, description: e.target.value }))}
-                  rows={3}
-                  className="rounded-lg"
+                  rows={6}
+                  className={cn('rounded-lg text-sm min-h-[8rem] px-3 py-2', TASK_MODAL_FOCUS)}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Equipo</Label>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Equipo</Label>
                   <Select
                     value={convertForm.areaId != null ? String(convertForm.areaId) : ''}
+                    disabled={convertBusy}
                     onValueChange={(v) => setConvertForm((f) => ({ ...f, areaId: Number(v) }))}
                   >
-                    <SelectTrigger className="rounded-lg">
+                    <SelectTrigger className={cn('rounded-lg min-h-10', TASK_MODAL_FOCUS)}>
                       <SelectValue placeholder="—" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1873,10 +2002,11 @@ export function MeetingMinutesTab({
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1.5">
-                  <Label>Espacio</Label>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Espacio</Label>
                   <Select
                     value={convertForm.workspaceId != null ? String(convertForm.workspaceId) : 'none'}
+                    disabled={convertBusy}
                     onValueChange={(v) =>
                       setConvertForm((f) => ({
                         ...f,
@@ -1885,7 +2015,7 @@ export function MeetingMinutesTab({
                       }))
                     }
                   >
-                    <SelectTrigger className="rounded-lg">
+                    <SelectTrigger className={cn('rounded-lg min-h-10', TASK_MODAL_FOCUS)}>
                       <SelectValue placeholder="—" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1900,15 +2030,16 @@ export function MeetingMinutesTab({
                 </div>
               </div>
               {sprintsForWorkspace.length > 0 && (
-                <div className="space-y-1.5">
-                  <Label>Sprint</Label>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Sprint</Label>
                   <Select
                     value={convertForm.sprintId != null ? String(convertForm.sprintId) : 'none'}
+                    disabled={convertBusy}
                     onValueChange={(v) =>
                       setConvertForm((f) => ({ ...f, sprintId: v === 'none' ? undefined : Number(v) }))
                     }
                   >
-                    <SelectTrigger className="rounded-lg">
+                    <SelectTrigger className={cn('rounded-lg min-h-10', TASK_MODAL_FOCUS)}>
                       <SelectValue placeholder="—" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1922,34 +2053,179 @@ export function MeetingMinutesTab({
                   </Select>
                 </div>
               )}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium flex items-center gap-1.5">
+                  <Crown
+                    className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400 shrink-0"
+                    aria-hidden
+                  />
+                  Responsable principal
+                </Label>
+                <Select
+                  value={
+                    convertForm.assignedUserId != null ? String(convertForm.assignedUserId) : ACTA_SELECT_NONE
+                  }
+                  onValueChange={setConvertOwnerPrincipal}
+                  disabled={convertBusy}
+                >
+                  <SelectTrigger
+                    className={cn(
+                      'relative min-h-10 h-auto min-w-0 py-2 rounded-lg items-center text-left [&>svg]:shrink-0',
+                      TASK_MODAL_FOCUS,
+                    )}
+                    aria-label={convertPrincipalOwnerRow?.lineTitle}
+                  >
+                    {convertPrincipalOwnerRow ? (
+                      <span className="flex min-w-0 flex-1 items-start gap-2 text-left">
+                        <Avatar
+                          name={convertPrincipalOwnerRow.nombre}
+                          size="xs"
+                          variant="owner"
+                          className="mt-0.5 shrink-0"
+                        />
+                        <PrincipalOwnerLine
+                          nombre={convertPrincipalOwnerRow.nombre}
+                          area={convertPrincipalOwnerRow.area}
+                        />
+                      </span>
+                    ) : (
+                      <SelectValue
+                        placeholder="Selecciona un responsable"
+                        className="block min-w-0 flex-1 text-left"
+                      />
+                    )}
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ACTA_SELECT_NONE}>Sin responsable</SelectItem>
+                    {convertAssigneeFiltered.map((c) => {
+                      const textValue = principalSelectItemTextValue(c)
+                      return (
+                        <SelectItem key={c.id} value={String(c.id)} textValue={textValue}>
+                          <span className="flex items-start gap-2 w-full min-w-0 py-0.5">
+                            <Avatar
+                              name={c.nombreCompleto}
+                              size="xs"
+                              variant="owner"
+                              className="mt-0.5 shrink-0"
+                            />
+                            <PrincipalOwnerLine
+                              nombre={c.nombreCompleto}
+                              area=""
+                              className="text-left"
+                            />
+                          </span>
+                        </SelectItem>
+                      )
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Colaboradores</Label>
+                <div className="flex gap-1.5 items-stretch">
+                  <Input
+                    variant="plain"
+                    type="text"
+                    autoComplete="off"
+                    placeholder="Buscar por nombre, equipo o rol…"
+                    value={convertAssigneeSearchQuery}
+                    disabled={convertBusy}
+                    onChange={(e) => setConvertAssigneeSearchQuery(e.target.value)}
+                    className={cn(
+                      'h-8 flex-1 min-w-0 rounded-lg border border-neutral-200 dark:border-border bg-background text-xs px-2.5',
+                      TASK_MODAL_FOCUS,
+                    )}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-8 shrink-0 rounded-lg border-neutral-200 dark:border-border bg-background px-2.5 text-xs font-medium gap-1.5"
+                    disabled={convertBusy || !convertAssigneeSearchQuery.trim()}
+                    onClick={() => setConvertAssigneeSearchQuery('')}
+                  >
+                    Limpiar
+                  </Button>
+                </div>
+                <div className="grid grid-cols-2 gap-2 rounded-lg border border-border/80 bg-muted/10 dark:bg-muted/20 p-3 max-h-48 overflow-y-auto">
+                  {convertCollaboratorPickerRows.length === 0 ? (
+                    <p className="text-xs text-muted-foreground col-span-2">
+                      No hay más personas en los equipos cargados.
+                    </p>
+                  ) : convertCollaboratorPickerRowsFiltered.length === 0 ? (
+                    <p className="text-xs text-muted-foreground col-span-2">
+                      Nadie coincide con la búsqueda. Prueba con otro nombre o equipo.
+                    </p>
+                  ) : (
+                    convertCollaboratorPickerRowsFiltered.map((c) => {
+                        const selected = convertCollaboratorIds.includes(c.id)
+                        return (
+                          <label
+                            key={c.id}
+                            className={cn(
+                              'flex items-center gap-2.5 cursor-pointer rounded-lg border px-2 py-1.5 transition-all duration-150',
+                              selected
+                                ? 'border-primary/35 bg-primary/[0.07] shadow-sm dark:bg-primary/10'
+                                : 'border-transparent hover:border-border/50 hover:bg-muted/40',
+                            )}
+                          >
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 rounded border-border text-primary-600 accent-primary-600 shrink-0"
+                              checked={selected}
+                              disabled={convertBusy}
+                              onChange={() => toggleConvertCollaborator(c.id)}
+                            />
+                            <Avatar
+                              name={c.nombreCompleto}
+                              size="md"
+                              variant="picker"
+                              className={cn(
+                                selected &&
+                                  'ring-2 ring-primary/45 ring-offset-2 ring-offset-background dark:ring-offset-background',
+                              )}
+                            />
+                            <span className="text-xs truncate min-w-0 flex flex-col items-start gap-0 leading-tight">
+                              <span className="truncate w-full font-medium">{c.nombreCompleto}</span>
+                            </span>
+                          </label>
+                        )
+                      })
+                  )}
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Inicio</Label>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Inicio</Label>
                   <Input
                     type="date"
                     min={minActaCalendarYmd}
+                    disabled={convertBusy}
                     value={convertForm.startDate ?? ''}
                     onChange={(e) => setConvertForm((f) => ({ ...f, startDate: e.target.value }))}
+                    className={cn('h-10 rounded-lg px-3', TASK_MODAL_FOCUS)}
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <Label>Fin</Label>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Fin</Label>
                   <Input
                     type="date"
-                    min={minActaCalendarYmd}
+                    min={actaDeadlineInputMin(minActaCalendarYmd, convertForm.startDate)}
+                    disabled={convertBusy}
                     value={convertForm.endDate ?? ''}
                     onChange={(e) => setConvertForm((f) => ({ ...f, endDate: e.target.value }))}
+                    className={cn('h-10 rounded-lg px-3', TASK_MODAL_FOCUS)}
                   />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Estado tarea</Label>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Estado tarea</Label>
                   <Select
                     value={convertForm.status ?? 'PENDING'}
+                    disabled={convertBusy}
                     onValueChange={(v) => setConvertForm((f) => ({ ...f, status: v as AreaTaskStatus }))}
                   >
-                    <SelectTrigger className="rounded-lg">
+                    <SelectTrigger className={cn('rounded-lg min-h-10', TASK_MODAL_FOCUS)}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1961,13 +2237,14 @@ export function MeetingMinutesTab({
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1.5">
-                  <Label>Prioridad</Label>
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Prioridad</Label>
                   <Select
                     value={convertForm.priority ?? 'MEDIUM'}
+                    disabled={convertBusy}
                     onValueChange={(v) => setConvertForm((f) => ({ ...f, priority: v as TaskPriority }))}
                   >
-                    <SelectTrigger className="rounded-lg">
+                    <SelectTrigger className={cn('rounded-lg min-h-10', TASK_MODAL_FOCUS)}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1988,7 +2265,7 @@ export function MeetingMinutesTab({
               variant="outline"
               className="rounded-lg"
               disabled={convertBusy}
-              onClick={() => setConvertItem(null)}
+              onClick={closeConvertDialog}
             >
               Cancelar
             </Button>

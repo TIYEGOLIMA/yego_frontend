@@ -86,7 +86,7 @@ export function taskStatusLabel(status: AreaTaskStatus | string | null | undefin
 export function itemTypeBadgeClass(t: WorkosMeetingItemType): string {
   switch (t) {
     case 'DECISION':
-      return 'bg-violet-500/12 text-violet-800 dark:text-violet-200 border-violet-500/25'
+      return 'bg-blue-500/12 text-blue-900 dark:text-blue-100 border-blue-500/25'
     case 'ACCION':
       return 'bg-sky-500/12 text-sky-800 dark:text-sky-200 border-sky-500/20'
     case 'RIESGO':

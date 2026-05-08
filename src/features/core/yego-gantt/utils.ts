@@ -88,7 +88,7 @@ export function sprintEndDateReached(endDateYmd: string): boolean {
 
 export const TAG_COLORS = [
   'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
-  'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
+  'bg-blue-100 text-blue-800 dark:bg-blue-950/45 dark:text-blue-200',
   'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300',
   'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300',
   'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
@@ -165,6 +165,36 @@ export function initialsFromLabel(label: string): string {
   return avatarInitials(label)
 }
 
+const YMD_RE = /^\d{4}-\d{2}-\d{2}$/
+
+/**
+ * Alinea la fecha límite de la subtarea con el inicio del padre si quedó por debajo (`yyyy-mm-dd`).
+ * No aplica techo con la fecha fin del padre: esa puede ampliarse al guardar según el máximo `dueDate` entre subtareas.
+ */
+export function ensureSubtaskDueNotBeforeParentStart(
+  dueYmd: string | null | undefined,
+  parentStartYmd: string | undefined | null,
+): string | null {
+  if (dueYmd == null || String(dueYmd).trim() === '') return null
+  let d = String(dueYmd).trim().slice(0, 10)
+  if (!YMD_RE.test(d)) return null
+  const start =
+    parentStartYmd != null && String(parentStartYmd).trim() !== ''
+      ? String(parentStartYmd).trim().slice(0, 10)
+      : ''
+  if (start && YMD_RE.test(start) && d < start) d = start
+  return d
+}
+
+/** @deprecated Usar `ensureSubtaskDueNotBeforeParentStart` (ya no se limita por fin de padre). */
+export function clampSubtaskDueYmdToParent(
+  dueYmd: string | null | undefined,
+  parentStartYmd: string | undefined | null,
+  _parentEndYmd?: string | undefined | null,
+): string | null {
+  return ensureSubtaskDueNotBeforeParentStart(dueYmd, parentStartYmd)
+}
+
 export function taskPoints(priority?: TaskPriority | null): number {
   switch (priority) {
     case 'URGENT':
@@ -203,6 +233,8 @@ export function timelineTaskBarColor(progressPct: number, status: GanttVisualSta
   return '#94a3b8'
 }
 
+export { timelineSubtaskBarColor } from './timelinePalette'
+
 export function areaLabelColor(progressPct: number): string {
   const p = Math.max(0, Math.min(100, progressPct))
   if (p >= 85) return 'text-emerald-700 dark:text-emerald-300'
@@ -213,7 +245,7 @@ export function areaLabelColor(progressPct: number): string {
 export function areaPillClass(areaId: number): string {
   const palette = [
     'border-sky-200 bg-sky-50 text-sky-800 dark:bg-sky-950/40 dark:text-sky-200 dark:border-sky-800/50',
-    'border-violet-200 bg-violet-50 text-violet-800 dark:bg-violet-950/40 dark:text-violet-200 dark:border-violet-800/50',
+    'border-blue-200 bg-blue-50 text-blue-900 dark:bg-blue-950/40 dark:text-blue-100 dark:border-blue-800/50',
     'border-rose-200 bg-rose-50 text-rose-800 dark:bg-rose-950/40 dark:text-rose-200 dark:border-rose-800/50',
     'border-teal-200 bg-teal-50 text-teal-800 dark:bg-teal-950/40 dark:text-teal-200 dark:border-teal-800/50',
   ]

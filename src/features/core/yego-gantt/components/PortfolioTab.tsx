@@ -372,7 +372,7 @@ export function PortfolioTab({
               <div className="rounded-xl border border-border/70 bg-background dark:bg-card/90 shadow-sm p-4 ring-1 ring-border/30">
                 <h4 className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground mb-3 font-semibold flex items-center gap-2 pb-2 border-b border-border/50">
                   <span className="w-1 h-3.5 rounded-full bg-red-500/70 inline-block" />
-                  Equipo del área
+                  Equipo
                 </h4>
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-3">
                   {g.collaborators.length > 0 ? (
@@ -419,7 +419,7 @@ export function PortfolioTab({
                 <div className="flex items-center justify-between mb-3 pb-2 border-b border-border/50">
                   <h4 className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-semibold flex items-center gap-2">
                     <span className="w-1 h-3.5 rounded-full bg-red-500/70 inline-block" />
-                    Tareas del área
+                    Tareas
                   </h4>
                   {manage && (
                     <button
@@ -523,7 +523,7 @@ export function PortfolioTab({
         </div>
         <div className="flex items-center gap-1.5">
           <Building2 className="w-3.5 h-3.5 text-primary-600 dark:text-primary-400" />
-          <span className="text-xs text-muted-foreground font-medium">Áreas con tareas:</span>
+          <span className="text-xs text-muted-foreground font-medium">Equipos con tareas:</span>
           <span className="text-xs font-bold tabular-nums">{totalAreas}</span>
         </div>
         <div className="flex items-center gap-1.5">

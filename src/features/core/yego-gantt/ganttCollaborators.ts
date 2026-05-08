@@ -80,38 +80,27 @@ export function collaboratorAreaLabel(
   return ''
 }
 
-function principalLineTitle(nombre: string, area: string): string {
-  const a = area.trim()
-  return a ? `${nombre} -- ${a}` : nombre
-}
 
-/** Responsable principal (modal): fila pública / select; área = `areaNamesLabel`. */
+/** Responsable principal (modal): solo nombre visible (equipo ya no se muestra en UI). */
 export function principalOwnerPublicParts(
   row: AssigneePickerRow | undefined,
   ownerId: number,
 ): { nombre: string; area: string; lineTitle: string } {
   const nombre = row?.nombreCompleto ?? `Usuario ${ownerId}`
-  const area = row?.areaNamesLabel?.trim() ?? ''
-  return { nombre, area, lineTitle: principalLineTitle(nombre, area) }
+  return { nombre, area: '', lineTitle: nombre }
 }
 
-/** Responsable principal en tarea privada: área vía `collaboratorAreaLabel` + equipo del formulario. */
+/** Responsable principal en tarea privada: mismo criterio (sin línea de equipo en UI). */
 export function principalOwnerPrivateParts(
   row: AssigneePickerRow | undefined,
   ownerId: number,
   user: { id?: number; name?: string } | null | undefined,
-  formAreaId: string | undefined,
-  areas: AreaFull[],
+  _formAreaId: string | undefined,
+  _areas: AreaFull[],
 ): { nombre: string; area: string; lineTitle: string } {
   const nombre =
     row?.nombreCompleto ?? (user?.id === ownerId ? user.name : null) ?? `Usuario ${ownerId}`
-  const aid = formAreaId ? Number(formAreaId) : undefined
-  const area = collaboratorAreaLabel(
-    row,
-    Number.isFinite(aid) ? aid : undefined,
-    areas,
-  ).trim()
-  return { nombre, area, lineTitle: principalLineTitle(nombre, area) }
+  return { nombre, area: '', lineTitle: nombre }
 }
 
 /** `textValue` del ítem del select (misma cadena que la línea visible). */

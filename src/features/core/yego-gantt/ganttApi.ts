@@ -238,6 +238,9 @@ export async function createTaskSubtask(
     done?: boolean
     assignedUserId?: number | null
     dueDate?: string | null
+    description?: string | null
+    areaId?: number | null
+    workspaceId?: number | null
   },
 ): Promise<TaskSubtaskDto> {
   const payload: Record<string, unknown> = {
@@ -248,6 +251,10 @@ export async function createTaskSubtask(
   if (body.assignedUserId != null) payload.assignedUserId = body.assignedUserId
   const d = body.dueDate?.trim()
   if (d) payload.dueDate = d
+  const desc = body.description?.trim()
+  if (desc) payload.description = desc
+  if (body.areaId != null) payload.areaId = body.areaId
+  if (body.workspaceId != null) payload.workspaceId = body.workspaceId
   const res = await api.post<TaskSubtaskDto>(`/yego-gantt/tasks/${taskId}/subtasks`, payload)
   return res.data
 }
@@ -257,6 +264,7 @@ export async function updateTaskSubtask(
   subtaskId: number,
   body: Partial<{
     title: string
+    description: string
     weight: number
     done: boolean
     sortOrder: number
@@ -264,6 +272,9 @@ export async function updateTaskSubtask(
     unassignUser: boolean
     dueDate: string | null
     clearDueDate: boolean
+    areaId: number
+    workspaceId: number
+    clearWorkspace: boolean
   }>,
 ): Promise<TaskSubtaskDto> {
   const res = await api.put(`/yego-gantt/tasks/${taskId}/subtasks/${subtaskId}`, body)
@@ -274,6 +285,19 @@ export async function deleteTaskSubtask(taskId: number, subtaskId: number): Prom
   await api.delete(`/yego-gantt/tasks/${taskId}/subtasks/${subtaskId}`)
 }
 
+/** Mueve la subtarea a otra tarea padre (permisos igual que crear/borrar subtarea). */
+export async function moveTaskSubtask(
+  fromParentTaskId: number,
+  subtaskId: number,
+  targetParentTaskId: number,
+): Promise<TaskSubtaskDto> {
+  const res = await api.post<TaskSubtaskDto>(
+    `/yego-gantt/tasks/${fromParentTaskId}/subtasks/${subtaskId}/move`,
+    { targetParentTaskId },
+  )
+  return res.data
+}
+
 export function parseGanttLoadError(e: unknown): string {
   const data = e && typeof e === 'object' && 'response' in e
     ? (e as { response?: { data?: { message?: string; code?: string } } }).response?.data
@@ -282,6 +306,16 @@ export function parseGanttLoadError(e: unknown): string {
     return String(data.message)
   }
   return 'Error al cargar'
+}
+
+export async function convertTaskToSubtask(
+  taskId: number,
+  targetParentTaskId: number,
+): Promise<TaskSubtaskDto> {
+  const res = await api.post<TaskSubtaskDto>(`/yego-gantt/tasks/${taskId}/convert-to-subtask`, {
+    targetParentTaskId,
+  })
+  return res.data
 }
 
 // --- Actas de reunión (meeting minutes) ---

@@ -14,11 +14,13 @@ export {
   normalizeSubtaskDtoList,
   updateTaskSubtaskNormalized,
   weightedProgressPercentFromSubtasks,
+  parentEndDateFromSubtasks,
   patchGanttParentFromSubtasks,
 } from './ganttSubtaskProgress'
 export {
   canUserToggleSubtaskDone,
   principalUserIdFromTask,
+  SUBTASK_DONE_NOT_ALLOWED_HINT,
 } from './ganttSubtaskPermissions'
 export {
   DETAIL_STATUS_PILL,

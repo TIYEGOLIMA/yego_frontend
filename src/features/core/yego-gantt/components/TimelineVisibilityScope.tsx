@@ -16,7 +16,7 @@ const SCOPES: ReadonlyArray<{
   countKey: keyof TimelineVisibilityCounts
   needsUser: boolean
 }> = [
-  { id: 'default', label: 'Equipos', Icon: GanttChartSquare, countKey: 'equipo', needsUser: false },
+  { id: 'default', label: 'Sin privadas', Icon: GanttChartSquare, countKey: 'equipo', needsUser: false },
   { id: 'all', label: 'Todas', Icon: Users, countKey: 'all', needsUser: false },
   { id: 'mine', label: 'Mis tareas', Icon: UserRound, countKey: 'mine', needsUser: true },
   { id: 'private', label: 'Privadas', Icon: Lock, countKey: 'priv', needsUser: true },
@@ -33,7 +33,7 @@ export function TimelineVisibilityScope({
   onChange: (v: TimelineVisibilityFilter) => void
   counts: TimelineVisibilityCounts
   currentUserId: number | null | undefined
-  /** En «Mi espacio» no aplica el alcance «Equipos» (solo tareas no privadas por equipo). */
+  /** En «Mi espacio» oculta el alcance «Sin privadas» (lista ya mezclada). */
   hideEquiposScope?: boolean
 }) {
   const scopes = hideEquiposScope ? SCOPES.filter((s) => s.id !== 'default') : SCOPES

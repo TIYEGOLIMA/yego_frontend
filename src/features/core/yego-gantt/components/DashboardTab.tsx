@@ -216,19 +216,6 @@ export function DashboardTab({
                 </ul>
               </div>
             )}
-            {mmKpis.topAreasBlocked && mmKpis.topAreasBlocked.length > 0 && (
-              <div>
-                <div className="text-xs font-medium text-muted-foreground mb-1">Áreas con más bloqueos</div>
-                <ul className="text-xs space-y-0.5">
-                  {mmKpis.topAreasBlocked.slice(0, 5).map((r) => (
-                    <li key={r.name} className="flex justify-between gap-2 tabular-nums">
-                      <span className="truncate">{r.name || '—'}</span>
-                      <span>{r.count}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
           </div>
         )}
         {onOpenActasTab && (
@@ -250,7 +237,6 @@ export function DashboardTab({
                 <div key={t.id} className="flex items-center gap-3 py-1.5 text-sm">
                   <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
                   <span className="font-medium flex-1 truncate">{t.title}</span>
-                  <span className="text-xs text-muted-foreground">{t.areaName}</span>
                   <span className="text-xs font-mono text-amber-700 dark:text-amber-400 tabular-nums">{t.endDate}</span>
                 </div>
               ))}
@@ -267,7 +253,6 @@ export function DashboardTab({
               <div key={t.id} className="flex items-center gap-3 py-2 text-sm">
                 <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
                 <span className="font-medium flex-1 truncate">{t.title}</span>
-                <span className="text-xs text-muted-foreground">{t.areaName}</span>
               </div>
             ))}
           </div>

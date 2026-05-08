@@ -62,7 +62,6 @@ import {
   taskPoints,
   sprintCapacityPts,
   sprintEndDateReached,
-  areaPillClass,
 } from '../utils'
 import { useDragAndDrop, useExpansion, useDialog } from '../hooks'
 import {
@@ -187,7 +186,7 @@ function SprintTaskCard({ task, onDragStart, onAdd, showAdd, collaboratorNames, 
       : []
   const firstId = assigneeIds[0]
   const firstLabel = firstId != null ? collaboratorNames?.get(firstId) ?? `#${firstId}` : null
-  const footerLabel = task.areaName || workspaceName || null
+  const footerLabel = workspaceName || null
 
   return (
     <div
@@ -203,7 +202,7 @@ function SprintTaskCard({ task, onDragStart, onAdd, showAdd, collaboratorNames, 
       <div className="mt-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 min-w-0">
           {footerLabel && (
-            <span className={`text-[10px] font-medium px-2 py-0.5 rounded-md border truncate max-w-[130px] ${areaPillClass(task.areaId)}`}>
+            <span className="text-[10px] font-medium px-2 py-0.5 rounded-md border border-border/60 bg-muted/30 text-muted-foreground truncate max-w-[130px]">
               {footerLabel}
             </span>
           )}
@@ -277,7 +276,6 @@ export function SprintsTab({
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
-  const [areaFilter, setAreaFilter] = useState('all')
   const [prioFilter, setPrioFilter] = useState('all')
 
   useEffect(() => {
@@ -373,14 +371,6 @@ export function SprintsTab({
     workspaces.forEach((p) => m.set(p.id, p.name))
     return m
   }, [workspaces])
-
-  const areasFromTasks = useMemo(() => {
-    const m = new Map<number, string>()
-    for (const t of tasks) {
-      if (t.areaName) m.set(t.areaId, t.areaName)
-    }
-    return Array.from(m.entries()).map(([id, name]) => ({ id, name }))
-  }, [tasks])
 
   const moveTaskToSprint = async (taskId: number, sprintId: number) => {
     try {
@@ -511,7 +501,6 @@ export function SprintsTab({
   const sprintsNonCompleted = allSprints.filter((s) => s.status !== 'COMPLETED' && s.status !== 'CANCELLED')
 
   const filteredBacklog = backlogTasks.filter((t) => {
-    if (areaFilter !== 'all' && String(t.areaId) !== areaFilter) return false
     if (prioFilter !== 'all' && normPriority(t.priority) !== prioFilter) return false
     return true
   })
@@ -1080,19 +1069,6 @@ export function SprintsTab({
               </p>
             </div>
             <div className="ml-auto flex items-center gap-2 flex-wrap">
-              <Select value={areaFilter} onValueChange={setAreaFilter}>
-                <SelectTrigger className="h-8 w-[180px] rounded-lg">
-                  <SelectValue placeholder="Área" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas las áreas</SelectItem>
-                  {areasFromTasks.map((a) => (
-                    <SelectItem key={a.id} value={String(a.id)}>
-                      {a.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
               <Select value={prioFilter} onValueChange={setPrioFilter}>
                 <SelectTrigger className="h-8 w-[140px] rounded-lg">
                   <SelectValue placeholder="Prioridad" />
@@ -1131,11 +1107,6 @@ export function SprintsTab({
                     className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/30 cursor-grab active:cursor-grabbing transition"
                   >
                     <PriorityBadge priority={p} size="sm" />
-                    {t.areaName && (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground truncate max-w-[100px]">
-                        {t.areaName}
-                      </span>
-                    )}
                     <div className="flex-1 min-w-0">
                       <button
                         type="button"

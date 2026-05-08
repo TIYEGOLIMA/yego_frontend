@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useState, type ChangeEvent } from 'react'
 import { CheckCircle2, Circle, Calendar } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import {
@@ -9,6 +10,7 @@ import {
 } from '@/components/ui/select'
 import { cn } from '../../../../utils/cn'
 import type { ColaboradorDto } from '../types'
+import { Textarea } from '@/components/ui/textarea'
 import { FORM_SUBTASK_CHECKBOX_CLASS, TASK_MODAL_FOCUS } from '../lib/ganttTaskModalStyles'
 
 export function SubtaskAssigneeSelect({
@@ -50,6 +52,13 @@ export function SubtaskAssigneeSelect({
   )
 }
 
+/** Normaliza valor de API a `yyyy-mm-dd` para el input native. */
+function ymdForDateInput(value: string | null | undefined): string {
+  if (value == null) return ''
+  const t = String(value).trim().slice(0, 10)
+  return /^\d{4}-\d{2}-\d{2}$/.test(t) ? t : ''
+}
+
 export function SubtaskDueDateField({
   value,
   min,
@@ -63,18 +72,62 @@ export function SubtaskDueDateField({
   disabled?: boolean
   onCommit: (next: string | null) => void | Promise<void>
 }) {
+  /** Borrador local: evita guardar/API en cada evento al cambiar de mes en el date picker nativo. */
+  const [draft, setDraft] = useState(() => ymdForDateInput(value))
+  useEffect(() => {
+    setDraft(ymdForDateInput(value))
+  }, [value])
+
+  const flushIfChanged = useCallback(() => {
+    const raw = draft.trim()
+    const next = raw === '' ? null : raw
+    const prev = (() => {
+      const p = ymdForDateInput(value)
+      return p === '' ? null : p
+    })()
+    if (next === prev) return
+    if (next != null && !/^\d{4}-\d{2}-\d{2}$/.test(next)) return
+    void onCommit(next)
+  }, [draft, value, onCommit])
+
+  const tryCommitFullYmd = useCallback(
+    (v: string) => {
+      setDraft(v)
+      const t = v.trim()
+      if (t === '') {
+        const had = ymdForDateInput(value) !== ''
+        if (had) void onCommit(null)
+        return
+      }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(t)) return
+      const prevYmd = ymdForDateInput(value)
+      if (t === prevYmd) return
+      void onCommit(t)
+    },
+    [value, onCommit],
+  )
+
+  const handleDateInput = useCallback(
+    (e: ChangeEvent<HTMLInputElement>) => {
+      tryCommitFullYmd(e.target.value)
+    },
+    [tryCommitFullYmd],
+  )
+
   return (
     <Input
       type="date"
       variant="plain"
       leftIcon={<Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" aria-hidden />}
-      value={value ?? ''}
+      value={draft}
       min={min || undefined}
       max={max || undefined}
       disabled={disabled}
-      onChange={(e) => {
-        const v = e.target.value.trim()
-        void onCommit(v === '' ? null : v)
+      onChange={handleDateInput}
+      onInput={handleDateInput}
+      onBlur={() => void flushIfChanged()}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
       }}
       aria-label="Fecha límite"
       className={cn(
@@ -82,6 +135,73 @@ export function SubtaskDueDateField({
         TASK_MODAL_FOCUS,
       )}
     />
+  )
+}
+
+/** Equipo y espacio de trabajo (misma lógica de herencia que en la API). */
+export function SubtaskAreaWorkspaceRow({
+  areas,
+  workspaces,
+  areaId,
+  workspaceId,
+  disabled,
+  onAreaCommit,
+  onWorkspaceCommit,
+}: {
+  areas: { id: number; name: string }[]
+  workspaces: { id: number; name: string }[]
+  areaId: number
+  workspaceId: number | null
+  disabled?: boolean
+  onAreaCommit: (nextAreaId: number) => void | Promise<void>
+  onWorkspaceCommit: (nextWorkspaceId: number | null) => void | Promise<void>
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-2 pl-7 min-w-0 items-start">
+      <Select
+        value={String(areaId)}
+        disabled={disabled || areas.length === 0}
+        onValueChange={(v) => void onAreaCommit(Number(v))}
+      >
+        <SelectTrigger
+          className={cn(
+            'h-8 w-full min-w-0 rounded-md border border-neutral-200 dark:border-border bg-white dark:bg-card px-2 text-[11px] shadow-none [&>span]:truncate',
+            TASK_MODAL_FOCUS,
+          )}
+        >
+          <SelectValue placeholder="Equipo" />
+        </SelectTrigger>
+        <SelectContent className="max-h-[min(40vh,280px)]">
+          {areas.map((a) => (
+            <SelectItem key={a.id} value={String(a.id)}>
+              {a.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select
+        value={workspaceId == null ? 'none' : String(workspaceId)}
+        disabled={disabled}
+        onValueChange={(v) => void onWorkspaceCommit(v === 'none' ? null : Number(v))}
+      >
+        <SelectTrigger
+          className={cn(
+            'h-8 w-full min-w-0 rounded-md border border-neutral-200 dark:border-border bg-white dark:bg-card px-2 text-[11px] shadow-none [&>span]:truncate',
+            TASK_MODAL_FOCUS,
+          )}
+        >
+          <SelectValue placeholder="Espacio trabajo" />
+        </SelectTrigger>
+        <SelectContent className="max-h-[min(40vh,280px)]">
+          <SelectItem value="none">Sin espacio</SelectItem>
+          {workspaces.map((w) => (
+            <SelectItem key={w.id} value={String(w.id)}>
+              {w.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   )
 }
 
@@ -93,6 +213,7 @@ export function SubtaskAssigneeDateGrid({
   min,
   max,
   disabled,
+  dueDateDisabled,
   onAssigneeCommit,
   onDueDateCommit,
   readOnlyAssigneeLabel,
@@ -103,10 +224,17 @@ export function SubtaskAssigneeDateGrid({
   min?: string
   max?: string
   disabled?: boolean
+  /**
+   * Control aparte del input de fecha: si no se pasa, usa `disabled`.
+   * Evita deshabilitar la fecha cuando `disabled` refleja un guardado en curso en otro campo
+   * (el `disabled` corta el foco y cierra el date picker nativo al cambiar de mes).
+   */
+  dueDateDisabled?: boolean
   onAssigneeCommit: (next: number | null) => void | Promise<void>
   onDueDateCommit: (next: string | null) => void | Promise<void>
   readOnlyAssigneeLabel?: string | null
 }) {
+  const dateFieldDisabled = dueDateDisabled ?? disabled
   const assigneeCell =
     readOnlyAssigneeLabel != null && readOnlyAssigneeLabel !== '' ? (
       <div
@@ -135,11 +263,42 @@ export function SubtaskAssigneeDateGrid({
           value={dueDate ?? null}
           min={min}
           max={max}
-          disabled={disabled}
+          disabled={dateFieldDisabled}
           onCommit={onDueDateCommit}
         />
       </div>
     </div>
+  )
+}
+
+export function SubtaskDescriptionField({
+  value,
+  disabled,
+  placeholder = 'Descripción (opcional)',
+  onChange,
+  onBlur,
+}: {
+  value: string
+  disabled?: boolean
+  placeholder?: string
+  onChange: (next: string) => void
+  onBlur?: () => void | Promise<void>
+}) {
+  const handleBlur = onBlur ?? (() => {})
+  return (
+    <Textarea
+      value={value}
+      disabled={disabled}
+      rows={2}
+      placeholder={placeholder}
+      onChange={(e) => onChange(e.target.value)}
+      onBlur={() => void handleBlur()}
+      className={cn(
+        'min-h-[52px] max-h-32 text-xs rounded-md border border-neutral-200 dark:border-border bg-white dark:bg-card shadow-none py-1.5 px-2 resize-y',
+        TASK_MODAL_FOCUS,
+      )}
+      aria-label="Descripción de la subtarea"
+    />
   )
 }
 
@@ -154,6 +313,8 @@ export function SubtaskDoneToggle({
   checkboxClassName,
   idleWrapperClassName,
   preferDisabledCheckbox,
+  cannotToggleTitle,
+  onCannotToggleInteract,
   onCommitted,
 }: {
   done: boolean
@@ -162,24 +323,56 @@ export function SubtaskDoneToggle({
   checkboxClassName?: string
   idleWrapperClassName?: string
   preferDisabledCheckbox?: boolean
+  /** Tooltip / accesibilidad cuando «no puede» completar (además del aviso opcional `onCannotToggleInteract`). */
+  cannotToggleTitle?: string
+  /** Al hacer clic sin permiso (p. ej. mostrar mensaje emergente). */
+  onCannotToggleInteract?: () => void
   onCommitted: (next: boolean) => void | Promise<void>
 }) {
   const combinedDisabled = Boolean(disabled) || (preferDisabledCheckbox && !canToggle)
+  const blockedTitle = cannotToggleTitle?.trim()
+  const defaultStateTitle = done ? 'Hecha' : 'Pendiente'
+  const hoverTitle =
+    preferDisabledCheckbox && !canToggle && blockedTitle ? blockedTitle : defaultStateTitle
+  const showPermissionBlockOverlay =
+    Boolean(onCannotToggleInteract) && !canToggle && !disabled && Boolean(preferDisabledCheckbox)
 
   if (preferDisabledCheckbox) {
     return (
-      <input
-        type="checkbox"
-        className={cn(FORM_SUBTASK_CHECKBOX_CLASS, checkboxClassName)}
-        checked={done}
-        disabled={combinedDisabled}
-        title={done ? 'Hecha' : 'Pendiente'}
-        aria-label={done ? 'Marcar pendiente' : 'Marcar hecha'}
-        onChange={(e) => {
-          if (!canToggle) return
-          void onCommitted(e.target.checked)
-        }}
-      />
+      <span className="relative inline-flex items-center shrink-0">
+        <input
+          type="checkbox"
+          className={cn(FORM_SUBTASK_CHECKBOX_CLASS, checkboxClassName)}
+          checked={done}
+          disabled={combinedDisabled}
+          title={hoverTitle}
+          aria-label={preferDisabledCheckbox && !canToggle && blockedTitle ? blockedTitle : done ? 'Marcar pendiente' : 'Marcar hecha'}
+          onChange={(e) => {
+            if (!canToggle) return
+            void onCommitted(e.target.checked)
+          }}
+        />
+        {showPermissionBlockOverlay ? (
+          <button
+            type="button"
+            tabIndex={0}
+            className="absolute -inset-2 z-[1] cursor-not-allowed rounded-sm"
+            title={blockedTitle}
+            aria-label={blockedTitle ?? 'Sin permiso para cambiar esta subtarea'}
+            onClick={(ev) => {
+              ev.preventDefault()
+              ev.stopPropagation()
+              onCannotToggleInteract?.()
+            }}
+            onKeyDown={(ev) => {
+              if (ev.key !== 'Enter' && ev.key !== ' ') return
+              ev.preventDefault()
+              ev.stopPropagation()
+              onCannotToggleInteract?.()
+            }}
+          />
+        ) : null}
+      </span>
     )
   }
 
@@ -197,16 +390,30 @@ export function SubtaskDoneToggle({
     )
   }
 
+  const roTitle = blockedTitle ?? defaultStateTitle
+  const roLabel = blockedTitle ?? (done ? 'Subtarea hecha' : 'Subtarea pendiente')
+
   return (
-    <span
-      className={cn('shrink-0 mt-px', idleWrapperClassName)}
-      title={done ? 'Hecha' : 'Pendiente'}
+    <button
+      type="button"
+      tabIndex={0}
+      className={cn(
+        'shrink-0 mt-px rounded-sm p-0.5 cursor-not-allowed text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/80 focus-visible:ring-offset-2',
+        idleWrapperClassName,
+      )}
+      title={roTitle}
+      aria-label={roLabel}
+      onClick={(ev) => {
+        ev.preventDefault()
+        ev.stopPropagation()
+        onCannotToggleInteract?.()
+      }}
     >
       {done ? (
         <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-500" aria-hidden />
       ) : (
         <Circle className="h-4 w-4 text-muted-foreground/60" aria-hidden />
       )}
-    </span>
+    </button>
   )
 }

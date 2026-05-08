@@ -253,17 +253,7 @@ export function TodoBoardTab({
                           dragTaskId === t.id ? 'opacity-50' : ''
                         } ${isUpdating ? 'pointer-events-none opacity-60' : ''}`}
                       >
-                        <div className="flex items-center justify-between gap-2">
-                          <span
-                            className="inline-flex items-center gap-1.5 min-w-0 max-w-[58%] rounded-full border border-emerald-200/80 bg-emerald-50 py-0.5 pl-2 pr-2.5 text-[11px] font-semibold text-emerald-700 shadow-sm dark:border-emerald-800/55 dark:bg-emerald-950/45 dark:text-emerald-300"
-                            title={t.areaName || `Área ${t.areaId}`}
-                          >
-                            <span
-                              className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500 dark:bg-emerald-400"
-                              aria-hidden
-                            />
-                            <span className="truncate">{t.areaName || `Área ${t.areaId}`}</span>
-                          </span>
+                        <div className="flex items-center justify-end gap-2">
                           <span
                             className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${boardPriorityPillClass(pr)}`}
                           >

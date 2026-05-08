@@ -15,6 +15,7 @@ import {
   areaBarFill,
   areaLabelColor,
   timelineTaskBarColor,
+  timelineSubtaskBarColor,
 } from './utils'
 
 export type {
@@ -24,7 +25,7 @@ export type {
   TimelineRange,
 }
 
-export { mapVisualStatus, mapVisualPriority, areaBarFill, areaLabelColor, timelineTaskBarColor }
+export { mapVisualStatus, mapVisualPriority, areaBarFill, areaLabelColor, timelineTaskBarColor, timelineSubtaskBarColor }
 
 /** Ancho mínimo por día (px): cabe "sáb" + "25 abr" en dos líneas sin recortar con puntos suspensivos. */
 export const DAY_WIDTH = 46
@@ -170,6 +171,38 @@ export function buildTeamsFromTasks(
       tasks: list.map((tr) => taskRowToGanttItem(tr, range, labelFor(tr))),
     }
   })
+}
+
+/** Una sola franja timeline: todas las tareas juntas, sin agrupar por equipo/área. */
+export const TIMELINE_FLAT_TEAM_ID = '__timeline_all__'
+
+export function buildTimelineTeamsFlat(
+  tasks: TaskRowLike[],
+  range: TimelineRange,
+  opts?: { workspaceNameById?: Map<number, string>; showProjectNameOnTasks?: boolean },
+): GanttTeamItem[] {
+  if (tasks.length === 0) return []
+  const wsMap = opts?.workspaceNameById
+  const showProj = opts?.showProjectNameOnTasks === true && wsMap != null
+  const labelFor = (tr: TaskRowLike): string | null | undefined => {
+    if (!showProj || tr.workspaceId == null) return undefined
+    return wsMap.get(tr.workspaceId) ?? undefined
+  }
+  const sorted = [...tasks].sort((a, b) => {
+    const da = parseYmd(a.startDate)?.getTime() ?? 0
+    const db = parseYmd(b.startDate)?.getTime() ?? 0
+    if (da !== db) return da - db
+    return (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' })
+  })
+  const cap = Math.min(100, 35 + sorted.length * 12)
+  return [
+    {
+      id: TIMELINE_FLAT_TEAM_ID,
+      name: 'Tareas',
+      capacity: cap,
+      tasks: sorted.map((tr) => taskRowToGanttItem(tr, range, labelFor(tr))),
+    },
+  ]
 }
 
 /**

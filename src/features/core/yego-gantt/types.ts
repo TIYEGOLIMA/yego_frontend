@@ -3,6 +3,8 @@
  * Centraliza todas las definiciones de tipos para evitar duplicación
  */
 
+import type { Dispatch, SetStateAction } from 'react'
+
 // ==================== ENUMS/TIPOS BÁSICOS ====================
 
 export type AreaTaskStatus = 'PENDING' | 'IN_PROGRESS' | 'DONE' | 'BLOCKED'
@@ -66,7 +68,7 @@ export interface TaskRow {
   assignedUserId?: number | null
   assignedUserIds?: number[]
   tags?: string[]
-  /** Flag persistido en API; las etiquetas «privada» siguen siendo respaldo en datos antiguos. */
+  /** Marca de tarea privada (columna persistida); no usar etiquetas «privada» para privacidad. */
   privateTask?: boolean
   createdByUserId?: number | null
   sortOrder?: number
@@ -105,12 +107,17 @@ export interface TaskSubtaskDto {
   id: number
   parentTaskId: number
   title: string
+  description?: string | null
   sortOrder: number
   done: boolean
   weight: string
   assignedUserId?: number | null
   dueDate?: string | null
   createdByUserId?: number | null
+  /** Equipo efectivo (puede coincidir con el del padre si no hay override). */
+  areaId?: number | null
+  /** Espacio de trabajo / proyecto (herencia si null en API resuelto al padre). */
+  workspaceId?: number | null
 }
 
 // ==================== TIPOS VISUALES DEL GANTT ====================
@@ -222,8 +229,6 @@ export interface GanttTimelineTabProps {
   loading: boolean
   refreshing?: boolean
   timelinePanDays: number
-  filterText: string
-  onFilterChange: (v: string) => void
   manage: boolean
   onEditTask: (t: TaskRow) => void
   onDeleteTask: (t: TaskRow) => void
@@ -232,9 +237,12 @@ export interface GanttTimelineTabProps {
   onTaskSelectNotify?: (taskTitle: string) => void
   /** Nombres en todos los equipos cargados (responsables fuera del área de la fila). */
   collaboratorNames?: Map<number, string>
-  /** Equipo(s) de cada usuario en datos cargados (varios separados por « · »). */
-  collaboratorAreaLabels?: Map<number, string>
   collaboratorsForArea: (areaId: number) => ColaboradorDto[]
+  /**
+   * Listado amplio para el panel detalle del timeline (nombres/roles fuera del solo equipo de la tarea).
+   * Si no se envía se usa collaboratorsForArea(tarea.areaId).
+   */
+  collaboratorsForDetailPanel?: ColaboradorDto[]
   /** Vista «Mi espacio»: nombre de proyecto en barras del timeline. */
   mySpaceShowProjectNames?: boolean
   workspaceNameById?: Map<number, string>
@@ -242,6 +250,12 @@ export interface GanttTimelineTabProps {
   currentUserId?: number | null
   /** Tras togglear subtareas en panel lateral del timeline (sincronizar KPIs/grid). */
   onParentSubtasksSynced?: (parentId: number, list: TaskSubtaskDto[]) => void
+  /**
+   * Estado de subtareas por tarea padre (mismo mapa que el timeline). Lo gestiona el padre
+   * para actualizar el timeline al editar subtareas en el modal sin esperar un refetch.
+   */
+  subtasksByParentId: Map<number, TaskSubtaskDto[]>
+  setSubtasksByParentId: Dispatch<SetStateAction<Map<number, TaskSubtaskDto[]>>>
 }
 
 // ==================== OTRAS INTERFACES ====================

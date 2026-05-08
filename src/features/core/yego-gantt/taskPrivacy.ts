@@ -1,22 +1,10 @@
 /**
- * Privacidad de tareas Gantt: `privateTask` en API y etiquetas legacy (privada / private).
+ * Solo `privateTask` en API marca tarea privada. Las etiquetas «privada» se ignoran para privacidad
+ * (persistencia limpia vía backend + migración manual `20260508_private_task_legacy_tags.sql` si hay datos antiguos).
  */
 import type { TaskRow } from './types'
 
-export function tagsIndicatePrivate(tags: string[] | undefined | null): boolean {
-  if (!tags?.length) return false
-  return tags.some((tag) => {
-    const t = tag.toLowerCase().trim()
-    return (
-      t === 'privada' ||
-      t === 'privado' ||
-      t === 'private' ||
-      t.startsWith('privada:') ||
-      t.startsWith('private:')
-    )
-  })
-}
-
+/** Elimina etiquetas reservadas de privado (compat. visual / entrada de texto). */
 export function tagsWithoutPrivateLabels(tags: string[]): string[] {
   return tags.filter((tag) => {
     const t = tag.toLowerCase().trim()
@@ -30,9 +18,8 @@ export function tagsWithoutPrivateLabels(tags: string[]): string[] {
   })
 }
 
-export function taskRowIsPrivate(t: { privateTask?: boolean; tags?: string[] | null | undefined }): boolean {
-  if (t.privateTask === true) return true
-  return tagsIndicatePrivate(t.tags)
+export function taskRowIsPrivate(t: { privateTask?: boolean }): boolean {
+  return t.privateTask === true
 }
 
 function taskAssigneeIds(t: { assignedUserIds?: number[]; assignedUserId?: number | null }): number[] {

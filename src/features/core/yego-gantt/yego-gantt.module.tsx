@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -16,32 +17,23 @@ import {
   Select,
   SelectContent,
   SelectItem,
-  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import {
-  AlertTriangle,
-  Boxes,
+  AlertCircle,
   Calendar,
   CalendarRange,
-  ChevronDown,
+  ArrowRightLeft,
   ChevronLeft,
   ChevronRight,
   Crown,
-  FileText,
   Flame,
-  GanttChartSquare,
-  Inbox,
-  KanbanSquare,
-  LayoutDashboard,
   ListChecks,
   Loader2,
   PencilLine,
-  Plus,
   Route,
-  Search,
   Trash2,
   User,
   Users,
@@ -81,10 +73,11 @@ import {
   createTaskSubtask,
   deleteTaskSubtask,
   fetchTaskSubtasks,
+  moveTaskSubtask,
+  convertTaskToSubtask,
   parseGanttLoadError,
 } from './ganttApi'
-import type { GanttMasterData, TaskSubtaskDto } from './ganttApi'
-import { projectIconByKey, PROJECT_ICON_CHOICES } from './projectIcons'
+import type { GanttMasterData, GanttTaskSaveFormFields, TaskSubtaskDto } from './ganttApi'
 import {
   normPriority,
   STATUS_LABEL,
@@ -93,10 +86,10 @@ import {
   tagColor,
   PRIO_BADGE,
   computeDurationDays,
+  ensureSubtaskDueNotBeforeParentStart,
 } from './utils'
 import {
   filterTasksForTimeline,
-  tagsIndicatePrivate,
   tagsWithoutPrivateLabels,
   taskRowIsPrivate,
   taskIsMine,
@@ -108,14 +101,14 @@ import { cn } from '@/utils/cn'
 import { Avatar, PrincipalOwnerLine, ProgressBar } from './components/common'
 import {
   SubtaskAssigneeDateGrid,
+  SubtaskAreaWorkspaceRow,
+  SubtaskDescriptionField,
   SubtaskDoneToggle,
 } from './components/SubtaskFormFields'
 import {
   buildAllCollaboratorsDeduped,
   buildAssigneePickerRows,
-  buildCollaboratorAreaLabelMap,
   buildCollaboratorNameMap,
-  collaboratorAreaLabel,
   principalOwnerPrivateParts,
   principalOwnerPublicParts,
   principalSelectItemTextValue,
@@ -127,6 +120,7 @@ import {
   FORM_SUBTASK_CHECKBOX_CLASS,
   TASK_MODAL_FOCUS,
   canUserToggleSubtaskDone,
+  SUBTASK_DONE_NOT_ALLOWED_HINT,
   formatDetailModalDate,
   ganttHasFullTabAccess,
   ganttCanCreateTasks,
@@ -134,14 +128,68 @@ import {
   ganttIsPlatformAdmin,
   normalizeSubtaskDto,
   normalizeSubtaskDtoList,
+  parentEndDateFromSubtasks,
   patchGanttParentFromSubtasks,
   resolveUserDefaultAreaId,
   type SubtaskModalBusy,
   todayYmdLocal,
   updateTaskSubtaskNormalized,
 } from './lib'
+import {
+  CreateWorkspaceDialog,
+  DeleteAreaConfirmDialog,
+  DeleteSubtaskConfirmDialog,
+  DeleteTaskConfirmDialog,
+  GanttModuleHeader,
+  GANTT_TAB_DEFINITIONS,
+  HEADER_WORKSPACE_CREATE_VALUE,
+} from './components/gantt-shell'
+import { TaskFormWorkspaceTagsRow } from './components/task-modal/TaskFormWorkspaceTagsRow'
+import { useTimelineTasksSubtasks } from './hooks/useTimelineTasksSubtasks'
 
-const HEADER_WORKSPACE_CREATE_VALUE = '__create_workspace__'
+function httpSubtaskMutateStatus(error: unknown): number | undefined {
+  if (typeof error !== 'object' || error === null || !('response' in error)) return undefined
+  return (error as { response?: { status?: number } }).response?.status
+}
+
+/** Fingerprint del formulario de tarea (sin % de progreso: las subtareas lo gestionan aparte). */
+function taskModalFormDirtyFingerprint(f: {
+  areaId: string
+  workspaceId: string
+  sprintId: string
+  title: string
+  description: string
+  startDate: string
+  endDate: string
+  status: AreaTaskStatus
+  priority: TaskPriority
+  assignedUserIds: number[]
+  tagsInput: string
+  isPrivateTask: boolean
+}): string {
+  const tags = tagsWithoutPrivateLabels(
+    f.tagsInput
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean),
+  )
+  tags.sort()
+  const assignees = [...f.assignedUserIds].sort((a, b) => a - b)
+  return JSON.stringify({
+    areaId: f.areaId,
+    workspaceId: f.workspaceId,
+    sprintId: f.sprintId,
+    title: f.title.trim(),
+    description: f.description.trim(),
+    startDate: f.startDate,
+    endDate: f.endDate,
+    status: f.status,
+    priority: f.priority,
+    isPrivateTask: f.isPrivateTask,
+    assignedUserIds: assignees,
+    tags: tags.join(','),
+  })
+}
 
 export function YegoGanttModule() {
   const user = useAuthStore((s) => s.user)
@@ -160,8 +208,6 @@ export function YegoGanttModule() {
   /** Por defecto «Mi espacio»; el usuario elige proyecto en el selector. */
   const [workspaceFilter, setWorkspaceFilter] = useState<string>('my_space')
   const [areaCollaborators, setAreaCollaborators] = useState<Map<number, ColaboradorDto[]>>(new Map())
-  /** Filtro local del timeline (equipos / texto en cabecera del Gantt). */
-  const [ganttTeamFilter, setGanttTeamFilter] = useState('')
   const [activeTab, setActiveTab] = useState<
     'gantt' | 'cartera' | 'board' | 'sprints' | 'actas' | 'calendar' | 'dashboard'
   >(() => (ganttHasFullTabAccess(useAuthStore.getState().user) ? 'sprints' : 'gantt'))
@@ -229,7 +275,16 @@ export function YegoGanttModule() {
   const [subtaskModalBusy, setSubtaskModalBusy] = useState<SubtaskModalBusy>('idle')
   /** Subtareas locales al crear tarea (se persisten tras POST). */
   const [pendingSubtasks, setPendingSubtasks] = useState<
-    Array<{ tempId: string; title: string; done: boolean; assignedUserId: number | null; dueDate: string | null }>
+    Array<{
+      tempId: string
+      title: string
+      description: string
+      done: boolean
+      assignedUserId: number | null
+      dueDate: string | null
+      areaId: number
+      workspaceId: number | null
+    }>
   >([])
   /**
    * En edición: si la tarea tiene o ha tenido subtareas en esta sesión, el % no es manual
@@ -242,9 +297,38 @@ export function YegoGanttModule() {
   const [detailModalSubtasks, setDetailModalSubtasks] = useState<TaskSubtaskDto[]>([])
   const [detailModalSubtasksLoading, setDetailModalSubtasksLoading] = useState(false)
   const [detailSubtaskBusyId, setDetailSubtaskBusyId] = useState<number | null>(null)
+  /** Aviso visible dentro del modal (setErr queda detrás del diálogo). */
+  const [detailSubtaskBlockedMsg, setDetailSubtaskBlockedMsg] = useState<string | null>(null)
+  const [editSubtaskBlockedMsg, setEditSubtaskBlockedMsg] = useState<string | null>(null)
+  /** Mover subtarea a otra tarea padre (diálogo desde el modal editar). */
+  const [subtaskMoveTargetRow, setSubtaskMoveTargetRow] = useState<TaskSubtaskDto | null>(null)
+  const [subtaskMoveParentChoice, setSubtaskMoveParentChoice] = useState<string>('')
+  /**
+   * Al elegir otro espacio para una subtarea: convertir en tarea o colgar bajo un padre «Por definir»
+   * en el espacio destino (no aplica si solo se limpia el espacio → herencia).
+   */
+  const [subtaskWorkspaceRelocation, setSubtaskWorkspaceRelocation] = useState<{
+    subtask: TaskSubtaskDto
+    nextWorkspaceId: number
+  } | null>(null)
+  const [relocationTargetTasks, setRelocationTargetTasks] = useState<TaskRow[] | null>(null)
+  const [relocationTargetTasksLoading, setRelocationTargetTasksLoading] = useState(false)
+  const [relocationSelectedParentId, setRelocationSelectedParentId] = useState<string>('')
+  const [subtaskPendingDelete, setSubtaskPendingDelete] = useState<TaskSubtaskDto | null>(null)
+  const [subtaskDeleteInProgress, setSubtaskDeleteInProgress] = useState(false)
+  /** Convertir la tarea principal en subtarea de otra. */
+  const [taskConvertToSubtaskDialogOpen, setTaskConvertToSubtaskDialogOpen] = useState(false)
+  const [taskConvertToSubtaskCandidates, setTaskConvertToSubtaskCandidates] = useState<TaskRow[] | null>(null)
+  const [taskConvertToSubtaskLoading, setTaskConvertToSubtaskLoading] = useState(false)
+  const [taskConvertToSubtaskSelectedId, setTaskConvertToSubtaskSelectedId] = useState<string>('')
   /** Tras cambiar el filtro de espacio para abrir una tarea: esperar a que `load()` traiga la lista nueva. */
   const pendingOpenTaskIdRef = useRef<number | null>(null)
   const pendingSawWorkspaceSwitchingRef = useRef(false)
+  const mergeTimelineSubtasksForParentRef = useRef<
+    ((parentId: number, list: TaskSubtaskDto[]) => void) | null
+  >(null)
+  /** Valor de `taskModalFormDirtyFingerprint` al abrir edición; el botón «Guardar» solo si difiere del form actual. */
+  const taskEditFormBaselineRef = useRef<string | null>(null)
 
   const manage = useMemo(() => ganttHasFullTabAccess(user), [user])
   const canCreateTasks = useMemo(() => ganttCanCreateTasks(user), [user])
@@ -305,13 +389,281 @@ export function YegoGanttModule() {
     }, 1000)
   }, [reloadTasksAndKpis])
 
-  const handleTimelineSubtasksSynced = useCallback(
+  const applySubtaskListToParentState = useCallback(
     (parentId: number, list: TaskSubtaskDto[]) => {
       patchGanttParentFromSubtasks(parentId, list, setTasks, setKpis)
+      mergeTimelineSubtasksForParentRef.current?.(parentId, list)
+      setForm((f) => {
+        if (editing?.id !== parentId) return f
+        const nextEnd = parentEndDateFromSubtasks(f.startDate, f.endDate, list)
+        return nextEnd !== f.endDate ? { ...f, endDate: nextEnd } : f
+      })
+    },
+    [editing?.id],
+  )
+
+  const pickDefaultSprintIdForWorkspace = useCallback(
+    (wsId: number): number | null => {
+      const list = [...sprintById.values()].filter((s) => s.workspaceId === wsId)
+      const active = list.find((s) => s.status === 'ACTIVE')
+      if (active) return active.id
+      const planned = list.filter((s) => s.status === 'PLANNED').sort((a, b) => a.id - b.id)
+      if (planned.length > 0) return planned[0]!.id
+      const rest = list.sort((a, b) => a.id - b.id)
+      return rest.length > 0 ? rest[0]!.id : null
+    },
+    [sprintById],
+  )
+
+  const confirmSubtaskWorkspaceRelocation = useCallback(
+    async (mode: 'standalone' | 'nested' | 'existing') => {
+      const ctx = subtaskWorkspaceRelocation
+      if (!editing || ctx == null) return
+      const st = ctx.subtask
+      const nextWs = ctx.nextWorkspaceId
+      setSubtaskModalBusy('updating')
+      try {
+        if (mode === 'existing') {
+          const targetParentId = Number(relocationSelectedParentId)
+          if (!Number.isFinite(targetParentId)) return
+          await moveTaskSubtask(editing.id, st.id, targetParentId)
+          setSubtasks((prev) => {
+            const nl = prev.filter((x) => x.id !== st.id)
+            applySubtaskListToParentState(editing.id, nl)
+            return nl
+          })
+          setSubtaskWorkspaceRelocation(null)
+          const targetWs = String(nextWs)
+          if (targetWs !== workspaceFilter) {
+            pendingOpenTaskIdRef.current = targetParentId
+            setWorkspaceFilter(targetWs)
+          } else {
+            pendingOpenTaskIdRef.current = targetParentId
+            await reloadTasksAndKpis()
+          }
+          return
+        }
+
+        const parentPriv = taskRowIsPrivate(editing)
+        const areaId = st.areaId ?? editing.areaId
+        const sprintId = parentPriv ? null : pickDefaultSprintIdForWorkspace(nextWs)
+        
+        const startYmd = (form.startDate || editing.startDate || '').slice(0, 10)
+        const parentEndFallback = (form.endDate || editing.endDate || '').slice(0, 10)
+        let endYmd =
+          mode === 'standalone'
+            ? ensureSubtaskDueNotBeforeParentStart(st.dueDate, startYmd) || parentEndFallback
+            : parentEndFallback
+        if (startYmd && endYmd < startYmd) endYmd = startYmd
+        if (!startYmd || !endYmd) {
+          setErr('Completa las fechas de la tarea antes de cambiar el espacio de la subtarea.')
+          setSubtaskModalBusy('idle')
+          return
+        }
+        if (mode === 'standalone') {
+          const formSnapshot: GanttTaskSaveFormFields = {
+            areaId: String(areaId),
+            workspaceId: String(nextWs),
+            sprintId: sprintId != null ? String(sprintId) : '',
+            title: st.title.trim() || 'Sin título',
+            description: (st.description ?? '').trim(),
+            startDate: startYmd,
+            endDate: endYmd,
+            status: st.done ? 'DONE' : 'PENDING',
+            priority: editing.priority ?? 'MEDIUM',
+            isPrivateTask: parentPriv,
+            assignedUserIds:
+              st.assignedUserId != null ? [st.assignedUserId] : [...form.assignedUserIds],
+          }
+          const payload = buildGanttTaskSavePayload(formSnapshot, st.done ? 100 : 0, [])
+          const res = await api.post<TaskRow>('/yego-gantt/tasks', payload)
+          const newTask = res.data
+          await deleteTaskSubtask(editing.id, st.id)
+          setSubtasks((prev) => {
+            const nl = prev.filter((x) => x.id !== st.id)
+            applySubtaskListToParentState(editing.id, nl)
+            return nl
+          })
+          setSubtaskWorkspaceRelocation(null)
+          const targetWs = String(nextWs)
+          if (targetWs !== workspaceFilter) {
+            pendingOpenTaskIdRef.current = newTask.id
+            setWorkspaceFilter(targetWs)
+          } else {
+            pendingOpenTaskIdRef.current = newTask.id
+            await reloadTasksAndKpis()
+          }
+        } else {
+          const formSnapshot: GanttTaskSaveFormFields = {
+            areaId: String(areaId),
+            workspaceId: String(nextWs),
+            sprintId: sprintId != null ? String(sprintId) : '',
+            title: 'Por definir',
+            description: '',
+            startDate: startYmd,
+            endDate: endYmd,
+            status: 'PENDING',
+            priority: editing.priority ?? 'MEDIUM',
+            isPrivateTask: parentPriv,
+            assignedUserIds:
+              form.assignedUserIds.length > 0
+                ? [...form.assignedUserIds]
+                : user?.id != null
+                  ? [user.id]
+                  : [],
+          }
+          const payload = buildGanttTaskSavePayload(formSnapshot, 0, [])
+          const res = await api.post<TaskRow>('/yego-gantt/tasks', payload)
+          const shellParent = res.data
+          await moveTaskSubtask(editing.id, st.id, shellParent.id)
+          setSubtasks((prev) => {
+            const nl = prev.filter((x) => x.id !== st.id)
+            applySubtaskListToParentState(editing.id, nl)
+            return nl
+          })
+          setSubtaskWorkspaceRelocation(null)
+          const targetWs = String(nextWs)
+          if (targetWs !== workspaceFilter) {
+            pendingOpenTaskIdRef.current = shellParent.id
+            setWorkspaceFilter(targetWs)
+          } else {
+            pendingOpenTaskIdRef.current = shellParent.id
+            await reloadTasksAndKpis()
+          }
+        }
+      } catch (e: unknown) {
+        setErr(parseGanttLoadError(e))
+      } finally {
+        setSubtaskModalBusy('idle')
+      }
+    },
+    [
+      subtaskWorkspaceRelocation,
+      editing,
+      form.startDate,
+      form.endDate,
+      form.assignedUserIds,
+      pickDefaultSprintIdForWorkspace,
+      workspaceFilter,
+      reloadTasksAndKpis,
+      applySubtaskListToParentState,
+      user?.id,
+      relocationSelectedParentId,
+    ],
+  )
+
+  const confirmConvertToSubtask = useCallback(async () => {
+    if (!editing || !taskConvertToSubtaskSelectedId) return
+    const targetParentId = Number(taskConvertToSubtaskSelectedId)
+    if (!Number.isFinite(targetParentId) || targetParentId === editing.id) return
+
+    setTaskConvertToSubtaskLoading(true)
+    try {
+      await convertTaskToSubtask(editing.id, targetParentId)
+      
+      // Update local state: remove the converted task from the list
+      setTasks((prev) => prev.filter((t) => t.id !== editing.id))
+      
+      // We should ideally reload tasks and kpis to reflect progress changes on the parent
+      await reloadTasksAndKpis()
+
+      // Also refresh the subtasks list for the parent in the timeline
+      try {
+        const rows = await fetchTaskSubtasks(targetParentId)
+        setSubtasksByParentId((prev) => new Map(prev).set(targetParentId, normalizeSubtaskDtoList(rows)))
+      } catch (e) {
+        console.error('Failed to refresh parent subtasks after conversion', e)
+      }
+      
+      setTaskConvertToSubtaskDialogOpen(false)
+      setDialogOpen(false)
+    } catch (e: unknown) {
+      setErr(parseGanttLoadError(e))
+    } finally {
+      setTaskConvertToSubtaskLoading(false)
+    }
+  }, [editing, taskConvertToSubtaskSelectedId, reloadTasksAndKpis])
+
+  const handleDropTaskToSubtask = useCallback(async (sourceTaskId: number, targetTaskId: number) => {
+    if (sourceTaskId === targetTaskId) return
+    const sourceTask = tasks.find(t => t.id === sourceTaskId)
+    // Avoid if source task has subtasks visually loaded, though backend validates this too
+    if (sourceTask && (sourceTask.subtaskTotal ?? 0) > 0) {
+      setErr('No puedes convertir una tarea con subtareas en una subtarea.')
+      return
+    }
+
+    setTaskConvertToSubtaskLoading(true)
+    try {
+      await convertTaskToSubtask(sourceTaskId, targetTaskId)
+      setTasks((prev) => prev.filter((t) => t.id !== sourceTaskId))
+      await reloadTasksAndKpis()
+
+      // Also refresh the subtasks list for the parent in the timeline
+      try {
+        const rows = await fetchTaskSubtasks(targetTaskId)
+        setSubtasksByParentId((prev) => new Map(prev).set(targetTaskId, normalizeSubtaskDtoList(rows)))
+      } catch (e) {
+        console.error('Failed to refresh parent subtasks after conversion drop', e)
+      }
+    } catch (e: unknown) {
+      setErr(parseGanttLoadError(e) || 'Error al convertir la tarea')
+    } finally {
+      setTaskConvertToSubtaskLoading(false)
+    }
+  }, [tasks, reloadTasksAndKpis])
+
+  useEffect(() => {
+    if (!subtaskWorkspaceRelocation) {
+      setRelocationTargetTasks(null)
+      setRelocationTargetTasksLoading(false)
+      setRelocationSelectedParentId('')
+      return
+    }
+    let cancelled = false
+    setRelocationTargetTasksLoading(true)
+    setRelocationSelectedParentId('')
+    void fetchGanttTaskSummary('all', 'all', String(subtaskWorkspaceRelocation.nextWorkspaceId), 'all')
+      .then((res) => {
+        if (!cancelled) setRelocationTargetTasks(res.tasks)
+      })
+      .catch(() => {
+        if (!cancelled) setRelocationTargetTasks([])
+      })
+      .finally(() => {
+        if (!cancelled) setRelocationTargetTasksLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [subtaskWorkspaceRelocation])
+
+  const handleTimelineSubtasksSynced = useCallback(
+    (parentId: number, list: TaskSubtaskDto[]) => {
+      applySubtaskListToParentState(parentId, list)
       scheduleReloadTasksAndKpisAfterSubtasks()
     },
-    [scheduleReloadTasksAndKpisAfterSubtasks],
+    [applySubtaskListToParentState, scheduleReloadTasksAndKpisAfterSubtasks],
   )
+
+  const subtaskParentMoveCandidates = useMemo(() => {
+    const curId = editing?.id
+    if (curId == null) return [] as { id: number; title: string; secondary: string }[]
+    const areaLabel = (id: number) => areas.find((a) => a.id === id)?.name?.trim() ?? `Equipo ${id}`
+    return tasks
+      .filter((t) => t.id !== curId)
+      .map((t) => {
+        const secondary = [t.areaName?.trim() || areaLabel(t.areaId), t.privateTask ? 'Privada' : null]
+          .filter(Boolean)
+          .join(' · ')
+        return { id: t.id, title: t.title.trim() || `Tarea #${t.id}`, secondary }
+      })
+      .sort((a, b) => {
+        const x = `${a.secondary}\t${a.title}`
+        const y = `${b.secondary}\t${b.title}`
+        return x.localeCompare(y, undefined, { sensitivity: 'base' })
+      })
+  }, [tasks, editing?.id, areas])
 
   useEffect(
     () => () => {
@@ -490,7 +842,6 @@ export function YegoGanttModule() {
 
   useLayoutEffect(() => {
     if (workspaceFilter !== 'my_space') return
-    setGanttTeamFilter('')
     setTimelineVisibility((v) => (v === 'default' ? 'all' : v))
   }, [workspaceFilter])
 
@@ -498,6 +849,11 @@ export function YegoGanttModule() {
     () => filterTasksForTimeline(tasks, timelineVisibility, user?.id ?? null),
     [tasks, timelineVisibility, user?.id],
   )
+
+  const { subtasksByParentId, setSubtasksByParentId } = useTimelineTasksSubtasks(tasksForTimeline)
+  mergeTimelineSubtasksForParentRef.current = (parentId, list) => {
+    setSubtasksByParentId((prev) => new Map(prev).set(parentId, [...list]))
+  }
 
   const tasksWithoutPrivate = useMemo(
     () => tasks.filter((t) => !taskRowIsPrivate(t)),
@@ -532,7 +888,7 @@ export function YegoGanttModule() {
   const formSubtaskDone = editing
     ? subtasks.filter((s) => s.done).length
     : pendingSubtasks.filter((s) => s.done).length
-  /** `null` = el usuario puede editar el % a mano; número = derivado de subtareas (incl. 0% con lista vacía si aplica). */
+  /** `null` = porcentaje reflejado desde el guardado (solo lectura en UI); número = derivado de subtareas en el formulario. */
   const progressFromFormSubtasks =
     formSubtaskCount > 0
       ? Math.floor((100 * formSubtaskDone) / formSubtaskCount)
@@ -553,19 +909,16 @@ export function YegoGanttModule() {
     assigneePickerList,
     allCollaborators,
     collaboratorNames,
-    collaboratorAreaLabels,
   } = useMemo((): {
     assigneePickerList: AssigneePickerRow[]
     allCollaborators: ColaboradorDto[]
     collaboratorNames: Map<number, string>
-    collaboratorAreaLabels: Map<number, string>
   } => {
     const assigneePickerList = buildAssigneePickerRows(areas, areaCollaborators)
     return {
       assigneePickerList,
       allCollaborators: buildAllCollaboratorsDeduped(areaCollaborators),
       collaboratorNames: buildCollaboratorNameMap(assigneePickerList),
-      collaboratorAreaLabels: buildCollaboratorAreaLabelMap(assigneePickerList),
     }
   }, [areas, areaCollaborators])
 
@@ -603,18 +956,6 @@ export function YegoGanttModule() {
     return workspaces.filter((p) => String(p.id) === workspaceFilter)
   }, [workspaces, workspaceFilter])
 
-  const WorkspacePickerIcon = useMemo(() => {
-    if (workspaceFilter === 'my_space') return Inbox
-    const p = workspaces.find((x) => String(x.id) === workspaceFilter)
-    return projectIconByKey(p?.iconKey)
-  }, [workspaceFilter, workspaces])
-
-  const workspacePickerLabel = useMemo(() => {
-    if (workspaceFilter === 'my_space') return 'Mi espacio'
-    if (workspaces.length === 0) return '—'
-    return workspaces.find((p) => String(p.id) === workspaceFilter)?.name ?? 'Espacio de trabajo'
-  }, [workspaceFilter, workspaces])
-
   const taskAlertNotifications = useMemo(
     () => buildTaskAlertNotifications(tasks, dismissedTaskIds),
     [tasks, dismissedTaskIds],
@@ -624,6 +965,19 @@ export function YegoGanttModule() {
     () => [...taskAlertNotifications, ...pulseNotifications].slice(0, 40),
     [taskAlertNotifications, pulseNotifications],
   )
+
+  useEffect(() => {
+    if (!dialogOpen) {
+      taskEditFormBaselineRef.current = null
+    }
+  }, [dialogOpen])
+
+  const isEditTaskFormDirty = useMemo(() => {
+    if (editing == null) return false
+    const b = taskEditFormBaselineRef.current
+    if (b == null) return true
+    return taskModalFormDirtyFingerprint(form) !== b
+  }, [form, editing])
 
   useEffect(() => {
     if (!dialogOpen || !editing) {
@@ -717,6 +1071,7 @@ export function YegoGanttModule() {
     setFormErrors({})
     setPendingSubtasks([])
     setAssigneeSearchQuery('')
+    taskEditFormBaselineRef.current = null
     setDialogOpen(true)
   }
 
@@ -738,8 +1093,7 @@ export function YegoGanttModule() {
     setTaskFormSaving(false)
     setEditing(t)
     setPendingSubtasks([])
-    const privateTask = Boolean(t.privateTask) || tagsIndicatePrivate(t.tags)
-    const effectivePrivate = privateTask
+    const effectivePrivate = Boolean(t.privateTask)
     const rawIds = t.assignedUserIds?.length
       ? [...t.assignedUserIds]
       : t.assignedUserId != null
@@ -753,7 +1107,7 @@ export function YegoGanttModule() {
             ? [user.id]
             : []
           : rawIds
-    setForm({
+    const nextForm = {
       areaId: String(t.areaId),
       workspaceId: t.workspaceId != null ? String(t.workspaceId) : '',
       sprintId: effectivePrivate ? '' : t.sprintId != null ? String(t.sprintId) : '',
@@ -767,7 +1121,9 @@ export function YegoGanttModule() {
       assignedUserIds: assignedIds,
       tagsInput: tagsWithoutPrivateLabels(t.tags ?? []).join(', '),
       isPrivateTask: effectivePrivate,
-    })
+    }
+    taskEditFormBaselineRef.current = taskModalFormDirtyFingerprint(nextForm)
+    setForm(nextForm)
     setFormErrors({})
     setAssigneeSearchQuery('')
     setDialogOpen(true)
@@ -777,12 +1133,6 @@ export function YegoGanttModule() {
     const errors: Record<string, string> = {}
     if (!form.title.trim()) errors.title = 'El nombre es obligatorio'
     if (!form.areaId) errors.areaId = 'Selecciona un equipo'
-
-    if (progressFromFormSubtasks == null) {
-      const prog = Number(form.progressPercent)
-      if (isNaN(prog) || prog < 0) errors.progressPercent = 'No puede ser negativo'
-      if (prog > 100) errors.progressPercent = 'Máximo 100%'
-    }
 
     const today = todayYmdLocal()
     if (!form.startDate) errors.startDate = 'Fecha inicio requerida'
@@ -808,22 +1158,12 @@ export function YegoGanttModule() {
         ? progressFromFormSubtasks
         : Math.min(100, Math.max(0, Number(form.progressPercent) || 0))
     const effectivePrivate = form.isPrivateTask
-    let parsedTags = form.tagsInput
-      .split(',')
-      .map((t) => t.trim())
-      .filter(Boolean)
-    if (effectivePrivate) {
-      const hasPriv = parsedTags.some((tag) => {
-        const x = tag.toLowerCase()
-        return x === 'privada' || x === 'privado' || x === 'private'
-      })
-      if (!hasPriv) parsedTags = [...parsedTags, 'privada']
-    } else {
-      parsedTags = parsedTags.filter((tag) => {
-        const x = tag.toLowerCase()
-        return x !== 'privada' && x !== 'privado' && x !== 'private'
-      })
-    }
+    const parsedTags = tagsWithoutPrivateLabels(
+      form.tagsInput
+        .split(',')
+        .map((t) => t.trim())
+        .filter(Boolean),
+    )
     const formSnapshot = {
       areaId: form.areaId,
       workspaceId: form.workspaceId,
@@ -858,8 +1198,16 @@ export function YegoGanttModule() {
               title: st,
               weight: 1,
               done: row.done,
+              areaId: row.areaId,
+              ...(row.workspaceId != null ? { workspaceId: row.workspaceId } : {}),
               ...(subtaskAssigneePersist != null ? { assignedUserId: subtaskAssigneePersist } : {}),
-              ...(row.dueDate != null && row.dueDate.trim() !== '' ? { dueDate: row.dueDate } : {}),
+              ...((): { dueDate?: string } => {
+                const d = ensureSubtaskDueNotBeforeParentStart(row.dueDate, form.startDate)
+                return d != null ? { dueDate: d } : {}
+              })(),
+              ...(row.description != null && row.description.trim() !== ''
+                ? { description: row.description.trim() }
+                : {}),
             })
           }
         }
@@ -899,6 +1247,27 @@ export function YegoGanttModule() {
       setErr('No se pudo eliminar')
     } finally {
       setDeleting(false)
+    }
+  }
+
+  const confirmDeleteSubtask = async () => {
+    if (!editing || subtaskPendingDelete == null) return
+    const taskId = editing.id
+    const subId = subtaskPendingDelete.id
+    setSubtaskDeleteInProgress(true)
+    try {
+      await deleteTaskSubtask(taskId, subId)
+      setSubtasks((prev) => {
+        const nextList = prev.filter((x) => x.id !== subId)
+        applySubtaskListToParentState(taskId, nextList)
+        return nextList
+      })
+      scheduleReloadTasksAndKpisAfterSubtasks()
+      setSubtaskPendingDelete(null)
+    } catch {
+      setErr('No se pudo eliminar la subtarea')
+    } finally {
+      setSubtaskDeleteInProgress(false)
     }
   }
 
@@ -987,6 +1356,30 @@ export function YegoGanttModule() {
   useEffect(() => {
     if (!taskDetailOpen) setDetailSubtaskBusyId(null)
   }, [taskDetailOpen])
+
+  useEffect(() => {
+    if (!taskDetailOpen) setDetailSubtaskBlockedMsg(null)
+  }, [taskDetailOpen])
+
+  useEffect(() => {
+    if (!detailSubtaskBlockedMsg) return
+    const tid = window.setTimeout(() => setDetailSubtaskBlockedMsg(null), 9000)
+    return () => window.clearTimeout(tid)
+  }, [detailSubtaskBlockedMsg])
+
+  useEffect(() => {
+    if (!dialogOpen) {
+      setEditSubtaskBlockedMsg(null)
+      setSubtaskPendingDelete(null)
+      setSubtaskDeleteInProgress(false)
+    }
+  }, [dialogOpen])
+
+  useEffect(() => {
+    if (!editSubtaskBlockedMsg) return
+    const tid = window.setTimeout(() => setEditSubtaskBlockedMsg(null), 9000)
+    return () => window.clearTimeout(tid)
+  }, [editSubtaskBlockedMsg])
 
   useEffect(() => {
     if (!taskDetailOpen || detailTaskId == null) {
@@ -1136,6 +1529,8 @@ export function YegoGanttModule() {
           title: t,
           weight: 1,
           ...(ownerForSubtask != null ? { assignedUserId: ownerForSubtask } : {}),
+          areaId: editing.areaId,
+          ...(editing.workspaceId != null ? { workspaceId: editing.workspaceId } : {}),
         })
         const row = normalizeSubtaskDto(createdRaw)
         setSubtaskDraft({ title: '' })
@@ -1143,7 +1538,7 @@ export function YegoGanttModule() {
           const next = [...prev, row].sort((a, b) =>
             a.sortOrder !== b.sortOrder ? a.sortOrder - b.sortOrder : a.id - b.id,
           )
-          patchGanttParentFromSubtasks(editing.id, next, setTasks, setKpis)
+          applySubtaskListToParentState(editing.id, next)
           return next
         })
         scheduleReloadTasksAndKpisAfterSubtasks()
@@ -1160,14 +1555,22 @@ export function YegoGanttModule() {
         : `p-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
     const ownerForSubtaskPending =
       form.assignedUserIds[0] ?? user?.id ?? null
+    const pendingAreaId =
+      Number.isFinite(Number(form.areaId)) && Number(form.areaId) > 0
+        ? Number(form.areaId)
+        : areas[0]?.id ?? 0
+    const pendingWsRaw = form.workspaceId ? Number(form.workspaceId) : NaN
     setPendingSubtasks((s) => [
       ...s,
       {
         tempId,
         title: t,
+        description: '',
         done: false,
         assignedUserId: ownerForSubtaskPending,
         dueDate: null,
+        areaId: pendingAreaId,
+        workspaceId: Number.isFinite(pendingWsRaw) && pendingWsRaw > 0 ? pendingWsRaw : null,
       },
     ])
     setSubtaskDraft({ title: '' })
@@ -1179,33 +1582,23 @@ export function YegoGanttModule() {
     form.assignedUserIds,
     user?.id,
     scheduleReloadTasksAndKpisAfterSubtasks,
+    areas,
+    form.areaId,
+    form.workspaceId,
+    applySubtaskListToParentState,
   ])
-
-  const TAB_CONFIG = useMemo(
-    () =>
-      [
-        { id: 'gantt' as const, label: 'Timeline', Icon: GanttChartSquare },
-        { id: 'cartera' as const, label: 'Portfolio', Icon: Boxes },
-        { id: 'board' as const, label: 'Board', Icon: KanbanSquare },
-        { id: 'sprints' as const, label: 'Sprints', Icon: Flame },
-        { id: 'actas' as const, label: 'Actas', Icon: FileText },
-        { id: 'calendar' as const, label: 'Calendario', Icon: CalendarRange },
-        { id: 'dashboard' as const, label: 'Dashboard', Icon: LayoutDashboard },
-      ],
-    [],
-  )
 
   const visibleTabs = useMemo(() => {
     const restricted = ['gantt', 'board', 'actas'] as const
     const baseTabs = manage
-      ? TAB_CONFIG
-      : TAB_CONFIG.filter((t) => (restricted as readonly string[]).includes(t.id))
+      ? GANTT_TAB_DEFINITIONS
+      : GANTT_TAB_DEFINITIONS.filter((t) => (restricted as readonly string[]).includes(t.id))
     if (!isMySpaceView) return baseTabs
     return baseTabs.filter(
       (t) =>
         t.id !== 'cartera' && t.id !== 'sprints' && t.id !== 'dashboard' && t.id !== 'calendar',
     )
-  }, [manage, TAB_CONFIG, isMySpaceView])
+  }, [manage, isMySpaceView])
 
   useEffect(() => {
     if (!isMySpaceView) return
@@ -1225,277 +1618,29 @@ export function YegoGanttModule() {
     setActiveTab('gantt')
   }, [manage, activeTab])
 
-  const taskFormWorkspaceTagsSection = useMemo(() => {
-    const hasWorkspaces = workspaces.length > 0
-    const sideBySide = form.isPrivateTask && hasWorkspaces
-    const workspaceCol = (
-      <div className={cn('space-y-1.5', sideBySide && 'min-w-0')}>
-        <Label className="text-sm font-medium">Espacio de trabajo</Label>
-        {hasWorkspaces ? (
-          <Select
-            value={form.workspaceId || 'none'}
-            disabled={taskFormSaving}
-            onValueChange={onTaskFormWorkspaceSelect}
-          >
-            <SelectTrigger className={cn('h-10 rounded-lg', TASK_MODAL_FOCUS)}>
-              <SelectValue placeholder="Sin espacio de trabajo" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">Sin espacio de trabajo</SelectItem>
-              {workspaces.map((p) => (
-                <SelectItem key={p.id} value={String(p.id)}>
-                  {p.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : (
-          <div className="rounded-lg border border-dashed border-border/80 bg-muted/25 px-3 py-2 text-xs text-muted-foreground leading-snug">
-            No hay espacios de trabajo en el sistema. La tarea quedará solo en el{' '}
-            <strong className="text-foreground font-medium">equipo</strong> (sin proyecto). Podrás asignarla a un espacio cuando exista uno.
-          </div>
-        )}
-      </div>
-    )
-
-    const tagsCol = (
-      <div className={cn('space-y-1.5', sideBySide && 'min-w-0')}>
-        <Label className="text-sm font-medium">Etiquetas</Label>
-        <Input
-          variant="plain"
-          placeholder="ci-devops, seguridad, backend…"
-          value={form.tagsInput}
-          disabled={taskFormSaving}
-          onChange={(e) => setForm((f) => ({ ...f, tagsInput: e.target.value }))}
-          className={cn('h-10 rounded-lg border border-neutral-300 dark:border-neutral-600', TASK_MODAL_FOCUS)}
-        />
-      </div>
-    )
-
-    if (sideBySide) {
-      return (
-        <div className="grid grid-cols-2 gap-3">
-          {workspaceCol}
-          {tagsCol}
-        </div>
-      )
-    }
-    return (
-      <>
-        {workspaceCol}
-        {tagsCol}
-      </>
-    )
-  }, [
-    form.isPrivateTask,
-    form.workspaceId,
-    form.tagsInput,
-    taskFormSaving,
-    workspaces,
-    onTaskFormWorkspaceSelect,
-  ])
-
   return (
     <div className="workos-gantt-shell workos-gantt-shell-bg min-h-[calc(100vh-4rem)] flex flex-col">
-      <header className="sticky top-0 z-30 border-b border-border/80 bg-background shadow-sm dark:shadow-dark-sm">
-        <div className="mx-auto max-w-[1680px] px-4 lg:px-6 py-3 flex items-center gap-4 flex-wrap">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="h-9 w-9 shrink-0 rounded-xl workos-gantt-gradient-icon flex items-center justify-center text-white">
-              <GanttChartSquare className="h-4 w-4" />
-            </div>
-            <div className="min-w-0">
-              <div className="font-display font-bold text-foreground leading-tight truncate">WorkOS</div>
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider -mt-0.5 truncate">
-                Project OS
-              </div>
-            </div>
-          </div>
-          <Select
-            value={workspaceFilter}
-            onValueChange={handleWorkspaceFilterChange}
-            disabled={workspacePickerBusy}
-          >
-              <SelectTrigger
-                title={
-                  workspacePickerBusy ? 'Cargando… espera a poder cambiar de espacio' : undefined
-                }
-                className={cn(
-                  'workos-project-picker-trigger',
-                  // Quita el chevron por defecto del ui/select (usamos uno dentro del card)
-                  '[&>svg]:hidden',
-                  'h-auto min-h-0 py-1 pl-1.5 pr-2 gap-0 rounded-xl border border-neutral-200/90 dark:border-neutral-600/80',
-                  'bg-white dark:bg-neutral-900/95 shadow-sm w-[min(12.5rem,calc(100vw-10rem))] max-w-[200px]',
-                  'focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500/40',
-                  'hover:border-neutral-300 dark:hover:border-neutral-500',
-                )}
-              >
-                <span className="sr-only">
-                  <SelectValue />
-                </span>
-                <div className="flex items-center gap-2 w-full min-w-0">
-                  <div
-                    className="h-8 w-8 shrink-0 rounded-lg bg-blue-600 dark:bg-blue-500 flex items-center justify-center text-white shadow-sm"
-                    aria-hidden
-                  >
-                    <WorkspacePickerIcon className="h-4 w-4 stroke-[2]" />
-                  </div>
-                  <div className="flex-1 min-w-0 text-left leading-none">
-                    <div className="text-[9px] font-medium text-muted-foreground uppercase tracking-wide mb-1">
-                      Espacio de trabajo
-                    </div>
-                    <div className="text-[13px] font-semibold text-foreground truncate tracking-tight">
-                      {workspacePickerLabel}
-                    </div>
-                  </div>
-                  <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" aria-hidden />
-                </div>
-              </SelectTrigger>
-              <SelectContent align="start" className="rounded-xl">
-                <SelectItem value="my_space">
-                  <span className="flex items-center gap-2">
-                    <Inbox className="h-3.5 w-3.5 shrink-0 opacity-80" />
-                    Mi espacio
-                  </span>
-                </SelectItem>
-                {workspaces.map((p) => {
-                  const ItemIcon = projectIconByKey(p.iconKey)
-                  return (
-                    <SelectItem key={p.id} value={String(p.id)}>
-                      <span className="flex items-center gap-2">
-                        <ItemIcon className="h-3.5 w-3.5 shrink-0 opacity-80" />
-                        {p.name}
-                      </span>
-                    </SelectItem>
-                  )
-                })}
-                {canManageWorkspaces && (
-                  <>
-                    <SelectSeparator />
-                    <SelectItem
-                      value={HEADER_WORKSPACE_CREATE_VALUE}
-                      className="text-primary focus:text-primary cursor-pointer"
-                    >
-                      <span className="flex items-center gap-2 font-medium">
-                        <Plus className="h-3.5 w-3.5 shrink-0 opacity-90" />
-                        Crear espacio de trabajo…
-                      </span>
-                    </SelectItem>
-                  </>
-                )}
-              </SelectContent>
-            </Select>
-          {activeTab === 'gantt' && !isMySpaceView && (
-            <div className="flex-1 min-w-[200px] max-w-md relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-              <Input
-                value={ganttTeamFilter}
-                onChange={(e) => setGanttTeamFilter(e.target.value)}
-                placeholder="Filtrar equipos en timeline…"
-                className="pl-9 h-9 text-sm rounded-lg bg-background border-border/80"
-              />
-            </div>
-          )}
-          {canCreateTasks && (
-            <Button
-              type="button"
-              onClick={() => openCreate()}
-              className="gap-1.5 h-9 rounded-lg border-0 workos-gantt-btn-primary shadow-sm"
-            >
-              <Plus className="h-4 w-4" />
-              Nueva tarea
-            </Button>
-          )}
-        </div>
-        <div className="mx-auto max-w-[1680px] px-4 lg:px-6 pb-2 pt-1">
-          <div className="flex flex-wrap items-center gap-1">
-            {visibleTabs.map(({ id, label, Icon }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setActiveTab(id)}
-                className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-                  activeTab === id
-                    ? 'workos-gantt-tab-active'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/70'
-                }`}
-              >
-                <Icon className="h-3.5 w-3.5 shrink-0" />
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </header>
+      <GanttModuleHeader
+        workspaceFilter={workspaceFilter}
+        workspacePickerBusy={workspacePickerBusy}
+        onWorkspaceFilterChange={handleWorkspaceFilterChange}
+        workspaces={workspaces}
+        canManageWorkspaces={canManageWorkspaces}
+        canCreateTasks={canCreateTasks}
+        onNewTaskClick={() => openCreate()}
+        visibleTabs={visibleTabs}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      />
 
-      <Dialog open={headerWorkspaceDialogOpen} onOpenChange={setHeaderWorkspaceDialogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Nuevo espacio de trabajo</DialogTitle>
-          </DialogHeader>
-          <p className="text-xs text-muted-foreground -mt-1">
-            Crea un espacio desde el selector del header. Podrás elegirlo en el combo y asociar tareas y sprints.
-          </p>
-          <div className="space-y-4 mt-2">
-            <div>
-              <Label>Icono</Label>
-              <p className="text-[11px] text-muted-foreground mb-2">
-                Se muestra en el selector y en Cartera.
-              </p>
-              <div className="grid grid-cols-8 gap-1.5 sm:grid-cols-8">
-                {PROJECT_ICON_CHOICES.map(({ key, label, Icon }) => {
-                  const sel = headerWorkspaceForm.iconKey === key
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      title={label}
-                      onClick={() => setHeaderWorkspaceForm((f) => ({ ...f, iconKey: key }))}
-                      className={`h-9 w-9 rounded-lg flex items-center justify-center transition-colors border ${
-                        sel
-                          ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                          : 'bg-muted/50 text-muted-foreground border-border/60 hover:bg-muted hover:text-foreground'
-                      }`}
-                    >
-                      <Icon className="w-4 h-4 stroke-[2]" />
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-            <div>
-              <Label>Nombre del espacio de trabajo *</Label>
-              <Input
-                value={headerWorkspaceForm.name}
-                onChange={(e) => setHeaderWorkspaceForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="Ej: Migración Cloud"
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label>Descripción</Label>
-              <Textarea
-                value={headerWorkspaceForm.description}
-                onChange={(e) => setHeaderWorkspaceForm((f) => ({ ...f, description: e.target.value }))}
-                placeholder="Descripción opcional…"
-                className="mt-1 resize-none"
-                rows={3}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setHeaderWorkspaceDialogOpen(false)} disabled={headerWorkspaceSaving}>
-              Cancelar
-            </Button>
-            <Button
-              className="workos-gantt-btn-primary border-0"
-              disabled={!headerWorkspaceForm.name.trim() || headerWorkspaceSaving}
-              onClick={() => void saveHeaderWorkspace()}
-            >
-              {headerWorkspaceSaving ? 'Creando…' : 'Crear espacio'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CreateWorkspaceDialog
+        open={headerWorkspaceDialogOpen}
+        onOpenChange={setHeaderWorkspaceDialogOpen}
+        form={headerWorkspaceForm}
+        setForm={setHeaderWorkspaceForm}
+        saving={headerWorkspaceSaving}
+        onSave={saveHeaderWorkspace}
+      />
 
       <main className="mx-auto w-full max-w-[1680px] px-4 lg:px-6 py-5 flex-1 flex flex-col min-h-0 bg-[#f9fafb] dark:bg-transparent">
         {err && (
@@ -1604,8 +1749,6 @@ export function YegoGanttModule() {
                   loading={loading}
                   refreshing={refreshing}
                   timelinePanDays={timelinePanDays}
-                  filterText={isMySpaceView ? '' : ganttTeamFilter}
-                  onFilterChange={setGanttTeamFilter}
                   manage={manage}
                   onEditTask={openEdit}
                   onDeleteTask={removeTask}
@@ -1613,12 +1756,15 @@ export function YegoGanttModule() {
                   showCriticalPath={showCriticalPath}
                   onTaskSelectNotify={onTaskSelectNotify}
                   collaboratorsForArea={collaboratorsForArea}
+                  collaboratorsForDetailPanel={allCollaborators}
                   collaboratorNames={collaboratorNames}
-                  collaboratorAreaLabels={collaboratorAreaLabels}
                   mySpaceShowProjectNames={isMySpaceView}
                   workspaceNameById={workspaceNameById}
                   currentUserId={user?.id ?? null}
                   onParentSubtasksSynced={handleTimelineSubtasksSynced}
+                  subtasksByParentId={subtasksByParentId}
+                  setSubtasksByParentId={setSubtasksByParentId}
+                  onDropTaskToSubtask={handleDropTaskToSubtask}
                 />
               </div>
             </div>
@@ -1770,16 +1916,6 @@ export function YegoGanttModule() {
                         <span className="h-1.5 w-1.5 rounded-full bg-current opacity-80 shrink-0" aria-hidden />
                         {detailLiveTask.tags[0]}
                       </span>
-                    ) : detailLiveTask.areaName ? (
-                      <span
-                        className={cn(
-                          DETAIL_TITLE_META_PILL,
-                          'border-primary-200/80 bg-primary-50 text-primary-800 dark:bg-primary-950/40 dark:text-primary-200 dark:border-primary-800/50',
-                        )}
-                      >
-                        <span className="h-1.5 w-1.5 rounded-full bg-primary-500 shrink-0" aria-hidden />
-                        {detailLiveTask.areaName}
-                      </span>
                     ) : null}
                     {(() => {
                       const sp =
@@ -1861,6 +1997,15 @@ export function YegoGanttModule() {
                         ) : null}
                       </div>
                       <div className="p-2">
+                        {detailSubtaskBlockedMsg ? (
+                          <div
+                            role="alert"
+                            className="mb-2 rounded-lg border border-amber-500/55 bg-amber-500/12 text-amber-950 dark:text-amber-50 dark:border-amber-500/40 dark:bg-amber-950/40 px-2.5 py-2 text-xs flex gap-2 items-start shadow-sm"
+                          >
+                            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 opacity-90" aria-hidden />
+                            <span className="leading-snug">{detailSubtaskBlockedMsg}</span>
+                          </div>
+                        ) : null}
                         {detailModalSubtasksLoading ? (
                           <div
                             className="flex items-center gap-2 text-xs text-muted-foreground py-3 px-2"
@@ -1881,7 +2026,7 @@ export function YegoGanttModule() {
                                 detailLiveTask,
                                 st,
                                 user?.id ?? null,
-                                manage,
+                                manage || canCollaboratorManageTaskBasics(detailLiveTask, user?.id),
                               )
                               return (
                               <li
@@ -1893,8 +2038,11 @@ export function YegoGanttModule() {
                                     done={st.done}
                                     canToggle={canToggle}
                                     disabled={detailSubtaskBusyId === st.id}
+                                    preferDisabledCheckbox
                                     checkboxClassName="mt-0.5 shrink-0"
                                     idleWrapperClassName="mt-0.5"
+                                    cannotToggleTitle={SUBTASK_DONE_NOT_ALLOWED_HINT}
+                                    onCannotToggleInteract={() => setDetailSubtaskBlockedMsg(SUBTASK_DONE_NOT_ALLOWED_HINT)}
                                     onCommitted={async (next) => {
                                       setDetailSubtaskBusyId(st.id)
                                       try {
@@ -1907,17 +2055,16 @@ export function YegoGanttModule() {
                                           const nextList = prev.map((x) =>
                                             x.id === st.id ? updated : x,
                                           )
-                                          patchGanttParentFromSubtasks(
-                                            detailLiveTask.id,
-                                            nextList,
-                                            setTasks,
-                                            setKpis,
-                                          )
+                                          applySubtaskListToParentState(detailLiveTask.id, nextList)
                                           return nextList
                                         })
                                         scheduleReloadTasksAndKpisAfterSubtasks()
-                                      } catch {
-                                        setErr('No se pudo actualizar la subtarea')
+                                      } catch (e: unknown) {
+                                        setDetailSubtaskBlockedMsg(
+                                          httpSubtaskMutateStatus(e) === 403
+                                            ? SUBTASK_DONE_NOT_ALLOWED_HINT
+                                            : 'No se pudo actualizar la subtarea',
+                                        )
                                       } finally {
                                         setDetailSubtaskBusyId(null)
                                       }
@@ -1933,6 +2080,11 @@ export function YegoGanttModule() {
                                     >
                                       {st.title?.trim() || `Subtarea #${st.id}`}
                                     </span>
+                                    {st.description?.trim() ? (
+                                      <p className="mt-1 text-[11px] text-muted-foreground whitespace-pre-wrap leading-snug">
+                                        {st.description.trim()}
+                                      </p>
+                                    ) : null}
                                     {(subResp || st.dueDate) ? (
                                       <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground">
                                         {subResp ? (
@@ -2025,18 +2177,11 @@ export function YegoGanttModule() {
                     const principal = ids[0]
                     const rest = ids.slice(1)
                     const n = (id: number) => collaboratorNames.get(id) || `#${id}`
-                    const areaCollabs = collaboratorsForArea(detailLiveTask.areaId)
                     const principalMeta =
                       principal != null
-                        ? assigneePickerList.find((c) => c.id === principal) ??
-                          areaCollabs.find((c) => c.id === principal)
+                        ? assigneePickerList.find((c) => c.id === principal)
                         : undefined
                     const roleLabel = principalMeta?.rol?.trim() || '—'
-                    const principalAreaLabel = collaboratorAreaLabel(
-                      principalMeta,
-                      detailLiveTask.areaId,
-                      areas,
-                    )
                     return (
                       <>
                         <div>
@@ -2052,14 +2197,6 @@ export function YegoGanttModule() {
                                 <div className="text-[10px] text-muted-foreground uppercase tracking-wider">
                                   {roleLabel}
                                 </div>
-                                {principalAreaLabel ? (
-                                  <div
-                                    className="text-[10px] text-muted-foreground/90 truncate mt-0.5"
-                                    title={principalAreaLabel}
-                                  >
-                                    {principalAreaLabel}
-                                  </div>
-                                ) : null}
                               </div>
                             </div>
                           ) : (
@@ -2078,10 +2215,7 @@ export function YegoGanttModule() {
                             ) : (
                               <div className="grid grid-cols-2 gap-2">
                                 {rest.map((id) => {
-                                  const m =
-                                    assigneePickerList.find((c) => c.id === id) ??
-                                    areaCollabs.find((c) => c.id === id)
-                                  const coAreaLabel = collaboratorAreaLabel(m, detailLiveTask.areaId, areas)
+                                  const m = assigneePickerList.find((c) => c.id === id)
                                   return (
                                     <div
                                       key={id}
@@ -2093,14 +2227,6 @@ export function YegoGanttModule() {
                                         <div className="text-[10px] text-muted-foreground uppercase tracking-wider">
                                           {m?.rol?.trim() || '—'}
                                         </div>
-                                        {coAreaLabel ? (
-                                          <div
-                                            className="text-[10px] text-muted-foreground/90 truncate mt-0.5"
-                                            title={coAreaLabel}
-                                          >
-                                            {coAreaLabel}
-                                          </div>
-                                        ) : null}
                                       </div>
                                     </div>
                                   )
@@ -2236,7 +2362,14 @@ export function YegoGanttModule() {
                 />
               </div>
 
-              {taskFormWorkspaceTagsSection}
+              <TaskFormWorkspaceTagsRow
+                workspaces={workspaces}
+                workspaceId={form.workspaceId}
+                tagsInput={form.tagsInput}
+                taskFormSaving={taskFormSaving}
+                onWorkspaceChange={onTaskFormWorkspaceSelect}
+                onTagsChange={(v) => setForm((f) => ({ ...f, tagsInput: v }))}
+              />
 
               <div className={cn('grid gap-3', form.isPrivateTask ? 'grid-cols-1' : 'grid-cols-2')}>
                 <div className="space-y-1.5">
@@ -2246,11 +2379,7 @@ export function YegoGanttModule() {
                   <Select
                     value={form.areaId}
                     onValueChange={(v) => {
-                      setForm((f) =>
-                        f.isPrivateTask
-                          ? { ...f, areaId: v }
-                          : { ...f, areaId: v, assignedUserIds: [] },
-                      )
+                      setForm((f) => ({ ...f, areaId: v }))
                       setAssigneeSearchQuery('')
                       setFormErrors((p) => ({ ...p, areaId: '' }))
                     }}
@@ -2402,11 +2531,13 @@ export function YegoGanttModule() {
                   >
                     Progreso · {displayProgressValue}%
                   </Label>
-                  {progressFromFormSubtasks != null && (
+                  {progressFromFormSubtasks != null ? (
                     <span className="text-[10px] text-muted-foreground italic">Calculado desde subtareas</span>
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground">Solo lectura (no se ajusta manualmente)</span>
                   )}
                 </div>
-                <div className="relative w-full min-h-[32px] flex items-center">
+                <div className="w-full flex items-center">
                   <div className="w-full rounded-full border border-border/60 bg-muted/50 dark:bg-muted/40 p-1 shadow-[inset_0_1px_2px_rgba(0,0,0,0.08)] dark:shadow-[inset_0_1px_2px_rgba(0,0,0,0.25)]">
                     <ProgressBar
                       value={displayProgressValue}
@@ -2415,34 +2546,7 @@ export function YegoGanttModule() {
                       className="!bg-transparent dark:!bg-transparent"
                     />
                   </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    step={1}
-                    value={displayProgressValue}
-                    disabled={taskFormSaving || progressFromFormSubtasks != null}
-                    onChange={(e) => {
-                      setForm((f) => ({ ...f, progressPercent: e.target.value }))
-                      setFormErrors((p) => ({ ...p, progressPercent: '' }))
-                    }}
-                    className={cn(
-                      'absolute left-0 right-0 w-full mx-auto max-w-full h-8 appearance-none bg-transparent cursor-pointer disabled:cursor-not-allowed',
-                      '[&::-webkit-slider-runnable-track]:h-2 [&::-webkit-slider-runnable-track]:bg-transparent',
-                      '[&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-background [&::-webkit-slider-thumb]:shadow',
-                      '[&::-moz-range-track]:h-2 [&::-moz-range-track]:bg-transparent',
-                      '[&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-background',
-                      displayProgressValue >= 100
-                        ? '[&::-webkit-slider-thumb]:bg-red-600 [&::-moz-range-thumb]:bg-red-600'
-                        : '[&::-webkit-slider-thumb]:bg-primary-500 [&::-moz-range-thumb]:bg-primary-500',
-                      'disabled:opacity-0 disabled:pointer-events-none',
-                    )}
-                    aria-label="Ajustar progreso de la tarea"
-                  />
                 </div>
-                {formErrors.progressPercent && (
-                  <p className="text-[11px] text-red-500">{formErrors.progressPercent}</p>
-                )}
               </div>
 
               <div className="space-y-1.5">
@@ -2498,11 +2602,7 @@ export function YegoGanttModule() {
                               variant="owner"
                               className="mt-0.5 shrink-0"
                             />
-                            <PrincipalOwnerLine
-                              nombre={c.nombreCompleto}
-                              area={c.areaNamesLabel ?? ''}
-                              className="text-left"
-                            />
+                            <PrincipalOwnerLine nombre={c.nombreCompleto} area="" className="text-left" />
                           </span>
                         </SelectItem>
                       )
@@ -2518,7 +2618,7 @@ export function YegoGanttModule() {
                     variant="plain"
                     type="text"
                     autoComplete="off"
-                    placeholder="Buscar por nombre, equipo o rol…"
+                    placeholder="Buscar por nombre o rol…"
                     value={assigneeSearchQuery}
                     disabled={taskFormSaving || (!form.isPrivateTask && !form.areaId)}
                     onChange={(e) => setAssigneeSearchQuery(e.target.value)}
@@ -2585,14 +2685,6 @@ export function YegoGanttModule() {
                             />
                             <span className="text-xs truncate min-w-0 flex flex-col items-start gap-0 leading-tight">
                               <span className="truncate w-full font-medium">{c.nombreCompleto}</span>
-                              {c.areaNamesLabel ? (
-                                <span
-                                  className="text-[10px] text-muted-foreground truncate w-full"
-                                  title={c.areaNamesLabel}
-                                >
-                                  {c.areaNamesLabel}
-                                </span>
-                              ) : null}
                             </span>
                           </label>
                         )
@@ -2602,6 +2694,15 @@ export function YegoGanttModule() {
               </div>
 
               <div className="rounded-lg border border-border px-2 py-2 space-y-2">
+                {editSubtaskBlockedMsg ? (
+                  <div
+                    role="alert"
+                    className="rounded-lg border border-amber-500/55 bg-amber-500/12 text-amber-950 dark:text-amber-50 dark:border-amber-500/40 dark:bg-amber-950/40 px-2.5 py-2 text-xs flex gap-2 items-start shadow-sm"
+                  >
+                    <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 opacity-90" aria-hidden />
+                    <span className="leading-snug">{editSubtaskBlockedMsg}</span>
+                  </div>
+                ) : null}
                 <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
                   <span>Subtareas</span>
                   <span className="tabular-nums">
@@ -2627,8 +2728,10 @@ export function YegoGanttModule() {
                         editing,
                         st,
                         user?.id ?? null,
-                        manage,
+                        manage || canCollaboratorManageTaskBasics(editing, user?.id),
                       )
+                      const subAreaId = st.areaId ?? Number(editing.areaId)
+                      const collabsForSub = collaboratorsForArea(subAreaId)
                       return (
                       <div
                         key={st.id}
@@ -2640,6 +2743,8 @@ export function YegoGanttModule() {
                             done={st.done}
                             canToggle={subCanToggle}
                             disabled={taskFormSaving || subtaskModalBusy !== 'idle'}
+                            cannotToggleTitle={SUBTASK_DONE_NOT_ALLOWED_HINT}
+                            onCannotToggleInteract={() => setEditSubtaskBlockedMsg(SUBTASK_DONE_NOT_ALLOWED_HINT)}
                             onCommitted={async (done) => {
                               if (!editing || subtaskModalBusy !== 'idle' || !subCanToggle) return
                               setSubtaskModalBusy('updating')
@@ -2649,12 +2754,16 @@ export function YegoGanttModule() {
                                 })
                                 setSubtasks((prev) => {
                                   const nextList = prev.map((x) => (x.id === st.id ? updated : x))
-                                  patchGanttParentFromSubtasks(editing.id, nextList, setTasks, setKpis)
+                                  applySubtaskListToParentState(editing.id, nextList)
                                   return nextList
                                 })
                                 scheduleReloadTasksAndKpisAfterSubtasks()
-                              } catch {
-                                setErr('No se pudo actualizar la subtarea')
+                              } catch (e: unknown) {
+                                setEditSubtaskBlockedMsg(
+                                  httpSubtaskMutateStatus(e) === 403
+                                    ? SUBTASK_DONE_NOT_ALLOWED_HINT
+                                    : 'No se pudo actualizar la subtarea',
+                                )
                               } finally {
                                 setSubtaskModalBusy('idle')
                               }
@@ -2679,7 +2788,7 @@ export function YegoGanttModule() {
                                 return
                               const row = subtasks.find((x) => x.id === st.id)
                               const v = row?.title?.trim() ?? ''
-                              if (!v) return
+                              if (!v || v === (st.title ?? '').trim()) return
                               setSubtaskModalBusy('updating')
                               try {
                                 const updated = await updateTaskSubtaskNormalized(editing.id, st.id, {
@@ -2687,7 +2796,7 @@ export function YegoGanttModule() {
                                 })
                                 setSubtasks((prev) => {
                                   const nextList = prev.map((x) => (x.id === st.id ? updated : x))
-                                  patchGanttParentFromSubtasks(editing.id, nextList, setTasks, setKpis)
+                                  applySubtaskListToParentState(editing.id, nextList)
                                   return nextList
                                 })
                                 scheduleReloadTasksAndKpisAfterSubtasks()
@@ -2706,41 +2815,94 @@ export function YegoGanttModule() {
                           <button
                             type="button"
                             disabled={taskFormSaving || subtaskModalBusy !== 'idle' || !canEditSubtasksInTaskModal}
+                            className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-primary hover:bg-primary/10"
+                            aria-label="Mover subtarea a otra tarea"
+                            title="Mover a otra tarea"
+                            onClick={() => {
+                              setSubtaskMoveParentChoice('')
+                              setSubtaskMoveTargetRow(st)
+                            }}
+                          >
+                            <ArrowRightLeft className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={taskFormSaving || subtaskModalBusy !== 'idle' || !canEditSubtasksInTaskModal}
                             className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10"
                             aria-label="Eliminar subtarea"
-                            onClick={async () => {
+                            onClick={() => {
                               if (
-                                !editing ||
+                                taskFormSaving ||
                                 subtaskModalBusy !== 'idle' ||
                                 !canEditSubtasksInTaskModal
                               )
                                 return
-                              setSubtaskModalBusy('updating')
-                              try {
-                                await deleteTaskSubtask(editing.id, st.id)
-                                setSubtasks((prev) => {
-                                  const nextList = prev.filter((x) => x.id !== st.id)
-                                  patchGanttParentFromSubtasks(editing.id, nextList, setTasks, setKpis)
-                                  return nextList
-                                })
-                                scheduleReloadTasksAndKpisAfterSubtasks()
-                              } catch {
-                                setErr('No se pudo eliminar la subtarea')
-                              } finally {
-                                setSubtaskModalBusy('idle')
-                              }
+                              setSubtaskPendingDelete(st)
                             }}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         </div>
+                        <SubtaskAreaWorkspaceRow
+                          areas={areas.map((a) => ({ id: a.id, name: a.name }))}
+                          workspaces={workspaces.map((w) => ({ id: w.id, name: w.name }))}
+                          areaId={subAreaId}
+                          workspaceId={st.workspaceId ?? editing.workspaceId ?? null}
+                          disabled={taskFormSaving || subtaskModalBusy !== 'idle' || !canEditSubtasksInTaskModal}
+                          onAreaCommit={async (nextArea) => {
+                            if (
+                              !editing ||
+                              subtaskModalBusy !== 'idle' ||
+                              !canEditSubtasksInTaskModal ||
+                              nextArea === subAreaId
+                            )
+                              return
+                            setSubtaskModalBusy('updating')
+                            try {
+                              const updated = await updateTaskSubtaskNormalized(editing.id, st.id, {
+                                areaId: nextArea,
+                              })
+                              setSubtasks((prev) => prev.map((x) => (x.id === st.id ? updated : x)))
+                              scheduleReloadTasksAndKpisAfterSubtasks()
+                            } catch {
+                              setErr('No se pudo actualizar el equipo de la subtarea')
+                            } finally {
+                              setSubtaskModalBusy('idle')
+                            }
+                          }}
+                          onWorkspaceCommit={async (nextWs) => {
+                            if (!editing || subtaskModalBusy !== 'idle' || !canEditSubtasksInTaskModal) return
+                            const curWs = st.workspaceId ?? editing.workspaceId ?? null
+                            if (nextWs === curWs) return
+                            if (nextWs == null) {
+                              setSubtaskModalBusy('updating')
+                              try {
+                                const updated = await updateTaskSubtaskNormalized(
+                                  editing.id,
+                                  st.id,
+                                  { clearWorkspace: true as const },
+                                )
+                                setSubtasks((prev) => prev.map((x) => (x.id === st.id ? updated : x)))
+                                scheduleReloadTasksAndKpisAfterSubtasks()
+                              } catch {
+                                setErr('No se pudo actualizar el espacio de la subtarea')
+                              } finally {
+                                setSubtaskModalBusy('idle')
+                              }
+                              return
+                            }
+                            setSubtaskWorkspaceRelocation({ subtask: st, nextWorkspaceId: nextWs })
+                          }}
+                        />
                         <SubtaskAssigneeDateGrid
-                          assignees={assigneePickerList}
+                          assignees={collabsForSub}
                           assignedUserId={st.assignedUserId}
                           dueDate={st.dueDate}
                           min={form.startDate || undefined}
-                          max={form.endDate || undefined}
-                          disabled={taskFormSaving || subtaskModalBusy !== 'idle' || !canEditSubtasksInTaskModal}
+                          disabled={
+                            taskFormSaving || subtaskModalBusy !== 'idle' || !canEditSubtasksInTaskModal
+                          }
+                          dueDateDisabled={taskFormSaving || !canEditSubtasksInTaskModal}
                           readOnlyAssigneeLabel={subtaskAssigneeReadOnlyLabel}
                           onAssigneeCommit={async (nextAssignee) => {
                             if (
@@ -2765,27 +2927,86 @@ export function YegoGanttModule() {
                             }
                           }}
                           onDueDateCommit={async (v) => {
-                            if (
-                              !editing ||
-                              subtaskModalBusy !== 'idle' ||
-                              !canEditSubtasksInTaskModal
-                            )
-                              return
+                            if (!editing || !canEditSubtasksInTaskModal) return
+                            const vClamped = ensureSubtaskDueNotBeforeParentStart(v, form.startDate)
+                            const previousDue = st.dueDate ?? null
+                            setSubtasks((prev) => {
+                              const nl = prev.map((x) =>
+                                x.id === st.id ? { ...x, dueDate: vClamped } : x,
+                              )
+                              applySubtaskListToParentState(editing.id, nl)
+                              return nl
+                            })
                             setSubtaskModalBusy('updating')
                             try {
-                              const body = v == null ? { clearDueDate: true as const } : { dueDate: v }
+                              const body =
+                                vClamped == null
+                                  ? { clearDueDate: true as const }
+                                  : { dueDate: vClamped }
                               const updated = await updateTaskSubtaskNormalized(editing.id, st.id, body)
-                              setSubtasks((prev) => prev.map((x) => (x.id === st.id ? updated : x)))
+                              setSubtasks((prev) => {
+                                const nl = prev.map((x) => (x.id === st.id ? updated : x))
+                                applySubtaskListToParentState(editing.id, nl)
+                                return nl
+                              })
                               scheduleReloadTasksAndKpisAfterSubtasks()
                             } catch {
                               setErr(
-                                'Fecha inválida: la subtarea debe quedar dentro del inicio y fin de la tarea',
+                                'Fecha inválida: la fecha límite no puede ser anterior al inicio de la tarea',
                               )
+                              setSubtasks((prev) => {
+                                const nl = prev.map((x) =>
+                                  x.id === st.id ? { ...x, dueDate: previousDue } : x,
+                                )
+                                applySubtaskListToParentState(editing.id, nl)
+                                return nl
+                              })
                             } finally {
                               setSubtaskModalBusy('idle')
                             }
                           }}
                         />
+                        <div className="pl-7 min-w-0">
+                          <SubtaskDescriptionField
+                            value={st.description ?? ''}
+                            disabled={
+                              taskFormSaving || subtaskModalBusy !== 'idle' || !canEditSubtasksInTaskModal
+                            }
+                            onChange={(v) =>
+                              setSubtasks((prev) =>
+                                prev.map((x) => (x.id === st.id ? { ...x, description: v } : x)),
+                              )
+                            }
+                            onBlur={async () => {
+                              if (
+                                !editing ||
+                                taskFormSaving ||
+                                subtaskModalBusy !== 'idle' ||
+                                !canEditSubtasksInTaskModal
+                              )
+                                return
+                              const row = subtasks.find((x) => x.id === st.id)
+                              const payload = (row?.description ?? '').trim()
+                              if (!payload || payload === (st.description ?? '').trim()) return
+                              setSubtaskModalBusy('updating')
+                              try {
+                                const updated = await updateTaskSubtaskNormalized(editing.id, st.id, {
+                                  description: payload,
+                                })
+                                setSubtasks((prev) => {
+                                  const nl = prev.map((x) => (x.id === st.id ? updated : x))
+                                  applySubtaskListToParentState(editing.id, nl)
+                                  return nl
+                                })
+                                scheduleReloadTasksAndKpisAfterSubtasks()
+                              } catch {
+                                setErr('No se pudo guardar la descripción de la subtarea')
+                              } finally {
+                                setSubtaskModalBusy('idle')
+                              }
+                            }}
+                          />
+                        </div>
                       </div>
                       )
                     })}
@@ -2841,12 +3062,32 @@ export function YegoGanttModule() {
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         </div>
+                        <SubtaskAreaWorkspaceRow
+                          areas={areas.map((a) => ({ id: a.id, name: a.name }))}
+                          workspaces={workspaces.map((w) => ({ id: w.id, name: w.name }))}
+                          areaId={ps.areaId}
+                          workspaceId={ps.workspaceId}
+                          disabled={taskFormSaving}
+                          onAreaCommit={(nextArea) => {
+                            setPendingSubtasks((prev) =>
+                              prev.map((x) =>
+                                x.tempId === ps.tempId ? { ...x, areaId: nextArea } : x,
+                              ),
+                            )
+                          }}
+                          onWorkspaceCommit={(nextWs) => {
+                            setPendingSubtasks((prev) =>
+                              prev.map((x) =>
+                                x.tempId === ps.tempId ? { ...x, workspaceId: nextWs } : x,
+                              ),
+                            )
+                          }}
+                        />
                         <SubtaskAssigneeDateGrid
-                          assignees={assigneePickerList}
+                          assignees={collaboratorsForArea(ps.areaId)}
                           assignedUserId={ps.assignedUserId}
                           dueDate={ps.dueDate}
                           min={form.startDate || undefined}
-                          max={form.endDate || undefined}
                           disabled={taskFormSaving}
                           readOnlyAssigneeLabel={subtaskAssigneeReadOnlyLabel}
                           onAssigneeCommit={(nextAssignee) => {
@@ -2857,13 +3098,27 @@ export function YegoGanttModule() {
                             )
                           }}
                           onDueDateCommit={(v) => {
+                            const vClamped = ensureSubtaskDueNotBeforeParentStart(v, form.startDate)
                             setPendingSubtasks((prev) =>
                               prev.map((x) =>
-                                x.tempId === ps.tempId ? { ...x, dueDate: v } : x,
+                                x.tempId === ps.tempId ? { ...x, dueDate: vClamped } : x,
                               ),
                             )
                           }}
                         />
+                        <div className="pl-7 min-w-0">
+                          <SubtaskDescriptionField
+                            value={ps.description ?? ''}
+                            disabled={taskFormSaving}
+                            onChange={(v) =>
+                              setPendingSubtasks((prev) =>
+                                prev.map((x) =>
+                                  x.tempId === ps.tempId ? { ...x, description: v } : x,
+                                ),
+                              )
+                            }
+                          />
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -2890,7 +3145,12 @@ export function YegoGanttModule() {
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-8 shrink-0 rounded-none border-neutral-200 dark:border-border bg-white dark:bg-background px-2.5 text-xs font-medium gap-1.5"
+                    className={cn(
+                      'h-8 min-w-[9rem] shrink-0 justify-center rounded-none border-neutral-200 dark:border-border bg-white dark:bg-background px-2.5 text-xs font-semibold gap-1.5',
+                      /* El Button global usa disabled:opacity-50; durante subtarea en curso debe leerse el texto. */
+                      subtaskModalBusy !== 'idle' && 'disabled:!opacity-100 disabled:border-primary/50 disabled:text-primary',
+                    )}
+                    aria-busy={subtaskModalBusy !== 'idle'}
                     disabled={
                       taskFormSaving ||
                       subtaskModalBusy !== 'idle' ||
@@ -2900,13 +3160,15 @@ export function YegoGanttModule() {
                     onClick={() => void commitSubtaskDraft()}
                   >
                     {subtaskModalBusy !== 'idle' ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" aria-hidden />
+                      <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" aria-hidden />
                     ) : null}
-                    {subtaskModalBusy === 'adding'
-                      ? 'Añadiendo…'
-                      : subtaskModalBusy === 'updating'
-                        ? 'Actualizando…'
-                        : '+ Añadir'}
+                    <span className="whitespace-nowrap">
+                      {subtaskModalBusy === 'adding'
+                        ? 'Añadiendo…'
+                        : subtaskModalBusy === 'updating'
+                          ? 'Actualizando…'
+                          : '+ Añadir'}
+                    </span>
                   </Button>
                 </div>
               </div>
@@ -2952,18 +3214,39 @@ export function YegoGanttModule() {
             </div>
 
             <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border/60 bg-muted/20">
+              {editing && !subtasksLoading && subtasks.length === 0 && (editing.subtaskTotal ?? 0) === 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setTaskConvertToSubtaskCandidates(subtaskParentMoveCandidates)
+                    setTaskConvertToSubtaskSelectedId('')
+                    setTaskConvertToSubtaskDialogOpen(true)
+                  }}
+                  disabled={taskFormSaving}
+                  className="rounded-lg px-4 mr-auto gap-2 text-muted-foreground hover:text-foreground"
+                >
+                  <ArrowRightLeft className="w-4 h-4" />
+                  Convertir a subtarea
+                </Button>
+              )}
               <Button
                 variant="outline"
                 onClick={() => setDialogOpen(false)}
                 disabled={taskFormSaving}
-                className="rounded-lg px-5"
+                className="rounded-lg px-5 ml-auto"
               >
                 Cancelar
               </Button>
               <Button
                 className="workos-gantt-btn-primary rounded-lg px-5 inline-flex items-center justify-center gap-2 text-white border-0 shadow-sm"
                 onClick={saveTask}
-                disabled={taskFormSaving || !form.title.trim() || (!editing && !form.areaId)}
+                disabled={
+                  taskFormSaving ||
+                  !form.title.trim() ||
+                  (!editing && !form.areaId) ||
+                  (!!editing && !isEditTaskFormDirty)
+                }
               >
                 {taskFormSaving ? (
                   <>
@@ -2978,71 +3261,367 @@ export function YegoGanttModule() {
           </DialogContent>
         </Dialog>
 
-        {/* Delete task confirmation dialog */}
-        <Dialog open={deleteDialogOpen} onOpenChange={(open) => { if (!deleting) { setDeleteDialogOpen(open); if (!open) setTaskToDelete(null) } }}>
-          <DialogContent className="max-w-sm">
-            <div className="flex flex-col items-center text-center pt-2 pb-1">
-              <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center mb-4 gantt-scale-in">
-                <AlertTriangle className="w-6 h-6 text-destructive" />
+        <Dialog
+          open={subtaskWorkspaceRelocation !== null}
+          onOpenChange={(open) => {
+            if (!open && subtaskModalBusy === 'idle') {
+              setSubtaskWorkspaceRelocation(null)
+            }
+          }}
+        >
+          <DialogContent
+            className={cn(
+              'max-h-[85vh] w-[min(100%,28rem)] max-w-md gap-0 overflow-y-auto p-0 sm:max-w-md sm:rounded-xl',
+              'border-border/80 shadow-lg',
+            )}
+          >
+            <DialogHeader className="min-w-0 space-y-0 px-4 pb-3 pt-4 text-left">
+              <DialogTitle className="pr-9 text-base font-semibold leading-tight text-foreground">
+                Cambio de espacio
+              </DialogTitle>
+              <DialogDescription asChild>
+                <div className="mt-2.5 min-w-0 space-y-2 text-xs leading-snug text-muted-foreground">
+                  <p>
+                    Destino:{' '}
+                    <span className="font-medium text-foreground">
+                      {workspaces.find((w) => w.id === subtaskWorkspaceRelocation?.nextWorkspaceId)?.name?.trim() ||
+                        '—'}
+                    </span>
+                  </p>
+                  <p className="break-words rounded-md bg-muted/50 px-2 py-1.5 text-[13px] text-foreground [overflow-wrap:anywhere]">
+                    {subtaskWorkspaceRelocation?.subtask.title?.trim() ||
+                      (subtaskWorkspaceRelocation != null ? `#${subtaskWorkspaceRelocation.subtask.id}` : '')}
+                  </p>
+                </div>
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="min-w-0 space-y-2 border-t border-border/50 px-4 py-3">
+              {subtaskModalBusy !== 'idle' && (
+                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
+                  Aplicando…
+                </p>
+              )}
+              <div className="flex min-w-0 flex-col gap-2">
+                <button
+                  type="button"
+                  disabled={subtaskModalBusy !== 'idle' || !editing || subtaskWorkspaceRelocation == null}
+                  className={cn(
+                    'flex min-w-0 flex-col items-stretch gap-0.5 rounded-lg border border-primary/25 bg-primary/10 px-3 py-2.5 text-left outline-none transition-colors',
+                    'hover:bg-primary/15 focus-visible:ring-2 focus-visible:ring-primary/25',
+                    'disabled:pointer-events-none disabled:opacity-50',
+                    'dark:bg-primary/15 dark:hover:bg-primary/25',
+                  )}
+                  onClick={() => void confirmSubtaskWorkspaceRelocation('standalone')}
+                >
+                  <span className="text-sm font-medium leading-snug text-foreground">
+                    Convertir en tarea
+                  </span>
+                  <span className="text-[11px] leading-snug text-muted-foreground">
+                    Independiente en el nuevo espacio, mismo contenido
+                  </span>
+                </button>
+                <div className="my-2 border-t border-border/50"></div>
+                <Label className="text-[13px] font-medium text-foreground">
+                  O mover a una tarea en el nuevo espacio:
+                </Label>
+                {relocationTargetTasksLoading ? (
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground py-2">
+                    <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
+                    Cargando tareas...
+                  </div>
+                ) : (
+                  <>
+                    <Select
+                      value={relocationSelectedParentId}
+                      onValueChange={setRelocationSelectedParentId}
+                      disabled={subtaskModalBusy !== 'idle' || !relocationTargetTasks?.length}
+                    >
+                      <SelectTrigger className="w-full text-sm">
+                        <SelectValue placeholder={relocationTargetTasks?.length ? 'Selecciona una tarea...' : 'No hay tareas en este espacio'} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {relocationTargetTasks?.map(t => (
+                          <SelectItem key={t.id} value={String(t.id)}>
+                            {t.title?.trim() || `Tarea #${t.id}`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <button
+                      type="button"
+                      disabled={subtaskModalBusy !== 'idle' || !editing || subtaskWorkspaceRelocation == null || !relocationSelectedParentId}
+                      className={cn(
+                        'flex min-w-0 flex-col items-stretch gap-0.5 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-left shadow-sm outline-none transition-colors mt-1',
+                        'hover:bg-primary/15 focus-visible:ring-2 focus-visible:ring-primary/25',
+                        'disabled:pointer-events-none disabled:opacity-50',
+                      )}
+                      onClick={() => void confirmSubtaskWorkspaceRelocation('existing')}
+                    >
+                      <span className="text-sm font-medium leading-snug text-primary text-center">
+                        Mover a la tarea seleccionada
+                      </span>
+                    </button>
+                    
+                    {!relocationTargetTasks?.length && (
+                      <button
+                        type="button"
+                        disabled={subtaskModalBusy !== 'idle' || !editing || subtaskWorkspaceRelocation == null}
+                        className={cn(
+                          'flex min-w-0 flex-col items-stretch gap-0.5 rounded-lg border border-border bg-background px-3 py-2 text-left shadow-sm outline-none transition-colors mt-2',
+                          'hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring',
+                          'disabled:pointer-events-none disabled:opacity-50',
+                        )}
+                        onClick={() => void confirmSubtaskWorkspaceRelocation('nested')}
+                      >
+                        <span className="text-[13px] font-medium leading-snug text-foreground">
+                          Subtarea con padre «Por definir»
+                        </span>
+                        <span className="text-[11px] leading-snug text-muted-foreground">
+                          Se crea la tarea padre y se mueve debajo
+                        </span>
+                      </button>
+                    )}
+                  </>
+                )}
               </div>
-              <DialogHeader className="space-y-1.5">
-                <DialogTitle className="text-base">Eliminar tarea</DialogTitle>
-              </DialogHeader>
-              <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
-                ¿Estás seguro de que deseas eliminar{' '}
-                <span className="font-semibold text-foreground">"{taskToDelete?.title}"</span>?
-                Esta acción no se puede deshacer.
-              </p>
             </div>
-            <DialogFooter className="flex-row gap-2 sm:justify-center pt-2">
+
+            <div className="flex justify-end border-t border-border/50 px-3 py-2.5">
               <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground"
+                disabled={subtaskModalBusy !== 'idle'}
+                onClick={() => setSubtaskWorkspaceRelocation(null)}
+              >
+                Cancelar
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={subtaskMoveTargetRow !== null}
+          onOpenChange={(open) => {
+            if (!open) {
+              setSubtaskMoveTargetRow(null)
+              setSubtaskMoveParentChoice('')
+            }
+          }}
+        >
+          <DialogContent className="max-w-md sm:rounded-xl">
+            <DialogHeader>
+              <DialogTitle>Mover subtarea</DialogTitle>
+              <DialogDescription>
+                La subtarea «{subtaskMoveTargetRow?.title?.trim() || `#${subtaskMoveTargetRow?.id}`}» pasará a formar parte
+                de la tarea que elijas. El chat de la subtarea se mantendrá; equipo y espacio heredados se alinean con el
+                nuevo padre.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2 py-1">
+              <Label className="text-sm font-medium">Nueva tarea padre</Label>
+              <Select
+                value={subtaskMoveParentChoice}
+                onValueChange={setSubtaskMoveParentChoice}
+                disabled={subtaskModalBusy !== 'idle' || subtaskParentMoveCandidates.length === 0}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Elegir tarea…" />
+                </SelectTrigger>
+                <SelectContent className="max-h-60">
+                  {subtaskParentMoveCandidates.map((c) => (
+                    <SelectItem
+                      key={c.id}
+                      value={String(c.id)}
+                      textValue={`${c.title} ${c.secondary}`}
+                    >
+                      {`${c.title} (${c.secondary})`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {subtaskParentMoveCandidates.length === 0 && (
+                <p className="text-xs text-muted-foreground">No hay otras tareas en la vista actual.</p>
+              )}
+            </div>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button
+                type="button"
                 variant="outline"
-                className="flex-1 rounded-lg"
-                onClick={() => { setDeleteDialogOpen(false); setTaskToDelete(null) }}
-                disabled={deleting}
+                onClick={() => {
+                  setSubtaskMoveTargetRow(null)
+                  setSubtaskMoveParentChoice('')
+                }}
+                disabled={subtaskModalBusy !== 'idle'}
               >
                 Cancelar
               </Button>
               <Button
-                className="flex-1 bg-destructive hover:bg-destructive/90 text-destructive-foreground rounded-lg"
-                onClick={confirmDeleteTask}
-                disabled={deleting}
+                type="button"
+                className="workos-gantt-btn-primary text-white"
+                disabled={
+                  subtaskModalBusy !== 'idle' ||
+                  !editing ||
+                  !subtaskMoveTargetRow ||
+                  subtaskMoveParentChoice === ''
+                }
+                onClick={async () => {
+                  if (!editing || !subtaskMoveTargetRow || subtaskMoveParentChoice === '') return
+                  const targetId = Number(subtaskMoveParentChoice)
+                  if (Number.isNaN(targetId) || targetId === editing.id) return
+                  setSubtaskModalBusy('updating')
+                  try {
+                    await moveTaskSubtask(editing.id, subtaskMoveTargetRow.id, targetId)
+                    const movedId = subtaskMoveTargetRow.id
+                    setSubtasks((prev) => {
+                      const nextList = prev.filter((x) => x.id !== movedId)
+                      applySubtaskListToParentState(editing.id, nextList)
+                      return nextList
+                    })
+                    setSubtaskMoveTargetRow(null)
+                    setSubtaskMoveParentChoice('')
+                    scheduleReloadTasksAndKpisAfterSubtasks()
+                  } catch (e) {
+                    setErr(parseGanttLoadError(e))
+                  } finally {
+                    setSubtaskModalBusy('idle')
+                  }
+                }}
               >
-                {deleting ? 'Eliminando…' : 'Eliminar'}
+                {subtaskModalBusy !== 'idle' ? (
+                  <>
+                    <Loader2 className="h-4 w-4 shrink-0 animate-spin mr-2" aria-hidden />
+                    Moviendo…
+                  </>
+                ) : (
+                  'Mover'
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        {/* Delete area confirmation dialog */}
-        <Dialog open={deleteAreaDialogOpen} onOpenChange={(open) => { if (!deletingArea) { setDeleteAreaDialogOpen(open); if (!open) setAreaToDelete(null) } }}>
-          <DialogContent className="max-w-md p-6 rounded-xl text-center">
-            <DialogHeader className="space-y-1 pb-0">
-              <DialogTitle className="text-lg font-semibold text-center">Eliminar Área</DialogTitle>
+        <DeleteSubtaskConfirmDialog
+          open={subtaskPendingDelete !== null && dialogOpen}
+          onOpenChange={(open) => {
+            if (!subtaskDeleteInProgress) {
+              if (!open) setSubtaskPendingDelete(null)
+            }
+          }}
+          subtaskTitle={
+            subtaskPendingDelete?.title?.trim() ||
+            (subtaskPendingDelete != null ? `Subtarea #${subtaskPendingDelete.id}` : undefined)
+          }
+          deleting={subtaskDeleteInProgress}
+          onConfirm={confirmDeleteSubtask}
+        />
+
+        <DeleteTaskConfirmDialog
+          open={deleteDialogOpen}
+          onOpenChange={(open) => {
+            if (!deleting) {
+              setDeleteDialogOpen(open)
+              if (!open) setTaskToDelete(null)
+            }
+          }}
+          taskTitle={taskToDelete?.title}
+          deleting={deleting}
+          onConfirm={confirmDeleteTask}
+        />
+
+        <DeleteAreaConfirmDialog
+          open={deleteAreaDialogOpen}
+          onOpenChange={(open) => {
+            if (!deletingArea) {
+              setDeleteAreaDialogOpen(open)
+              if (!open) setAreaToDelete(null)
+            }
+          }}
+          areaName={areaToDelete?.name}
+          deleting={deletingArea}
+          onConfirm={confirmDeleteArea}
+        />
+
+        <Dialog
+          open={taskConvertToSubtaskDialogOpen}
+          onOpenChange={(open) => {
+            if (!open) {
+              setTaskConvertToSubtaskDialogOpen(false)
+              setTaskConvertToSubtaskSelectedId('')
+            }
+          }}
+        >
+          <DialogContent className="max-w-md sm:rounded-xl">
+            <DialogHeader>
+              <DialogTitle>Convertir a subtarea</DialogTitle>
+              <DialogDescription>
+                La tarea actual pasará a ser una subtarea de la tarea que elijas. Su chat y comentarios se mantendrán.
+              </DialogDescription>
             </DialogHeader>
-            <p className="text-sm text-muted-foreground mt-2 leading-relaxed text-center">
-              ¿Estás seguro de eliminar <strong>"{areaToDelete?.name}"</strong>? Los equipos asignados
-              quedarán sin área. Esta acción no se puede deshacer.
-            </p>
-            <DialogFooter className="flex-row justify-center gap-3 pt-4 sm:justify-center">
+            <div className="space-y-2 py-1">
+              <Label className="text-sm font-medium">Tarea padre destino</Label>
+              <Select
+                value={taskConvertToSubtaskSelectedId}
+                onValueChange={setTaskConvertToSubtaskSelectedId}
+                disabled={taskConvertToSubtaskLoading || !taskConvertToSubtaskCandidates?.length}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Elegir tarea…" />
+                </SelectTrigger>
+                <SelectContent className="max-h-60">
+                  {taskConvertToSubtaskCandidates?.map((c) => (
+                    <SelectItem
+                      key={c.id}
+                      value={String(c.id)}
+                      textValue={`${c.title} ${c.secondary}`}
+                    >
+                      {`${c.title} (${c.secondary})`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {taskConvertToSubtaskCandidates?.length === 0 && (
+                <p className="text-xs text-muted-foreground">No hay otras tareas en la vista actual.</p>
+              )}
+            </div>
+            <DialogFooter className="gap-2 sm:gap-0">
               <Button
+                type="button"
                 variant="outline"
-                className="rounded-lg px-5"
-                onClick={() => { setDeleteAreaDialogOpen(false); setAreaToDelete(null) }}
-                disabled={deletingArea}
+                onClick={() => {
+                  setTaskConvertToSubtaskDialogOpen(false)
+                  setTaskConvertToSubtaskSelectedId('')
+                }}
+                disabled={taskConvertToSubtaskLoading}
               >
                 Cancelar
               </Button>
               <Button
-                className="rounded-lg px-5 bg-red-500 hover:bg-red-600 text-white"
-                onClick={confirmDeleteArea}
-                disabled={deletingArea}
+                type="button"
+                className="workos-gantt-btn-primary text-white"
+                disabled={
+                  taskConvertToSubtaskLoading ||
+                  !editing ||
+                  taskConvertToSubtaskSelectedId === ''
+                }
+                onClick={confirmConvertToSubtask}
               >
-                {deletingArea ? 'Eliminando…' : 'Eliminar'}
+                {taskConvertToSubtaskLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 shrink-0 animate-spin mr-2" aria-hidden />
+                    Convirtiendo…
+                  </>
+                ) : (
+                  'Convertir'
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
       </main>
     </div>
   )

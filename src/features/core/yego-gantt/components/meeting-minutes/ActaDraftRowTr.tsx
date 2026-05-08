@@ -12,6 +12,7 @@ import { cn } from '@/utils/cn'
 import type { AreaFull, ColaboradorDto, WorkosMeetingItemStatus } from '../../types'
 import { Avatar } from '../common'
 import type { ActaNewRowDraft } from './actaDraftTypes'
+import { actaDeadlineInputMin } from './actaHelpers'
 import {
   ACTA_ACTION_ORANGE_BTN,
   ACTA_ACTION_ORANGE_ICON,
@@ -30,7 +31,6 @@ export function ActaDraftRowTr({
   onDiscard,
   sheetBusy,
   areas,
-  collaboratorsForArea,
   collaboratorsAll,
   minActaCalendarYmd,
   discardAriaLabel,
@@ -42,15 +42,11 @@ export function ActaDraftRowTr({
   onDiscard: () => void
   sheetBusy: boolean
   areas: AreaFull[]
-  collaboratorsForArea: (areaId: number) => ColaboradorDto[]
   collaboratorsAll: ColaboradorDto[]
   minActaCalendarYmd: string
   discardAriaLabel: string
 }) {
-  const draftRespOptions = useMemo(
-    () => (value.areaId != null ? collaboratorsForArea(value.areaId) : collaboratorsAll),
-    [value.areaId, collaboratorsForArea, collaboratorsAll],
-  )
+  const draftRespOptions = collaboratorsAll
   const draftResponsibleAvatarName = useMemo(() => {
     if (value.responsibleUserId != null) {
       const c = draftRespOptions.find((x) => x.id === value.responsibleUserId)
@@ -92,16 +88,10 @@ export function ActaDraftRowTr({
               }
               const aid = Number(v)
               const aname = areas.find((ar) => ar.id === aid)?.name
-              const areaCollabs = collaboratorsForArea(aid)
               onChange({
                 ...value,
                 areaId: aid,
                 areaNameSnapshot: aname?.trim() ?? '',
-                responsibleUserId:
-                  value.responsibleUserId != null &&
-                  !areaCollabs.some((c) => c.id === value.responsibleUserId)
-                    ? undefined
-                    : value.responsibleUserId,
               })
             }}
             disabled={sheetBusy || areas.length === 0}
@@ -206,7 +196,7 @@ export function ActaDraftRowTr({
         <input
           type="date"
           className={EXCEL_ACTA_DATE_INPUT}
-          min={minActaCalendarYmd}
+          min={actaDeadlineInputMin(minActaCalendarYmd, value.startDate)}
           value={value.deadline}
           onChange={(e) => onChange({ ...value, deadline: e.target.value })}
           onKeyDown={keyDown}

@@ -1,5 +1,9 @@
 import type { TaskRowLike, TaskSubtaskDto } from '../types'
 
+/** Explicación al intentar completar una subtarea sin rol / asignación adecuada (UI timeline y modal). */
+export const SUBTASK_DONE_NOT_ALLOWED_HINT =
+  'No puedes marcar esta subtarea como hecha porque no eres el colaborador asignado para cumplirla. Solo puede hacerlo quien está asignado a esta subtarea, quien puede gestionar la tarea o un gestor.'
+
 export function principalUserIdFromTask(task: TaskRowLike): number | undefined {
   if (task.assignedUserIds?.length) return task.assignedUserIds[0]
   if (task.assignedUserId != null) return task.assignedUserId
