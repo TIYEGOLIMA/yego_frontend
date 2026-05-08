@@ -34,21 +34,27 @@ export function useWorkosTaskChat({ taskId, subtasks, subtasksLoading }: UseWork
 
   useEffect(() => {
     const ac = new AbortController()
+    let active = true
     setLoadingMessages(true)
     setError(null)
     void fetchWorkosTaskMessages(taskId, selectedSubtaskId, { signal: ac.signal })
       .then((data) => {
+        if (!active) return
         setMessages(data)
       })
       .catch((e: unknown) => {
         if (axios.isCancel(e)) return
+        if (!active) return
         setError('No se pudieron cargar los mensajes.')
         setMessages([])
       })
       .finally(() => {
-        if (!ac.signal.aborted) setLoadingMessages(false)
+        if (active) setLoadingMessages(false)
       })
-    return () => ac.abort()
+    return () => {
+      active = false
+      ac.abort()
+    }
   }, [taskId, selectedSubtaskId])
 
   const sendMessage = useCallback(async () => {

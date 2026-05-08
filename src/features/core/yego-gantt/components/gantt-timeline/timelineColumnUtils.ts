@@ -11,6 +11,15 @@ export function formatTimelineShortDate(iso: string): string {
   return `${day} ${MONTHS_SHORT[d.getMonth()] ?? '?'}`
 }
 
+/** Nombre del responsable de subtarea para pies de fila (timeline / modales compactos). */
+export function subtaskResponsibleLabel(
+  userId: number | null | undefined,
+  collaboratorNames?: Map<number, string>,
+): string | null {
+  if (userId == null) return null
+  return collaboratorNames?.get(userId) ?? `#${userId}`
+}
+
 export function ganttSubtaskCountHint(task: Pick<GanttTaskItem, 'subtaskTotal' | 'subtaskDone'>): string {
   const total = task.subtaskTotal ?? 0
   if (total <= 0) return ''

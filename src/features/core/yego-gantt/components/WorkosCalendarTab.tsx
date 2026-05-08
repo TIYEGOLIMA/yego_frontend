@@ -372,7 +372,7 @@ export function WorkosCalendarTab({
               </Button>
               <Button type="button" variant="outline" size="sm" className={cn(NAV_BTN, 'gap-1.5')} onClick={() => onPickCreateTask(selectedDay)}>
                 <ListTodo className="h-4 w-4" />
-                Nueva tarea
+                Nuevo proyecto
               </Button>
             </div>
 

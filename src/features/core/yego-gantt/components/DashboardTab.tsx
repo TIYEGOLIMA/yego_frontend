@@ -277,7 +277,7 @@ export function DashboardTab({
         {onCreateTask && (
           <Button size="sm" onClick={onCreateTask} className="gap-1.5 rounded-lg workos-gantt-btn-primary border-0">
             <Plus className="h-4 w-4" />
-            Nueva tarea
+            Nuevo proyecto
           </Button>
         )}
       </div>

@@ -419,7 +419,7 @@ export function PortfolioTab({
                 <div className="flex items-center justify-between mb-3 pb-2 border-b border-border/50">
                   <h4 className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground font-semibold flex items-center gap-2">
                     <span className="w-1 h-3.5 rounded-full bg-red-500/70 inline-block" />
-                    Tareas
+                    Proyectos
                   </h4>
                   {manage && (
                     <button
@@ -427,7 +427,7 @@ export function PortfolioTab({
                       onClick={() => onCreateTask(g.areaId)}
                       className="text-[11px] text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 flex items-center gap-0.5 font-semibold transition-colors"
                     >
-                      + Nueva tarea
+                      + Nuevo proyecto
                     </button>
                   )}
                 </div>
@@ -498,7 +498,7 @@ export function PortfolioTab({
                       </div>
                     )
                   })}
-                  {g.tasks.length === 0 && <p className="text-[11px] text-muted-foreground/60 italic text-center py-8 rounded-lg border border-dashed border-border/60 bg-muted/10">Sin tareas asignadas.</p>}
+                  {g.tasks.length === 0 && <p className="text-[11px] text-muted-foreground/60 italic text-center py-8 rounded-lg border border-dashed border-border/60 bg-muted/10">Sin proyectos asignados.</p>}
                 </div>
               </div>
             </div>
@@ -532,7 +532,7 @@ export function PortfolioTab({
           <span className="text-xs font-bold tabular-nums">{totalUsers}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="text-xs text-muted-foreground font-medium">Tareas:</span>
+          <span className="text-xs text-muted-foreground font-medium">Estado proyectos:</span>
           <span className="text-xs font-bold tabular-nums">
             {totalDone}/{totalTasks}
           </span>
@@ -545,10 +545,10 @@ export function PortfolioTab({
               variant="outline"
               onClick={() => onCreateTask()}
               className="h-8 text-xs gap-1.5 rounded-lg border-red-200/90 dark:border-red-800/60 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/40"
-              title="Abre el formulario de nueva tarea (equipo y espacio se eligen en el modal)"
+              title="Abre el formulario de nuevo proyecto (equipo y espacio se eligen en el modal)"
             >
               <Plus className="w-3 h-3" />
-              Nueva tarea
+              Nuevo proyecto
             </Button>
             <Button
               size="sm"

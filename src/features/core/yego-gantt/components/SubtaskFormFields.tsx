@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ChangeEvent } from 'react'
-import { CheckCircle2, Circle, Calendar } from 'lucide-react'
+import { CheckCircle2, Circle, Calendar, Crown } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -18,11 +18,13 @@ export function SubtaskAssigneeSelect({
   value,
   disabled,
   onCommit,
+  triggerClassName,
 }: {
   assignees: ColaboradorDto[]
   value: number | null
   disabled?: boolean
   onCommit: (next: number | null) => void | Promise<void>
+  triggerClassName?: string
 }) {
   return (
     <Select
@@ -36,6 +38,7 @@ export function SubtaskAssigneeSelect({
         className={cn(
           'h-8 w-full min-w-0 rounded-md border border-neutral-200 dark:border-border bg-white dark:bg-card px-2 text-[11px] shadow-none [&>span]:truncate',
           TASK_MODAL_FOCUS,
+          triggerClassName,
         )}
       >
         <SelectValue placeholder="Responsable" />
@@ -65,12 +68,16 @@ export function SubtaskDueDateField({
   max,
   disabled,
   onCommit,
+  ariaLabel = 'Fecha límite',
+  className,
 }: {
   value: string | null
   min?: string
   max?: string
   disabled?: boolean
   onCommit: (next: string | null) => void | Promise<void>
+  ariaLabel?: string
+  className?: string
 }) {
   /** Borrador local: evita guardar/API en cada evento al cambiar de mes en el date picker nativo. */
   const [draft, setDraft] = useState(() => ymdForDateInput(value))
@@ -129,10 +136,11 @@ export function SubtaskDueDateField({
       onKeyDown={(e) => {
         if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
       }}
-      aria-label="Fecha límite"
+      aria-label={ariaLabel}
       className={cn(
         'h-8 w-full min-w-0 text-xs rounded-md border border-neutral-200 dark:border-border bg-white dark:bg-card shadow-none py-1',
         TASK_MODAL_FOCUS,
+        className,
       )}
     />
   )
@@ -147,6 +155,10 @@ export function SubtaskAreaWorkspaceRow({
   disabled,
   onAreaCommit,
   onWorkspaceCommit,
+  /** Sin sangría `pl-7` (p. ej. modal de subtarea). */
+  noIndent = false,
+  /** Etiquetas Área / Proyecto encima de cada selector. */
+  labeled = false,
 }: {
   areas: { id: number; name: string }[]
   workspaces: { id: number; name: string }[]
@@ -155,52 +167,84 @@ export function SubtaskAreaWorkspaceRow({
   disabled?: boolean
   onAreaCommit: (nextAreaId: number) => void | Promise<void>
   onWorkspaceCommit: (nextWorkspaceId: number | null) => void | Promise<void>
+  noIndent?: boolean
+  labeled?: boolean
 }) {
+  const areaSelect = (
+    <Select
+      value={String(areaId)}
+      disabled={disabled || areas.length === 0}
+      onValueChange={(v) => void onAreaCommit(Number(v))}
+    >
+      <SelectTrigger
+        className={cn(
+          'h-8 w-full min-w-0 rounded-md border border-neutral-200 dark:border-border bg-white dark:bg-card px-2 text-[11px] shadow-none [&>span]:truncate',
+          TASK_MODAL_FOCUS,
+          labeled && 'h-9 text-sm',
+        )}
+      >
+        <SelectValue placeholder="Equipo" />
+      </SelectTrigger>
+      <SelectContent className="max-h-[min(40vh,280px)]">
+        {areas.map((a) => (
+          <SelectItem key={a.id} value={String(a.id)}>
+            {a.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+
+  const workspaceSelect = (
+    <Select
+      value={workspaceId == null ? 'none' : String(workspaceId)}
+      disabled={disabled}
+      onValueChange={(v) => void onWorkspaceCommit(v === 'none' ? null : Number(v))}
+    >
+      <SelectTrigger
+        className={cn(
+          'h-8 w-full min-w-0 rounded-md border border-neutral-200 dark:border-border bg-white dark:bg-card px-2 text-[11px] shadow-none [&>span]:truncate',
+          TASK_MODAL_FOCUS,
+          labeled && 'h-9 text-sm',
+        )}
+      >
+        <SelectValue placeholder="Proyecto" />
+      </SelectTrigger>
+      <SelectContent className="max-h-[min(40vh,280px)]">
+        <SelectItem value="none">{labeled ? 'Sin proyecto' : 'Sin espacio'}</SelectItem>
+        {workspaces.map((w) => (
+          <SelectItem key={w.id} value={String(w.id)}>
+            {w.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+
+  if (labeled) {
+    return (
+      <div className="grid grid-cols-2 gap-3 min-w-0">
+        <div className="min-w-0 space-y-1.5">
+          <span className="text-xs font-medium text-foreground">Área</span>
+          {areaSelect}
+        </div>
+        <div className="min-w-0 space-y-1.5">
+          <span className="text-xs font-medium text-foreground">Proyecto</span>
+          {workspaceSelect}
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="grid grid-cols-2 gap-2 pl-7 min-w-0 items-start">
-      <Select
-        value={String(areaId)}
-        disabled={disabled || areas.length === 0}
-        onValueChange={(v) => void onAreaCommit(Number(v))}
-      >
-        <SelectTrigger
-          className={cn(
-            'h-8 w-full min-w-0 rounded-md border border-neutral-200 dark:border-border bg-white dark:bg-card px-2 text-[11px] shadow-none [&>span]:truncate',
-            TASK_MODAL_FOCUS,
-          )}
-        >
-          <SelectValue placeholder="Equipo" />
-        </SelectTrigger>
-        <SelectContent className="max-h-[min(40vh,280px)]">
-          {areas.map((a) => (
-            <SelectItem key={a.id} value={String(a.id)}>
-              {a.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Select
-        value={workspaceId == null ? 'none' : String(workspaceId)}
-        disabled={disabled}
-        onValueChange={(v) => void onWorkspaceCommit(v === 'none' ? null : Number(v))}
-      >
-        <SelectTrigger
-          className={cn(
-            'h-8 w-full min-w-0 rounded-md border border-neutral-200 dark:border-border bg-white dark:bg-card px-2 text-[11px] shadow-none [&>span]:truncate',
-            TASK_MODAL_FOCUS,
-          )}
-        >
-          <SelectValue placeholder="Espacio trabajo" />
-        </SelectTrigger>
-        <SelectContent className="max-h-[min(40vh,280px)]">
-          <SelectItem value="none">Sin espacio</SelectItem>
-          {workspaces.map((w) => (
-            <SelectItem key={w.id} value={String(w.id)}>
-              {w.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+    <div
+      className={cn(
+        'grid grid-cols-2 gap-2 min-w-0 items-start',
+        noIndent ? 'pl-0' : 'pl-7',
+      )}
+    >
+      {areaSelect}
+      {workspaceSelect}
     </div>
   )
 }
@@ -217,6 +261,8 @@ export function SubtaskAssigneeDateGrid({
   onAssigneeCommit,
   onDueDateCommit,
   readOnlyAssigneeLabel,
+  noIndent = false,
+  labeled = false,
 }: {
   assignees: ColaboradorDto[]
   assignedUserId: number | null | undefined
@@ -233,6 +279,8 @@ export function SubtaskAssigneeDateGrid({
   onAssigneeCommit: (next: number | null) => void | Promise<void>
   onDueDateCommit: (next: string | null) => void | Promise<void>
   readOnlyAssigneeLabel?: string | null
+  noIndent?: boolean
+  labeled?: boolean
 }) {
   const dateFieldDisabled = dueDateDisabled ?? disabled
   const assigneeCell =
@@ -240,6 +288,7 @@ export function SubtaskAssigneeDateGrid({
       <div
         className={cn(
           'h-8 w-full min-w-0 rounded-md border border-neutral-200 dark:border-border bg-muted/40 dark:bg-muted/25 px-2 flex items-center text-[11px] text-foreground truncate',
+          labeled && 'h-9 text-sm',
           disabled && 'opacity-50 pointer-events-none',
         )}
         title={readOnlyAssigneeLabel}
@@ -252,21 +301,46 @@ export function SubtaskAssigneeDateGrid({
         value={assignedUserId ?? null}
         disabled={disabled}
         onCommit={onAssigneeCommit}
+        triggerClassName={labeled ? 'h-9 text-sm' : undefined}
       />
     )
 
-  return (
-    <div className="grid grid-cols-2 gap-2 pl-7 min-w-0 items-start">
-      <div className="min-w-0">{assigneeCell}</div>
-      <div className="min-w-0">
-        <SubtaskDueDateField
-          value={dueDate ?? null}
-          min={min}
-          max={max}
-          disabled={dateFieldDisabled}
-          onCommit={onDueDateCommit}
-        />
+  const datePicker = (
+    <div className="min-w-0">
+      <SubtaskDueDateField
+        value={dueDate ?? null}
+        min={min}
+        max={max}
+        disabled={dateFieldDisabled}
+        onCommit={onDueDateCommit}
+        ariaLabel={labeled ? 'Fecha objetivo' : undefined}
+        className={labeled ? 'h-9 text-sm' : undefined}
+      />
+    </div>
+  )
+
+  if (labeled) {
+    return (
+      <div className={cn('grid grid-cols-2 gap-3 min-w-0 items-start', noIndent ? 'pl-0' : 'pl-7')}>
+        <div className="min-w-0 space-y-1.5">
+          <span className="flex items-center gap-1 text-xs font-semibold text-foreground">
+            <Crown className="h-3 w-3 text-amber-500 shrink-0" aria-hidden />
+            Responsable
+          </span>
+          <div className="min-w-0">{assigneeCell}</div>
+        </div>
+        <div className="min-w-0 space-y-1.5">
+          <span className="text-xs font-medium text-foreground">Fecha objetivo</span>
+          {datePicker}
+        </div>
       </div>
+    )
+  }
+
+  return (
+    <div className={cn('grid grid-cols-2 gap-2 min-w-0 items-start', noIndent ? 'pl-0' : 'pl-7')}>
+      <div className="min-w-0">{assigneeCell}</div>
+      {datePicker}
     </div>
   )
 }

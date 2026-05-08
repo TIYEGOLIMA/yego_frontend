@@ -12,8 +12,13 @@ export {
 export {
   normalizeSubtaskDto,
   normalizeSubtaskDtoList,
+  compareSubtasksForDisplay,
+  sortSubtasksForDisplay,
   updateTaskSubtaskNormalized,
   weightedProgressPercentFromSubtasks,
+  derivedSubtaskDoneFromChecklist,
+  checklistPayloadWithUniformDone,
+  bodyForSubtaskDoneToggleCommit,
   parentEndDateFromSubtasks,
   patchGanttParentFromSubtasks,
 } from './ganttSubtaskProgress'

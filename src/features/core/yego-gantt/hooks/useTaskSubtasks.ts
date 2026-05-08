@@ -15,19 +15,24 @@ export function useTaskSubtasks(taskId: number | null) {
       return
     }
     const ac = new AbortController()
+    let active = true
     setLoading(true)
     void fetchTaskSubtasks(taskId, { signal: ac.signal })
       .then((rows) => {
-        if (!ac.signal.aborted) setItems(normalizeSubtaskDtoList(rows))
+        if (!active) return
+        setItems(normalizeSubtaskDtoList(rows))
       })
       .catch(() => {
-        if (ac.signal.aborted) return
+        if (!active) return
         setItems([])
       })
       .finally(() => {
-        if (!ac.signal.aborted) setLoading(false)
+        if (active) setLoading(false)
       })
-    return () => ac.abort()
+    return () => {
+      active = false
+      ac.abort()
+    }
   }, [taskId])
 
   return { items, setItems, loading }

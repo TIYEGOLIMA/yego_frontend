@@ -17,6 +17,7 @@ import type {
   SprintDto,
   TaskPriority,
   TaskRow,
+  TaskSubtaskChecklistItem,
   TaskSubtaskDto,
   WorkspaceDto,
   WorkosMeetingItemStatus,
@@ -230,15 +231,40 @@ export async function fetchTaskSubtasks(taskId: number, opts?: { signal?: AbortS
   return res.data
 }
 
+/** PUT — reordenar subtareas persistiendo `sortOrder` según lista completa de ids. */
+export async function reorderTaskSubtasks(
+  taskId: number,
+  orderedSubtaskIds: number[],
+): Promise<TaskSubtaskDto[]> {
+  const res = await api.put<TaskSubtaskDto[]>(`/yego-gantt/tasks/${taskId}/subtasks/order`, {
+    orderedSubtaskIds,
+  })
+  return res.data
+}
+
+export async function fetchTaskSubtask(
+  taskId: number,
+  subtaskId: number,
+  opts?: { signal?: AbortSignal },
+): Promise<TaskSubtaskDto> {
+  const res = await api.get<TaskSubtaskDto>(`/yego-gantt/tasks/${taskId}/subtasks/${subtaskId}`, {
+    signal: opts?.signal,
+  })
+  return res.data
+}
+
 export async function createTaskSubtask(
   taskId: number,
   body: {
     title: string
     weight: number
     done?: boolean
+    status?: AreaTaskStatus
     assignedUserId?: number | null
     dueDate?: string | null
     description?: string | null
+    objectives?: string | null
+    checklist?: TaskSubtaskChecklistItem[]
     areaId?: number | null
     workspaceId?: number | null
   },
@@ -253,6 +279,15 @@ export async function createTaskSubtask(
   if (d) payload.dueDate = d
   const desc = body.description?.trim()
   if (desc) payload.description = desc
+  const obj = body.objectives?.trim()
+  if (obj) payload.objectives = obj
+  if (body.checklist != null && body.checklist.length > 0) {
+    payload.checklist = body.checklist.map((c) => ({
+      ...(c.id ? { id: c.id } : {}),
+      text: c.text.trim(),
+      done: Boolean(c.done),
+    }))
+  }
   if (body.areaId != null) payload.areaId = body.areaId
   if (body.workspaceId != null) payload.workspaceId = body.workspaceId
   const res = await api.post<TaskSubtaskDto>(`/yego-gantt/tasks/${taskId}/subtasks`, payload)
@@ -265,6 +300,8 @@ export async function updateTaskSubtask(
   body: Partial<{
     title: string
     description: string
+    objectives: string | null
+    checklist: TaskSubtaskChecklistItem[] | null
     weight: number
     done: boolean
     sortOrder: number
@@ -275,6 +312,8 @@ export async function updateTaskSubtask(
     areaId: number
     workspaceId: number
     clearWorkspace: boolean
+    /** Columna Kanban propia de la subtarea. */
+    status?: AreaTaskStatus
   }>,
 ): Promise<TaskSubtaskDto> {
   const res = await api.put(`/yego-gantt/tasks/${taskId}/subtasks/${subtaskId}`, body)

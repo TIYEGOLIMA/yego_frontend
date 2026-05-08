@@ -16,19 +16,20 @@ import {
 import { Label } from '@/components/ui/label'
 import {
   AlertCircle,
-  Calendar,
   CalendarRange,
   ArrowRightLeft,
   ChevronLeft,
+  ChevronDown,
   ChevronRight,
   Crown,
   Flame,
   ListChecks,
   Loader2,
+  Plus,
+  Pencil,
   PencilLine,
   Route,
   Trash2,
-  User,
   Users,
 } from 'lucide-react'
 import './workos-gantt-shell.css'
@@ -55,6 +56,7 @@ import type {
   WorkspaceDto,
   Kpis,
   GanttOpenTaskHint,
+  TaskSubtaskChecklistItem,
 } from './types'
 import {
   areasStableKey,
@@ -66,6 +68,7 @@ import {
   createTaskSubtask,
   deleteTaskSubtask,
   fetchTaskSubtasks,
+  fetchTaskSubtask,
   moveTaskSubtask,
   convertTaskToSubtask,
   parseGanttLoadError,
@@ -92,12 +95,8 @@ import {
 } from './taskPrivacy'
 import { cn } from '@/utils/cn'
 import { Avatar, PrincipalOwnerLine, ProgressBar } from './components/common'
-import {
-  SubtaskAssigneeDateGrid,
-  SubtaskAreaWorkspaceRow,
-  SubtaskDescriptionField,
-  SubtaskDoneToggle,
-} from './components/SubtaskFormFields'
+import { SubtaskDoneToggle } from './components/SubtaskFormFields'
+import { formatTimelineShortDate, subtaskResponsibleLabel } from './components/gantt-timeline/timelineColumnUtils'
 import {
   buildAllCollaboratorsDeduped,
   buildAssigneePickerRows,
@@ -121,8 +120,11 @@ import {
   ganttIsPlatformAdmin,
   normalizeSubtaskDto,
   normalizeSubtaskDtoList,
+  sortSubtasksForDisplay,
   parentEndDateFromSubtasks,
   patchGanttParentFromSubtasks,
+  derivedSubtaskDoneFromChecklist,
+  bodyForSubtaskDoneToggleCommit,
   resolveUserDefaultAreaId,
   type SubtaskModalBusy,
   todayYmdLocal,
@@ -140,10 +142,65 @@ import {
 import { TaskFormWorkspaceTagsRow } from './components/task-modal/TaskFormWorkspaceTagsRow'
 import { SubtaskWorkspaceRelocationDialog } from './components/task-modal/SubtaskWorkspaceRelocationDialog'
 import { SubtaskMoveParentDialog } from './components/task-modal/SubtaskMoveParentDialog'
+import {
+  TASK_MODAL_COMPACT_SUBTASKS_LIST_CLASS,
+  TaskModalCompactSubtaskRow,
+  toolbarIconBtnInteractive,
+} from './components/task-modal/TaskModalCompactSubtaskRow'
 import type { TaskConvertToSubtaskCandidate } from './components/task-modal/TaskConvertToSubtaskDialog'
 import { TaskConvertToSubtaskDialog } from './components/task-modal/TaskConvertToSubtaskDialog'
+import {
+  SubtaskEditorDialog,
+  type SubtaskEditorForm,
+} from './components/task-modal/SubtaskEditorDialog'
 import { httpSubtaskMutateStatus, taskModalFormDirtyFingerprint } from './lib/ganttModuleFormUtils'
 import { useTimelineTasksSubtasks } from './hooks/useTimelineTasksSubtasks'
+
+function newSubtaskChecklistRowKey() {
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `ck-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+}
+
+function checklistPayloadFromEditor(form: SubtaskEditorForm): TaskSubtaskChecklistItem[] {
+  return form.checklist
+    .map((c) => ({
+      ...(c.key.trim() !== '' ? { id: c.key } : {}),
+      text: c.text.trim(),
+      done: Boolean(c.done),
+    }))
+    .filter((c) => c.text.length > 0)
+}
+
+/** Checklist desde DTO subtarea para PATCH `/subtasks` (misma regla sanitizada que el editor). */
+function checklistPayloadFromSubtaskDtoList(
+  checklist: NonNullable<TaskSubtaskDto['checklist']> | null | undefined,
+): TaskSubtaskChecklistItem[] {
+  if (checklist == null || checklist.length === 0) return []
+  const out = checklist
+    .map((c) => {
+      const rawId = typeof c?.id === 'string' ? c.id.trim() : ''
+      const id = rawId !== '' ? rawId.slice(0, 64) : undefined
+      const text = (c?.text ?? '').trim()
+      return {
+        ...(id !== undefined ? { id } : {}),
+        text,
+        done: Boolean(c?.done),
+      } satisfies TaskSubtaskChecklistItem
+    })
+    .filter((c) => c.text.length > 0)
+  return out
+}
+
+type SubtaskEditorSession = {
+  target:
+    | 'create'
+    | { kind: 'pending'; tempId: string }
+    | { kind: 'persisted'; id: number; parentTaskId: number }
+  initial: SubtaskEditorForm
+  /** Oculta «De: proyecto» y centra el modal en la subtarea (p. ej. desde detalle). */
+  hideParentContext?: boolean
+}
 
 export function YegoGanttModule() {
   const user = useAuthStore((s) => s.user)
@@ -225,7 +282,7 @@ export function YegoGanttModule() {
   const [assigneeSearchQuery, setAssigneeSearchQuery] = useState('')
   const [subtasks, setSubtasks] = useState<TaskSubtaskDto[]>([])
   const [subtasksLoading, setSubtasksLoading] = useState(false)
-  const [subtaskDraft, setSubtaskDraft] = useState({ title: '' })
+  const [subtaskEditor, setSubtaskEditor] = useState<SubtaskEditorSession | null>(null)
   const [subtaskModalBusy, setSubtaskModalBusy] = useState<SubtaskModalBusy>('idle')
   /** Subtareas locales al crear tarea (se persisten tras POST). */
   const [pendingSubtasks, setPendingSubtasks] = useState<
@@ -233,6 +290,8 @@ export function YegoGanttModule() {
       tempId: string
       title: string
       description: string
+      objectives: string
+      checklist: TaskSubtaskChecklistItem[]
       done: boolean
       assignedUserId: number | null
       dueDate: string | null
@@ -249,10 +308,15 @@ export function YegoGanttModule() {
   const [detailTaskId, setDetailTaskId] = useState<number | null>(null)
   /** Subtareas del modal de solo lectura (detalle desde board, etc.). */
   const [detailModalSubtasks, setDetailModalSubtasks] = useState<TaskSubtaskDto[]>([])
+  /** Si se abre desde una fila de subtarea del board, lista GET solo ese id (`/subtasks/{id}`). */
+  const [detailFocusSubtaskId, setDetailFocusSubtaskId] = useState<number | null>(null)
   const [detailModalSubtasksLoading, setDetailModalSubtasksLoading] = useState(false)
   const [detailSubtaskBusyId, setDetailSubtaskBusyId] = useState<number | null>(null)
+  /** Mientras se guarda checklist o hecho de una subtarea en el modal de detalle. */
+  const detailModalSubtaskSaving = detailSubtaskBusyId != null
   /** Aviso visible dentro del modal (setErr queda detrás del diálogo). */
   const [detailSubtaskBlockedMsg, setDetailSubtaskBlockedMsg] = useState<string | null>(null)
+  const [detailExpandedSubtaskId, setDetailExpandedSubtaskId] = useState<number | null>(null)
   const [editSubtaskBlockedMsg, setEditSubtaskBlockedMsg] = useState<string | null>(null)
   /** Mover subtarea a otra tarea padre (diálogo desde el modal editar). */
   const [subtaskMoveTargetRow, setSubtaskMoveTargetRow] = useState<TaskSubtaskDto | null>(null)
@@ -279,6 +343,7 @@ export function YegoGanttModule() {
   const [taskConvertToSubtaskSelectedId, setTaskConvertToSubtaskSelectedId] = useState<string>('')
   /** Tras cambiar el filtro de espacio para abrir una tarea: esperar a que `load()` traiga la lista nueva. */
   const pendingOpenTaskIdRef = useRef<number | null>(null)
+  const pendingOpenTaskHintRef = useRef<GanttOpenTaskHint | null>(null)
   const pendingSawWorkspaceSwitchingRef = useRef(false)
   const mergeTimelineSubtasksForParentRef = useRef<
     ((parentId: number, list: TaskSubtaskDto[]) => void) | null
@@ -356,6 +421,20 @@ export function YegoGanttModule() {
       })
     },
     [editing?.id],
+  )
+
+  /** Con vista enfocada en una subtarea, el panel muestra solo 1 ítem pero el KPI del padre exige lista completa. */
+  const applySubtaskMutationToBoardState = useCallback(
+    (parentId: number, visibleListGuess: TaskSubtaskDto[]) => {
+      if (detailFocusSubtaskId != null && detailTaskId === parentId) {
+        void fetchTaskSubtasks(parentId)
+          .then((rows) => applySubtaskListToParentState(parentId, normalizeSubtaskDtoList(rows)))
+          .catch(() => {})
+      } else {
+        applySubtaskListToParentState(parentId, visibleListGuess)
+      }
+    },
+    [detailFocusSubtaskId, detailTaskId, applySubtaskListToParentState],
   )
 
   const pickDefaultSprintIdForWorkspace = useCallback(
@@ -843,7 +922,7 @@ export function YegoGanttModule() {
 
   const { subtasksByParentId, setSubtasksByParentId } = useTimelineTasksSubtasks(tasksForTimeline)
   mergeTimelineSubtasksForParentRef.current = (parentId, list) => {
-    setSubtasksByParentId((prev) => new Map(prev).set(parentId, [...list]))
+    setSubtasksByParentId((prev) => new Map(prev).set(parentId, sortSubtasksForDisplay(list)))
   }
 
   const tasksWithoutPrivate = useMemo(
@@ -990,7 +1069,6 @@ export function YegoGanttModule() {
   useEffect(() => {
     if (!dialogOpen || !editing) {
       setSubtasks([])
-      setSubtaskDraft({ title: '' })
       setSubtasksLoading(false)
       return
     }
@@ -1063,6 +1141,7 @@ export function YegoGanttModule() {
     setPendingSubtasks([])
     setAssigneeSearchQuery('')
     taskEditFormBaselineRef.current = null
+    setSubtaskEditor(null)
     setDialogOpen(true)
   }
 
@@ -1082,6 +1161,7 @@ export function YegoGanttModule() {
 
   const openEdit = (t: TaskRow) => {
     setTaskFormSaving(false)
+    setSubtaskEditor(null)
     setEditing(t)
     setPendingSubtasks([])
     const effectivePrivate = Boolean(t.privateTask)
@@ -1185,10 +1265,21 @@ export function YegoGanttModule() {
               formSnapshot.assignedUserIds[0] ??
               user?.id ??
               null
+            const ckMappedPersist =
+              row.checklist != null && row.checklist.length > 0
+                ? row.checklist
+                    .map((c) => ({
+                      ...(c.id ? { id: c.id } : {}),
+                      text: c.text.trim(),
+                      done: Boolean(c.done),
+                    }))
+                    .filter((c) => c.text.length > 0)
+                : []
+            const doneFromCk = derivedSubtaskDoneFromChecklist(ckMappedPersist)
             await createTaskSubtask(newTaskId, {
               title: st,
               weight: 1,
-              done: row.done,
+              done: doneFromCk ?? row.done,
               areaId: row.areaId,
               ...(row.workspaceId != null ? { workspaceId: row.workspaceId } : {}),
               ...(subtaskAssigneePersist != null ? { assignedUserId: subtaskAssigneePersist } : {}),
@@ -1199,6 +1290,10 @@ export function YegoGanttModule() {
               ...(row.description != null && row.description.trim() !== ''
                 ? { description: row.description.trim() }
                 : {}),
+              ...(row.objectives != null && row.objectives.trim() !== ''
+                ? { objectives: row.objectives.trim() }
+                : {}),
+              ...(ckMappedPersist.length > 0 ? { checklist: ckMappedPersist } : {}),
             })
           }
         }
@@ -1231,6 +1326,7 @@ export function YegoGanttModule() {
       if (detailTaskId === taskToDelete.id) {
         setTaskDetailOpen(false)
         setDetailTaskId(null)
+        setDetailFocusSubtaskId(null)
       }
       setTaskToDelete(null)
       await reloadTasksAndKpis()
@@ -1262,8 +1358,9 @@ export function YegoGanttModule() {
     }
   }
 
-  const openTaskDetail = useCallback((t: TaskRow) => {
+  const openTaskDetail = useCallback((t: TaskRow, opts?: { focusSubtaskId?: number }) => {
     setDetailTaskId(t.id)
+    setDetailFocusSubtaskId(opts?.focusSubtaskId ?? null)
     setTaskDetailOpen(true)
   }, [])
 
@@ -1273,7 +1370,11 @@ export function YegoGanttModule() {
         const t = list.find((x) => x.id === taskId)
         if (t) {
           pendingOpenTaskIdRef.current = null
-          openTaskDetail(t)
+          pendingOpenTaskHintRef.current = null
+          openTaskDetail(
+            t,
+            hint?.focusSubtaskId != null ? { focusSubtaskId: hint.focusSubtaskId } : undefined,
+          )
           return true
         }
         return false
@@ -1288,6 +1389,7 @@ export function YegoGanttModule() {
 
       if (targetWs !== workspaceFilter) {
         pendingOpenTaskIdRef.current = taskId
+        pendingOpenTaskHintRef.current = hint ?? null
         setWorkspaceFilter(targetWs)
         return
       }
@@ -1314,7 +1416,9 @@ export function YegoGanttModule() {
     if (t) {
       pendingOpenTaskIdRef.current = null
       pendingSawWorkspaceSwitchingRef.current = false
-      openTaskDetail(t)
+      const h = pendingOpenTaskHintRef.current
+      pendingOpenTaskHintRef.current = null
+      openTaskDetail(t, h?.focusSubtaskId != null ? { focusSubtaskId: h.focusSubtaskId } : undefined)
       return
     }
 
@@ -1325,6 +1429,7 @@ export function YegoGanttModule() {
       !refreshing
     ) {
       pendingOpenTaskIdRef.current = null
+      pendingOpenTaskHintRef.current = null
       pendingSawWorkspaceSwitchingRef.current = false
       setErr(
         'La tarea no está en la lista actual. Cambia el espacio de trabajo, recarga o ábrela desde el board.',
@@ -1341,12 +1446,21 @@ export function YegoGanttModule() {
     if (taskDetailOpen && detailTaskId != null && !tasks.some((t) => t.id === detailTaskId)) {
       setTaskDetailOpen(false)
       setDetailTaskId(null)
+      setDetailFocusSubtaskId(null)
     }
   }, [tasks, taskDetailOpen, detailTaskId])
 
   useEffect(() => {
     if (!taskDetailOpen) setDetailSubtaskBusyId(null)
   }, [taskDetailOpen])
+
+  useEffect(() => {
+    if (!taskDetailOpen) setDetailExpandedSubtaskId(null)
+  }, [taskDetailOpen])
+
+  useEffect(() => {
+    setDetailExpandedSubtaskId(null)
+  }, [detailTaskId])
 
   useEffect(() => {
     if (!taskDetailOpen) setDetailSubtaskBlockedMsg(null)
@@ -1378,21 +1492,52 @@ export function YegoGanttModule() {
       setDetailModalSubtasksLoading(false)
       return
     }
+    const pid = detailTaskId
+    const focusId = detailFocusSubtaskId
     const ac = new AbortController()
+    let active = true
     setDetailModalSubtasksLoading(true)
-    void fetchTaskSubtasks(detailTaskId, { signal: ac.signal })
-      .then((rows) => {
-        setDetailModalSubtasks(normalizeSubtaskDtoList(rows))
-      })
-      .catch((e: unknown) => {
-        if (axios.isCancel(e)) return
-        setDetailModalSubtasks([])
-      })
-      .finally(() => {
-        if (!ac.signal.aborted) setDetailModalSubtasksLoading(false)
-      })
-    return () => ac.abort()
-  }, [taskDetailOpen, detailTaskId])
+    if (focusId != null) {
+      void fetchTaskSubtask(pid, focusId, { signal: ac.signal })
+        .then((row) => {
+          if (!active) return
+          setDetailModalSubtasks([normalizeSubtaskDto(row)])
+        })
+        .catch((e: unknown) => {
+          if (axios.isCancel(e)) return
+          if (!active) return
+          setDetailModalSubtasks([])
+        })
+        .finally(() => {
+          if (active) setDetailModalSubtasksLoading(false)
+        })
+    } else {
+      void fetchTaskSubtasks(pid, { signal: ac.signal })
+        .then((rows) => {
+          if (!active) return
+          setDetailModalSubtasks(normalizeSubtaskDtoList(rows))
+        })
+        .catch((e: unknown) => {
+          if (axios.isCancel(e)) return
+          if (!active) return
+          setDetailModalSubtasks([])
+        })
+        .finally(() => {
+          if (active) setDetailModalSubtasksLoading(false)
+        })
+    }
+    return () => {
+      active = false
+      ac.abort()
+    }
+  }, [taskDetailOpen, detailTaskId, detailFocusSubtaskId])
+
+  useEffect(() => {
+    if (detailFocusSubtaskId != null && !detailModalSubtasksLoading) {
+      const has = detailModalSubtasks.some((s) => s.id === detailFocusSubtaskId)
+      if (has) setDetailExpandedSubtaskId(detailFocusSubtaskId)
+    }
+  }, [detailFocusSubtaskId, detailModalSubtasksLoading, detailModalSubtasks])
 
   const deleteArea = (areaId: number) => {
     const areaInfo = areas.find((a) => a.id === areaId)
@@ -1433,7 +1578,7 @@ export function YegoGanttModule() {
         {
           id: `n${notifSeqRef.current}`,
           type: 'info' as const,
-          title: 'Tarea seleccionada',
+          title: 'Proyecto seleccionado',
           message: taskTitle,
           timestamp: new Date(),
           read: false,
@@ -1508,76 +1653,328 @@ export function YegoGanttModule() {
     })
   }, [sprintById])
 
-  const commitSubtaskDraft = useCallback(async () => {
-    const t = subtaskDraft.title.trim()
-    if (!t || taskFormSaving || subtaskModalBusy !== 'idle') return
-    if (editing) {
-      setSubtaskModalBusy('adding')
+  const closeSubtaskEditor = useCallback(() => setSubtaskEditor(null), [])
+
+  const openSubtaskEditorCreate = useCallback(() => {
+    const ownerDefault = form.assignedUserIds[0] ?? user?.id ?? null
+    const fromFormArea = Number(form.areaId)
+    const defaultArea =
+      editing?.areaId ?? (Number.isFinite(fromFormArea) && fromFormArea > 0 ? fromFormArea : areas[0]?.id ?? 1)
+    const pendingWsRaw = form.workspaceId ? Number(form.workspaceId) : NaN
+    const defaultWs =
+      editing?.workspaceId ?? (Number.isFinite(pendingWsRaw) && pendingWsRaw > 0 ? pendingWsRaw : null)
+    const initial: SubtaskEditorForm = {
+      title: '',
+      description: '',
+      objectives: '',
+      checklist: [],
+      assignedUserId: ownerDefault,
+      dueDate: null,
+      areaId: defaultArea,
+      workspaceId: defaultWs,
+    }
+    setSubtaskEditor({ target: 'create', initial })
+  }, [form.assignedUserIds, form.areaId, form.workspaceId, user?.id, areas, editing])
+
+  const openSubtaskEditorEditPersisted = useCallback(
+    (st: TaskSubtaskDto, parentCtx?: TaskRow | null, opts?: { hideParentContext?: boolean }) => {
+      const parent = parentCtx ?? editing
+      if (!parent) return
+      const subAreaId = st.areaId ?? parent.areaId
+      const initial: SubtaskEditorForm = {
+        title: st.title,
+        description: st.description ?? '',
+        objectives: st.objectives ?? '',
+        checklist: (st.checklist ?? []).map((c) => ({
+          key: (c.id != null && String(c.id).trim() !== '' ? String(c.id) : '') || newSubtaskChecklistRowKey(),
+          text: c.text,
+          done: Boolean(c.done),
+        })),
+        assignedUserId: st.assignedUserId ?? null,
+        dueDate: st.dueDate ?? null,
+        areaId: subAreaId ?? parent.areaId,
+        workspaceId: st.workspaceId ?? parent.workspaceId ?? null,
+      }
+      setSubtaskEditor({
+        target: { kind: 'persisted', id: st.id, parentTaskId: parent.id },
+        initial,
+        ...(opts?.hideParentContext ? { hideParentContext: true } : {}),
+      })
+    },
+    [editing],
+  )
+
+  type PendingSubtaskRow = (typeof pendingSubtasks)[number]
+
+  const openSubtaskEditorEditPending = useCallback((ps: PendingSubtaskRow) => {
+    const initial: SubtaskEditorForm = {
+      title: ps.title,
+      description: ps.description,
+      objectives: ps.objectives,
+      checklist: ps.checklist.map((c) => ({
+        key: c.id != null && String(c.id).trim() !== '' ? String(c.id) : newSubtaskChecklistRowKey(),
+        text: c.text,
+        done: Boolean(c.done),
+      })),
+      assignedUserId: ps.assignedUserId,
+      dueDate: ps.dueDate,
+      areaId: ps.areaId,
+      workspaceId: ps.workspaceId,
+    }
+    setSubtaskEditor({ target: { kind: 'pending', tempId: ps.tempId }, initial })
+  }, [])
+
+  const handleSubtaskEditorSave = useCallback(
+    async (editorForm: SubtaskEditorForm) => {
+      const sess = subtaskEditor
+      if (!sess || taskFormSaving) return
+      const title = editorForm.title.trim()
+      const descTrim = editorForm.description.trim()
+      const objTrim = editorForm.objectives.trim()
+      const listPayload = checklistPayloadFromEditor(editorForm)
+      const sortSubtasksStable = (a: TaskSubtaskDto, b: TaskSubtaskDto) =>
+        a.sortOrder !== b.sortOrder ? a.sortOrder - b.sortOrder : a.id - b.id
+      const dueFromFormStart = ensureSubtaskDueNotBeforeParentStart(editorForm.dueDate, form.startDate)
+
+      if (sess.target === 'create' && editing) {
+        setSubtaskModalBusy('adding')
+        try {
+          const syncedNew = derivedSubtaskDoneFromChecklist(listPayload)
+          const createdRaw = await createTaskSubtask(editing.id, {
+            title,
+            weight: 1,
+            ...(syncedNew !== undefined ? { done: syncedNew } : {}),
+            ...(editorForm.assignedUserId != null ? { assignedUserId: editorForm.assignedUserId } : {}),
+            areaId: editorForm.areaId,
+            ...(editorForm.workspaceId != null ? { workspaceId: editorForm.workspaceId } : {}),
+            ...(dueFromFormStart != null ? { dueDate: dueFromFormStart } : {}),
+            ...(descTrim !== '' ? { description: descTrim } : {}),
+            ...(objTrim !== '' ? { objectives: objTrim } : {}),
+            ...(listPayload.length > 0 ? { checklist: listPayload } : {}),
+          })
+          const row = normalizeSubtaskDto(createdRaw)
+          setSubtasks((prev) => {
+            const next = [...prev, row].sort((a, b) =>
+              a.sortOrder !== b.sortOrder ? a.sortOrder - b.sortOrder : a.id - b.id,
+            )
+            applySubtaskListToParentState(editing.id, next)
+            return next
+          })
+          scheduleReloadTasksAndKpisAfterSubtasks()
+          setSubtaskEditor(null)
+        } catch {
+          setErr('No se pudo crear la subtarea')
+        } finally {
+          setSubtaskModalBusy('idle')
+        }
+        return
+      }
+
+      if (sess.target === 'create' && !editing) {
+        const tempId =
+          typeof crypto !== 'undefined' && 'randomUUID' in crypto
+            ? crypto.randomUUID()
+            : `p-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+        const ownerForSubtaskPending =
+          editorForm.assignedUserId ?? form.assignedUserIds[0] ?? user?.id ?? null
+        setPendingSubtasks((s) => [
+          ...s,
+          {
+            tempId,
+            title,
+            description: descTrim,
+            objectives: objTrim,
+            checklist: listPayload.map((c) => ({
+              ...(c.id ? { id: c.id } : {}),
+              text: c.text,
+              done: c.done ?? false,
+            })),
+            done: derivedSubtaskDoneFromChecklist(listPayload) ?? false,
+            assignedUserId: ownerForSubtaskPending,
+            dueDate: dueFromFormStart,
+            areaId: editorForm.areaId,
+            workspaceId: editorForm.workspaceId,
+          },
+        ])
+        setSubtaskEditor(null)
+        return
+      }
+
+      if (typeof sess.target !== 'string' && sess.target.kind === 'pending') {
+        const tid = sess.target.tempId
+        setPendingSubtasks((prev) =>
+          prev.map((p) =>
+            p.tempId === tid
+              ? {
+                  ...p,
+                  title,
+                  description: descTrim,
+                  objectives: objTrim,
+                  checklist: listPayload.map((c) => ({
+                    ...(c.id ? { id: c.id } : {}),
+                    text: c.text,
+                    done: c.done ?? false,
+                  })),
+                  done: derivedSubtaskDoneFromChecklist(listPayload) ?? p.done,
+                  assignedUserId: editorForm.assignedUserId,
+                  dueDate: dueFromFormStart,
+                  areaId: editorForm.areaId,
+                  workspaceId: editorForm.workspaceId,
+                }
+              : p,
+          ),
+        )
+        setSubtaskEditor(null)
+        return
+      }
+
+      const persistedTarget =
+        typeof sess.target !== 'string' && sess.target.kind === 'persisted' ? sess.target : null
+      if (persistedTarget == null) return
+      const pid = persistedTarget.parentTaskId
+      const sid = persistedTarget.id
+      const parentRow =
+        tasks.find((t) => t.id === pid) ?? (editing?.id === pid ? editing : null)
+      if (!parentRow) {
+        setErr('No se encontró la tarea padre de la subtarea')
+        return
+      }
+      const parentStartYmd =
+        editing?.id === pid && dialogOpen ? form.startDate : (parentRow.startDate || '').slice(0, 10)
+      const dueClampedPersisted = ensureSubtaskDueNotBeforeParentStart(
+        editorForm.dueDate,
+        parentStartYmd || undefined,
+      )
+
+      const curWsParent = parentRow.workspaceId ?? null
+      const wsPart =
+        editorForm.workspaceId === curWsParent || editorForm.workspaceId == null
+          ? ({ clearWorkspace: true as const } as const)
+          : ({ workspaceId: editorForm.workspaceId } as const)
+
+      setSubtaskModalBusy('updating')
       try {
-        const ownerForSubtask =
-          form.assignedUserIds[0] ?? user?.id ?? null
-        const createdRaw = await createTaskSubtask(editing.id, {
-          title: t,
-          weight: 1,
-          ...(ownerForSubtask != null ? { assignedUserId: ownerForSubtask } : {}),
-          areaId: editing.areaId,
-          ...(editing.workspaceId != null ? { workspaceId: editing.workspaceId } : {}),
+        const assignPart =
+          editorForm.assignedUserId == null
+            ? ({ unassignUser: true as const } as const)
+            : ({ assignedUserId: editorForm.assignedUserId } as const)
+        const duePart =
+          dueClampedPersisted == null
+            ? ({ clearDueDate: true as const } as const)
+            : ({ dueDate: dueClampedPersisted } as const)
+
+        const syncedPersisted = derivedSubtaskDoneFromChecklist(listPayload)
+        const updated = await updateTaskSubtaskNormalized(pid, sid, {
+          title,
+          description: descTrim,
+          objectives: objTrim === '' ? null : objTrim,
+          checklist: listPayload,
+          ...(syncedPersisted !== undefined ? { done: syncedPersisted } : {}),
+          areaId: editorForm.areaId,
+          ...assignPart,
+          ...duePart,
+          ...wsPart,
         })
-        const row = normalizeSubtaskDto(createdRaw)
-        setSubtaskDraft({ title: '' })
-        setSubtasks((prev) => {
-          const next = [...prev, row].sort((a, b) =>
-            a.sortOrder !== b.sortOrder ? a.sortOrder - b.sortOrder : a.id - b.id,
-          )
-          applySubtaskListToParentState(editing.id, next)
-          return next
-        })
+        const listBase =
+          editing?.id === pid && subtasks.length > 0
+            ? subtasks
+            : detailTaskId === pid && detailModalSubtasks.length > 0
+              ? detailModalSubtasks
+              : (subtasksByParentId.get(pid) ?? ([] as TaskSubtaskDto[]))
+        const nl: TaskSubtaskDto[] = listBase.some((x) => x.id === sid)
+          ? listBase.map((x) => (x.id === sid ? updated : x))
+          : [...listBase, updated].sort(sortSubtasksStable)
+
+        applySubtaskMutationToBoardState(pid, nl)
+        if (editing?.id === pid) {
+          setSubtasks(nl)
+        }
+        if (detailTaskId === pid) {
+          if (detailFocusSubtaskId != null) {
+            setDetailModalSubtasks((prev) => prev.map((x) => (x.id === sid ? updated : x)))
+          } else {
+            setDetailModalSubtasks(nl)
+          }
+        }
         scheduleReloadTasksAndKpisAfterSubtasks()
+        setSubtaskEditor(null)
       } catch {
-        setErr('No se pudo crear la subtarea')
+        setErr('No se pudo guardar la subtarea')
       } finally {
         setSubtaskModalBusy('idle')
       }
-      return
+    },
+    [
+      subtaskEditor,
+      taskFormSaving,
+      editing,
+      dialogOpen,
+      form.startDate,
+      form.assignedUserIds,
+      user?.id,
+      tasks,
+      subtasks,
+      subtasksByParentId,
+      applySubtaskMutationToBoardState,
+      scheduleReloadTasksAndKpisAfterSubtasks,
+      detailTaskId,
+      detailModalSubtasks,
+      detailFocusSubtaskId,
+    ],
+  )
+
+  const handleTimelineEditPersistedSubtask = useCallback(
+    (parent: TaskRow, sub: TaskSubtaskDto) => {
+      openSubtaskEditorEditPersisted(sub, parent)
+    },
+    [openSubtaskEditorEditPersisted],
+  )
+
+  const subtaskEditorPersistParentTask = useMemo((): TaskRow | null => {
+    const s = subtaskEditor
+    if (!s || s.target === 'create' || s.target.kind !== 'persisted') return null
+    const pid = s.target.parentTaskId
+    return tasks.find((t) => t.id === pid) ?? (editing?.id === pid ? editing : null) ?? null
+  }, [subtaskEditor, tasks, editing])
+
+  const canSubmitSubtaskEditor = useMemo(() => {
+    if (subtaskEditor == null) return canEditSubtasksInTaskModal
+    if (subtaskEditor.target === 'create') return canEditSubtasksInTaskModal
+    if (subtaskEditor.target.kind === 'pending') return canEditSubtasksInTaskModal
+    const p = subtaskEditorPersistParentTask
+    if (!p) return manage
+    return manage || canCollaboratorManageTaskBasics(p, user?.id)
+  }, [subtaskEditor, subtaskEditorPersistParentTask, canEditSubtasksInTaskModal, manage, user?.id])
+
+  const subtaskEditorMinDueYmd = useMemo(() => {
+    const s = subtaskEditor
+    if (!s) return form.startDate || undefined
+    if (s.target === 'create') return form.startDate || undefined
+    if (s.target.kind === 'pending') return form.startDate || undefined
+    const pid = s.target.parentTaskId
+    const p = tasks.find((t) => t.id === pid) ?? (editing?.id === pid ? editing : null)
+    if (!p) return form.startDate || undefined
+    if (editing?.id === pid && dialogOpen) return form.startDate || undefined
+    return (p.startDate || '').slice(0, 10) || undefined
+  }, [subtaskEditor, form.startDate, tasks, editing, dialogOpen])
+
+  const subtaskEditorParentTitle = useMemo(() => {
+    if (!subtaskEditor) return null
+    if (subtaskEditor.hideParentContext) return null
+    if (subtaskEditor.target === 'create') {
+      if (editing) return (editing.title || '').trim() || `Proyecto #${editing.id}`
+      return (form.title || '').trim() || 'Nuevo proyecto'
     }
-    const tempId =
-      typeof crypto !== 'undefined' && 'randomUUID' in crypto
-        ? crypto.randomUUID()
-        : `p-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
-    const ownerForSubtaskPending =
-      form.assignedUserIds[0] ?? user?.id ?? null
-    const pendingAreaId =
-      Number.isFinite(Number(form.areaId)) && Number(form.areaId) > 0
-        ? Number(form.areaId)
-        : areas[0]?.id ?? 0
-    const pendingWsRaw = form.workspaceId ? Number(form.workspaceId) : NaN
-    setPendingSubtasks((s) => [
-      ...s,
-      {
-        tempId,
-        title: t,
-        description: '',
-        done: false,
-        assignedUserId: ownerForSubtaskPending,
-        dueDate: null,
-        areaId: pendingAreaId,
-        workspaceId: Number.isFinite(pendingWsRaw) && pendingWsRaw > 0 ? pendingWsRaw : null,
-      },
-    ])
-    setSubtaskDraft({ title: '' })
-  }, [
-    subtaskDraft.title,
-    taskFormSaving,
-    subtaskModalBusy,
-    editing,
-    form.assignedUserIds,
-    user?.id,
-    scheduleReloadTasksAndKpisAfterSubtasks,
-    areas,
-    form.areaId,
-    form.workspaceId,
-    applySubtaskListToParentState,
-  ])
+    if (typeof subtaskEditor.target !== 'string' && subtaskEditor.target.kind === 'pending') {
+      return (form.title || '').trim() || 'Nuevo proyecto'
+    }
+    if (typeof subtaskEditor.target !== 'string' && subtaskEditor.target.kind === 'persisted') {
+      const pid = subtaskEditor.target.parentTaskId
+      const p = tasks.find((x) => x.id === pid) ?? (editing?.id === pid ? editing : null)
+      return (p?.title || '').trim() || `Proyecto #${pid}`
+    }
+    return null
+  }, [subtaskEditor, editing, form.title, tasks])
 
   const visibleTabs = useMemo(() => {
     const restricted = ['gantt', 'board', 'actas'] as const
@@ -1731,7 +2128,7 @@ export function YegoGanttModule() {
                   <ChevronRight className="h-3.5 w-3.5" />
                 </Button>
                 <span className="text-[11px] text-muted-foreground tabular-nums leading-none">
-                  {tasksForTimeline.length} tareas en vista
+                  {tasksForTimeline.length} proyectos en vista
                 </span>
               </div>
               <div className="mt-1 flex-1 min-h-0 flex flex-col">
@@ -1756,6 +2153,7 @@ export function YegoGanttModule() {
                   subtasksByParentId={subtasksByParentId}
                   setSubtasksByParentId={setSubtasksByParentId}
                   onDropTaskToSubtask={handleDropTaskToSubtask}
+                  onTimelineEditPersistedSubtask={handleTimelineEditPersistedSubtask}
                 />
               </div>
             </div>
@@ -1793,6 +2191,7 @@ export function YegoGanttModule() {
               currentUserId={user?.id ?? null}
               showWorkspaceOnCards={isMySpaceView}
               workspaceNameById={workspaceNameById}
+              onBoardSubtasksSynced={applySubtaskListToParentState}
             />
           )}
 
@@ -1860,17 +2259,26 @@ export function YegoGanttModule() {
           open={taskDetailOpen}
           onOpenChange={(open) => {
             if (!open) {
+              if (detailModalSubtaskSaving) return
               setTaskDetailOpen(false)
               setDetailTaskId(null)
+              setDetailFocusSubtaskId(null)
             }
           }}
         >
-          <DialogContent className="max-w-5xl w-[calc(100vw-1.5rem)] max-h-[min(92vh,940px)] overflow-hidden gap-0 sm:rounded-xl p-6 flex flex-col">
+          <DialogContent
+            className="max-w-7xl w-[calc(100vw-1rem)] max-h-[min(98vh,1240px)] overflow-hidden gap-0 sm:rounded-xl p-5 sm:p-6 flex flex-col"
+            closable={!detailModalSubtaskSaving}
+            onPointerDownOutside={(e) => {
+              if (detailModalSubtaskSaving) e.preventDefault()
+            }}
+            onEscapeKeyDown={(e) => {
+              if (detailModalSubtaskSaving) e.preventDefault()
+            }}
+          >
             {detailLiveTask ? (
               <>
-                <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0 mt-0">
-                  <div className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
-                <DialogHeader className="text-left space-y-0 pr-10 shrink-0">
+                <DialogHeader className="text-left space-y-0 pr-10 shrink-0 pb-4 border-b border-border/55">
                   <DialogTitle className="text-xl font-bold tracking-tight leading-snug">{detailLiveTask.title}</DialogTitle>
                   <div className="flex items-center gap-2 flex-wrap pt-1 text-foreground text-sm">
                     {(() => {
@@ -1941,25 +2349,20 @@ export function YegoGanttModule() {
                   </div>
                 </DialogHeader>
 
-                <div className="space-y-4 mt-2 flex-1 overflow-y-auto min-h-0 pr-1">
-                  <div>
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">
-                      Descripción
-                    </div>
-                    <p className="text-sm">
-                      {detailLiveTask.description?.trim() ? (
-                        <span className="text-foreground whitespace-pre-wrap">{detailLiveTask.description.trim()}</span>
-                      ) : (
-                        <span className="italic text-muted-foreground">Sin descripción</span>
-                      )}
-                    </p>
-                  </div>
-
+                <div className="flex flex-1 flex-col xl:flex-row xl:gap-0 min-h-0 mt-4 overflow-hidden isolate">
+                  <section
+                    className={cn(
+                      'flex flex-col min-h-[min(44vh,380px)] xl:min-h-0 xl:flex-[0_1_34%] xl:max-w-[22rem]',
+                      'min-w-0 border-b xl:border-b-0 border-border/55 xl:border-r xl:border-border/55 xl:pr-5',
+                      'pb-4 xl:pb-0',
+                    )}
+                  >
+                    <div className="flex-1 flex flex-col min-h-0 min-w-0 pt-1 pr-0.5 xl:pr-1">
                   {(detailModalSubtasksLoading ||
                     detailModalSubtasks.length > 0 ||
                     (detailLiveTask.subtaskTotal ?? 0) > 0) && (
-                    <div className="rounded-xl border border-border/70 bg-card/40 dark:bg-card/25 overflow-hidden shadow-sm">
-                      <div className="flex items-center gap-2 px-3 py-2 border-b border-border/60 bg-muted/25 dark:bg-muted/20">
+                    <div className="rounded-xl border border-border/70 bg-white dark:bg-neutral-950/95 dark:border-neutral-700 overflow-hidden shadow-sm flex flex-col flex-1 min-h-0">
+                      <div className="flex items-center gap-2 px-3 py-2 border-b border-border/60 bg-muted/25 dark:bg-muted/20 shrink-0">
                         <div
                           className="h-8 w-8 shrink-0 rounded-lg bg-primary/12 text-primary dark:bg-primary/20 flex items-center justify-center border border-primary/15"
                           aria-hidden
@@ -1970,8 +2373,9 @@ export function YegoGanttModule() {
                           <div className="text-xs font-semibold text-foreground tracking-tight">Subtareas</div>
                           {!detailModalSubtasksLoading && detailModalSubtasks.length > 0 ? (
                             <div className="text-[10px] text-muted-foreground">
-                              {detailModalSubtasks.filter((s) => s.done).length} de {detailModalSubtasks.length}{' '}
-                              completadas
+                              {detailFocusSubtaskId != null
+                                ? 'Solo esta subtarea (cargada por id). Usa el enlace de abajo para ver todas.'
+                                : 'Pulsa la fila para mostrar solo el checklist; marca ítems sin abrir otro modal.'}
                             </div>
                           ) : (
                             <div className="text-[10px] text-muted-foreground">Checklist de esta tarea</div>
@@ -1979,6 +2383,7 @@ export function YegoGanttModule() {
                         </div>
                         {!detailModalSubtasksLoading && detailModalSubtasks.length > 0 ? (
                           <span className="shrink-0 text-[10px] font-semibold tabular-nums rounded-full bg-primary/12 text-primary px-2 py-0.5 border border-primary/15">
+                            {detailModalSubtasks.filter((s) => s.done).length}/{detailModalSubtasks.length} ·{' '}
                             {Math.round(
                               (100 * detailModalSubtasks.filter((s) => s.done).length) /
                                 Math.max(1, detailModalSubtasks.length),
@@ -1987,7 +2392,19 @@ export function YegoGanttModule() {
                           </span>
                         ) : null}
                       </div>
-                      <div className="p-2">
+                      {detailFocusSubtaskId != null ? (
+                        <div className="px-3 py-1.5 border-b border-border/50 bg-muted/15 dark:bg-muted/10 shrink-0">
+                          <button
+                            type="button"
+                            className="text-[11px] font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded disabled:opacity-45 disabled:pointer-events-none"
+                            disabled={detailModalSubtaskSaving}
+                            onClick={() => setDetailFocusSubtaskId(null)}
+                          >
+                            Ver todas las subtareas del proyecto
+                          </button>
+                        </div>
+                      ) : null}
+                      <div className="p-2 flex flex-col flex-1 min-h-0">
                         {detailSubtaskBlockedMsg ? (
                           <div
                             role="alert"
@@ -2007,11 +2424,12 @@ export function YegoGanttModule() {
                             <span>Cargando subtareas…</span>
                           </div>
                         ) : detailModalSubtasks.length > 0 ? (
-                          <ul className="space-y-1 max-h-[min(36vh,260px)] overflow-y-auto">
+                          <ul className="space-y-1 overflow-y-auto flex-1 min-h-0 pr-0.5">
                             {detailModalSubtasks.map((st) => {
                               const subResp =
                                 st.assignedUserId != null
-                                  ? collaboratorNames.get(st.assignedUserId) ?? `Usuario #${st.assignedUserId}`
+                                  ? collaboratorNames.get(st.assignedUserId) ??
+                                    `Usuario #${st.assignedUserId}`
                                   : null
                               const canToggle = canUserToggleSubtaskDone(
                                 detailLiveTask,
@@ -2019,230 +2437,407 @@ export function YegoGanttModule() {
                                 user?.id ?? null,
                                 manage || canCollaboratorManageTaskBasics(detailLiveTask, user?.id),
                               )
+                              const metaLine = [subResp, st.dueDate ? formatDetailModalDate(st.dueDate) : null]
+                                .filter(Boolean)
+                                .join(' · ')
+                              const expanded = detailExpandedSubtaskId === st.id
+                              const busyRow = detailSubtaskBusyId === st.id
+
+                              const toggleChecklistItem = async (
+                                checklistIndex: number,
+                                checked: boolean,
+                              ) => {
+                                if (busyRow) return
+                                if (!canToggle) {
+                                  setDetailSubtaskBlockedMsg(SUBTASK_DONE_NOT_ALLOWED_HINT)
+                                  return
+                                }
+                                const list = [...(st.checklist ?? [])]
+                                if (
+                                  checklistIndex < 0 ||
+                                  checklistIndex >= list.length ||
+                                  !String(list[checklistIndex]?.text ?? '').trim()
+                                ) {
+                                  return
+                                }
+                                setDetailSubtaskBusyId(st.id)
+                                try {
+                                  const nextDraft = list.map((c, i) =>
+                                    i === checklistIndex ? { ...c, done: checked } : c,
+                                  )
+                                  const payloadChecklist =
+                                    checklistPayloadFromSubtaskDtoList(nextDraft)
+                                  const syncedDone =
+                                    derivedSubtaskDoneFromChecklist(payloadChecklist)
+                                  const patchBody: Parameters<
+                                    typeof updateTaskSubtaskNormalized
+                                  >[2] = { checklist: payloadChecklist }
+                                  if (syncedDone !== undefined) patchBody.done = syncedDone
+                                  const updated = await updateTaskSubtaskNormalized(
+                                    detailLiveTask.id,
+                                    st.id,
+                                    patchBody,
+                                  )
+                                  setDetailModalSubtasks((prev) => {
+                                    const nl = prev.map((x) => (x.id === st.id ? updated : x))
+                                    applySubtaskMutationToBoardState(detailLiveTask.id, nl)
+                                    return nl
+                                  })
+                                  scheduleReloadTasksAndKpisAfterSubtasks()
+                                } catch (e: unknown) {
+                                  setDetailSubtaskBlockedMsg(
+                                    httpSubtaskMutateStatus(e) === 403
+                                      ? SUBTASK_DONE_NOT_ALLOWED_HINT
+                                      : 'No se pudo actualizar el checklist',
+                                  )
+                                } finally {
+                                  setDetailSubtaskBusyId(null)
+                                }
+                              }
+
                               return (
-                              <li
-                                key={st.id}
-                                className="rounded-lg px-2 py-1.5 text-sm border border-transparent hover:border-border/50 hover:bg-muted/30 transition-colors"
-                              >
-                                <div className="flex items-start gap-2.5">
-                                  <SubtaskDoneToggle
-                                    done={st.done}
-                                    canToggle={canToggle}
-                                    disabled={detailSubtaskBusyId === st.id}
-                                    preferDisabledCheckbox
-                                    checkboxClassName="mt-0.5 shrink-0"
-                                    idleWrapperClassName="mt-0.5"
-                                    cannotToggleTitle={SUBTASK_DONE_NOT_ALLOWED_HINT}
-                                    onCannotToggleInteract={() => setDetailSubtaskBlockedMsg(SUBTASK_DONE_NOT_ALLOWED_HINT)}
-                                    onCommitted={async (next) => {
-                                      setDetailSubtaskBusyId(st.id)
-                                      try {
-                                        const updated = await updateTaskSubtaskNormalized(
-                                          detailLiveTask.id,
-                                          st.id,
-                                          { done: next },
-                                        )
-                                        setDetailModalSubtasks((prev) => {
-                                          const nextList = prev.map((x) =>
-                                            x.id === st.id ? updated : x,
-                                          )
-                                          applySubtaskListToParentState(detailLiveTask.id, nextList)
-                                          return nextList
-                                        })
-                                        scheduleReloadTasksAndKpisAfterSubtasks()
-                                      } catch (e: unknown) {
-                                        setDetailSubtaskBlockedMsg(
-                                          httpSubtaskMutateStatus(e) === 403
-                                            ? SUBTASK_DONE_NOT_ALLOWED_HINT
-                                            : 'No se pudo actualizar la subtarea',
-                                        )
-                                      } finally {
-                                        setDetailSubtaskBusyId(null)
+                                <li
+                                  key={st.id}
+                                  className="rounded-lg border border-transparent hover:border-border/60 hover:bg-muted/35 transition-colors flex flex-col min-h-[2.75rem]"
+                                >
+                                  <div className="flex items-stretch min-h-[2.75rem]">
+                                  <div
+                                    className="shrink-0 pl-2 py-2 self-start"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <SubtaskDoneToggle
+                                      done={st.done}
+                                      canToggle={canToggle}
+                                      disabled={detailModalSubtaskSaving}
+                                      preferDisabledCheckbox
+                                      checkboxClassName="mt-0.5 shrink-0"
+                                      idleWrapperClassName="mt-0.5"
+                                      cannotToggleTitle={SUBTASK_DONE_NOT_ALLOWED_HINT}
+                                      onCannotToggleInteract={() =>
+                                        setDetailSubtaskBlockedMsg(SUBTASK_DONE_NOT_ALLOWED_HINT)
                                       }
-                                    }}
-                                  />
-                                  <div className="min-w-0 flex-1">
-                                    <span
-                                      className={cn(
-                                        'block leading-snug text-[13px]',
-                                        st.done &&
-                                          'text-muted-foreground line-through decoration-muted-foreground/50',
-                                      )}
-                                    >
-                                      {st.title?.trim() || `Subtarea #${st.id}`}
-                                    </span>
-                                    {st.description?.trim() ? (
-                                      <p className="mt-1 text-[11px] text-muted-foreground whitespace-pre-wrap leading-snug">
-                                        {st.description.trim()}
-                                      </p>
-                                    ) : null}
-                                    {(subResp || st.dueDate) ? (
-                                      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground">
-                                        {subResp ? (
-                                          <span className="inline-flex items-center gap-1 truncate max-w-[12rem]">
-                                            <User className="h-3 w-3 shrink-0 opacity-80" aria-hidden />
-                                            {subResp}
-                                          </span>
-                                        ) : null}
-                                        {st.dueDate ? (
-                                          <span className="inline-flex items-center gap-1 tabular-nums shrink-0">
-                                            <Calendar className="h-3 w-3 shrink-0 opacity-80" aria-hidden />
-                                            {formatDetailModalDate(st.dueDate)}
-                                          </span>
-                                        ) : null}
-                                      </div>
-                                    ) : null}
+                                      onCommitted={async (next) => {
+                                        setDetailSubtaskBusyId(st.id)
+                                        try {
+                                          const updated = await updateTaskSubtaskNormalized(
+                                            detailLiveTask.id,
+                                            st.id,
+                                            bodyForSubtaskDoneToggleCommit(st, next),
+                                          )
+                                          setDetailModalSubtasks((prev) => {
+                                            const nextList = prev.map((x) =>
+                                              x.id === st.id ? updated : x,
+                                            )
+                                            applySubtaskMutationToBoardState(detailLiveTask.id, nextList)
+                                            return nextList
+                                          })
+                                          scheduleReloadTasksAndKpisAfterSubtasks()
+                                        } catch (e: unknown) {
+                                          setDetailSubtaskBlockedMsg(
+                                            httpSubtaskMutateStatus(e) === 403
+                                              ? SUBTASK_DONE_NOT_ALLOWED_HINT
+                                              : 'No se pudo actualizar la subtarea',
+                                          )
+                                        } finally {
+                                          setDetailSubtaskBusyId(null)
+                                        }
+                                      }}
+                                    />
                                   </div>
-                                </div>
-                              </li>
+                                  <button
+                                    type="button"
+                                    aria-expanded={expanded}
+                                    aria-controls={`detail-sub-checklist-${st.id}`}
+                                    disabled={detailModalSubtaskSaving}
+                                    className="flex flex-1 min-w-0 items-center gap-2 py-2 pr-2 pl-1 text-left rounded-r-lg outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setDetailExpandedSubtaskId((prev) =>
+                                        prev === st.id ? null : st.id,
+                                      )
+                                    }}
+                                  >
+                                    <div className="min-w-0 flex-1">
+                                      <span
+                                        className={cn(
+                                          'block leading-snug text-[13px] font-medium',
+                                          st.done &&
+                                            'text-muted-foreground line-through decoration-muted-foreground/50',
+                                        )}
+                                      >
+                                        {st.title?.trim() || `Subtarea #${st.id}`}
+                                      </span>
+                                      {metaLine ? (
+                                        <p className="mt-0.5 text-[10px] text-muted-foreground truncate">
+                                          {metaLine}
+                                        </p>
+                                      ) : null}
+                                    </div>
+                                    <ChevronDown
+                                      className={cn(
+                                        'h-4 w-4 shrink-0 text-muted-foreground opacity-70 transition-transform',
+                                        expanded ? 'rotate-180' : '',
+                                      )}
+                                      aria-hidden
+                                    />
+                                  </button>
+                                  </div>
+
+                                  {expanded ? (
+                                    <div
+                                      id={`detail-sub-checklist-${st.id}`}
+                                      className="mx-2 mb-2 mt-1 rounded-lg border border-rose-200/85 bg-gradient-to-b from-rose-50/95 to-rose-50/70 px-3 py-2 dark:border-rose-900/50 dark:from-rose-950/50 dark:to-rose-950/30"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <p className="text-[10px] font-semibold uppercase tracking-wide text-rose-900/95 dark:text-rose-100/95 mb-1.5">
+                                        Checklist
+                                      </p>
+                                      <ul className="space-y-1.5 m-0 p-0 list-none">
+                                        {(st.checklist ?? []).length === 0 ||
+                                        !(st.checklist ?? []).some((c) =>
+                                          String(c.text ?? '').trim(),
+                                        ) ? (
+                                          <li className="text-[11px] text-rose-800/85 dark:text-rose-200/85 leading-snug">
+                                            Sin ítems. Ábrelos con <strong>Editar</strong> en la tarea
+                                            proyecto.
+                                          </li>
+                                        ) : (
+                                          (st.checklist ?? []).map((it, checklistIdx) => {
+                                            const t = String(it.text ?? '').trim()
+                                            if (!t) return null
+                                            const checklistLocked = detailModalSubtaskSaving
+                                            const itemKey =
+                                              typeof it.id === 'string' && String(it.id).trim() !== ''
+                                                ? String(it.id).trim()
+                                                : `${st.id}:${checklistIdx}`
+                                            return (
+                                              <li key={itemKey} className="flex items-start gap-2">
+                                                <input
+                                                  type="checkbox"
+                                                  checked={Boolean(it.done)}
+                                                  disabled={checklistLocked || !canToggle}
+                                                  title={
+                                                    !canToggle
+                                                      ? SUBTASK_DONE_NOT_ALLOWED_HINT
+                                                      : checklistLocked
+                                                        ? 'Esperando a que termine el guardado anterior'
+                                                        : undefined
+                                                  }
+                                                  className={cn(
+                                                    'mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-rose-400 text-rose-600 accent-rose-600 dark:border-rose-600',
+                                                    checklistLocked ? 'opacity-50' : '',
+                                                  )}
+                                                  onChange={(ev) =>
+                                                    void toggleChecklistItem(checklistIdx, ev.target.checked)
+                                                  }
+                                                />
+                                                <span
+                                                  className={cn(
+                                                    'text-[11.5px] leading-snug [overflow-wrap:anywhere]',
+                                                    Boolean(it.done) &&
+                                                      'text-muted-foreground line-through decoration-rose-500/45 dark:decoration-rose-600/55',
+                                                  )}
+                                                >
+                                                  {t}
+                                                </span>
+                                              </li>
+                                            )
+                                          })
+                                        )}
+                                      </ul>
+                                    </div>
+                                  ) : null}
+                                </li>
                               )
                             })}
                           </ul>
                         ) : (
                           <p className="text-[11px] text-muted-foreground py-2 px-2 leading-snug">
                             Sin subtareas. Usa{' '}
-                            <strong className="font-medium text-foreground/80">Editar</strong> para añadir ítems al checklist.
+                            <strong className="font-medium text-foreground/80">Editar</strong> para añadir ítems.
                           </p>
                         )}
                       </div>
                     </div>
                   )}
+                </div>
+                  </section>
 
-                  <div>
-                    <div className="flex items-center justify-between text-xs mb-2 gap-2">
-                      <span className="text-muted-foreground inline-flex items-center gap-1 flex-wrap">
-                        Progreso
-                        {((detailLiveTask.subtaskTotal ?? 0) > 0) && (
-                          <span className="italic font-normal">(auto desde subtareas)</span>
-                        )}
-                      </span>
-                      <span className="font-semibold tabular-nums text-foreground shrink-0">
-                        {Math.min(100, Math.max(0, Math.round(detailLiveTask.progressPercent ?? 0)))}%
-                      </span>
-                    </div>
-                    <div className="w-full rounded-full border border-border/60 bg-muted/50 dark:bg-muted/40 p-1 shadow-[inset_0_1px_2px_rgba(0,0,0,0.08)] dark:shadow-[inset_0_1px_2px_rgba(0,0,0,0.25)]">
-                      <ProgressBar
-                        value={detailLiveTask.progressPercent ?? 0}
-                        size="md"
-                        variant="primary"
-                        className="!bg-transparent dark:!bg-transparent"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-3 text-xs rounded-lg border border-border/80 bg-muted/30 p-3 dark:bg-muted/20">
-                    <div>
-                      <div className="text-muted-foreground inline-flex items-center gap-1">
-                        <CalendarRange className="h-3 w-3 shrink-0" />
-                        Inicio
-                      </div>
-                      <div className="font-semibold mt-0.5 tabular-nums">
-                        {formatDetailModalDate(detailLiveTask.startDate)}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-muted-foreground inline-flex items-center gap-1">
-                        <CalendarRange className="h-3 w-3 shrink-0" />
-                        Fin
-                      </div>
-                      <div className="font-semibold mt-0.5 tabular-nums">
-                        {formatDetailModalDate(detailLiveTask.endDate)}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-muted-foreground">Duración</div>
-                      <div className="font-semibold mt-0.5 tabular-nums">
-                        {computeDurationDays(detailLiveTask.startDate, detailLiveTask.endDate)} día
-                        {computeDurationDays(detailLiveTask.startDate, detailLiveTask.endDate) !== 1 ? 's' : ''}
-                      </div>
-                    </div>
-                  </div>
-
-                  {(() => {
-                    const ids =
-                      detailLiveTask.assignedUserIds?.length
-                        ? detailLiveTask.assignedUserIds
-                        : detailLiveTask.assignedUserId != null
-                          ? [detailLiveTask.assignedUserId]
-                          : []
-                    const principal = ids[0]
-                    const rest = ids.slice(1)
-                    const n = (id: number) => collaboratorNames.get(id) || `#${id}`
-                    const principalMeta =
-                      principal != null
-                        ? assigneePickerList.find((c) => c.id === principal)
-                        : undefined
-                    const roleLabel = principalMeta?.rol?.trim() || '—'
-                    return (
-                      <>
-                        <div>
-                          <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2 inline-flex items-center gap-1.5">
-                            <Crown className="h-3 w-3 text-amber-500 dark:text-amber-400 shrink-0" aria-hidden />
-                            Responsable
-                          </div>
-                          {principal != null ? (
-                            <div className="flex items-center gap-2 rounded-lg border border-border/80 bg-card p-2">
-                              <Avatar name={n(principal)} size="lg" variant="owner" />
-                              <div className="min-w-0 flex-1">
-                                <div className="text-sm font-semibold truncate">{n(principal)}</div>
-                                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                                  {roleLabel}
-                                </div>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="text-xs italic text-muted-foreground">Sin responsable</div>
-                          )}
+                  <section
+                    className={cn(
+                      'flex flex-col min-h-[min(36vh,320px)] xl:min-h-0 xl:flex-[0_1_30%] xl:max-w-[24rem]',
+                      'min-w-0 border-b xl:border-b-0 border-border/55 xl:border-r xl:border-border/55 xl:pr-5',
+                      'pb-4 xl:pb-0 xl:overflow-hidden',
+                    )}
+                  >
+                    <div className="overflow-y-auto flex-1 min-h-0 space-y-4 pr-1 pb-2 overscroll-contain max-h-[min(62vh,620px)] xl:max-h-none">
+                      <div>
+                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">
+                          Descripción
                         </div>
+                        <p className="text-sm">
+                          {detailLiveTask.description?.trim() ? (
+                            <span className="text-foreground whitespace-pre-wrap">
+                              {detailLiveTask.description.trim()}
+                            </span>
+                          ) : (
+                            <span className="italic text-muted-foreground">Sin descripción</span>
+                          )}
+                        </p>
+                      </div>
 
-                        {!taskRowIsPrivate(detailLiveTask) && (
-                          <div>
-                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2 inline-flex items-center gap-1.5">
-                              <Users className="h-3 w-3" />
-                              Colaboradores ({rest.length})
-                            </div>
-                            {rest.length === 0 ? (
-                              <div className="text-xs italic text-muted-foreground">Sin colaboradores</div>
-                            ) : (
-                              <div className="grid grid-cols-2 gap-2">
-                                {rest.map((id) => {
-                                  const m = assigneePickerList.find((c) => c.id === id)
-                                  return (
-                                    <div
-                                      key={id}
-                                      className="flex items-center gap-2 rounded-lg border border-border/80 bg-card p-2"
-                                    >
-                                      <Avatar name={n(id)} size="sm" />
-                                      <div className="min-w-0">
-                                        <div className="text-xs font-medium truncate">{n(id)}</div>
-                                        <div className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                                          {m?.rol?.trim() || '—'}
-                                        </div>
-                                      </div>
+                      <div>
+                        <div className="flex items-center justify-between text-xs mb-2 gap-2">
+                          <span className="text-muted-foreground inline-flex items-center gap-1 flex-wrap">
+                            Progreso
+                            {((detailLiveTask.subtaskTotal ?? 0) > 0) && (
+                              <span className="italic font-normal">(auto desde subtareas)</span>
+                            )}
+                          </span>
+                          <span className="font-semibold tabular-nums text-foreground shrink-0">
+                            {Math.min(100, Math.max(0, Math.round(detailLiveTask.progressPercent ?? 0)))}%
+                          </span>
+                        </div>
+                        <div className="w-full rounded-full border border-border/60 bg-muted/50 dark:bg-muted/40 p-1 shadow-[inset_0_1px_2px_rgba(0,0,0,0.08)] dark:shadow-[inset_0_1px_2px_rgba(0,0,0,0.25)]">
+                          <ProgressBar
+                            value={detailLiveTask.progressPercent ?? 0}
+                            size="md"
+                            variant="primary"
+                            className="!bg-transparent dark:!bg-transparent"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2 text-[11px] rounded-lg border border-border/80 bg-muted/30 p-2.5 dark:bg-muted/20">
+                        <div>
+                          <div className="text-muted-foreground inline-flex items-center gap-1">
+                            <CalendarRange className="h-3 w-3 shrink-0" />
+                            Inicio
+                          </div>
+                          <div className="font-semibold mt-0.5 tabular-nums">
+                            {formatDetailModalDate(detailLiveTask.startDate)}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-muted-foreground inline-flex items-center gap-1">
+                            <CalendarRange className="h-3 w-3 shrink-0" />
+                            Fin
+                          </div>
+                          <div className="font-semibold mt-0.5 tabular-nums">
+                            {formatDetailModalDate(detailLiveTask.endDate)}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-muted-foreground">Duración</div>
+                          <div className="font-semibold mt-0.5 tabular-nums">
+                            {computeDurationDays(detailLiveTask.startDate, detailLiveTask.endDate)} día
+                            {computeDurationDays(detailLiveTask.startDate, detailLiveTask.endDate) !== 1
+                              ? 's'
+                              : ''}
+                          </div>
+                        </div>
+                      </div>
+
+                      {(() => {
+                        const ids =
+                          detailLiveTask.assignedUserIds?.length
+                            ? detailLiveTask.assignedUserIds
+                            : detailLiveTask.assignedUserId != null
+                              ? [detailLiveTask.assignedUserId]
+                              : []
+                        const principal = ids[0]
+                        const rest = ids.slice(1)
+                        const n = (id: number) => collaboratorNames.get(id) || `#${id}`
+                        const principalMeta =
+                          principal != null
+                            ? assigneePickerList.find((c) => c.id === principal)
+                            : undefined
+                        const roleLabel = principalMeta?.rol?.trim() || '—'
+                        return (
+                          <>
+                            <div>
+                              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2 inline-flex items-center gap-1.5">
+                                <Crown className="h-3 w-3 text-amber-500 dark:text-amber-400 shrink-0" aria-hidden />
+                                Responsable
+                              </div>
+                              {principal != null ? (
+                                <div className="flex items-center gap-2 rounded-lg border border-border/80 bg-card p-2">
+                                  <Avatar name={n(principal)} size="lg" variant="owner" />
+                                  <div className="min-w-0 flex-1">
+                                    <div className="text-sm font-semibold truncate">{n(principal)}</div>
+                                    <div className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                                      {roleLabel}
                                     </div>
-                                  )
-                                })}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="text-xs italic text-muted-foreground">Sin responsable</div>
+                              )}
+                            </div>
+
+                            {!taskRowIsPrivate(detailLiveTask) && (
+                              <div>
+                                <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2 inline-flex items-center gap-1.5">
+                                  <Users className="h-3 w-3" />
+                                  Colaboradores ({rest.length})
+                                </div>
+                                {rest.length === 0 ? (
+                                  <div className="text-xs italic text-muted-foreground">Sin colaboradores</div>
+                                ) : (
+                                  <div className="grid grid-cols-2 gap-2">
+                                    {rest.map((id) => {
+                                      const m = assigneePickerList.find((c) => c.id === id)
+                                      return (
+                                        <div
+                                          key={id}
+                                          className="flex items-center gap-2 rounded-lg border border-border/80 bg-card p-2"
+                                        >
+                                          <Avatar name={n(id)} size="sm" />
+                                          <div className="min-w-0">
+                                            <div className="text-xs font-medium truncate">{n(id)}</div>
+                                            <div className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                                              {m?.rol?.trim() || '—'}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                )}
                               </div>
                             )}
-                          </div>
-                        )}
-                      </>
-                    )
-                  })()}
+                          </>
+                        )
+                      })()}
+                    </div>
+                  </section>
 
+                  <section className="flex flex-col flex-1 xl:flex-[1.15_1_0%] min-h-[min(42vh,360px)] xl:min-h-0 min-w-0 pt-4 xl:pt-0 xl:pl-5">
+                    <div className="flex flex-col flex-1 min-h-[280px] xl:min-h-[min(68vh,760px)] rounded-xl border border-border/60 bg-muted/[0.08] dark:bg-muted/10 px-3 py-3 shadow-sm overflow-hidden min-w-0">
+                      <WorkosTaskChatPanel
+                        key={detailLiveTask.id}
+                        taskId={detailLiveTask.id}
+                        currentUserId={user?.id ?? null}
+                        subtasks={detailModalSubtasks}
+                        subtasksLoading={detailModalSubtasksLoading}
+                        interactionLocked={detailModalSubtaskSaving}
+                      />
+                    </div>
+                  </section>
                 </div>
-                  </div>
 
-                  <div className="shrink-0 w-full lg:w-[min(22rem,36vw)] lg:min-w-[260px] flex flex-col border-t lg:border-t-0 lg:border-l border-border/60 pt-4 lg:pt-0 lg:pl-4 lg:max-h-full min-h-[220px] lg:min-h-[min(68vh,620px)]">
-                    <WorkosTaskChatPanel
-                      key={detailLiveTask.id}
-                      taskId={detailLiveTask.id}
-                      currentUserId={user?.id ?? null}
-                      subtasks={detailModalSubtasks}
-                      subtasksLoading={detailModalSubtasksLoading}
-                    />
+                {detailModalSubtaskSaving ? (
+                  <div
+                    className="flex items-center gap-2.5 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-950 dark:text-amber-50 dark:border-amber-600/40 dark:bg-amber-950/35 shrink-0 mt-2"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    <Loader2 className="h-4 w-4 shrink-0 animate-spin text-amber-700 dark:text-amber-400" aria-hidden />
+                    <span className="leading-snug font-medium">
+                      Guardando subtarea (checklist o estado). No cierres el modal todavía.
+                    </span>
                   </div>
-                </div>
+                ) : null}
 
                 <div className="flex items-center justify-end gap-2 pt-4 mt-4 border-t border-border/60 shrink-0">
                   {manage && (
@@ -2250,7 +2845,11 @@ export function YegoGanttModule() {
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="gap-1.5 rounded-lg border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      className="gap-1.5 rounded-lg border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+                      disabled={detailModalSubtaskSaving}
+                      title={
+                        detailModalSubtaskSaving ? 'Espera a que termine el guardado de la subtarea' : undefined
+                      }
                       onClick={() => {
                         removeTask(detailLiveTask)
                       }}
@@ -2264,10 +2863,15 @@ export function YegoGanttModule() {
                     <Button
                       type="button"
                       size="sm"
-                      className="gap-1.5 rounded-lg workos-gantt-btn-primary text-white border-0 shadow-sm"
+                      className="gap-1.5 rounded-lg workos-gantt-btn-primary text-white border-0 shadow-sm disabled:opacity-50"
+                      disabled={detailModalSubtaskSaving}
+                      title={
+                        detailModalSubtaskSaving ? 'Espera a que termine el guardado de la subtarea' : undefined
+                      }
                       onClick={() => {
                         setTaskDetailOpen(false)
                         setDetailTaskId(null)
+                        setDetailFocusSubtaskId(null)
                         openEdit(detailLiveTask)
                       }}
                     >
@@ -2279,7 +2883,11 @@ export function YegoGanttModule() {
                     type="button"
                     variant="secondary"
                     size="sm"
-                    className="rounded-lg"
+                    className="rounded-lg disabled:opacity-50"
+                    disabled={detailModalSubtaskSaving}
+                    title={
+                      detailModalSubtaskSaving ? 'Espera a que termine el guardado de la subtarea' : undefined
+                    }
                     onClick={() => setTaskDetailOpen(false)}
                   >
                     Cerrar
@@ -2310,7 +2918,7 @@ export function YegoGanttModule() {
             <div className="px-6 pt-6 pb-4">
               <DialogHeader>
                 <DialogTitle className="text-xl font-bold">
-                  {editing ? 'Editar Tarea' : 'Nueva Tarea'}
+                  {editing ? 'Editar proyecto' : 'Nuevo proyecto'}
                 </DialogTitle>
               </DialogHeader>
             </div>
@@ -2684,7 +3292,7 @@ export function YegoGanttModule() {
                 </div>
               </div>
 
-              <div className="rounded-lg border border-border px-2 py-2 space-y-2">
+              <div className="rounded-lg border border-border px-2 py-2 space-y-2 mt-2">
                 {editSubtaskBlockedMsg ? (
                   <div
                     role="alert"
@@ -2713,455 +3321,226 @@ export function YegoGanttModule() {
                   </div>
                 )}
                 {editing && subtasks.length > 0 && (
-                  <div className="space-y-2 max-h-52 overflow-y-auto pr-0.5">
-                    {subtasks.map((st) => {
+                  <div className={TASK_MODAL_COMPACT_SUBTASKS_LIST_CLASS}>
+                    {sortSubtasksForDisplay(subtasks).map((st) => {
                       const subCanToggle = canUserToggleSubtaskDone(
                         editing,
                         st,
                         user?.id ?? null,
                         manage || canCollaboratorManageTaskBasics(editing, user?.id),
                       )
-                      const subAreaId = st.areaId ?? Number(editing.areaId)
-                      const collabsForSub = collaboratorsForArea(subAreaId)
+                      const rn = subtaskResponsibleLabel(st.assignedUserId, collaboratorNames)
+                      const titleDisp = st.title?.trim() || `Subtarea #${st.id}`
+                      const actionsDisabled =
+                        taskFormSaving ||
+                        subtaskModalBusy !== 'idle' ||
+                        !canEditSubtasksInTaskModal
                       return (
-                      <div
-                        key={st.id}
-                        className="rounded-md border border-neutral-200/90 dark:border-border/70 bg-white dark:bg-card px-2 py-1.5 space-y-1.5 group"
-                      >
-                        <div className="flex items-center gap-2">
-                          <SubtaskDoneToggle
-                            preferDisabledCheckbox
-                            done={st.done}
-                            canToggle={subCanToggle}
-                            disabled={taskFormSaving || subtaskModalBusy !== 'idle'}
-                            cannotToggleTitle={SUBTASK_DONE_NOT_ALLOWED_HINT}
-                            onCannotToggleInteract={() => setEditSubtaskBlockedMsg(SUBTASK_DONE_NOT_ALLOWED_HINT)}
-                            onCommitted={async (done) => {
-                              if (!editing || subtaskModalBusy !== 'idle' || !subCanToggle) return
-                              setSubtaskModalBusy('updating')
-                              try {
-                                const updated = await updateTaskSubtaskNormalized(editing.id, st.id, {
-                                  done,
-                                })
-                                setSubtasks((prev) => {
-                                  const nextList = prev.map((x) => (x.id === st.id ? updated : x))
-                                  applySubtaskListToParentState(editing.id, nextList)
-                                  return nextList
-                                })
-                                scheduleReloadTasksAndKpisAfterSubtasks()
-                              } catch (e: unknown) {
-                                setEditSubtaskBlockedMsg(
-                                  httpSubtaskMutateStatus(e) === 403
-                                    ? SUBTASK_DONE_NOT_ALLOWED_HINT
-                                    : 'No se pudo actualizar la subtarea',
-                                )
-                              } finally {
-                                setSubtaskModalBusy('idle')
-                              }
-                            }}
-                          />
-                          <Input
-                            variant="plain"
-                            value={st.title}
-                            disabled={taskFormSaving || subtaskModalBusy !== 'idle' || !canEditSubtasksInTaskModal}
-                            onChange={(e) =>
-                              setSubtasks((prev) =>
-                                prev.map((x) => (x.id === st.id ? { ...x, title: e.target.value } : x)),
-                              )
-                            }
-                            onBlur={async () => {
-                              if (
-                                !editing ||
-                                taskFormSaving ||
-                                subtaskModalBusy !== 'idle' ||
-                                !canEditSubtasksInTaskModal
-                              )
-                                return
-                              const row = subtasks.find((x) => x.id === st.id)
-                              const v = row?.title?.trim() ?? ''
-                              if (!v || v === (st.title ?? '').trim()) return
-                              setSubtaskModalBusy('updating')
-                              try {
-                                const updated = await updateTaskSubtaskNormalized(editing.id, st.id, {
-                                  title: v,
-                                })
-                                setSubtasks((prev) => {
-                                  const nextList = prev.map((x) => (x.id === st.id ? updated : x))
-                                  applySubtaskListToParentState(editing.id, nextList)
-                                  return nextList
-                                })
-                                scheduleReloadTasksAndKpisAfterSubtasks()
-                              } catch {
-                                setErr('No se pudo renombrar la subtarea')
-                              } finally {
-                                setSubtaskModalBusy('idle')
-                              }
-                            }}
-                            className={cn(
-                              'h-7 min-h-0 rounded-none border-0 bg-transparent px-1 py-0 text-xs shadow-none flex-1 min-w-0',
-                              'focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0',
-                              st.done ? 'line-through text-muted-foreground' : 'text-foreground',
-                            )}
-                          />
-                          <button
-                            type="button"
-                            disabled={taskFormSaving || subtaskModalBusy !== 'idle' || !canEditSubtasksInTaskModal}
-                            className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-primary hover:bg-primary/10"
-                            aria-label="Mover subtarea a otra tarea"
-                            title="Mover a otra tarea"
-                            onClick={() => {
-                              setSubtaskMoveParentChoice('')
-                              setSubtaskMoveTargetRow(st)
-                            }}
-                          >
-                            <ArrowRightLeft className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            disabled={taskFormSaving || subtaskModalBusy !== 'idle' || !canEditSubtasksInTaskModal}
-                            className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10"
-                            aria-label="Eliminar subtarea"
-                            onClick={() => {
-                              if (
-                                taskFormSaving ||
-                                subtaskModalBusy !== 'idle' ||
-                                !canEditSubtasksInTaskModal
-                              )
-                                return
-                              setSubtaskPendingDelete(st)
-                            }}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                        <SubtaskAreaWorkspaceRow
-                          areas={areas.map((a) => ({ id: a.id, name: a.name }))}
-                          workspaces={workspaces.map((w) => ({ id: w.id, name: w.name }))}
-                          areaId={subAreaId}
-                          workspaceId={st.workspaceId ?? editing.workspaceId ?? null}
-                          disabled={taskFormSaving || subtaskModalBusy !== 'idle' || !canEditSubtasksInTaskModal}
-                          onAreaCommit={async (nextArea) => {
-                            if (
-                              !editing ||
-                              subtaskModalBusy !== 'idle' ||
-                              !canEditSubtasksInTaskModal ||
-                              nextArea === subAreaId
-                            )
-                              return
-                            setSubtaskModalBusy('updating')
-                            try {
-                              const updated = await updateTaskSubtaskNormalized(editing.id, st.id, {
-                                areaId: nextArea,
-                              })
-                              setSubtasks((prev) => prev.map((x) => (x.id === st.id ? updated : x)))
-                              scheduleReloadTasksAndKpisAfterSubtasks()
-                            } catch {
-                              setErr('No se pudo actualizar el equipo de la subtarea')
-                            } finally {
-                              setSubtaskModalBusy('idle')
-                            }
-                          }}
-                          onWorkspaceCommit={async (nextWs) => {
-                            if (!editing || subtaskModalBusy !== 'idle' || !canEditSubtasksInTaskModal) return
-                            const curWs = st.workspaceId ?? editing.workspaceId ?? null
-                            if (nextWs === curWs) return
-                            if (nextWs == null) {
-                              setSubtaskModalBusy('updating')
-                              try {
-                                const updated = await updateTaskSubtaskNormalized(
-                                  editing.id,
-                                  st.id,
-                                  { clearWorkspace: true as const },
-                                )
-                                setSubtasks((prev) => prev.map((x) => (x.id === st.id ? updated : x)))
-                                scheduleReloadTasksAndKpisAfterSubtasks()
-                              } catch {
-                                setErr('No se pudo actualizar el espacio de la subtarea')
-                              } finally {
-                                setSubtaskModalBusy('idle')
-                              }
-                              return
-                            }
-                            setSubtaskWorkspaceRelocation({ subtask: st, nextWorkspaceId: nextWs })
-                          }}
-                        />
-                        <SubtaskAssigneeDateGrid
-                          assignees={collabsForSub}
-                          assignedUserId={st.assignedUserId}
-                          dueDate={st.dueDate}
-                          min={form.startDate || undefined}
-                          disabled={
-                            taskFormSaving || subtaskModalBusy !== 'idle' || !canEditSubtasksInTaskModal
+                        <TaskModalCompactSubtaskRow
+                          key={st.id}
+                          titleAttr={[
+                            titleDisp,
+                            editing.title ? `Tarea: ${editing.title}` : '',
+                            rn ? `Responsable: ${rn}` : '',
+                            st.dueDate ? `Vence: ${formatTimelineShortDate(st.dueDate)}` : '',
+                            'Clic para editar equipo, espacio y detalle.',
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                          leading={
+                            <div
+                              className="shrink-0"
+                              onClick={(e) => e.stopPropagation()}
+                              onKeyDown={(e) => e.stopPropagation()}
+                            >
+                              <SubtaskDoneToggle
+                                preferDisabledCheckbox
+                                checkboxClassName="mt-0"
+                                done={st.done}
+                                canToggle={subCanToggle}
+                                disabled={taskFormSaving || subtaskModalBusy !== 'idle'}
+                                cannotToggleTitle={SUBTASK_DONE_NOT_ALLOWED_HINT}
+                                onCannotToggleInteract={() =>
+                                  setEditSubtaskBlockedMsg(SUBTASK_DONE_NOT_ALLOWED_HINT)
+                                }
+                                onCommitted={async (done) => {
+                                  if (!editing || subtaskModalBusy !== 'idle' || !subCanToggle) return
+                                  setSubtaskModalBusy('updating')
+                                  try {
+                                    const updated = await updateTaskSubtaskNormalized(
+                                      editing.id,
+                                      st.id,
+                                      bodyForSubtaskDoneToggleCommit(st, done),
+                                    )
+                                    setSubtasks((prev) => {
+                                      const nextList = prev.map((x) => (x.id === st.id ? updated : x))
+                                      applySubtaskListToParentState(editing.id, nextList)
+                                      return nextList
+                                    })
+                                    scheduleReloadTasksAndKpisAfterSubtasks()
+                                  } catch (e: unknown) {
+                                    setEditSubtaskBlockedMsg(
+                                      httpSubtaskMutateStatus(e) === 403
+                                        ? SUBTASK_DONE_NOT_ALLOWED_HINT
+                                        : 'No se pudo actualizar la subtarea',
+                                    )
+                                  } finally {
+                                    setSubtaskModalBusy('idle')
+                                  }
+                                }}
+                              />
+                            </div>
                           }
-                          dueDateDisabled={taskFormSaving || !canEditSubtasksInTaskModal}
-                          readOnlyAssigneeLabel={subtaskAssigneeReadOnlyLabel}
-                          onAssigneeCommit={async (nextAssignee) => {
-                            if (
-                              !editing ||
-                              subtaskModalBusy !== 'idle' ||
-                              !canEditSubtasksInTaskModal
-                            )
-                              return
-                            setSubtaskModalBusy('updating')
-                            try {
-                              const body =
-                                nextAssignee == null
-                                  ? { unassignUser: true as const }
-                                  : { assignedUserId: nextAssignee }
-                              const updated = await updateTaskSubtaskNormalized(editing.id, st.id, body)
-                              setSubtasks((prev) => prev.map((x) => (x.id === st.id ? updated : x)))
-                              scheduleReloadTasksAndKpisAfterSubtasks()
-                            } catch {
-                              setErr('No se pudo asignar responsable a la subtarea')
-                            } finally {
-                              setSubtaskModalBusy('idle')
-                            }
-                          }}
-                          onDueDateCommit={async (v) => {
-                            if (!editing || !canEditSubtasksInTaskModal) return
-                            const vClamped = ensureSubtaskDueNotBeforeParentStart(v, form.startDate)
-                            const previousDue = st.dueDate ?? null
-                            setSubtasks((prev) => {
-                              const nl = prev.map((x) =>
-                                x.id === st.id ? { ...x, dueDate: vClamped } : x,
-                              )
-                              applySubtaskListToParentState(editing.id, nl)
-                              return nl
-                            })
-                            setSubtaskModalBusy('updating')
-                            try {
-                              const body =
-                                vClamped == null
-                                  ? { clearDueDate: true as const }
-                                  : { dueDate: vClamped }
-                              const updated = await updateTaskSubtaskNormalized(editing.id, st.id, body)
-                              setSubtasks((prev) => {
-                                const nl = prev.map((x) => (x.id === st.id ? updated : x))
-                                applySubtaskListToParentState(editing.id, nl)
-                                return nl
-                              })
-                              scheduleReloadTasksAndKpisAfterSubtasks()
-                            } catch {
-                              setErr(
-                                'Fecha inválida: la fecha límite no puede ser anterior al inicio de la tarea',
-                              )
-                              setSubtasks((prev) => {
-                                const nl = prev.map((x) =>
-                                  x.id === st.id ? { ...x, dueDate: previousDue } : x,
-                                )
-                                applySubtaskListToParentState(editing.id, nl)
-                                return nl
-                              })
-                            } finally {
-                              setSubtaskModalBusy('idle')
-                            }
-                          }}
+                          displayTitle={titleDisp}
+                          done={st.done}
+                          responsibleName={rn}
+                          dueDate={st.dueDate}
+                          mainDisabled={actionsDisabled}
+                          onOpenDetail={() => openSubtaskEditorEditPersisted(st)}
+                          trailingActions={
+                            <>
+                              <button
+                                type="button"
+                                disabled={actionsDisabled}
+                                className={toolbarIconBtnInteractive(actionsDisabled, 'default')}
+                                aria-label="Editar subtarea (descripción, objetivos, checklist)"
+                                title="Editar en ventana"
+                                onClick={() => openSubtaskEditorEditPersisted(st)}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={actionsDisabled}
+                                className={toolbarIconBtnInteractive(actionsDisabled, 'default')}
+                                aria-label="Mover subtarea a otra tarea"
+                                title="Mover a otra tarea"
+                                onClick={() => {
+                                  setSubtaskMoveParentChoice('')
+                                  setSubtaskMoveTargetRow(st)
+                                }}
+                              >
+                                <ArrowRightLeft className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={actionsDisabled}
+                                className={toolbarIconBtnInteractive(actionsDisabled, 'danger')}
+                                aria-label="Eliminar subtarea"
+                                onClick={() => {
+                                  if (actionsDisabled) return
+                                  setSubtaskPendingDelete(st)
+                                }}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </>
+                          }
                         />
-                        <div className="pl-7 min-w-0">
-                          <SubtaskDescriptionField
-                            value={st.description ?? ''}
-                            disabled={
-                              taskFormSaving || subtaskModalBusy !== 'idle' || !canEditSubtasksInTaskModal
-                            }
-                            onChange={(v) =>
-                              setSubtasks((prev) =>
-                                prev.map((x) => (x.id === st.id ? { ...x, description: v } : x)),
-                              )
-                            }
-                            onBlur={async () => {
-                              if (
-                                !editing ||
-                                taskFormSaving ||
-                                subtaskModalBusy !== 'idle' ||
-                                !canEditSubtasksInTaskModal
-                              )
-                                return
-                              const row = subtasks.find((x) => x.id === st.id)
-                              const payload = (row?.description ?? '').trim()
-                              if (!payload || payload === (st.description ?? '').trim()) return
-                              setSubtaskModalBusy('updating')
-                              try {
-                                const updated = await updateTaskSubtaskNormalized(editing.id, st.id, {
-                                  description: payload,
-                                })
-                                setSubtasks((prev) => {
-                                  const nl = prev.map((x) => (x.id === st.id ? updated : x))
-                                  applySubtaskListToParentState(editing.id, nl)
-                                  return nl
-                                })
-                                scheduleReloadTasksAndKpisAfterSubtasks()
-                              } catch {
-                                setErr('No se pudo guardar la descripción de la subtarea')
-                              } finally {
-                                setSubtaskModalBusy('idle')
-                              }
-                            }}
-                          />
-                        </div>
-                      </div>
                       )
                     })}
                   </div>
                 )}
                 {!editing && pendingSubtasks.length > 0 && (
-                  <div className="space-y-2 max-h-52 overflow-y-auto pr-0.5">
-                    {pendingSubtasks.map((ps) => (
-                      <div
-                        key={ps.tempId}
-                        className="rounded-md border border-neutral-200/90 dark:border-border/70 bg-white dark:bg-card px-2 py-1.5 space-y-1.5 group"
-                      >
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            className={FORM_SUBTASK_CHECKBOX_CLASS}
-                            checked={ps.done}
-                            disabled={taskFormSaving}
-                            onChange={() =>
-                              setPendingSubtasks((prev) =>
-                                prev.map((x) =>
-                                  x.tempId === ps.tempId ? { ...x, done: !x.done } : x,
-                                ),
-                              )
-                            }
-                          />
-                          <Input
-                            variant="plain"
-                            value={ps.title}
-                            disabled={taskFormSaving}
-                            onChange={(e) =>
-                              setPendingSubtasks((prev) =>
-                                prev.map((x) =>
-                                  x.tempId === ps.tempId ? { ...x, title: e.target.value } : x,
-                                ),
-                              )
-                            }
-                            className={cn(
-                              'h-7 min-h-0 rounded-none border-0 bg-transparent px-1 py-0 text-xs shadow-none flex-1 min-w-0',
-                              'focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0',
-                              ps.done ? 'line-through text-muted-foreground' : 'text-foreground',
-                            )}
-                          />
-                          <button
-                            type="button"
-                            disabled={taskFormSaving}
-                            className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10"
-                            aria-label="Quitar subtarea"
-                            onClick={() =>
-                              setPendingSubtasks((prev) => prev.filter((x) => x.tempId !== ps.tempId))
-                            }
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                        <SubtaskAreaWorkspaceRow
-                          areas={areas.map((a) => ({ id: a.id, name: a.name }))}
-                          workspaces={workspaces.map((w) => ({ id: w.id, name: w.name }))}
-                          areaId={ps.areaId}
-                          workspaceId={ps.workspaceId}
-                          disabled={taskFormSaving}
-                          onAreaCommit={(nextArea) => {
-                            setPendingSubtasks((prev) =>
-                              prev.map((x) =>
-                                x.tempId === ps.tempId ? { ...x, areaId: nextArea } : x,
-                              ),
-                            )
-                          }}
-                          onWorkspaceCommit={(nextWs) => {
-                            setPendingSubtasks((prev) =>
-                              prev.map((x) =>
-                                x.tempId === ps.tempId ? { ...x, workspaceId: nextWs } : x,
-                              ),
-                            )
-                          }}
-                        />
-                        <SubtaskAssigneeDateGrid
-                          assignees={collaboratorsForArea(ps.areaId)}
-                          assignedUserId={ps.assignedUserId}
+                  <div className={TASK_MODAL_COMPACT_SUBTASKS_LIST_CLASS}>
+                    {pendingSubtasks.map((ps) => {
+                      const rn = subtaskResponsibleLabel(ps.assignedUserId, collaboratorNames)
+                      const titleDisp = ps.title?.trim() || 'Sin título'
+                      return (
+                        <TaskModalCompactSubtaskRow
+                          key={ps.tempId}
+                          titleAttr={[
+                            titleDisp,
+                            rn ? `Responsable: ${rn}` : '',
+                            ps.dueDate ? `Vence: ${formatTimelineShortDate(ps.dueDate)}` : '',
+                            'Clic para editar equipo, espacio y detalle.',
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                          leading={
+                            <input
+                              type="checkbox"
+                              className={cn(FORM_SUBTASK_CHECKBOX_CLASS, 'mt-0 shrink-0 self-center')}
+                              checked={ps.done}
+                              disabled={taskFormSaving}
+                              onChange={() =>
+                                setPendingSubtasks((prev) =>
+                                  prev.map((x) =>
+                                    x.tempId === ps.tempId ? { ...x, done: !x.done } : x,
+                                  ),
+                                )
+                              }
+                            />
+                          }
+                          displayTitle={titleDisp}
+                          done={ps.done}
+                          responsibleName={rn}
                           dueDate={ps.dueDate}
-                          min={form.startDate || undefined}
-                          disabled={taskFormSaving}
-                          readOnlyAssigneeLabel={subtaskAssigneeReadOnlyLabel}
-                          onAssigneeCommit={(nextAssignee) => {
-                            setPendingSubtasks((prev) =>
-                              prev.map((x) =>
-                                x.tempId === ps.tempId ? { ...x, assignedUserId: nextAssignee } : x,
-                              ),
-                            )
-                          }}
-                          onDueDateCommit={(v) => {
-                            const vClamped = ensureSubtaskDueNotBeforeParentStart(v, form.startDate)
-                            setPendingSubtasks((prev) =>
-                              prev.map((x) =>
-                                x.tempId === ps.tempId ? { ...x, dueDate: vClamped } : x,
-                              ),
-                            )
-                          }}
+                          mainDisabled={taskFormSaving}
+                          onOpenDetail={() => openSubtaskEditorEditPending(ps)}
+                          trailingActions={
+                            <>
+                              <button
+                                type="button"
+                                disabled={taskFormSaving}
+                                className={toolbarIconBtnInteractive(taskFormSaving, 'default')}
+                                aria-label="Editar subtarea"
+                                title="Editar subtarea"
+                                onClick={() => openSubtaskEditorEditPending(ps)}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={taskFormSaving}
+                                className={toolbarIconBtnInteractive(taskFormSaving, 'danger')}
+                                aria-label="Quitar subtarea"
+                                onClick={() =>
+                                  setPendingSubtasks((prev) =>
+                                    prev.filter((x) => x.tempId !== ps.tempId),
+                                  )
+                                }
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </>
+                          }
                         />
-                        <div className="pl-7 min-w-0">
-                          <SubtaskDescriptionField
-                            value={ps.description ?? ''}
-                            disabled={taskFormSaving}
-                            onChange={(v) =>
-                              setPendingSubtasks((prev) =>
-                                prev.map((x) =>
-                                  x.tempId === ps.tempId ? { ...x, description: v } : x,
-                                ),
-                              )
-                            }
-                          />
-                        </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
-                <div className="flex gap-1.5 items-stretch">
-                  <Input
-                    variant="plain"
-                    placeholder="Añadir subtarea y presiona Enter"
-                    value={subtaskDraft.title}
-                    disabled={
-                      taskFormSaving || subtaskModalBusy !== 'idle' || (Boolean(editing) && subtasksLoading)
-                    }
-                    onChange={(e) => setSubtaskDraft((d) => ({ ...d, title: e.target.value }))}
-                    className={cn(
-                      'h-8 flex-1 min-w-0 rounded-none border border-neutral-200 dark:border-border bg-white dark:bg-background text-xs px-2.5',
-                      TASK_MODAL_FOCUS,
-                    )}
-                    onKeyDown={(e) => {
-                      if (e.key !== 'Enter') return
-                      e.preventDefault()
-                      void commitSubtaskDraft()
-                    }}
-                  />
+                {canEditSubtasksInTaskModal ? (
                   <Button
                     type="button"
                     variant="outline"
                     className={cn(
-                      'h-8 min-w-[9rem] shrink-0 justify-center rounded-none border-neutral-200 dark:border-border bg-white dark:bg-background px-2.5 text-xs font-semibold gap-1.5',
-                      /* El Button global usa disabled:opacity-50; durante subtarea en curso debe leerse el texto. */
-                      subtaskModalBusy !== 'idle' && 'disabled:!opacity-100 disabled:border-primary/50 disabled:text-primary',
+                      'h-9 w-full justify-center rounded-lg border-neutral-200 dark:border-border bg-white dark:bg-background text-xs font-semibold gap-2',
+                      subtaskModalBusy !== 'idle' &&
+                        'disabled:!opacity-100 disabled:border-primary/50 disabled:text-primary',
                     )}
                     aria-busy={subtaskModalBusy !== 'idle'}
                     disabled={
                       taskFormSaving ||
                       subtaskModalBusy !== 'idle' ||
-                      !subtaskDraft.title.trim() ||
                       (Boolean(editing) && subtasksLoading)
                     }
-                    onClick={() => void commitSubtaskDraft()}
+                    onClick={() => openSubtaskEditorCreate()}
                   >
                     {subtaskModalBusy !== 'idle' ? (
                       <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" aria-hidden />
-                    ) : null}
+                    ) : (
+                      <Plus className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                    )}
                     <span className="whitespace-nowrap">
                       {subtaskModalBusy === 'adding'
                         ? 'Añadiendo…'
                         : subtaskModalBusy === 'updating'
                           ? 'Actualizando…'
-                          : '+ Añadir'}
+                          : 'Añadir subtarea'}
                     </span>
                   </Button>
-                </div>
+                ) : null}
               </div>
 
               <label
@@ -3199,7 +3578,7 @@ export function YegoGanttModule() {
                     setFormErrors((p) => ({ ...p, areaId: '' }))
                   }}
                 />
-                <span className="text-sm font-medium">Tarea privada</span>
+                <span className="text-sm font-medium">Proyecto privado</span>
               </label>
 
             </div>
@@ -3245,12 +3624,49 @@ export function YegoGanttModule() {
                     {editing ? 'Guardando…' : 'Creando…'}
                   </>
                 ) : (
-                  editing ? 'Guardar Cambios' : 'Crear Tarea'
+                  editing ? 'Guardar cambios' : 'Crear proyecto'
                 )}
               </Button>
             </div>
           </DialogContent>
         </Dialog>
+
+        <SubtaskEditorDialog
+          open={subtaskEditor != null}
+          onOpenChange={(o) => {
+            if (!o) closeSubtaskEditor()
+          }}
+          headerTitle={
+            subtaskEditor == null
+              ? 'Subtarea'
+              : subtaskEditor.target === 'create'
+                ? 'Nueva subtarea'
+                : subtaskEditor.hideParentContext
+                  ? subtaskEditor.initial.title?.trim() || 'Subtarea'
+                  : 'Editar subtarea'
+          }
+          parentTaskTitle={subtaskEditorParentTitle}
+          saving={subtaskModalBusy !== 'idle'}
+          canEdit={canSubmitSubtaskEditor}
+          initial={
+            subtaskEditor?.initial ?? {
+              title: '',
+              description: '',
+              objectives: '',
+              checklist: [],
+              assignedUserId: null,
+              dueDate: null,
+              areaId: areas[0]?.id ?? 1,
+              workspaceId: null,
+            }
+          }
+          minDueDate={subtaskEditorMinDueYmd}
+          areas={areas.map((a) => ({ id: a.id, name: a.name }))}
+          workspaces={workspaces.map((w) => ({ id: w.id, name: w.name }))}
+          resolveCollaborators={(aid) => collaboratorsForArea(aid)}
+          readOnlyAssigneeLabel={subtaskAssigneeReadOnlyLabel}
+          onSave={(f) => void handleSubtaskEditorSave(f)}
+        />
 
         <SubtaskWorkspaceRelocationDialog
           open={subtaskWorkspaceRelocation !== null}

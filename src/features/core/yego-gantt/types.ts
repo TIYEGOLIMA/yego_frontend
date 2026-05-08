@@ -102,13 +102,26 @@ export interface TaskRowLike {
   subtaskAssignedToViewer?: boolean
 }
 
+/** Ítem checklist de subtarea (API ↔ UI). */
+export interface TaskSubtaskChecklistItem {
+  id?: string | null
+  text: string
+  done?: boolean
+}
+
 /** Subtarea (checklist); alineado con `/yego-gantt/tasks/:id/subtasks`. */
 export interface TaskSubtaskDto {
   id: number
   parentTaskId: number
   title: string
   description?: string | null
+  /** Objetivos / criterios de la subtarea. */
+  objectives?: string | null
+  /** Checklist persistido como JSON en backend. */
+  checklist?: TaskSubtaskChecklistItem[] | null
   sortOrder: number
+  /** Columna/agrupación en tablero; independiente del estado del proyecto padre. */
+  status: AreaTaskStatus
   done: boolean
   weight: string
   assignedUserId?: number | null
@@ -199,13 +212,18 @@ export interface TodoBoardTabProps {
   allCollaborators?: ColaboradorDto[]
   onStatusChange?: (taskId: number, newStatus: AreaTaskStatus) => Promise<void>
   onAddTask?: (status: AreaTaskStatus) => void
-  /** Abre vista detalle con subtareas (clic en tarjeta). */
-  onOpenTask?: (t: TaskRow) => void
+  /** Abre detalle del proyecto; con `focusSubtaskId`, solo muestra esa subtarea (lista GET por id). */
+  onOpenTask?: (t: TaskRow, opts?: { focusSubtaskId?: number }) => void
   /** Id del usuario logueado (filtro «Mis tareas»). */
   currentUserId?: number | null
   /** Vista «Mi espacio»: muestra chip con nombre del proyecto si la tarea tiene `workspaceId`. */
   showWorkspaceOnCards?: boolean
   workspaceNameById?: Map<number, string>
+  /**
+   * Tras mutar subtareas desde el tablero (marcar hecho / mover): actualiza progreso y agregados
+   * de la tarea padre igual que en timeline/modal (ponderado desde subtareas).
+   */
+  onBoardSubtasksSynced?: (parentId: number, list: TaskSubtaskDto[]) => void
 }
 
 export interface SprintsTabProps {
@@ -258,6 +276,8 @@ export interface GanttTimelineTabProps {
   setSubtasksByParentId: Dispatch<SetStateAction<Map<number, TaskSubtaskDto[]>>>
   /** Arrastrar tarea → otra tarea para convertirla en subtarea (validación en padre). */
   onDropTaskToSubtask?: (sourceTaskId: number, targetTaskId: number) => void
+  /** Editar subtarea persistida desde el panel lateral del timeline (modal de subtarea). */
+  onTimelineEditPersistedSubtask?: (parent: TaskRow, sub: TaskSubtaskDto) => void
 }
 
 // ==================== OTRAS INTERFACES ====================
@@ -313,6 +333,8 @@ export interface MeetingMinuteSummaryKpis {
 export type GanttOpenTaskHint = {
   workspaceId?: number | null
   privateTask?: boolean
+  /** Solo carga esa subtarea en el panel lateral del detalle. */
+  focusSubtaskId?: number
 }
 
 export interface MeetingMinuteItemResponse {

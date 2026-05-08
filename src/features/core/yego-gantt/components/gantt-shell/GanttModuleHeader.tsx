@@ -146,7 +146,7 @@ export function GanttModuleHeader({
             className="gap-1.5 h-9 rounded-lg border-0 workos-gantt-btn-primary shadow-sm"
           >
             <Plus className="h-4 w-4" />
-            Nueva tarea
+            Nuevo proyecto
           </Button>
         )}
       </div>

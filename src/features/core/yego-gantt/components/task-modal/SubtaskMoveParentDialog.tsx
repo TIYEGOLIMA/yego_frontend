@@ -67,7 +67,7 @@ export function SubtaskMoveParentDialog(props: {
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2 py-1">
-          <Label className="text-sm font-medium">Nueva tarea padre</Label>
+          <Label className="text-sm font-medium">Nuevo proyecto padre</Label>
           <Select
             value={parentChoice}
             onValueChange={onParentChoiceChange}

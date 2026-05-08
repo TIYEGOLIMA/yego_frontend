@@ -198,7 +198,7 @@ export function buildTimelineTeamsFlat(
   return [
     {
       id: TIMELINE_FLAT_TEAM_ID,
-      name: 'Tareas',
+      name: 'Proyectos',
       capacity: cap,
       tasks: sorted.map((tr) => taskRowToGanttItem(tr, range, labelFor(tr))),
     },

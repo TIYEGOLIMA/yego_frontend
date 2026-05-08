@@ -52,7 +52,7 @@ export function PulseStatsBar({ kpis, trailing }: { kpis: PulseKpis | null; trai
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[#e5e7eb] bg-white p-2 workos-shadow-soft dark:border-border/80 dark:bg-card">
       <KPI icon={Users} label="Equipos" value={kpis.equipos} />
-      <KPI icon={Activity} label="Tareas" value={kpis.tareas} />
+      <KPI icon={Activity} label="Proyectos" value={kpis.tareas} />
       <KPI icon={Activity} label="Progreso" value={`${kpis.progresoPromedioPct}%`} accent="primary" />
       <KPI icon={CheckCircle2} label="Completadas" value={kpis.completadas} accent="success" />
       <KPI icon={AlertOctagon} label="Bloqueadas" value={kpis.bloqueadas} accent="destructive" />

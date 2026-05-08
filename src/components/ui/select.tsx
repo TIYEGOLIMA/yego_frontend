@@ -82,9 +82,10 @@ const SelectContent = React.forwardRef<
       <SelectScrollUpButton />
       <SelectPrimitive.Viewport
         className={cn(
-          "p-1",
-          position === "popper" &&
-            "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]"
+          'p-1',
+          position === 'popper' &&
+            // No fijar altura al trigger: eso recorta el menú a ~36px y oculta ítems largos.
+            'w-full min-w-[var(--radix-select-trigger-width)] max-h-[min(18rem,var(--radix-select-content-available-height,18rem))] overflow-y-auto overscroll-contain',
         )}
       >
         {children}

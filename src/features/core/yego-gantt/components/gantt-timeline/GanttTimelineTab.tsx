@@ -3,23 +3,35 @@ import {
   Clock,
   Crown,
   Calendar,
+  CheckCircle2,
+  Circle,
   Edit3,
   FileText,
   Flag,
   ListChecks,
   Loader2,
+  Pencil,
   Route,
+  ChevronDown,
   Trash2,
   User,
   X,
+  GripVertical,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/utils/cn'
 import { WorkosTabLoading } from '../WorkosLoading'
 import { SubtaskDoneToggle } from '../SubtaskFormFields'
-import type { TaskSubtaskDto } from '../../types'
+import type {
+  ColaboradorDto,
+  GanttTimelineTabProps,
+  TaskRow,
+  TaskSubtaskChecklistItem,
+  TaskSubtaskDto,
+} from '../../types'
 import { canUserToggleSubtaskDone, SUBTASK_DONE_NOT_ALLOWED_HINT } from '../../lib/ganttSubtaskPermissions'
-import { updateTaskSubtaskNormalized } from '../../lib/ganttSubtaskProgress'
+import { updateTaskSubtaskNormalized, normalizeSubtaskDtoList, sortSubtasksForDisplay, bodyForSubtaskDoneToggleCommit } from '../../lib/ganttSubtaskProgress'
+import { fetchTaskSubtasks, reorderTaskSubtasks } from '../../ganttApi'
 import { useTaskSubtasks } from '../../hooks/useTaskSubtasks'
 import { canCollaboratorManageTaskBasics } from '../../taskPrivacy'
 import {
@@ -49,8 +61,7 @@ import {
   startOfDay,
   timelineSubtaskBarColor,
 } from '../../utils'
-import type { ColaboradorDto, GanttTimelineTabProps, TaskRow } from '../../types'
-import { formatTimelineShortDate } from './timelineColumnUtils'
+import { formatTimelineShortDate, subtaskResponsibleLabel } from './timelineColumnUtils'
 import { TimelineParentTaskRow } from './TimelineParentTaskRow'
 import {
   TIMELINE_SUBTASK_BADGE_ICON,
@@ -60,6 +71,86 @@ import {
 } from '../../timelinePalette'
 
 const LEFT_COL = 288
+
+/** Ítems de checklist no vacíos (misma semántica que el editor / agregados). */
+function checklistTimelineItems(checklist: TaskSubtaskDto['checklist']): TaskSubtaskChecklistItem[] {
+  if (!Array.isArray(checklist)) return []
+  return checklist.filter((c) => String(c?.text ?? '').trim().length > 0)
+}
+
+function checklistLanesIfExpandedCount(
+  subList: TaskSubtaskDto[],
+  parentTaskId: number,
+  expandedKeys: ReadonlySet<string>,
+): number {
+  let n = 0
+  for (const s of subList) {
+    const chk = checklistTimelineItems(s.checklist)
+    if (chk.length === 0) continue
+    if (!expandedKeys.has(`${parentTaskId}:${s.id}`)) continue
+    n += chk.length
+  }
+  return n
+}
+
+/** Reinserta antes de `dropBeforeSubId` (solo ids del mismo padre). */
+function moveOrderedSubtasksAdjacent(
+  sorted: readonly TaskSubtaskDto[],
+  fromSubId: number,
+  dropBeforeSubId: number,
+): TaskSubtaskDto[] {
+  if (fromSubId === dropBeforeSubId) return sortSubtasksForDisplay([...sorted])
+  const arr = [...sorted]
+  const fromIdx = arr.findIndex((s) => s.id === fromSubId)
+  if (fromIdx < 0) return sortSubtasksForDisplay(arr)
+  const [moved] = arr.splice(fromIdx, 1)
+  if (!moved) return sortSubtasksForDisplay(arr)
+  const insertAt = arr.findIndex((s) => s.id === dropBeforeSubId)
+  if (insertAt < 0) return sortSubtasksForDisplay(sorted)
+  arr.splice(insertAt, 0, moved)
+  return arr.map((s, i) => ({ ...s, sortOrder: i }))
+}
+
+/** Preview bajo el cursor durante HTML5 drag para que el usuario vea claro qué está moviendo. */
+function setTimelineSubtaskDragPreview(ev: React.DragEvent, titleRaw: string) {
+  const label = titleRaw.trim().length > 0 ? titleRaw.trim() : 'Subtarea'
+  const display = label.length > 76 ? `${label.slice(0, 73)}…` : label
+  const ghost = document.createElement('div')
+  ghost.textContent = display
+  ghost.setAttribute(
+    'style',
+    [
+      'position:absolute',
+      'left:-9999px',
+      'top:0',
+      'z-index:100000',
+      'padding:10px 14px',
+      'border-radius:12px',
+      'border:2px dashed rgb(34,211,238)',
+      'background:linear-gradient(135deg,rgb(236,253,250),rgb(255,255,255))',
+      'box-shadow:0 14px 40px rgba(15,118,166,0.22)',
+      'font-family:ui-sans-serif,system-ui,sans-serif',
+      'font-weight:650',
+      'font-size:11px',
+      'line-height:1.35',
+      'max-width:268px',
+      'color:#0f172a',
+      'pointer-events:none',
+      'white-space:nowrap',
+      'overflow:hidden',
+      'text-overflow:ellipsis',
+    ].join(';'),
+  )
+  document.body.appendChild(ghost)
+  try {
+    ev.dataTransfer.setDragImage(ghost, 28, 20)
+  } catch {
+    /* algunos navegadores limitan setDragImage */
+  }
+  window.requestAnimationFrame(() => {
+    window.setTimeout(() => ghost.remove(), 0)
+  })
+}
 
 function TimelineHeader({ anchor, totalDays, dayWidth }: { anchor: Date; totalDays: number; dayWidth: number }) {
   const days = Array.from({ length: totalDays }, (_, i) => i)
@@ -263,19 +354,28 @@ function subtaskTimelineSpan(
 function SubtaskGanttBar({
   parent,
   sub,
+  parentRow,
   anchor,
   totalDays,
   laneIdx,
   dayWidth,
   onOpenParent,
+  onActivateSubtimeline,
+  manage,
+  currentUserId,
 }: {
   parent: GanttTaskItem
   sub: TaskSubtaskDto
+  parentRow: TaskRowLike
   anchor: Date
   totalDays: number
   laneIdx: number
   dayWidth: number
   onOpenParent: (t: GanttTaskItem) => void
+  /** Clic sobre la barra de subtarea: selección + modal de subtarea (sin modal de tarea padre). */
+  onActivateSubtimeline?: (parentRow: TaskRowLike, sub: TaskSubtaskDto) => void
+  manage: boolean
+  currentUserId: number | null | undefined
 }) {
   const { startDay, duration } = subtaskTimelineSpan(parent, sub.dueDate, anchor, totalDays)
   const left = startDay * dayWidth
@@ -284,6 +384,10 @@ function SubtaskGanttBar({
   const fade = sub.done ? 'opacity-40' : 'opacity-95'
   const laneTop = laneIdx * TIMELINE_LANE_H
   const barTop = laneTop + (TIMELINE_LANE_H - 20) / 2
+
+  const canEditSubtimeline =
+    onActivateSubtimeline != null &&
+    (manage || canCollaboratorManageTaskBasics(parentRow, currentUserId))
 
   return (
     <button
@@ -299,7 +403,11 @@ function SubtaskGanttBar({
         color: '#fff',
         boxShadow: 'inset 4px 0 0 rgba(255,255,255,0.35)',
       }}
-      onClick={() => onOpenParent(parent)}
+      onClick={() =>
+        canEditSubtimeline && onActivateSubtimeline
+          ? onActivateSubtimeline(parentRow, sub)
+          : onOpenParent(parent)
+      }
     >
       <span
         className="relative shrink-0 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-black/25 border border-white/35"
@@ -339,6 +447,15 @@ function timelineDayCellClass(
 type TimelineLane =
   | { kind: 'parent'; task: GanttTaskItem; laneIdx: number }
   | { kind: 'sub'; parent: GanttTaskItem; parentRow: TaskRowLike; sub: TaskSubtaskDto; laneIdx: number }
+  | {
+      kind: 'subChecklist'
+      parent: GanttTaskItem
+      parentRow: TaskRowLike
+      sub: TaskSubtaskDto
+      item: TaskSubtaskChecklistItem
+      itemKey: string
+      laneIdx: number
+    }
 
 interface TeamRowWithGridProps {
   team: GanttTeamItem
@@ -362,7 +479,12 @@ interface TeamRowWithGridProps {
   onSubtaskDoneBlockedNotify?: (message?: string) => void
   collapsedParentIds: ReadonlySet<number>
   onToggleParentSubtasksCollapsed: (parentSourceId: number) => void
+  expandedSubtaskChecklistKeys: ReadonlySet<string>
+  onToggleSubtaskChecklistExpanded: (parentTaskId: number, subtaskId: number) => void
   onDropTaskToSubtask?: (sourceTaskId: number, targetTaskId: number) => void
+  /** Seleccionar padre en el panel sin abrir el modal de editar tarea. */
+  onSelectTimelineTaskSidebarOnly: (task: GanttTaskItem) => void
+  onTimelineEditPersistedSubtask?: (parent: TaskRow, sub: TaskSubtaskDto) => void
 }
 
 function TeamRowWithGrid({
@@ -386,9 +508,37 @@ function TeamRowWithGrid({
   onSubtaskDoneBlockedNotify,
   collapsedParentIds,
   onToggleParentSubtasksCollapsed,
+  expandedSubtaskChecklistKeys,
+  onToggleSubtaskChecklistExpanded,
   onDropTaskToSubtask,
+  onSelectTimelineTaskSidebarOnly,
+  onTimelineEditPersistedSubtask,
 }: TeamRowWithGridProps) {
   const [subBusyId, setSubBusyId] = useState<number | null>(null)
+  const [reorderBusyParentId, setReorderBusyParentId] = useState<number | null>(null)
+  /** Activo durante el gesto HTML5-drag (para estilos reactivos en la lista). */
+  const [reorderDrag, setReorderDrag] = useState<{ parentSourceId: number; subtaskId: number } | null>(
+    null,
+  )
+  /** Insertar justo antes de esta fila cuando sueltas. */
+  const [reorderHoverBefore, setReorderHoverBefore] = useState<{
+    parentSourceId: number
+    targetSubtaskId: number
+  } | null>(null)
+  const subtaskReorderDragRef = useRef<{ parentSourceId: number; subtaskId: number } | null>(null)
+
+  const clearReorderDragUi = useCallback(() => {
+    subtaskReorderDragRef.current = null
+    setReorderDrag(null)
+    setReorderHoverBefore(null)
+  }, [])
+
+  useEffect(() => {
+    if (!reorderDrag) return undefined
+    const onWinDragEnd = () => clearReorderDragUi()
+    window.addEventListener('dragend', onWinDragEnd)
+    return () => window.removeEventListener('dragend', onWinDragEnd)
+  }, [reorderDrag, clearReorderDragUi])
 
   const lanes = useMemo(() => {
     const out: TimelineLane[] = []
@@ -398,15 +548,44 @@ function TeamRowWithGrid({
       laneIdx++
       const subs = subtasksByParentId.get(task.sourceId)
       const parentRow = tasksBySourceId.get(task.sourceId)
-      if (!subs?.length || !parentRow) continue
+      const orderedSubs = subs?.length ? sortSubtasksForDisplay(subs) : undefined
+      if (!orderedSubs?.length || !parentRow) continue
       if (collapsedParentIds.has(task.sourceId)) continue
-      for (const sub of subs) {
+      for (const sub of orderedSubs) {
         out.push({ kind: 'sub', parent: task, parentRow, sub, laneIdx })
         laneIdx++
+        const chk = checklistTimelineItems(sub.checklist)
+        if (chk.length === 0 || !expandedSubtaskChecklistKeys.has(`${task.sourceId}:${sub.id}`))
+          continue
+        for (let ci = 0; ci < chk.length; ci++) {
+          const item = chk[ci]!
+          const rawId =
+            typeof item.id === 'string' && item.id.trim().length > 0 ? item.id.trim() : ''
+          const itemKey =
+            rawId !== ''
+              ? `${sub.id}:${rawId}`
+              : `${sub.id}:chk-${ci}:${String(item.text ?? '').trim().slice(0, 48)}`
+          out.push({
+            kind: 'subChecklist',
+            parent: task,
+            parentRow,
+            sub,
+            item,
+            itemKey,
+            laneIdx,
+          })
+          laneIdx++
+        }
       }
     }
     return out
-  }, [team.tasks, subtasksByParentId, tasksBySourceId, collapsedParentIds])
+  }, [
+    team.tasks,
+    subtasksByParentId,
+    tasksBySourceId,
+    collapsedParentIds,
+    expandedSubtaskChecklistKeys,
+  ])
 
   const laneCount = lanes.length > 0 ? lanes.length : team.tasks.length
   const taskLaneMinHeight = Math.max(48, laneCount * TIMELINE_LANE_H + 8)
@@ -441,20 +620,15 @@ function TeamRowWithGrid({
           className="shrink-0 sticky left-0 z-20 bg-white border-r border-[#e5e7eb] px-4 py-2.5 flex flex-col gap-2 shadow-[2px_0_8px_-4px_rgba(0,0,0,0.06)] dark:bg-card dark:border-border/80"
           style={{ width: LEFT_COL }}
         >
-          <span
-            className={cn(
-              'text-sm font-semibold truncate',
-              team.id === TIMELINE_FLAT_TEAM_ID && 'text-foreground',
-            )}
-            style={
-              team.id === TIMELINE_FLAT_TEAM_ID
-                ? undefined
-                : { color: areaLabelColor(Number(team.id)) }
-            }
-            title={team.name}
-          >
-            {team.name}
-          </span>
+          {team.id !== TIMELINE_FLAT_TEAM_ID ? (
+            <span
+              className="text-sm font-semibold truncate"
+              style={{ color: areaLabelColor(Number(team.id)) }}
+              title={team.name}
+            >
+              {team.name}
+            </span>
+          ) : null}
           <div
             className="flex flex-col gap-0 w-full shrink-0 pt-1 text-[11px] text-muted-foreground/75 leading-tight"
             style={{ minHeight: taskLaneMinHeight }}
@@ -468,7 +642,8 @@ function TeamRowWithGrid({
 
               if (lane.kind === 'parent') {
                 const task = lane.task
-                const loadedSubs = subtasksByParentId.get(task.sourceId)
+                const rawSubs = subtasksByParentId.get(task.sourceId)
+                const loadedSubs = rawSubs?.length ? sortSubtasksForDisplay(rawSubs) : rawSubs
                 const apiSubCount = task.subtaskTotal ?? 0
                 const hasSubtasks =
                   (loadedSubs?.length ?? 0) > 0 || apiSubCount > 0
@@ -491,6 +666,50 @@ function TeamRowWithGrid({
                 )
               }
 
+              if (lane.kind === 'subChecklist') {
+                const { parent, item, itemKey } = lane
+                const laneCkSel = rowSelectionForTask(
+                  parent,
+                  selectedSourceId,
+                  selectedPrincipalUserId,
+                )
+                const laneCkBg = selectionLaneTint(laneCkSel)
+                const ckText = String(item.text ?? '').trim()
+                const ckDone = Boolean(item.done)
+                return (
+                  <div
+                    key={`ck-${itemKey}`}
+                    className={cn(
+                      'flex shrink-0 select-none gap-1.5 min-h-[40px] py-1.5 pl-10 pr-1.5 items-center rounded-md mr-px',
+                      'ml-7 border border-rose-200/90 bg-gradient-to-r from-rose-50 via-rose-50/78 to-transparent',
+                      'border-l-[4px] border-l-rose-500/95 dark:border-rose-800/95',
+                      'dark:from-rose-950/60 dark:via-rose-950/38 dark:to-transparent',
+                      'shadow-sm ring-1 ring-inset ring-rose-200/80 dark:ring-rose-800/65',
+                      laneCkBg,
+                    )}
+                    aria-label={`Checklist de subtarea ${parent.name}: ${ckText}`}
+                  >
+                    <span aria-hidden className="shrink-0 text-rose-500 dark:text-rose-400">
+                      {ckDone ? (
+                        <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2.25} />
+                      ) : (
+                        <Circle className="h-3.5 w-3.5" strokeWidth={2.25} />
+                      )}
+                    </span>
+                    <span
+                      className={cn(
+                        'min-w-0 flex-1 text-[10px] leading-snug font-semibold tracking-tight',
+                        'text-rose-950/95 dark:text-rose-100/95 [overflow-wrap:anywhere]',
+                        ckDone &&
+                          'line-through decoration-rose-500/70 text-rose-800/82 dark:text-rose-300/82',
+                      )}
+                    >
+                      {ckText.length > 260 ? `${ckText.slice(0, 257)}…` : ckText}
+                    </span>
+                  </div>
+                )
+              }
+
               const { parent, parentRow, sub } = lane
               const canToggle = canUserToggleSubtaskDone(
                 parentRow,
@@ -499,12 +718,145 @@ function TeamRowWithGrid({
                 manage || canCollaboratorManageTaskBasics(parentRow, currentUserId),
               )
               const rn = subtaskResponsibleLabel(sub.assignedUserId, collaboratorNames)
+              const subChecklistItems = checklistTimelineItems(sub.checklist)
+              const subChecklistExpanded = expandedSubtaskChecklistKeys.has(`${parent.sourceId}:${sub.id}`)
+              const canOpenSubtimelineEditor =
+                onTimelineEditPersistedSubtask != null &&
+                (manage || canCollaboratorManageTaskBasics(parentRow, currentUserId))
+              const canReorderSubs = manage || canCollaboratorManageTaskBasics(parentRow, currentUserId)
+              const reorderBusyHere = reorderBusyParentId === parent.sourceId
+              const reorderActiveHere = reorderDrag?.parentSourceId === parent.sourceId
+              const isDragSource =
+                reorderDrag?.parentSourceId === parent.sourceId && reorderDrag.subtaskId === sub.id
+              const showDropCue =
+                reorderActiveHere &&
+                reorderDrag.subtaskId !== sub.id &&
+                reorderHoverBefore?.parentSourceId === parent.sourceId &&
+                reorderHoverBefore.targetSubtaskId === sub.id
+              const sameGroupReorderDragging =
+                reorderActiveHere && reorderDrag !== null && !reorderBusyHere
               return (
                 <div
                   key={`s-${parent.sourceId}-${sub.id}`}
-                  className={cn(TIMELINE_SUBTASK_ROW, laneBg)}
-                  title={`Subtarea · Tarea: ${parent.name}`}
+                  className={cn(
+                    TIMELINE_SUBTASK_ROW,
+                    laneBg,
+                    'relative transition-[opacity,transform,box-shadow] duration-150',
+                    sameGroupReorderDragging &&
+                      !isDragSource &&
+                      !showDropCue &&
+                      'shadow-[inset_0_0_0_1px_rgba(34,211,238,0.35)] bg-gradient-to-r from-cyan-500/[0.07] via-transparent dark:from-cyan-400/[0.12]',
+                    isDragSource &&
+                      '-translate-y-px z-[55] rounded-md opacity-[0.45] shadow-xl ring-[3px] ring-cyan-500/65 ring-offset-2 ring-offset-white dark:ring-offset-card scale-[0.985]',
+                    showDropCue && 'rounded-t-none z-[50] pt-[5px]',
+                  )}
+                  title={`Subtarea · Tarea: ${parent.name}${canReorderSubs ? ' · Arrastra el asa para cambiar orden' : ''}`}
+                  onDragOver={(e) => {
+                    if (!canReorderSubs || reorderBusyHere) return
+                    const drag = subtaskReorderDragRef.current
+                    if (!drag || drag.parentSourceId !== parent.sourceId || drag.subtaskId === sub.id)
+                      return
+                    e.preventDefault()
+                    e.dataTransfer.dropEffect = 'move'
+                    setReorderHoverBefore((prev) => {
+                      const next = { parentSourceId: parent.sourceId, targetSubtaskId: sub.id }
+                      if (
+                        prev?.parentSourceId === next.parentSourceId &&
+                        prev?.targetSubtaskId === next.targetSubtaskId
+                      ) {
+                        return prev
+                      }
+                      return next
+                    })
+                  }}
+                  onDrop={async (e) => {
+                    e.preventDefault()
+                    const dragSnapshot = subtaskReorderDragRef.current
+                    const pid = parent.sourceId
+                    if (!canReorderSubs || reorderBusyHere) {
+                      clearReorderDragUi()
+                      return
+                    }
+                    if (
+                      !dragSnapshot ||
+                      dragSnapshot.parentSourceId !== pid ||
+                      dragSnapshot.subtaskId === sub.id
+                    ) {
+                      clearReorderDragUi()
+                      return
+                    }
+                    const base = sortSubtasksForDisplay(subtasksByParentId.get(pid) ?? [])
+                    const optimistic = moveOrderedSubtasksAdjacent(base, dragSnapshot.subtaskId, sub.id)
+                    onParentSubtasksSynced?.(pid, optimistic)
+                    clearReorderDragUi()
+                    try {
+                      setReorderBusyParentId(pid)
+                      const server = normalizeSubtaskDtoList(
+                        await reorderTaskSubtasks(
+                          pid,
+                          optimistic.map((x) => x.id),
+                        ),
+                      )
+                      onParentSubtasksSynced?.(pid, server)
+                    } catch {
+                      onSubtaskDoneBlockedNotify?.(SUBTASK_REORDER_FAILED_HINT)
+                      try {
+                        const rows = await fetchTaskSubtasks(pid)
+                        onParentSubtasksSynced?.(pid, normalizeSubtaskDtoList(rows))
+                      } catch {
+                        /* ignore refresh failure */
+                      }
+                    } finally {
+                      setReorderBusyParentId(null)
+                    }
+                  }}
                 >
+                  {showDropCue ? (
+                    <div
+                      aria-hidden
+                      className="absolute left-0 right-2 top-0 z-20 h-[3px] rounded-full bg-cyan-500 shadow-[0_0_14px_rgb(34,211,238)] pointer-events-none"
+                    />
+                  ) : null}
+                  {canReorderSubs ? (
+                    reorderBusyHere ? (
+                      <span
+                        className="shrink-0 inline-flex w-8 items-center justify-center text-muted-foreground"
+                        aria-label="Guardando orden de subtareas"
+                        title="Guardando orden…"
+                      >
+                        <Loader2 className="h-4 w-4 animate-spin opacity-85" aria-hidden />
+                      </span>
+                    ) : (
+                      <span
+                        className={cn(
+                          'shrink-0 inline-flex items-center justify-center rounded-md p-0.5 text-muted-foreground',
+                          'hover:text-cyan-700 hover:bg-cyan-500/10 dark:hover:bg-cyan-950/55 dark:hover:text-cyan-200',
+                          'cursor-grab active:cursor-grabbing touch-none select-none',
+                          isDragSource && 'text-cyan-700 dark:text-cyan-200',
+                        )}
+                        draggable
+                        role="button"
+                        tabIndex={0}
+                        aria-label="Arrastrar para reordenar subtareas"
+                        title="Sostén y arrastra; suelta sobre otra fila para dejarla encima (se guarda solo)"
+                        onDragStart={(ev) => {
+                          const ctx = { parentSourceId: parent.sourceId, subtaskId: sub.id }
+                          subtaskReorderDragRef.current = ctx
+                          setReorderDrag(ctx)
+                          ev.dataTransfer.effectAllowed = 'move'
+                          ev.dataTransfer.setData('text/plain', `yego-subtask-reorder:${sub.id}`)
+                          setTimelineSubtaskDragPreview(ev, sub.title ?? '')
+                        }}
+                        onDragEnd={clearReorderDragUi}
+                        onClick={(ev) => ev.stopPropagation()}
+                        onKeyDown={(ev) => ev.stopPropagation()}
+                      >
+                        <GripVertical className="h-4 w-4" aria-hidden />
+                      </span>
+                    )
+                  ) : (
+                    <span className="w-3 shrink-0" aria-hidden />
+                  )}
                   <span className="flex w-5 shrink-0 flex-col items-center justify-center gap-px select-none pointer-events-none" aria-hidden>
                     <ListChecks className={TIMELINE_SUBTASK_BADGE_ICON} strokeWidth={2.25} />
                     <span className={TIMELINE_SUBTASK_BADGE_LABEL}>sub</span>
@@ -523,9 +875,15 @@ function TeamRowWithGrid({
                       onCommitted={async (next) => {
                         setSubBusyId(sub.id)
                         try {
-                          const updated = await updateTaskSubtaskNormalized(parent.sourceId, sub.id, { done: next })
+                          const updated = await updateTaskSubtaskNormalized(
+                            parent.sourceId,
+                            sub.id,
+                            bodyForSubtaskDoneToggleCommit(sub, next),
+                          )
                           const prev = subtasksByParentId.get(parent.sourceId) ?? []
-                          const nextList = prev.map((x) => (x.id === sub.id ? updated : x))
+                          const nextList = sortSubtasksForDisplay(
+                            prev.map((x) => (x.id === sub.id ? updated : x)),
+                          )
                           onParentSubtasksSynced?.(parent.sourceId, nextList)
                         } catch (e: unknown) {
                           onSubtaskDoneBlockedNotify?.(
@@ -541,7 +899,14 @@ function TeamRowWithGrid({
                   </div>
                   <button
                     type="button"
-                    onClick={() => onTaskClick(parent)}
+                    onClick={() => {
+                      if (canOpenSubtimelineEditor && onTimelineEditPersistedSubtask) {
+                        onSelectTimelineTaskSidebarOnly(parent)
+                        onTimelineEditPersistedSubtask(parentRow as TaskRow, sub)
+                        return
+                      }
+                      onTaskClick(parent)
+                    }}
                     className="min-w-0 flex-1 text-left flex flex-col justify-center gap-0.5 py-px"
                     title={[
                       sub.title?.trim() || `Subtarea #${sub.id}`,
@@ -578,6 +943,55 @@ function TeamRowWithGrid({
                       </span>
                     ) : null}
                   </button>
+                  {subChecklistItems.length > 0 ? (
+                    <button
+                      type="button"
+                      aria-label={subChecklistExpanded ? 'Ocultar checklist' : 'Mostrar checklist'}
+                      aria-expanded={subChecklistExpanded}
+                      title={subChecklistExpanded ? 'Ocultar ítems de checklist' : 'Mostrar checklist de esta subtarea'}
+                      className={cn(
+                        'shrink-0 self-stretch flex items-center justify-center pl-0.5 pr-1 min-w-[28px]',
+                        'border-l border-cyan-700/14 text-muted-foreground/90 transition-colors rounded-r-md',
+                        'hover:bg-cyan-950/[0.06] hover:text-foreground dark:border-cyan-400/22',
+                        'dark:hover:bg-cyan-400/[0.1] dark:hover:text-cyan-50',
+                        'focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyan-500',
+                      )}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        onToggleSubtaskChecklistExpanded(parent.sourceId, sub.id)
+                      }}
+                    >
+                      <ChevronDown
+                        className={cn(
+                          'h-2.5 w-2.5 shrink-0 opacity-90 stroke-[2.5] transition-transform duration-200 ease-out',
+                          !subChecklistExpanded && '-rotate-90',
+                        )}
+                        aria-hidden
+                      />
+                    </button>
+                  ) : canOpenSubtimelineEditor && onTimelineEditPersistedSubtask ? (
+                    <button
+                      type="button"
+                      aria-label="Editar subtarea"
+                      title="Editar subtarea"
+                      className={cn(
+                        'shrink-0 self-stretch flex items-center justify-center pl-0.5 pr-1 min-w-[28px]',
+                        'border-l border-cyan-700/14 text-muted-foreground/90 transition-colors rounded-r-md',
+                        'hover:bg-cyan-950/[0.06] hover:text-foreground dark:border-cyan-400/22',
+                        'dark:hover:bg-cyan-400/[0.1] dark:hover:text-cyan-50',
+                        'focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyan-500',
+                      )}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        onSelectTimelineTaskSidebarOnly(parent)
+                        onTimelineEditPersistedSubtask(parentRow as TaskRow, sub)
+                      }}
+                    >
+                      <Pencil className="h-2.5 w-2.5 shrink-0 opacity-90 stroke-[2.5]" aria-hidden />
+                    </button>
+                  ) : null}
                 </div>
               )
             })}
@@ -631,7 +1045,29 @@ function TeamRowWithGrid({
                   </React.Fragment>
                 )
               }
-              const { parent, sub } = lane
+
+              if (lane.kind === 'subChecklist') {
+                const idxCk = lane.laneIdx
+                const topBand = idxCk * TIMELINE_LANE_H
+                return (
+                  <React.Fragment key={`g-${lane.itemKey}`}>
+                    {laneSel ? (
+                      <div
+                        className={`absolute left-0 right-0 z-[1] pointer-events-none rounded-sm ${selectionLaneTint(laneSel)}`}
+                        style={{ top: topBand, height: TIMELINE_LANE_H }}
+                        aria-hidden
+                      />
+                    ) : null}
+                    <div
+                      aria-hidden
+                      className="absolute left-[18px] right-[14px] z-[8] rounded-full opacity-95 bg-gradient-to-r from-transparent via-rose-400/98 to-transparent dark:via-rose-500/90"
+                      style={{ top: topBand + TIMELINE_LANE_H / 2 - 2, height: 3 }}
+                    />
+                  </React.Fragment>
+                )
+              }
+
+              const { parent, parentRow, sub } = lane
               const idx = lane.laneIdx
               const subBarH = 20
               const subSelTop = idx * TIMELINE_LANE_H + (TIMELINE_LANE_H - subBarH) / 2
@@ -647,11 +1083,22 @@ function TeamRowWithGrid({
                   <SubtaskGanttBar
                     parent={parent}
                     sub={sub}
+                    parentRow={parentRow}
                     anchor={anchor}
                     totalDays={totalDays}
                     laneIdx={idx}
                     dayWidth={dayWidth}
                     onOpenParent={onTaskClick}
+                    onActivateSubtimeline={
+                      onTimelineEditPersistedSubtask
+                        ? (pr, s) => {
+                            onSelectTimelineTaskSidebarOnly(parent)
+                            onTimelineEditPersistedSubtask(pr as TaskRow, s)
+                          }
+                        : undefined
+                    }
+                    manage={manage}
+                    currentUserId={currentUserId}
                   />
                 </React.Fragment>
               )
@@ -747,14 +1194,6 @@ const PRIORITY_UI: Record<string, { label: string; className: string }> = {
   critical: { label: 'Urgente', className: 'text-red-700 bg-white border-red-400' },
 }
 
-function subtaskResponsibleLabel(
-  userId: number | null | undefined,
-  collaboratorNames?: Map<number, string>,
-): string | null {
-  if (userId == null) return null
-  return collaboratorNames?.get(userId) ?? `#${userId}`
-}
-
 function httpResponseStatus(error: unknown): number | undefined {
   if (typeof error !== 'object' || error === null || !('response' in error)) return undefined
   const r = (error as { response?: { status?: number } }).response
@@ -762,6 +1201,7 @@ function httpResponseStatus(error: unknown): number | undefined {
 }
 
 const SUBTASK_UPDATE_FAILED_HINT = 'No se pudo guardar el cambio en la subtarea.'
+const SUBTASK_REORDER_FAILED_HINT = 'No se pudo guardar el orden de las subtareas.'
 
 function TimelineDetailSubtasksSection({
   parentTask,
@@ -775,6 +1215,7 @@ function TimelineDetailSubtasksSection({
   collaboratorNames,
   onParentSubtasksSynced,
   onSubtaskDoneBlockedNotify,
+  onEditPersisted,
 }: {
   parentTask: TaskRowLike
   loading: boolean
@@ -787,8 +1228,11 @@ function TimelineDetailSubtasksSection({
   collaboratorNames?: Map<number, string>
   onParentSubtasksSynced?: (parentId: number, nextList: TaskSubtaskDto[]) => void
   onSubtaskDoneBlockedNotify?: (message?: string) => void
+  onEditPersisted?: (sub: TaskSubtaskDto) => void
 }) {
   const [busyId, setBusyId] = useState<number | null>(null)
+  const canEditSubtaskRows =
+    manage || canCollaboratorManageTaskBasics(parentTask, currentUserId)
 
   if (!loading && items.length === 0 && summaryTotal <= 0) return null
 
@@ -859,9 +1303,11 @@ function TimelineDetailSubtasksSection({
                     onCommitted={async (next) => {
                       setBusyId(pst.id)
                       try {
-                        const updated = await updateTaskSubtaskNormalized(parentTask.id, pst.id, {
-                          done: next,
-                        })
+                        const updated = await updateTaskSubtaskNormalized(
+                          parentTask.id,
+                          pst.id,
+                          bodyForSubtaskDoneToggleCommit(pst, next),
+                        )
                         setItems((prev) => {
                           const nextList = prev.map((x) => (x.id === pst.id ? updated : x))
                           onParentSubtasksSynced?.(parentTask.id, nextList)
@@ -878,7 +1324,25 @@ function TimelineDetailSubtasksSection({
                       }
                     }}
                   />
-                  <div className="min-w-0 flex-1 space-y-0.5">
+                  <div
+                    className={cn(
+                      'min-w-0 flex-1 space-y-0.5',
+                      canEditSubtaskRows && onEditPersisted ? 'cursor-pointer' : '',
+                    )}
+                    role={canEditSubtaskRows && onEditPersisted ? 'button' : undefined}
+                    tabIndex={canEditSubtaskRows && onEditPersisted ? 0 : undefined}
+                    onClick={() => {
+                      if (!canEditSubtaskRows || busyId != null || !onEditPersisted) return
+                      onEditPersisted(pst)
+                    }}
+                    onKeyDown={(e) => {
+                      if (!canEditSubtaskRows || busyId != null || !onEditPersisted) return
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        onEditPersisted(pst)
+                      }
+                    }}
+                  >
                     <span
                       className={`block ${
                         pst.done
@@ -905,6 +1369,19 @@ function TimelineDetailSubtasksSection({
                       </div>
                     ) : null}
                   </div>
+                  <button
+                    type="button"
+                    className={cn(
+                      'shrink-0 rounded-md p-1 mt-px text-muted-foreground hover:text-primary hover:bg-primary/10',
+                      !canEditSubtaskRows || !onEditPersisted || busyId != null ? 'hidden' : '',
+                    )}
+                    aria-label={`Editar subtarea: ${pst.title?.trim() || pst.id}`}
+                    title="Editar subtarea"
+                    disabled={busyId != null}
+                    onClick={() => onEditPersisted?.(pst)}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
                 </div>
               </li>
               )
@@ -932,6 +1409,8 @@ function TaskDetailPanel({
   collaboratorNames,
   onParentSubtasksSynced,
   onSubtaskDoneBlockedNotify,
+  subtasksByParentId,
+  onTimelineEditPersistedSubtask,
 }: {
   task: TaskRowLike | null
   ganttTask: GanttTaskItem | null
@@ -944,10 +1423,19 @@ function TaskDetailPanel({
   collaboratorNames?: Map<number, string>
   onParentSubtasksSynced?: (parentId: number, nextList: TaskSubtaskDto[]) => void
   onSubtaskDoneBlockedNotify?: (message?: string) => void
+  subtasksByParentId: Map<number, TaskSubtaskDto[]>
+  onTimelineEditPersistedSubtask?: (parent: TaskRow, sub: TaskSubtaskDto) => void
 }) {
   const { items: subtasks, loading: subtasksLoading, setItems: setSubtasks } = useTaskSubtasks(
     task?.id ?? null,
   )
+
+  const mapSubs = task != null ? subtasksByParentId.get(task.id) : undefined
+  useEffect(() => {
+    if (mapSubs === undefined) return
+    if (subtasksLoading && mapSubs.length === 0) return
+    setSubtasks(mapSubs)
+  }, [mapSubs, setSubtasks, subtasksLoading])
 
   if (!task || !ganttTask) return null
 
@@ -1043,6 +1531,11 @@ function TaskDetailPanel({
           collaboratorNames={collaboratorNames}
           onParentSubtasksSynced={onParentSubtasksSynced}
           onSubtaskDoneBlockedNotify={onSubtaskDoneBlockedNotify}
+          onEditPersisted={
+            onTimelineEditPersistedSubtask
+              ? (sub) => onTimelineEditPersistedSubtask(task as TaskRow, sub)
+              : undefined
+          }
         />
 
         {/* Assigned */}
@@ -1136,12 +1629,17 @@ function useTimelineTaskActivation(
   }, [])
 
   const activateTask = useCallback(
-    (gt: GanttTaskItem) => {
+    (gt: GanttTaskItem, options?: { openEditModal?: boolean }) => {
+      const openEdit = options?.openEditModal !== false
       setSelectedSourceId(gt.sourceId)
       setSelectedGantt(gt)
       const row = taskById.get(gt.sourceId)
       if (row) onTaskSelectNotify?.(row.title)
-      if (row != null && (manage || canCollaboratorManageTaskBasics(row, currentUserId))) {
+      if (
+        openEdit &&
+        row != null &&
+        (manage || canCollaboratorManageTaskBasics(row, currentUserId))
+      ) {
         onEditTask(row as TaskRow)
       }
     },
@@ -1172,11 +1670,13 @@ export function GanttTimelineTab({
   subtasksByParentId,
   setSubtasksByParentId,
   onDropTaskToSubtask,
+  onTimelineEditPersistedSubtask,
 }: GanttTimelineTabProps) {
   const [scrollLeft, setScrollLeft] = useState(0)
   const [viewportW, setViewportW] = useState(800)
   const [subtaskDoneHint, setSubtaskDoneHint] = useState<string | null>(null)
   const [collapsedSubtasksParentIds, setCollapsedSubtasksParentIds] = useState(() => new Set<number>())
+  const [expandedSubtaskChecklistKeys, setExpandedSubtaskChecklistKeys] = useState(() => new Set<string>())
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const toggleParentSubtasksCollapsed = useCallback((parentSourceId: number) => {
@@ -1184,6 +1684,16 @@ export function GanttTimelineTab({
       const next = new Set(prev)
       if (next.has(parentSourceId)) next.delete(parentSourceId)
       else next.add(parentSourceId)
+      return next
+    })
+  }, [])
+
+  const toggleSubtaskChecklistExpanded = useCallback((parentTaskId: number, subtaskId: number) => {
+    const key = `${parentTaskId}:${subtaskId}`
+    setExpandedSubtaskChecklistKeys((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
       return next
     })
   }, [])
@@ -1220,13 +1730,15 @@ export function GanttTimelineTab({
       let lc = tm.tasks.length
       for (const gt of tm.tasks) {
         if (!collapsedSubtasksParentIds.has(gt.sourceId)) {
-          lc += subtasksByParentId.get(gt.sourceId)?.length ?? 0
+          const subList = subtasksByParentId.get(gt.sourceId) ?? []
+          lc += subList.length
+          lc += checklistLanesIfExpandedCount(subList, gt.sourceId, expandedSubtaskChecklistKeys)
         }
       }
       h += Math.max(72, lc * TIMELINE_LANE_H + 52)
     }
     return Math.max(160, h)
-  }, [timelineTeams, subtasksByParentId, collapsedSubtasksParentIds])
+  }, [timelineTeams, subtasksByParentId, collapsedSubtasksParentIds, expandedSubtaskChecklistKeys])
 
   const taskById = useMemo(() => {
     const m = new Map<number, TaskRowLike>()
@@ -1240,6 +1752,11 @@ export function GanttTimelineTab({
     onTaskSelectNotify,
     onEditTask,
   })
+
+  const selectTimelineTaskSidebarOnly = useCallback(
+    (gt: GanttTaskItem) => activateTask(gt, { openEditModal: false }),
+    [activateTask],
+  )
 
   const handleSubtasksSyncedFromUi = useCallback(
     (parentId: number, nextList: TaskSubtaskDto[]) => {
@@ -1283,7 +1800,7 @@ export function GanttTimelineTab({
 
       {!blockingLoad && timelineTeams.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground text-sm">
-          <p>No hay tareas que mostrar en esta vista.</p>
+          <p>No hay proyectos que mostrar en esta vista.</p>
         </div>
       )}
 
@@ -1306,7 +1823,7 @@ export function GanttTimelineTab({
                     className="shrink-0 sticky left-0 z-40 bg-[#fafafa] border-b border-r border-[#e5e7eb] px-3 py-1 flex items-end shadow-[2px_0_8px_-4px_rgba(0,0,0,0.06)] dark:bg-muted/30 dark:border-border/80 min-h-[40px] box-border"
                     style={{ width: LEFT_COL }}
                   >
-                    <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">Tareas</span>
+                    <span className="sr-only">Lista de tareas en el timeline</span>
                   </div>
                   <TimelineHeader anchor={range.anchor} totalDays={totalDays} dayWidth={dayWidth} />
                 </div>
@@ -1341,7 +1858,11 @@ export function GanttTimelineTab({
                       onSubtaskDoneBlockedNotify={notifySubtaskDoneBlocked}
                       collapsedParentIds={collapsedSubtasksParentIds}
                       onToggleParentSubtasksCollapsed={toggleParentSubtasksCollapsed}
+                      expandedSubtaskChecklistKeys={expandedSubtaskChecklistKeys}
+                      onToggleSubtaskChecklistExpanded={toggleSubtaskChecklistExpanded}
                       onDropTaskToSubtask={onDropTaskToSubtask}
+                      onSelectTimelineTaskSidebarOnly={selectTimelineTaskSidebarOnly}
+                      onTimelineEditPersistedSubtask={onTimelineEditPersistedSubtask}
                     />
                   ))}
                 </div>
@@ -1368,6 +1889,8 @@ export function GanttTimelineTab({
             collaboratorNames={collaboratorNames}
             onParentSubtasksSynced={handleSubtasksSyncedFromUi}
             onSubtaskDoneBlockedNotify={notifySubtaskDoneBlocked}
+            subtasksByParentId={subtasksByParentId}
+            onTimelineEditPersistedSubtask={onTimelineEditPersistedSubtask}
           />
         </div>
       )}

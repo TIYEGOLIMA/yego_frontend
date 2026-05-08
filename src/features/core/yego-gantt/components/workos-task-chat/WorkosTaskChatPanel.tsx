@@ -1,4 +1,4 @@
-import { Loader2, MessageSquareText, SendHorizontal, Sparkles, Trash2 } from 'lucide-react'
+import { CheckCircle2, Circle, Loader2, MessageSquareText, SendHorizontal, Sparkles, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -26,17 +26,23 @@ export interface WorkosTaskChatPanelProps {
   /** Subtareas ya cargadas por el modal de detalle (un solo GET /subtasks). */
   subtasks: TaskSubtaskDto[]
   subtasksLoading: boolean
+  /** Deshabilita hilo, envío y borrados mientras otro pane guarda (p. ej. checklist en detalle). */
+  interactionLocked?: boolean
+  /** Clases en el contenedor raíz (layout del padre). */
+  className?: string
 }
 
 function ThreadPicker({
   threadKey,
   loadingSubtasks,
   subtasks,
+  interactionLocked,
   onChange,
 }: {
   threadKey: string
   loadingSubtasks: boolean
   subtasks: TaskSubtaskDto[]
+  interactionLocked?: boolean
   onChange: (next: string) => void
 }) {
   if (subtasks.length === 0) return null
@@ -46,15 +52,31 @@ function ThreadPicker({
       <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
         Chat sobre
       </span>
-      <Select value={threadKey} disabled={loadingSubtasks} onValueChange={onChange}>
-        <SelectTrigger className="h-9 text-xs">
+      <Select value={threadKey} disabled={loadingSubtasks || interactionLocked} onValueChange={onChange}>
+        <SelectTrigger className="h-auto min-h-9 text-xs py-2">
           <SelectValue placeholder="Elegir hilo" />
         </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={THREAD_TASK}>Toda la tarea</SelectItem>
+        <SelectContent align="start" className="max-h-[min(20rem,70vh)] w-[min(100vw-2rem,var(--radix-select-trigger-width))]">
+          <SelectItem value={THREAD_TASK} className="py-2.5">
+            <span className="flex w-full items-center gap-2 min-w-0">
+              <MessageSquareText className="h-3.5 w-3.5 shrink-0 opacity-75" aria-hidden />
+              <span className="line-clamp-2 leading-snug">Toda la tarea</span>
+            </span>
+          </SelectItem>
           {subtasks.map((s) => (
-            <SelectItem key={s.id} value={String(s.id)}>
-              <span className="line-clamp-2">{s.title?.trim() || `Subtarea #${s.id}`}</span>
+            <SelectItem key={s.id} value={String(s.id)} className="py-2.5 cursor-pointer">
+              <span className="flex w-full items-start gap-2 min-w-0">
+                <span className="mt-px shrink-0" title={s.done ? 'Subtarea hecha' : 'Pendiente'}>
+                  {s.done ? (
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden />
+                  ) : (
+                    <Circle className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+                  )}
+                </span>
+                <span className="line-clamp-3 min-w-0 flex-1 text-left leading-snug">
+                  {s.title?.trim() || `Subtarea #${s.id}`}
+                </span>
+              </span>
             </SelectItem>
           ))}
         </SelectContent>
@@ -147,11 +169,13 @@ export function WorkosTaskChatPanel({
   currentUserId,
   subtasks,
   subtasksLoading,
+  interactionLocked = false,
+  className,
 }: WorkosTaskChatPanelProps) {
   const chat = useWorkosTaskChat({ taskId, subtasks, subtasksLoading })
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2">
+    <div className={cn('flex min-h-0 flex-1 flex-col gap-2', className)}>
       <div className="flex items-center gap-2 text-sm font-semibold text-neutral-800 dark:text-neutral-100">
         <MessageSquareText className="h-4 w-4 shrink-0 text-primary-600 dark:text-primary-400" aria-hidden />
         Chat de la tarea
@@ -161,6 +185,7 @@ export function WorkosTaskChatPanel({
         threadKey={chat.threadKey}
         loadingSubtasks={chat.loadingSubtasks}
         subtasks={chat.subtasks}
+        interactionLocked={interactionLocked}
         onChange={chat.setThreadKey}
       />
 
@@ -172,7 +197,7 @@ export function WorkosTaskChatPanel({
 
       <div
         className={cn(
-          'min-h-[140px] flex-1 overflow-y-auto rounded-lg border border-neutral-200/90 bg-neutral-50/60 p-1.5 sm:p-2 dark:border-neutral-700 dark:bg-neutral-950/40',
+          'flex-1 min-h-0 overflow-y-auto rounded-lg border border-neutral-200/90 bg-neutral-50/60 p-1.5 sm:p-2 dark:border-neutral-700 dark:bg-neutral-950/40',
           chat.loadingMessages && 'flex items-center justify-center',
         )}
       >
@@ -191,7 +216,7 @@ export function WorkosTaskChatPanel({
                   message={m}
                   isMine={isMine}
                   showDelete={isMine}
-                  trashDisabled={chat.blockTrashButtons}
+                  trashDisabled={chat.blockTrashButtons || interactionLocked}
                   onRequestDelete={chat.setMessagePendingDelete}
                 />
               )
@@ -204,7 +229,7 @@ export function WorkosTaskChatPanel({
         <Textarea
           placeholder="Escribe un mensaje… (@menciones como texto)"
           value={chat.draft}
-          disabled={chat.sending}
+          disabled={chat.sending || interactionLocked}
           rows={2}
           className="min-h-[52px] resize-none text-sm"
           onChange={(e) => chat.setDraft(e.target.value)}
@@ -219,7 +244,7 @@ export function WorkosTaskChatPanel({
           type="button"
           className="shrink-0 self-end h-10 px-3"
           loading={chat.sending}
-          disabled={chat.sending || !chat.draft.trim()}
+          disabled={chat.sending || !chat.draft.trim() || interactionLocked}
           leftIcon={<SendHorizontal className="h-4 w-4 shrink-0" />}
           onClick={() => void chat.sendMessage()}
         >
