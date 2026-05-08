@@ -256,6 +256,8 @@ export interface GanttTimelineTabProps {
    */
   subtasksByParentId: Map<number, TaskSubtaskDto[]>
   setSubtasksByParentId: Dispatch<SetStateAction<Map<number, TaskSubtaskDto[]>>>
+  /** Arrastrar tarea → otra tarea para convertirla en subtarea (validación en padre). */
+  onDropTaskToSubtask?: (sourceTaskId: number, targetTaskId: number) => void
 }
 
 // ==================== OTRAS INTERFACES ====================

@@ -5,14 +5,7 @@ import { useAuthStore } from '../../../store/auth-store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
   Select,
   SelectContent,
@@ -145,51 +138,12 @@ import {
   HEADER_WORKSPACE_CREATE_VALUE,
 } from './components/gantt-shell'
 import { TaskFormWorkspaceTagsRow } from './components/task-modal/TaskFormWorkspaceTagsRow'
+import { SubtaskWorkspaceRelocationDialog } from './components/task-modal/SubtaskWorkspaceRelocationDialog'
+import { SubtaskMoveParentDialog } from './components/task-modal/SubtaskMoveParentDialog'
+import type { TaskConvertToSubtaskCandidate } from './components/task-modal/TaskConvertToSubtaskDialog'
+import { TaskConvertToSubtaskDialog } from './components/task-modal/TaskConvertToSubtaskDialog'
+import { httpSubtaskMutateStatus, taskModalFormDirtyFingerprint } from './lib/ganttModuleFormUtils'
 import { useTimelineTasksSubtasks } from './hooks/useTimelineTasksSubtasks'
-
-function httpSubtaskMutateStatus(error: unknown): number | undefined {
-  if (typeof error !== 'object' || error === null || !('response' in error)) return undefined
-  return (error as { response?: { status?: number } }).response?.status
-}
-
-/** Fingerprint del formulario de tarea (sin % de progreso: las subtareas lo gestionan aparte). */
-function taskModalFormDirtyFingerprint(f: {
-  areaId: string
-  workspaceId: string
-  sprintId: string
-  title: string
-  description: string
-  startDate: string
-  endDate: string
-  status: AreaTaskStatus
-  priority: TaskPriority
-  assignedUserIds: number[]
-  tagsInput: string
-  isPrivateTask: boolean
-}): string {
-  const tags = tagsWithoutPrivateLabels(
-    f.tagsInput
-      .split(',')
-      .map((t) => t.trim())
-      .filter(Boolean),
-  )
-  tags.sort()
-  const assignees = [...f.assignedUserIds].sort((a, b) => a - b)
-  return JSON.stringify({
-    areaId: f.areaId,
-    workspaceId: f.workspaceId,
-    sprintId: f.sprintId,
-    title: f.title.trim(),
-    description: f.description.trim(),
-    startDate: f.startDate,
-    endDate: f.endDate,
-    status: f.status,
-    priority: f.priority,
-    isPrivateTask: f.isPrivateTask,
-    assignedUserIds: assignees,
-    tags: tags.join(','),
-  })
-}
 
 export function YegoGanttModule() {
   const user = useAuthStore((s) => s.user)
@@ -318,7 +272,9 @@ export function YegoGanttModule() {
   const [subtaskDeleteInProgress, setSubtaskDeleteInProgress] = useState(false)
   /** Convertir la tarea principal en subtarea de otra. */
   const [taskConvertToSubtaskDialogOpen, setTaskConvertToSubtaskDialogOpen] = useState(false)
-  const [taskConvertToSubtaskCandidates, setTaskConvertToSubtaskCandidates] = useState<TaskRow[] | null>(null)
+  const [taskConvertToSubtaskCandidates, setTaskConvertToSubtaskCandidates] = useState<
+    TaskConvertToSubtaskCandidate[] | null
+  >(null)
   const [taskConvertToSubtaskLoading, setTaskConvertToSubtaskLoading] = useState(false)
   const [taskConvertToSubtaskSelectedId, setTaskConvertToSubtaskSelectedId] = useState<string>('')
   /** Tras cambiar el filtro de espacio para abrir una tarea: esperar a que `load()` traiga la lista nueva. */
@@ -638,6 +594,12 @@ export function YegoGanttModule() {
     }
   }, [subtaskWorkspaceRelocation])
 
+  const subtaskRelocationDestinationName = useMemo(
+    () =>
+      workspaces.find((w) => w.id === subtaskWorkspaceRelocation?.nextWorkspaceId)?.name?.trim() ?? '—',
+    [workspaces, subtaskWorkspaceRelocation?.nextWorkspaceId],
+  )
+
   const handleTimelineSubtasksSynced = useCallback(
     (parentId: number, list: TaskSubtaskDto[]) => {
       applySubtaskListToParentState(parentId, list)
@@ -664,6 +626,35 @@ export function YegoGanttModule() {
         return x.localeCompare(y, undefined, { sensitivity: 'base' })
       })
   }, [tasks, editing?.id, areas])
+
+  const handleConfirmSubtaskMoveParent = useCallback(async () => {
+    if (!editing || !subtaskMoveTargetRow || subtaskMoveParentChoice === '') return
+    const targetId = Number(subtaskMoveParentChoice)
+    if (Number.isNaN(targetId) || targetId === editing.id) return
+    setSubtaskModalBusy('updating')
+    try {
+      await moveTaskSubtask(editing.id, subtaskMoveTargetRow.id, targetId)
+      const movedId = subtaskMoveTargetRow.id
+      setSubtasks((prev) => {
+        const nextList = prev.filter((x) => x.id !== movedId)
+        applySubtaskListToParentState(editing.id, nextList)
+        return nextList
+      })
+      setSubtaskMoveTargetRow(null)
+      setSubtaskMoveParentChoice('')
+      scheduleReloadTasksAndKpisAfterSubtasks()
+    } catch (e) {
+      setErr(parseGanttLoadError(e))
+    } finally {
+      setSubtaskModalBusy('idle')
+    }
+  }, [
+    editing,
+    subtaskMoveTargetRow,
+    subtaskMoveParentChoice,
+    applySubtaskListToParentState,
+    scheduleReloadTasksAndKpisAfterSubtasks,
+  ])
 
   useEffect(
     () => () => {
@@ -3261,248 +3252,38 @@ export function YegoGanttModule() {
           </DialogContent>
         </Dialog>
 
-        <Dialog
+        <SubtaskWorkspaceRelocationDialog
           open={subtaskWorkspaceRelocation !== null}
           onOpenChange={(open) => {
-            if (!open && subtaskModalBusy === 'idle') {
-              setSubtaskWorkspaceRelocation(null)
-            }
+            if (!open && subtaskModalBusy === 'idle') setSubtaskWorkspaceRelocation(null)
           }}
-        >
-          <DialogContent
-            className={cn(
-              'max-h-[85vh] w-[min(100%,28rem)] max-w-md gap-0 overflow-y-auto p-0 sm:max-w-md sm:rounded-xl',
-              'border-border/80 shadow-lg',
-            )}
-          >
-            <DialogHeader className="min-w-0 space-y-0 px-4 pb-3 pt-4 text-left">
-              <DialogTitle className="pr-9 text-base font-semibold leading-tight text-foreground">
-                Cambio de espacio
-              </DialogTitle>
-              <DialogDescription asChild>
-                <div className="mt-2.5 min-w-0 space-y-2 text-xs leading-snug text-muted-foreground">
-                  <p>
-                    Destino:{' '}
-                    <span className="font-medium text-foreground">
-                      {workspaces.find((w) => w.id === subtaskWorkspaceRelocation?.nextWorkspaceId)?.name?.trim() ||
-                        '—'}
-                    </span>
-                  </p>
-                  <p className="break-words rounded-md bg-muted/50 px-2 py-1.5 text-[13px] text-foreground [overflow-wrap:anywhere]">
-                    {subtaskWorkspaceRelocation?.subtask.title?.trim() ||
-                      (subtaskWorkspaceRelocation != null ? `#${subtaskWorkspaceRelocation.subtask.id}` : '')}
-                  </p>
-                </div>
-              </DialogDescription>
-            </DialogHeader>
+          relocation={subtaskWorkspaceRelocation}
+          destinationWorkspaceName={subtaskRelocationDestinationName}
+          editingTaskId={editing?.id ?? null}
+          subtaskModalBusy={subtaskModalBusy}
+          relocationTargetTasksLoading={relocationTargetTasksLoading}
+          relocationTargetTasks={relocationTargetTasks}
+          relocationSelectedParentId={relocationSelectedParentId}
+          onRelocationSelectedParentIdChange={setRelocationSelectedParentId}
+          onConfirmStandalone={() => void confirmSubtaskWorkspaceRelocation('standalone')}
+          onConfirmExisting={() => void confirmSubtaskWorkspaceRelocation('existing')}
+          onConfirmNested={() => void confirmSubtaskWorkspaceRelocation('nested')}
+        />
 
-            <div className="min-w-0 space-y-2 border-t border-border/50 px-4 py-3">
-              {subtaskModalBusy !== 'idle' && (
-                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
-                  Aplicando…
-                </p>
-              )}
-              <div className="flex min-w-0 flex-col gap-2">
-                <button
-                  type="button"
-                  disabled={subtaskModalBusy !== 'idle' || !editing || subtaskWorkspaceRelocation == null}
-                  className={cn(
-                    'flex min-w-0 flex-col items-stretch gap-0.5 rounded-lg border border-primary/25 bg-primary/10 px-3 py-2.5 text-left outline-none transition-colors',
-                    'hover:bg-primary/15 focus-visible:ring-2 focus-visible:ring-primary/25',
-                    'disabled:pointer-events-none disabled:opacity-50',
-                    'dark:bg-primary/15 dark:hover:bg-primary/25',
-                  )}
-                  onClick={() => void confirmSubtaskWorkspaceRelocation('standalone')}
-                >
-                  <span className="text-sm font-medium leading-snug text-foreground">
-                    Convertir en tarea
-                  </span>
-                  <span className="text-[11px] leading-snug text-muted-foreground">
-                    Independiente en el nuevo espacio, mismo contenido
-                  </span>
-                </button>
-                <div className="my-2 border-t border-border/50"></div>
-                <Label className="text-[13px] font-medium text-foreground">
-                  O mover a una tarea en el nuevo espacio:
-                </Label>
-                {relocationTargetTasksLoading ? (
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground py-2">
-                    <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
-                    Cargando tareas...
-                  </div>
-                ) : (
-                  <>
-                    <Select
-                      value={relocationSelectedParentId}
-                      onValueChange={setRelocationSelectedParentId}
-                      disabled={subtaskModalBusy !== 'idle' || !relocationTargetTasks?.length}
-                    >
-                      <SelectTrigger className="w-full text-sm">
-                        <SelectValue placeholder={relocationTargetTasks?.length ? 'Selecciona una tarea...' : 'No hay tareas en este espacio'} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {relocationTargetTasks?.map(t => (
-                          <SelectItem key={t.id} value={String(t.id)}>
-                            {t.title?.trim() || `Tarea #${t.id}`}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <button
-                      type="button"
-                      disabled={subtaskModalBusy !== 'idle' || !editing || subtaskWorkspaceRelocation == null || !relocationSelectedParentId}
-                      className={cn(
-                        'flex min-w-0 flex-col items-stretch gap-0.5 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-left shadow-sm outline-none transition-colors mt-1',
-                        'hover:bg-primary/15 focus-visible:ring-2 focus-visible:ring-primary/25',
-                        'disabled:pointer-events-none disabled:opacity-50',
-                      )}
-                      onClick={() => void confirmSubtaskWorkspaceRelocation('existing')}
-                    >
-                      <span className="text-sm font-medium leading-snug text-primary text-center">
-                        Mover a la tarea seleccionada
-                      </span>
-                    </button>
-                    
-                    {!relocationTargetTasks?.length && (
-                      <button
-                        type="button"
-                        disabled={subtaskModalBusy !== 'idle' || !editing || subtaskWorkspaceRelocation == null}
-                        className={cn(
-                          'flex min-w-0 flex-col items-stretch gap-0.5 rounded-lg border border-border bg-background px-3 py-2 text-left shadow-sm outline-none transition-colors mt-2',
-                          'hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring',
-                          'disabled:pointer-events-none disabled:opacity-50',
-                        )}
-                        onClick={() => void confirmSubtaskWorkspaceRelocation('nested')}
-                      >
-                        <span className="text-[13px] font-medium leading-snug text-foreground">
-                          Subtarea con padre «Por definir»
-                        </span>
-                        <span className="text-[11px] leading-snug text-muted-foreground">
-                          Se crea la tarea padre y se mueve debajo
-                        </span>
-                      </button>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-
-            <div className="flex justify-end border-t border-border/50 px-3 py-2.5">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground"
-                disabled={subtaskModalBusy !== 'idle'}
-                onClick={() => setSubtaskWorkspaceRelocation(null)}
-              >
-                Cancelar
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        <Dialog
+        <SubtaskMoveParentDialog
           open={subtaskMoveTargetRow !== null}
-          onOpenChange={(open) => {
-            if (!open) {
-              setSubtaskMoveTargetRow(null)
-              setSubtaskMoveParentChoice('')
-            }
+          targetSubtask={subtaskMoveTargetRow}
+          parentChoice={subtaskMoveParentChoice}
+          onParentChoiceChange={setSubtaskMoveParentChoice}
+          candidates={subtaskParentMoveCandidates}
+          subtaskModalBusy={subtaskModalBusy}
+          editingTaskId={editing?.id ?? null}
+          onClose={() => {
+            setSubtaskMoveTargetRow(null)
+            setSubtaskMoveParentChoice('')
           }}
-        >
-          <DialogContent className="max-w-md sm:rounded-xl">
-            <DialogHeader>
-              <DialogTitle>Mover subtarea</DialogTitle>
-              <DialogDescription>
-                La subtarea «{subtaskMoveTargetRow?.title?.trim() || `#${subtaskMoveTargetRow?.id}`}» pasará a formar parte
-                de la tarea que elijas. El chat de la subtarea se mantendrá; equipo y espacio heredados se alinean con el
-                nuevo padre.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-2 py-1">
-              <Label className="text-sm font-medium">Nueva tarea padre</Label>
-              <Select
-                value={subtaskMoveParentChoice}
-                onValueChange={setSubtaskMoveParentChoice}
-                disabled={subtaskModalBusy !== 'idle' || subtaskParentMoveCandidates.length === 0}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Elegir tarea…" />
-                </SelectTrigger>
-                <SelectContent className="max-h-60">
-                  {subtaskParentMoveCandidates.map((c) => (
-                    <SelectItem
-                      key={c.id}
-                      value={String(c.id)}
-                      textValue={`${c.title} ${c.secondary}`}
-                    >
-                      {`${c.title} (${c.secondary})`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {subtaskParentMoveCandidates.length === 0 && (
-                <p className="text-xs text-muted-foreground">No hay otras tareas en la vista actual.</p>
-              )}
-            </div>
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setSubtaskMoveTargetRow(null)
-                  setSubtaskMoveParentChoice('')
-                }}
-                disabled={subtaskModalBusy !== 'idle'}
-              >
-                Cancelar
-              </Button>
-              <Button
-                type="button"
-                className="workos-gantt-btn-primary text-white"
-                disabled={
-                  subtaskModalBusy !== 'idle' ||
-                  !editing ||
-                  !subtaskMoveTargetRow ||
-                  subtaskMoveParentChoice === ''
-                }
-                onClick={async () => {
-                  if (!editing || !subtaskMoveTargetRow || subtaskMoveParentChoice === '') return
-                  const targetId = Number(subtaskMoveParentChoice)
-                  if (Number.isNaN(targetId) || targetId === editing.id) return
-                  setSubtaskModalBusy('updating')
-                  try {
-                    await moveTaskSubtask(editing.id, subtaskMoveTargetRow.id, targetId)
-                    const movedId = subtaskMoveTargetRow.id
-                    setSubtasks((prev) => {
-                      const nextList = prev.filter((x) => x.id !== movedId)
-                      applySubtaskListToParentState(editing.id, nextList)
-                      return nextList
-                    })
-                    setSubtaskMoveTargetRow(null)
-                    setSubtaskMoveParentChoice('')
-                    scheduleReloadTasksAndKpisAfterSubtasks()
-                  } catch (e) {
-                    setErr(parseGanttLoadError(e))
-                  } finally {
-                    setSubtaskModalBusy('idle')
-                  }
-                }}
-              >
-                {subtaskModalBusy !== 'idle' ? (
-                  <>
-                    <Loader2 className="h-4 w-4 shrink-0 animate-spin mr-2" aria-hidden />
-                    Moviendo…
-                  </>
-                ) : (
-                  'Mover'
-                )}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+          onConfirmMove={handleConfirmSubtaskMoveParent}
+        />
 
         <DeleteSubtaskConfirmDialog
           open={subtaskPendingDelete !== null && dialogOpen}
@@ -3545,82 +3326,19 @@ export function YegoGanttModule() {
           onConfirm={confirmDeleteArea}
         />
 
-        <Dialog
+        <TaskConvertToSubtaskDialog
           open={taskConvertToSubtaskDialogOpen}
-          onOpenChange={(open) => {
-            if (!open) {
-              setTaskConvertToSubtaskDialogOpen(false)
-              setTaskConvertToSubtaskSelectedId('')
-            }
+          candidates={taskConvertToSubtaskCandidates ?? []}
+          selectedParentId={taskConvertToSubtaskSelectedId}
+          onSelectedParentIdChange={setTaskConvertToSubtaskSelectedId}
+          loading={taskConvertToSubtaskLoading}
+          editing={editing !== null}
+          onClose={() => {
+            setTaskConvertToSubtaskDialogOpen(false)
+            setTaskConvertToSubtaskSelectedId('')
           }}
-        >
-          <DialogContent className="max-w-md sm:rounded-xl">
-            <DialogHeader>
-              <DialogTitle>Convertir a subtarea</DialogTitle>
-              <DialogDescription>
-                La tarea actual pasará a ser una subtarea de la tarea que elijas. Su chat y comentarios se mantendrán.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-2 py-1">
-              <Label className="text-sm font-medium">Tarea padre destino</Label>
-              <Select
-                value={taskConvertToSubtaskSelectedId}
-                onValueChange={setTaskConvertToSubtaskSelectedId}
-                disabled={taskConvertToSubtaskLoading || !taskConvertToSubtaskCandidates?.length}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Elegir tarea…" />
-                </SelectTrigger>
-                <SelectContent className="max-h-60">
-                  {taskConvertToSubtaskCandidates?.map((c) => (
-                    <SelectItem
-                      key={c.id}
-                      value={String(c.id)}
-                      textValue={`${c.title} ${c.secondary}`}
-                    >
-                      {`${c.title} (${c.secondary})`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {taskConvertToSubtaskCandidates?.length === 0 && (
-                <p className="text-xs text-muted-foreground">No hay otras tareas en la vista actual.</p>
-              )}
-            </div>
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setTaskConvertToSubtaskDialogOpen(false)
-                  setTaskConvertToSubtaskSelectedId('')
-                }}
-                disabled={taskConvertToSubtaskLoading}
-              >
-                Cancelar
-              </Button>
-              <Button
-                type="button"
-                className="workos-gantt-btn-primary text-white"
-                disabled={
-                  taskConvertToSubtaskLoading ||
-                  !editing ||
-                  taskConvertToSubtaskSelectedId === ''
-                }
-                onClick={confirmConvertToSubtask}
-              >
-                {taskConvertToSubtaskLoading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 shrink-0 animate-spin mr-2" aria-hidden />
-                    Convirtiendo…
-                  </>
-                ) : (
-                  'Convertir'
-                )}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+          onConfirm={() => void confirmConvertToSubtask()}
+        />
 
       </main>
     </div>
