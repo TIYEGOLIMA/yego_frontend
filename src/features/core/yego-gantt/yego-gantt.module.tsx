@@ -2030,7 +2030,7 @@ export function YegoGanttModule() {
         onSave={saveHeaderWorkspace}
       />
 
-      <main className="mx-auto w-full max-w-[1680px] px-4 lg:px-6 py-5 flex-1 flex flex-col min-h-0 bg-[#f9fafb] dark:bg-transparent">
+      <main className="mx-auto w-full px-4 lg:px-6 py-5 flex-1 flex flex-col min-h-0 bg-[#f9fafb] dark:bg-transparent">
         {err && (
           <div className="mb-3 rounded-lg bg-destructive/10 text-destructive text-sm px-3 py-2 border border-destructive/20">
             {err}
@@ -2352,7 +2352,7 @@ export function YegoGanttModule() {
                 <div className="flex flex-1 flex-col xl:flex-row xl:gap-0 min-h-0 mt-4 overflow-hidden isolate">
                   <section
                     className={cn(
-                      'flex flex-col min-h-[min(44vh,380px)] xl:min-h-0 xl:flex-[0_1_34%] xl:max-w-[22rem]',
+                      'flex flex-col min-h-[min(44vh,380px)] xl:min-h-0 xl:flex-[0_1_40%] xl:max-w-[30rem]',
                       'min-w-0 border-b xl:border-b-0 border-border/55 xl:border-r xl:border-border/55 xl:pr-5',
                       'pb-4 xl:pb-0',
                     )}
@@ -2665,7 +2665,7 @@ export function YegoGanttModule() {
 
                   <section
                     className={cn(
-                      'flex flex-col min-h-[min(36vh,320px)] xl:min-h-0 xl:flex-[0_1_30%] xl:max-w-[24rem]',
+                      'flex flex-col min-h-[min(36vh,320px)] xl:min-h-0 xl:flex-[0_1_35%] xl:max-w-[28rem]',
                       'min-w-0 border-b xl:border-b-0 border-border/55 xl:border-r xl:border-border/55 xl:pr-5',
                       'pb-4 xl:pb-0 xl:overflow-hidden',
                     )}
@@ -2907,7 +2907,7 @@ export function YegoGanttModule() {
           }}
         >
           <DialogContent
-            className="workos-gantt-task-modal-scroll max-w-2xl w-[calc(100vw-1.5rem)] max-h-[90vh] overflow-y-auto overflow-x-hidden p-0 gap-0 sm:rounded-xl"
+            className="workos-gantt-task-modal-scroll max-w-5xl w-[calc(100vw-1.5rem)] max-h-[90vh] overflow-y-auto overflow-x-hidden p-0 gap-0 sm:rounded-xl"
             onPointerDownOutside={(e) => {
               if (taskFormSaving) e.preventDefault()
             }}

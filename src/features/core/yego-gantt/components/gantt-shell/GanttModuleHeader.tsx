@@ -56,7 +56,7 @@ export function GanttModuleHeader({
 
   return (
     <header className="sticky top-0 z-30 border-b border-border/80 bg-background shadow-sm dark:shadow-dark-sm">
-      <div className="mx-auto max-w-[1680px] px-4 lg:px-6 py-3 flex items-center gap-4 flex-wrap">
+      <div className="mx-auto w-full px-4 lg:px-6 py-3 flex items-center gap-4 flex-wrap">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="h-9 w-9 shrink-0 rounded-xl workos-gantt-gradient-icon flex items-center justify-center text-white">
             <GanttChartSquare className="h-4 w-4" />
@@ -150,7 +150,7 @@ export function GanttModuleHeader({
           </Button>
         )}
       </div>
-      <div className="mx-auto max-w-[1680px] px-4 lg:px-6 pb-2 pt-1">
+      <div className="mx-auto w-full px-4 lg:px-6 pb-2 pt-1">
         <div className="flex flex-wrap items-center gap-1">
           {visibleTabs.map(({ id, label, Icon }) => (
             <button
