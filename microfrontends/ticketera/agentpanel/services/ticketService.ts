@@ -33,14 +33,16 @@ api.interceptors.response.use(
 )
 
 export const ticketService = {
-  async getAllTickets(): Promise<Ticket[]> {
+  async getAllTickets(sedeId?: number | null): Promise<Ticket[]> {
     try {
-      const response = await api.get('/tickets/all')
+      const params = sedeId != null ? { sedeId } : undefined
+      const response = await api.get('/tickets/all', { params })
       return response.data
     } catch (error: any) {
       if (error?.response?.status === 429) {
         await new Promise((resolve) => setTimeout(resolve, 2000))
-        const retryResponse = await api.get('/tickets/all')
+        const params = sedeId != null ? { sedeId } : undefined
+        const retryResponse = await api.get('/tickets/all', { params })
         return retryResponse.data
       }
       throw error

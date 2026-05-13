@@ -353,7 +353,7 @@ export const useAgentPanel = (sedePickerKey?: number): UseAgentPanelReturn => {
     }
     
     try {
-      const todosLosTicketsBackend = await ticketService.getAllTickets()
+      const todosLosTicketsBackend = await ticketService.getAllTickets(sedeFiltroId)
       const ticketsRelevantes = todosLosTicketsBackend.filter(ticket => {
         if (ticket.status === 'WAITING' && ticket.moduleId == null) return true
         const enModuloActivo = ticket.moduleId === selectedModule
