@@ -229,7 +229,20 @@ export const ModuleSelection: React.FC<ModuleSelectionProps> = ({
   }, [onModulesUpdated, user])
 
   useEffect(() => {
+    const getSedeFiltroId = (): number | null => {
+      const sedeContext = getSedeActivaId()
+      if (sedeContext != null) return sedeContext
+      return authUser?.sedeId ?? null
+    }
+
     const handleModulosActualizados = (data: any) => {
+      const sedeFiltro = getSedeFiltroId()
+      if (sedeFiltro != null && data.sedeId == null) {
+        return
+      }
+      if (sedeFiltro != null && data.sedeId != null && Number(data.sedeId) !== Number(sedeFiltro)) {
+        return
+      }
       if (data.modulosOcupados && Array.isArray(data.modulosOcupados)) {
         const nuevosOcupados = procesarModulosOcupados(
           data.modulosOcupados,
