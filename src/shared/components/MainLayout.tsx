@@ -178,6 +178,12 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     if (location.pathname === '/control-tower' || location.pathname.startsWith('/control-tower/')) {
       return 'Control Tower';
     }
+    if (location.pathname === '/control-loop' || location.pathname.startsWith('/control-loop/')) {
+      return 'Control Loop';
+    }
+    if (location.pathname === '/financiator' || location.pathname.startsWith('/financiator/')) {
+      return 'Financiator';
+    }
     return navItems.find(item => isActive(item.to))?.label || 'Dashboard'
   }
 

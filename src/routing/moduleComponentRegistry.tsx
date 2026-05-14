@@ -15,6 +15,8 @@ import YegoProOpsModule from '@/features/core/yego-pro-ops/yego-pro-ops.module'
 import { YegoGanttModule } from '@/features/core/yego-gantt'
 import { MarketingMensajesModule } from '@/features/core/marketing-mensajes'
 import ControlTowerModule from '@/features/core/control-tower/control-tower.module'
+import ControlLoopModule from '@/features/core/control-loop/control-loop.module'
+import FinanciatorModule from '@/features/core/financiator/financiator.module'
 
 /**
  * Registro por código estable (columna codigo en queue_modulos).
@@ -38,6 +40,8 @@ const REGISTRY: Record<string, ComponentType> = {
   YEGO_GANTT: YegoGanttModule,
   MENSAJES_MARKETING: MarketingMensajesModule,
   CONTROL_TOWER: ControlTowerModule,
+  CONTROL_LOOP: ControlLoopModule,
+  FINANCIATOR: FinanciatorModule,
 }
 
 export function getComponentByModuleCode(code: string): ComponentType | null {

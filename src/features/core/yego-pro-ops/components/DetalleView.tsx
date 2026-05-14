@@ -383,6 +383,8 @@ export const DetalleView = () => {
     cantidadTurnos?: number
   } | null>(null)
   const [conductorParaCerrarTurnos, setConductorParaCerrarTurnos] = useState<ConductorResumenPagos | null>(null)
+  const [showConfirmCerrarTurnos, setShowConfirmCerrarTurnos] = useState(false)
+  const [conductorParaConfirmar, setConductorParaConfirmar] = useState<ConductorResumenPagos | null>(null)
   const [editandoCierre, setEditandoCierre] = useState(false)
   const [actualizandoCierre, setActualizandoCierre] = useState(false)
   const [editGnvM3, setEditGnvM3] = useState('')
@@ -788,7 +790,7 @@ export const DetalleView = () => {
     setOtrosGastosDescripcion('')
     setOdometroInicial('')
     setOdometroFinal('')
-    setPlaca('')
+    setPlaca(conductorParaUsar.placa || '')
     setPestanaRegistrarCierre('combustible')
     setShowModalCierre(true)
   }
@@ -865,16 +867,25 @@ export const DetalleView = () => {
 
   const handleCerrarTurnos = async (conductor: ConductorResumenPagos) => {
     if (!conductor.driver_id || !fechaSeleccionada) return
+    setConductorParaConfirmar(conductor)
+    setShowConfirmCerrarTurnos(true)
+  }
+
+  const ejecutarCerrarTurnos = async () => {
+    const conductor = conductorParaConfirmar
+    if (!conductor?.driver_id || !fechaSeleccionada) return
+
+    setShowConfirmCerrarTurnos(false)
 
     try {
       setCerrandoTurnos(true)
       setConductorParaCerrarTurnos(conductor)
-      
+
       const respuesta = await yegoProOpsService.calcularTurnos(conductor.driver_id, fechaSeleccionada)
-      
+
       setRespuestaCerrarTurnos(respuesta)
       setShowModalCerrarTurnos(true)
-      
+
       await Promise.all([
         refetchTurnosPagados(),
         refetchResumenPagos(),
@@ -2953,6 +2964,82 @@ value={editOtrosGastos}
               className="px-4 h-8 text-xs"
             >
               Cerrar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showConfirmCerrarTurnos} onOpenChange={setShowConfirmCerrarTurnos}>
+        <DialogContent className="max-w-md rounded-2xl border border-gray-200 dark:border-gray-700 shadow-2xl bg-white dark:bg-gray-900 p-6 sm:p-7">
+          <DialogHeader className="space-y-1 text-center sm:text-left">
+            <div className="flex items-center justify-center sm:justify-start gap-3">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-900/40">
+                <AlertCircle className="h-6 w-6 text-amber-600 dark:text-amber-400" />
+              </div>
+              <DialogTitle className="text-xl font-bold text-gray-900 dark:text-gray-100 leading-tight">
+                {esFechaActual ? 'Confirmar generación' : 'Confirmar cierre'}
+              </DialogTitle>
+            </div>
+          </DialogHeader>
+
+          <div className="mt-5 space-y-3">
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              {esFechaActual
+                ? '¿Estás seguro de generar la liquidación para este conductor?'
+                : '¿Estás seguro de cerrar los turnos para este conductor?'}
+            </p>
+
+            {conductorParaConfirmar && (
+              <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 overflow-hidden">
+                <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <span className="text-sm text-gray-500 dark:text-gray-400">Conductor</span>
+                    <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 text-right max-w-[60%] truncate" title={conductorParaConfirmar.nombre || conductorParaConfirmar.driver_id}>
+                      {conductorParaConfirmar.nombre || conductorParaConfirmar.driver_id}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <span className="text-sm text-gray-500 dark:text-gray-400">Fecha</span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                      {formatearFechaLegible(fechaSeleccionada)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <span className="text-sm text-gray-500 dark:text-gray-400">Turnos a procesar</span>
+                    <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                      {conductorParaConfirmar.cantidad_turnos} turno{conductorParaConfirmar.cantidad_turnos !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  {conductorParaConfirmar.placa && (
+                    <div className="flex items-center justify-between px-4 py-3">
+                      <span className="text-sm text-gray-500 dark:text-gray-400">Placa</span>
+                      <span className="text-sm font-mono font-medium text-gray-900 dark:text-gray-100">
+                        {conductorParaConfirmar.placa}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-3 mt-6 pt-5 border-t border-gray-200 dark:border-gray-700">
+            <Button
+              variant="outline"
+              size="md"
+              onClick={() => {
+                setShowConfirmCerrarTurnos(false)
+                setConductorParaConfirmar(null)
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
+              onClick={ejecutarCerrarTurnos}
+            >
+              {esFechaActual ? 'Generar liquidación' : 'Cerrar turnos'}
             </Button>
           </div>
         </DialogContent>
