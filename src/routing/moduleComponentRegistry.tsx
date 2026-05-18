@@ -9,7 +9,6 @@ import AuditModule from '@/features/core/audit/audit.module'
 import ApiLogsModule from '@/features/core/api-logs/api-logs.module'
 import SessionsModule from '@/features/core/sessions/sessions.module'
 import { Reports, GarantizadoModule } from '../../microfrontends'
-import { AsistenciaModule } from '@/features/core/asistencia'
 import YegoPremiumModule from '@/features/core/yego-premium/yego-premium.module'
 import YegoProOpsModule from '@/features/core/yego-pro-ops/yego-pro-ops.module'
 import { YegoGanttModule } from '@/features/core/yego-gantt'
@@ -34,7 +33,6 @@ const REGISTRY: Record<string, ComponentType> = {
   SESSIONS: SessionsModule,
   REPORTS: Reports,
   GARANTIZADO: GarantizadoModule,
-  ASISTENCIA: AsistenciaModule,
   YEGO_PREMIUM: YegoPremiumModule,
   YEGO_PRO_OPS: YegoProOpsModule,
   YEGO_GANTT: YegoGanttModule,

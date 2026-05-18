@@ -4,6 +4,8 @@ export interface SACPerformance {
   id: number;
   name: string;
   username: string;
+  sedeId: number | null;
+  sedeName: string;
   totalTickets: number;
   completedTickets: number;
   averageRating: number;
@@ -33,6 +35,20 @@ export interface ReportData {
     comment: string;
     ticketNumber: string;
     date: string;
+  }>;
+  hourlyDistribution: Array<{
+    hour: number;
+    label: string;
+    count: number;
+  }>;
+  hourlyBySede: Array<{
+    sedeId: number;
+    sedeName: string;
+    hourlyDistribution: Array<{
+      hour: number;
+      label: string;
+      count: number;
+    }>;
   }>;
 }
 

@@ -8,6 +8,7 @@ import { ThemeToggle } from './ThemeToggle'
 import { Button } from '../../components/ui/button'
 import { ChangePasswordDialog } from '../../components/ChangePasswordDialog'
 import { ForcePasswordChangeDialog } from '../../components/ForcePasswordChangeDialog'
+import UpdateBanner from '../../components/UpdateBanner'
 import { 
   Menu, 
   User, 
@@ -21,6 +22,15 @@ import {
   ChevronDown
 } from 'lucide-react'
 import { ICON_MAP } from '../utils/moduleIcons'
+import { buildControlTowerUrl } from '../../utils/control-tower-sso'
+import { buildFinanciatorUrl } from '../../utils/financiator-sso'
+import { buildControlLoopUrl } from '../../utils/control-loop-sso'
+
+const REDIRECT_URLS: Record<string, () => string> = {
+  '/control-tower': buildControlTowerUrl,
+  '/financiator': buildFinanciatorUrl,
+  '/control-loop': buildControlLoopUrl,
+}
 
 interface NavItem {
   label: string;
@@ -282,6 +292,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
   return (
     <div className="min-h-screen bg-background-secondary dark:bg-background-dark">
+      <UpdateBanner />
       {/* Header */}
       <header className="yego-surface sticky top-0 z-40 border-b shadow-sm dark:shadow-dark-sm">
         <div className="flex items-center justify-between h-16 px-4 lg:px-6">
@@ -504,7 +515,12 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                           <button
                             key={child.to}
                             onClick={() => {
-                              navigate(child.to);
+                              const redirect = REDIRECT_URLS[child.to];
+                              if (redirect) {
+                                window.open(redirect(), '_blank', 'noopener,noreferrer');
+                              } else {
+                                navigate(child.to);
+                              }
                             }}
                             className={`${isOptionActive ? 'bg-transparent border-2 border-red-500 rounded-lg text-gray-800 dark:text-white' : 'yego-nav-item-inactive'} w-full flex items-center relative text-sm pl-3 py-3`}
                           >
@@ -526,8 +542,12 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               <button
                 key={item.to}
                 onClick={() => {
-                  navigate(item.to);
-                  // El useEffect se encarga de cerrar dropdowns que ya no tienen opción activa
+                  const redirect = REDIRECT_URLS[item.to];
+                  if (redirect) {
+                    window.open(redirect(), '_blank', 'noopener,noreferrer');
+                  } else {
+                    navigate(item.to);
+                  }
                 }}
                 className={`${isActiveItem ? 'yego-nav-item-active' : 'yego-nav-item-inactive'} w-full flex items-center relative`}
                 title={sidebarCollapsed ? item.label : undefined}

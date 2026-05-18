@@ -6,7 +6,6 @@ export {
   SessionsModule,
   ReportsModule,
   ModulesModule,
-  AsistenciaModule,
   YegoPremiumModule,
   TicketsModule
 } from './core'
