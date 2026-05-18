@@ -1,12 +1,15 @@
 import { api } from './core/api'
 import type {
+  BillingConfigResponse,
   CalcularTurnosResponse,
   ConductorEnOrden,
   ConductoresEnOrdenResponse,
+  FacturacionSemanal,
   FechasTurnosResponse,
   ListaConductoresResponse,
   RegistroCierre,
   ResumenPagosResponse,
+  ResumenSemanalResponse,
   TurnosPagadosResponse,
   ViajeCompleto,
   ViajesCompletosResponse,
@@ -35,6 +38,9 @@ export type {
   RegistroCierre,
   ViajesCompletosResponse,
   CalcularTurnosResponse,
+  ResumenSemanalResponse,
+  FacturacionSemanal,
+  BillingConfigResponse,
 } from './yego-pro-ops.types'
 
 const ENDPOINTS = {
@@ -48,6 +54,10 @@ const ENDPOINTS = {
   turnosPagados: '/pro-ops/drivers/turnos-pagados',
   listaConductores: '/pro-ops/drivers',
   calcularTurnos: '/pro-ops/driver/calcular-turnos',
+  resumenSemanal: '/pro-ops/drivers/resumen-semanal',
+  facturacionSemanal: '/pro-ops/drivers/facturacion-semanal',
+  historialFacturacion: '/pro-ops/drivers/facturacion-semanal/historial',
+  configBilling: '/pro-ops/config/billing',
 } as const
 
 export interface CierrePayload {
@@ -211,6 +221,37 @@ export const yegoProOpsService = {
   calcularTurnos: async (driverId: string, fecha: string): Promise<CalcularTurnosResponse> => {
     const { data } = await api.get<CalcularTurnosResponse>(ENDPOINTS.calcularTurnos, {
       params: { driverId, fecha },
+    })
+    return data
+  },
+
+  obtenerResumenSemanal: async (fechaInicio: string, fechaFin: string): Promise<ResumenSemanalResponse> => {
+    const { data } = await api.get<ResumenSemanalResponse>(ENDPOINTS.resumenSemanal, {
+      params: { fechaInicio, fechaFin },
+    })
+    return data
+  },
+
+  registrarFacturacionSemanal: async (facturacion: FacturacionSemanal): Promise<FacturacionSemanal> => {
+    const { data } = await api.post<FacturacionSemanal>(ENDPOINTS.facturacionSemanal, facturacion)
+    return data
+  },
+
+  obtenerHistorialFacturacion: async (fechaInicio?: string, fechaFin?: string): Promise<FacturacionSemanal[]> => {
+    const { data } = await api.get<FacturacionSemanal[]>(ENDPOINTS.historialFacturacion, {
+      params: { fechaInicio, fechaFin },
+    })
+    return data
+  },
+
+  obtenerConfigBilling: async (): Promise<BillingConfigResponse> => {
+    const { data } = await api.get<BillingConfigResponse>(ENDPOINTS.configBilling)
+    return data
+  },
+
+  guardarConfigBilling: async (config: BillingConfigResponse, userId: number): Promise<BillingConfigResponse> => {
+    const { data } = await api.put<BillingConfigResponse>(ENDPOINTS.configBilling, config, {
+      params: { userId },
     })
     return data
   },

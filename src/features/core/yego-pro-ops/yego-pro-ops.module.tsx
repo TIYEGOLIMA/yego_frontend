@@ -1,8 +1,9 @@
 import React from 'react'
 import { DetalleView } from './components/DetalleView'
 import { MonitoreoEnVivoView } from './components/MonitoreoEnVivoView'
+import { FacturacionSemanalView } from './components/FacturacionSemanalView'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../components/ui/tabs'
-import { FileText, Radio } from 'lucide-react'
+import { FileText, Radio, ReceiptText } from 'lucide-react'
 
 const YegoProOpsModule: React.FC = () => {
   return (
@@ -19,7 +20,7 @@ const YegoProOpsModule: React.FC = () => {
       </div>
 
       <Tabs defaultValue="monitoreo" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2 bg-transparent p-0 h-auto rounded-none border-b border-gray-200 dark:border-gray-700">
+        <TabsList className="grid w-full grid-cols-3 bg-transparent p-0 h-auto rounded-none border-b border-gray-200 dark:border-gray-700">
           <TabsTrigger value="monitoreo" className="flex items-center gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-red-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none py-2">
             <Radio className="w-4 h-4" />
             Monitoreo en Vivo
@@ -27,6 +28,10 @@ const YegoProOpsModule: React.FC = () => {
           <TabsTrigger value="detalle" className="flex items-center gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-red-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none py-2">
             <FileText className="w-4 h-4" />
             Detalle
+          </TabsTrigger>
+          <TabsTrigger value="facturacion" className="flex items-center gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-red-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none py-2">
+            <ReceiptText className="w-4 h-4" />
+            Facturación Semanal
           </TabsTrigger>
         </TabsList>
 
@@ -36,6 +41,10 @@ const YegoProOpsModule: React.FC = () => {
 
         <TabsContent value="detalle" className="space-y-4 data-[state=inactive]:hidden" forceMount>
           <DetalleView />
+        </TabsContent>
+
+        <TabsContent value="facturacion" className="space-y-4 data-[state=inactive]:hidden" forceMount>
+          <FacturacionSemanalView />
         </TabsContent>
       </Tabs>
 

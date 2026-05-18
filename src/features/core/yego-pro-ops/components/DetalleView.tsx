@@ -953,6 +953,10 @@ export const DetalleView = () => {
         ? editOdometroFinalNum - editOdometroInicialNum 
         : null
 
+      const totalIngresos = soloCambioOdometro ? cierreDetalle.totalIngresos : montoBase
+      const totalGastos = soloCambioOdometro ? cierreDetalle.totalGastos : valoresCalculados.totalGastos
+      const resta = soloCambioOdometro ? cierreDetalle.resta : valoresCalculados.montoRestante
+
       await yegoProOpsService.actualizarCierre({
         id: cierreDetalle.id,
         driverId: selectedDriver.driver_id,
@@ -967,9 +971,9 @@ export const DetalleView = () => {
         liquidaYape: parseNumber(editLiquidaYape),
         otrosGastos: valoresCalculados.totalOtrosGastos,
         otrosGastosDescripcion: editOtrosGastosDescripcion.trim() || null,
-        totalIngresos: montoBase,
-        totalGastos: valoresCalculados.totalGastos,
-        resta: valoresCalculados.montoRestante,
+        totalIngresos,
+        totalGastos,
+        resta,
         placa: editPlaca.trim() || null,
         odometroInicial: editOdometroInicialNum,
         odometroFinal: editOdometroFinalNum,
@@ -2646,7 +2650,9 @@ value={editOtrosGastos}
                 </h3>
                 {(() => {
                   if (editandoCierre && valoresCierreEdicion) {
-                    const montoBase = selectedConductorResumen?.monto_total_pagar ?? selectedConductorResumen?.monto_total_pagado ?? cierreDetalle.totalIngresos
+      const montoBase = selectedConductorResumen?.monto_total_pagado
+        ?? selectedConductorResumen?.monto_total_pagar
+        ?? cierreDetalle.totalIngresos
                     const valoresCalculados = valoresCierreEdicion
 
                     return (

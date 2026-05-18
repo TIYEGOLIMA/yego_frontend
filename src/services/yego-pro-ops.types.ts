@@ -190,3 +190,132 @@ export interface CalcularTurnosResponse {
   fecha: string
   cantidadTurnos?: number
 }
+
+export interface DiaSemanalInfo {
+  fecha: string
+  dia_semana: string
+  cantidad_viajes: number
+  cantidad_turnos: number
+  turnos_tipo: string
+  produccion_total: number
+  comisiones_servicio: number
+  monto_total_pagar: number
+  monto_total_pagado: number
+  gasto_combustible: number
+  liquida_efectivo: number
+  liquida_yape: number
+  otros_gastos: number
+  odometro_inicial: number | null
+  odometro_final: number | null
+  km_recorrido: number
+  liquidado: boolean
+}
+
+export interface ConductorSemanalInfo {
+  driver_id: string
+  avatar_url?: string
+  nombre?: string
+  telefono?: string
+  placa?: string | null
+  turno: string
+  dias_trabajados: number
+  dias_liquidados: number
+  total_viajes: number
+  viajes_validos: number
+  horas_trabajo: number
+  tph: number
+  monto_total_producido: number
+  comision_app: number
+  monto_neto: number
+  km_recorrido: number
+  gasto_combustible: number
+  bono_yango: number
+  gasto_mantenimiento: number
+  produccion_bonificable: number
+  bono_adic_viajes: number
+  bono: number
+  porcentaje_pago: number
+  pago: number
+  pago_total: number
+  total_pagado: number
+  utilidad: number
+  utilidad_por_viaje: number
+  pago_por_viaje: number
+  completamente_liquidado: boolean
+  datos_por_dia: DiaSemanalInfo[]
+}
+
+export interface ResumenSemanalResponse {
+  fecha_inicio: string
+  fecha_fin: string
+  total_conductores: number
+  total_viajes: number
+  total_produccion: number
+  total_comision: number
+  total_combustible: number
+  total_pagar: number
+  total_pagado: number
+  total_pendiente: number
+  total_bonos: number
+  total_utilidad: number
+  total_turnos: number
+  conductores: ConductorSemanalInfo[]
+}
+
+export interface FacturacionSemanal {
+  id?: number
+  driverId: string
+  fechaInicio: string
+  fechaFin: string
+  totalViajes: number
+  viajesValidos: number
+  horasTrabajo: number
+  montoTotalProducido: number
+  comisionApp: number
+  montoNeto: number
+  kmRecorrido: number
+  gastoCombustible: number
+  gastoMantenimiento: number
+  produccionBonificable: number
+  bonoAdicViajes: number
+  bono: number
+  porcentajePago: number
+  pago: number
+  descuentoYego?: number
+  pagoTotal: number
+  utilidad: number
+  utilidadPorViaje: number
+  pagoPorViaje: number
+  diasTrabajados: number
+  diasLiquidados: number
+  turno: string
+  estado?: string
+  userId?: number
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface BonusThreshold {
+  id?: number
+  minTrips: number
+  bonusAmount: number
+  effectiveFrom: string
+  updatedBy?: number
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface PaymentPercentage {
+  id?: number
+  minValidatedTrips: number
+  percentage: number
+  effectiveFrom: string
+  updatedBy?: number
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface BillingConfigResponse {
+  bonus_thresholds: BonusThreshold[]
+  payment_percentages: PaymentPercentage[]
+}
