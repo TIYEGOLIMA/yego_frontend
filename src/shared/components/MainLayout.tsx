@@ -8,7 +8,7 @@ import { ThemeToggle } from './ThemeToggle'
 import { Button } from '../../components/ui/button'
 import { ChangePasswordDialog } from '../../components/ChangePasswordDialog'
 import { ForcePasswordChangeDialog } from '../../components/ForcePasswordChangeDialog'
-import UpdateBanner from '../../components/UpdateBanner'
+
 import { 
   Menu, 
   User, 
@@ -292,7 +292,6 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
   return (
     <div className="min-h-screen bg-background-secondary dark:bg-background-dark">
-      <UpdateBanner />
       {/* Header */}
       <header className="yego-surface sticky top-0 z-40 border-b shadow-sm dark:shadow-dark-sm">
         <div className="flex items-center justify-between h-16 px-4 lg:px-6">

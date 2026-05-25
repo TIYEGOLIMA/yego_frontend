@@ -1,11 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { RefreshCw, X, Sparkles } from 'lucide-react';
+import systemNotificationsService from '../services/system-notifications-service';
 
 const STORAGE_KEY = 'yego_app_version';
 
 const UpdateBanner: React.FC = () => {
   const [visible, setVisible] = useState(false);
   const [animateIn, setAnimateIn] = useState(false);
+  const [serverVersion, setServerVersion] = useState<string | null>(null);
+
+  const showBanner = useCallback(() => {
+    setVisible(true);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => setAnimateIn(true));
+    });
+  }, []);
 
   useEffect(() => {
     const currentVersion = __APP_VERSION__;
@@ -14,29 +23,42 @@ const UpdateBanner: React.FC = () => {
     const storedVersion = localStorage.getItem(STORAGE_KEY);
 
     if (storedVersion !== currentVersion) {
-      setVisible(true);
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => setAnimateIn(true));
-      });
+      showBanner();
     }
-  }, []);
+  }, [showBanner]);
+
+  useEffect(() => {
+    systemNotificationsService.setOnNewVersionAvailable((event) => {
+      const newVersion = event.version || 'desconocida';
+      const stored = localStorage.getItem(STORAGE_KEY);
+
+      if (stored === newVersion) return;
+
+      setServerVersion(newVersion);
+      showBanner();
+    });
+
+    return () => {
+      systemNotificationsService.setOnNewVersionAvailable(null);
+    };
+  }, [showBanner]);
 
   const handleReload = () => {
-    const currentVersion = __APP_VERSION__;
-    if (currentVersion) {
-      localStorage.setItem(STORAGE_KEY, currentVersion);
+    const versionToStore = serverVersion || __APP_VERSION__;
+    if (versionToStore) {
+      localStorage.setItem(STORAGE_KEY, versionToStore);
     }
     const url = new URL(window.location.href);
-    url.searchParams.set('_v', currentVersion || Date.now().toString(36));
+    url.searchParams.set('_v', versionToStore || Date.now().toString(36));
     window.location.href = url.toString();
   };
 
   const handleDismiss = () => {
     setAnimateIn(false);
     setTimeout(() => setVisible(false), 400);
-    const currentVersion = __APP_VERSION__;
-    if (currentVersion) {
-      localStorage.setItem(STORAGE_KEY, currentVersion);
+    const versionToStore = serverVersion || __APP_VERSION__;
+    if (versionToStore) {
+      localStorage.setItem(STORAGE_KEY, versionToStore);
     }
   };
 

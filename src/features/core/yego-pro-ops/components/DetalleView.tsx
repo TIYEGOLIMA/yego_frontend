@@ -203,6 +203,8 @@ interface Metricas {
   totalViajes: number
   totalEfectivo: number
   totalTarjeta: number
+  totalCorporate: number
+  totalTips: number
   totalIngresos: number
   totalDistancia: number
   totalBonos: number
@@ -725,16 +727,18 @@ export const DetalleView = () => {
   const metricas = useMemo<Metricas | null>(() => {
     if (!viajesArray || viajesArray.length === 0) return null
 
-    const { totalEfectivo, totalTarjeta, totalIngresos, totalDistancia, totalBonos, totalPromocion } = viajesArray.reduce(
+    const { totalEfectivo, totalTarjeta, totalCorporate, totalTips, totalIngresos, totalDistancia, totalBonos, totalPromocion } = viajesArray.reduce(
       (acc, viaje: ViajeCompleto) => ({
         totalEfectivo: acc.totalEfectivo + (viaje.cash ?? 0),
         totalTarjeta: acc.totalTarjeta + (viaje.card ?? 0),
+        totalCorporate: acc.totalCorporate + ((viaje as any).price_corporate ?? 0),
+        totalTips: acc.totalTips + ((viaje as any).price_tip ?? 0),
         totalIngresos: acc.totalIngresos + (viaje.price ?? 0),
         totalDistancia: acc.totalDistancia + (viaje.distance ?? 0),
         totalBonos: acc.totalBonos + (viaje.price_bonus ?? 0),
         totalPromocion: acc.totalPromocion + (viaje.price_promotion ?? 0),
       }),
-      { totalEfectivo: 0, totalTarjeta: 0, totalIngresos: 0, totalDistancia: 0, totalBonos: 0, totalPromocion: 0 }
+      { totalEfectivo: 0, totalTarjeta: 0, totalCorporate: 0, totalTips: 0, totalIngresos: 0, totalDistancia: 0, totalBonos: 0, totalPromocion: 0 }
     )
 
     const totalViajes = viajesArray.length
@@ -743,6 +747,8 @@ export const DetalleView = () => {
       totalViajes,
       totalEfectivo,
       totalTarjeta,
+      totalCorporate,
+      totalTips,
       totalIngresos,
       totalDistancia,
       totalBonos,
@@ -943,9 +949,6 @@ export const DetalleView = () => {
         Math.abs(parseNumber(editLiquidaEfectivo) - (Number(cierreDetalle.liquidaEfectivo) || 0)) < 0.01 &&
         Math.abs(parseNumber(editLiquidaYape) - (Number(cierreDetalle.liquidaYape) || 0)) < 0.01 &&
         Math.abs(parseNumber(editOtrosGastos) - (Number(cierreDetalle.otrosGastos) || 0)) < 0.01
-      if (!soloCambioOdometro && !validarLiquidacion(valoresCalculados)) {
-        return
-      }
 
       const editOdometroInicialNum = editOdometroInicial ? parseNumber(editOdometroInicial) : null
       const editOdometroFinalNum = editOdometroFinal ? parseNumber(editOdometroFinal) : null
@@ -989,7 +992,7 @@ export const DetalleView = () => {
     }
   }
 
-  const puedeEditar = user?.role?.toUpperCase() !== 'GESTOR'
+  const puedeEditar = true
 
   const valoresCierre = useMemo(() => {
     const montoBase = selectedConductorResumen?.monto_total_pagar ?? selectedConductorResumen?.monto_total_pagado ?? metricas?.totalIngresos
@@ -2642,6 +2645,45 @@ value={editOtrosGastos}
                   </div>
                 </div>
               </div>
+
+              {metricas && (
+                <div className={SECTION_CARD_CIERRE_CLASS}>
+                  <h3 className="text-xs font-semibold text-gray-900 dark:text-gray-100 mb-2 pb-1 border-b border-gray-200 dark:border-gray-700 flex items-center gap-1.5">
+                    <CreditCard className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                    Ingresos del Día
+                  </h3>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-x-3 gap-y-2">
+                    <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg px-3 py-2 border border-gray-200 dark:border-gray-700">
+                      <p className="text-[10px] text-gray-500 dark:text-gray-400">Efectivo</p>
+                      <p className="text-sm font-bold text-green-700 dark:text-green-300">{formatBalance(metricas.totalEfectivo)}</p>
+                    </div>
+                    <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg px-3 py-2 border border-gray-200 dark:border-gray-700">
+                      <p className="text-[10px] text-gray-500 dark:text-gray-400">Pago sin Efectivo</p>
+                      <p className="text-sm font-bold text-purple-700 dark:text-purple-300">{formatBalance(metricas.totalTarjeta)}</p>
+                    </div>
+                    <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg px-3 py-2 border border-gray-200 dark:border-gray-700">
+                      <p className="text-[10px] text-gray-500 dark:text-gray-400">Pago Corporativo</p>
+                      <p className="text-sm font-bold text-amber-700 dark:text-amber-300">{formatBalance(metricas.totalCorporate)}</p>
+                    </div>
+                    <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg px-3 py-2 border border-gray-200 dark:border-gray-700">
+                      <p className="text-[10px] text-gray-500 dark:text-gray-400">Propinas</p>
+                      <p className="text-sm font-bold text-pink-700 dark:text-pink-300">{formatBalance(metricas.totalTips)}</p>
+                    </div>
+                    <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg px-3 py-2 border border-gray-200 dark:border-gray-700">
+                      <p className="text-[10px] text-gray-500 dark:text-gray-400">Comp. Promoción</p>
+                      <p className="text-sm font-bold text-sky-700 dark:text-sky-300">{formatBalance(metricas.totalPromocion)}</p>
+                    </div>
+                    <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg px-3 py-2 border border-gray-200 dark:border-gray-700">
+                      <p className="text-[10px] text-gray-500 dark:text-gray-400">Bonos</p>
+                      <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{formatBalance(metricas.totalBonos)}</p>
+                    </div>
+                  </div>
+                  <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                    <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">Total Ingresos del Día</span>
+                    <span className="text-sm font-bold text-red-600 dark:text-red-400">{formatBalance(metricas.totalIngresos)}</span>
+                  </div>
+                </div>
+              )}
 
               <div className={SECTION_CARD_CIERRE_CLASS}>
                 <h3 className="text-xs font-semibold text-gray-900 dark:text-gray-100 mb-2 pb-1 border-b border-gray-200 dark:border-gray-700 flex items-center gap-1.5">

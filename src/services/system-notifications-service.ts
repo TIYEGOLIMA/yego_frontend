@@ -1,4 +1,4 @@
-import { SystemEvent, ForcedLogoutEvent, AccountBlockedEvent, UserTableUpdateEvent, PremiumProcessAvailableEvent, RoleDeactivatedEvent, YangoApiLogUpdatedEvent } from '../types/system-notifications'
+import { SystemEvent, ForcedLogoutEvent, AccountBlockedEvent, UserTableUpdateEvent, PremiumProcessAvailableEvent, RoleDeactivatedEvent, YangoApiLogUpdatedEvent, NewVersionAvailableEvent } from '../types/system-notifications'
 import socketService from './socket-service'
 
 /**
@@ -16,6 +16,7 @@ class SystemNotificationsService {
   private onPremiumProcessAvailable: ((event: PremiumProcessAvailableEvent) => void) | null = null
   private onRoleDeactivated: ((event: RoleDeactivatedEvent) => void) | null = null
   private onYangoApiLogUpdated: ((event: YangoApiLogUpdatedEvent) => void) | null = null
+  private onNewVersionAvailable: ((event: NewVersionAvailableEvent) => void) | null = null
 
   constructor() {
     this.setupSubscriptions()
@@ -119,6 +120,9 @@ class SystemNotificationsService {
             case 'YANGO_API_LOG_UPDATED':
               this.onYangoApiLogUpdated?.(event as YangoApiLogUpdatedEvent)
               break
+            case 'NEW_VERSION_AVAILABLE':
+              this.onNewVersionAvailable?.(event as NewVersionAvailableEvent)
+              break
           }
         } catch (error) {
       console.error('❌ [SystemNotifications] Error procesando evento del sistema:', error)
@@ -181,6 +185,10 @@ class SystemNotificationsService {
 
   public setOnYangoApiLogUpdated(callback: ((event: YangoApiLogUpdatedEvent) => void) | null) {
     this.onYangoApiLogUpdated = callback
+  }
+
+  public setOnNewVersionAvailable(callback: ((event: NewVersionAvailableEvent) => void) | null) {
+    this.onNewVersionAvailable = callback
   }
 
   /**

@@ -49,6 +49,13 @@ export interface YangoApiLogUpdatedEvent {
   timestamp: string
 }
 
+export interface NewVersionAvailableEvent {
+  type: 'NEW_VERSION_AVAILABLE'
+  version: string
+  message: string
+  timestamp: string
+}
+
 export type SystemEvent =
   | ForcedLogoutEvent
   | AccountBlockedEvent
@@ -56,3 +63,4 @@ export type SystemEvent =
   | PremiumProcessAvailableEvent
   | RoleDeactivatedEvent
   | YangoApiLogUpdatedEvent
+  | NewVersionAvailableEvent

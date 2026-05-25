@@ -26,6 +26,7 @@ import { ModuleBySlugRoute } from './routing/ModuleBySlugPage'
 import { ForcedLogoutModal } from './components/ForcedLogoutModal'
 import { AccountBlockedModal } from './components/AccountBlockedModal'
 import { RoleDeactivatedModal } from './components/RoleDeactivatedModal'
+import UpdateBanner from './components/UpdateBanner'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -223,6 +224,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <Router>
         <SystemNotificationsHandler />
+        <UpdateBanner />
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/tickets" element={

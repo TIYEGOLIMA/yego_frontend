@@ -81,8 +81,10 @@ export interface ViajeCompleto {
   price_bonus: number | null
   price_commission_park: number | null
   price_commission_service: number | null
+  price_corporate: number | null
   price_other: number | null
   price_promotion: number | null
+  price_tip: number | null
   address_from?: string | null
   address_to?: string | null
 }
@@ -275,6 +277,7 @@ export interface FacturacionSemanal {
   montoNeto: number
   kmRecorrido: number
   gastoCombustible: number
+  bonoYango?: number
   gastoMantenimiento: number
   produccionBonificable: number
   bonoAdicViajes: number

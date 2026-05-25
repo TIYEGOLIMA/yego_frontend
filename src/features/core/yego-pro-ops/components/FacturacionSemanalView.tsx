@@ -113,6 +113,7 @@ export const FacturacionSemanalView = () => {
       montoNeto: conductor.monto_neto,
       kmRecorrido: conductor.km_recorrido,
       gastoCombustible: conductor.gasto_combustible,
+      bonoYango: conductor.bono_yango,
       gastoMantenimiento: conductor.gasto_mantenimiento,
       produccionBonificable: conductor.produccion_bonificable,
       bonoAdicViajes: conductor.bono_adic_viajes,
@@ -328,6 +329,7 @@ export const FacturacionSemanalView = () => {
                           <TableHead className="text-right py-1.5">Neto</TableHead>
                           <TableHead className="text-right py-1.5">KM</TableHead>
                           <TableHead className="text-right py-1.5">Combustible</TableHead>
+                          <TableHead className="text-right py-1.5">Bono Yango</TableHead>
                           <TableHead className="text-right py-1.5">Mantenim.</TableHead>
                           <TableHead className="text-right py-1.5">Prod. Bonif.</TableHead>
                           <TableHead className="text-right py-1.5">Bono Adic.</TableHead>
@@ -382,6 +384,7 @@ export const FacturacionSemanalView = () => {
                                 <TableCell className="text-right py-1 font-medium">{formatNumber(c.monto_neto)}</TableCell>
                                 <TableCell className="text-right py-1">{c.km_recorrido > 0 ? formatNumber(c.km_recorrido, 0) : '—'}</TableCell>
                                 <TableCell className="text-right py-1 text-amber-600">{c.gasto_combustible > 0 ? formatNumber(c.gasto_combustible) : '—'}</TableCell>
+                                <TableCell className="text-right py-1 text-blue-600">{c.bono_yango > 0 ? formatNumber(c.bono_yango) : (c.bono_yango < 0 ? formatNumber(c.bono_yango) : '—')}</TableCell>
                                 <TableCell className="text-right py-1 text-gray-500">{c.gasto_mantenimiento > 0 ? formatNumber(c.gasto_mantenimiento) : '—'}</TableCell>
                                 <TableCell className="text-right py-1 font-medium">{formatNumber(c.produccion_bonificable)}</TableCell>
                                 <TableCell className="text-right py-1 text-green-600">{c.bono_adic_viajes > 0 ? formatNumber(c.bono_adic_viajes) : '—'}</TableCell>
@@ -439,6 +442,9 @@ export const FacturacionSemanalView = () => {
                                     <div className="px-3 py-2">
                                       <div className="flex items-center gap-3 text-[10px] text-gray-500 mb-2 flex-wrap">
                                         <span>Neto: <b className="text-gray-700">{formatBalance(conductorExpandidoData.monto_neto)}</b></span>
+                                        {conductorExpandidoData.bono_yango !== 0 && (
+                                          <span>+ B.Yango: <b className="text-blue-600">{formatBalance(conductorExpandidoData.bono_yango)}</b></span>
+                                        )}
                                         <span>− Comb: <b className="text-amber-600">{formatBalance(conductorExpandidoData.gasto_combustible)}</b></span>
                                         <span>− Mant(15%): <b>{formatBalance(conductorExpandidoData.gasto_mantenimiento)}</b></span>
                                         <span>= Bonif: <b className="text-indigo-600">{formatBalance(conductorExpandidoData.produccion_bonificable)}</b></span>
@@ -514,6 +520,7 @@ export const FacturacionSemanalView = () => {
                           <TableCell className="text-right py-1">{formatNumber(data.total_produccion - data.total_comision)}</TableCell>
                           <TableCell className="text-right py-1">—</TableCell>
                           <TableCell className="text-right py-1 text-amber-600">{formatNumber(data.total_combustible)}</TableCell>
+                          <TableCell className="text-right py-1 text-blue-600">{formatNumber(data.conductores.reduce((s, c) => s + (c.bono_yango ?? 0), 0))}</TableCell>
                           <TableCell className="text-right py-1">—</TableCell>
                           <TableCell className="text-right py-1">{formatNumber(data.total_bonos)}</TableCell>
                           <TableCell className="text-right py-1">—</TableCell>
