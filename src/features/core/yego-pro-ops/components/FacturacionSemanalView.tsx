@@ -479,7 +479,7 @@ export const FacturacionSemanalView = () => {
                                                 <td className="text-right py-0.5 px-1">{dia.cantidad_viajes || '—'}</td>
                                                 <td className="text-right py-0.5 px-1">{dia.turnos_tipo || '—'}</td>
                                                 <td className="text-right py-0.5 px-1">{dia.produccion_total > 0 ? formatNumber(dia.produccion_total) : '—'}</td>
-                                                <td className="text-right py-0.5 px-1 text-rose-600">{dia.comisiones_servicio > 0 ? formatNumber(dia.comisiones_servicio) : '—'}</td>
+                                                <td className="text-right py-0.5 px-1 text-rose-600">{dia.comisiones_servicio !== 0 ? formatNumber(dia.comisiones_servicio) : '—'}</td>
                                                 <td className="text-right py-0.5 px-1 text-amber-600">{dia.gasto_combustible > 0 ? formatNumber(dia.gasto_combustible) : '—'}</td>
                                                 <td className="text-right py-0.5 px-1">{dia.km_recorrido > 0 ? formatNumber(dia.km_recorrido, 0) : '—'}</td>
                                                 <td className="text-right py-0.5 px-1 font-semibold text-red-600">{formatNumber(dia.monto_total_pagar)}</td>
