@@ -48,7 +48,7 @@ const formatearFechaLegible = (f: Date): string =>
 export const FacturacionSemanalView = () => {
   const { user } = useAuth()
   const queryClient = useQueryClient()
-  const [semanaOffset, setSemanaOffset] = useState(0)
+  const [semanaOffset, setSemanaOffset] = useState(-1)
   const [showConfirmPago, setShowConfirmPago] = useState<ConductorSemanalInfo | null>(null)
   const [conductorExpandido, setConductorExpandido] = useState<string | null>(null)
   const [vista, setVista] = useState<'resumen' | 'calculos' | 'config'>('calculos')
@@ -80,7 +80,7 @@ export const FacturacionSemanalView = () => {
   const { data, isLoading, error, refetch } = useQuery<ResumenSemanalResponse>({
     queryKey: ['yego-pro-ops-resumen-semanal', fechaInicio, fechaFin],
     queryFn: () => yegoProOpsService.obtenerResumenSemanal(fechaInicio, fechaFin),
-    enabled: !semanaFutura,
+    enabled: !semanaFutura && !semanaEnCurso,
     staleTime: 30 * 1000,
     refetchOnWindowFocus: true,
   })
@@ -185,11 +185,14 @@ export const FacturacionSemanalView = () => {
     sig.setDate(sig.getDate() + 7)
     if (sig <= new Date()) setSemanaOffset((s) => s + 1)
   }
-  const semActual = () => setSemanaOffset(0)
+  const semActual = () => setSemanaOffset(-1)
+  const semanaEnCurso = lunesSemana >= obtenerLunesSemana(new Date())
   const puedeAvanzar = (() => {
     const sig = new Date(lunesSemana)
     sig.setDate(sig.getDate() + 7)
-    return sig <= new Date()
+    const domingo = new Date(sig)
+    domingo.setDate(domingo.getDate() - 1)
+    return domingo < new Date()
   })()
 
   const conductorExpandidoData = useMemo(
@@ -270,6 +273,11 @@ export const FacturacionSemanalView = () => {
             <div className="text-center py-12 text-gray-500">
               <AlertCircle className="mx-auto h-8 w-8 mb-2 opacity-50" />
               <p className="text-sm">Esta semana aún no ha comenzado</p>
+            </div>
+          ) : semanaEnCurso ? (
+            <div className="text-center py-12 text-gray-500">
+              <AlertCircle className="mx-auto h-8 w-8 mb-2 opacity-50" />
+              <p className="text-sm">Semana en curso. Disponible cuando termine.</p>
             </div>
           ) : isLoading ? (
             <div className="text-center py-12">
