@@ -255,4 +255,17 @@ export const yegoProOpsService = {
     })
     return data
   },
+
+  exportarAsistenciaExcel: async (fechaInicio: string, fechaFin: string): Promise<void> => {
+    const response = await api.get(ENDPOINTS.facturacionSemanal + '/exportar-asistencia', {
+      params: { fechaInicio, fechaFin },
+      responseType: 'blob',
+    })
+    const url = window.URL.createObjectURL(new Blob([response.data]))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `Asistencia_Yego_PRO_${fechaInicio}_${fechaFin}.xlsx`
+    link.click()
+    window.URL.revokeObjectURL(url)
+  },
 }

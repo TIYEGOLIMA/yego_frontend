@@ -51,7 +51,7 @@ export const FacturacionSemanalView = () => {
   const [semanaOffset, setSemanaOffset] = useState(0)
   const [showConfirmPago, setShowConfirmPago] = useState<ConductorSemanalInfo | null>(null)
   const [conductorExpandido, setConductorExpandido] = useState<string | null>(null)
-  const [vista, setVista] = useState<'resumen' | 'calculos' | 'historial' | 'config'>('calculos')
+  const [vista, setVista] = useState<'resumen' | 'calculos' | 'config'>('calculos')
   const [searchTerm, setSearchTerm] = useState('')
 
   const lunesSemana = useMemo(() => {
@@ -85,18 +85,11 @@ export const FacturacionSemanalView = () => {
     refetchOnWindowFocus: true,
   })
 
-  const { data: historial, isLoading: loadingHistorial } = useQuery<FacturacionSemanal[]>({
-    queryKey: ['yego-pro-ops-facturacion-historial', fechaInicio, fechaFin],
-    queryFn: () => yegoProOpsService.obtenerHistorialFacturacion(fechaInicio, fechaFin),
-    enabled: !semanaFutura,
-    staleTime: 60 * 1000,
-  })
-
   const saveMutation = useMutation({
     mutationFn: (facturacion: FacturacionSemanal) =>
       yegoProOpsService.registrarFacturacionSemanal(facturacion),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['yego-pro-ops-facturacion-historial'] })
+      queryClient.invalidateQueries({ queryKey: ['yego-pro-ops-resumen-semanal'] })
     },
   })
 
@@ -128,12 +121,18 @@ export const FacturacionSemanalView = () => {
       diasLiquidados: conductor.dias_liquidados,
       turno: conductor.turno,
       userId: user?.id,
+      bonificacion: bonificacion ? Number(bonificacion) : undefined,
+      garantia: garantia ? Number(garantia) : undefined,
+      descuento: descuento ? Number(descuento) : undefined,
+      general: general || undefined,
     }
     saveMutation.mutate(payload)
+    setBonificacion('')
+    setGarantia('')
+    setDescuento('')
+    setGeneral('')
   }
 
-  const yaGuardado = (driverId: string) =>
-    historial?.some((h) => h.driverId === driverId && h.fechaInicio === fechaInicio && h.fechaFin === fechaFin)
 
   const { data: config } = useQuery<BillingConfigResponse>({
     queryKey: ['yego-pro-ops-config-billing'],
@@ -145,6 +144,11 @@ export const FacturacionSemanalView = () => {
   const [editPcts, setEditPcts] = useState<PaymentPercentage[]>([])
   const [configDirty, setConfigDirty] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<{ type: 'bono' | 'pct'; index: number } | null>(null)
+  const [bonificacion, setBonificacion] = useState('')
+  const [garantia, setGarantia] = useState('')
+  const [descuento, setDescuento] = useState('')
+  const [general, setGeneral] = useState('')
+  const [exportando, setExportando] = useState(false)
 
   const iniciarEdicionConfig = () => {
     if (!config) return
@@ -289,10 +293,6 @@ export const FacturacionSemanalView = () => {
                       <Table2 className="w-3 h-3" />
                       Resumen por Día
                     </TabsTrigger>
-                    <TabsTrigger value="historial" className="flex items-center gap-1 text-[11px] px-2.5 py-1 data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 rounded-sm">
-                      <History className="w-3 h-3" />
-                      Historial
-                    </TabsTrigger>
                     <TabsTrigger value="config" className="flex items-center gap-1 text-[11px] px-2.5 py-1 data-[state=active]:bg-white dark:data-[state=active]:bg-gray-700 rounded-sm">
                       <Settings className="w-3 h-3" />
                       Config
@@ -310,6 +310,23 @@ export const FacturacionSemanalView = () => {
                       />
                     </div>
                   )}
+                  <Button variant="outline" size="sm" disabled={exportando}
+                    onClick={async () => {
+                      setExportando(true)
+                      try {
+                        await yegoProOpsService.exportarAsistenciaExcel(fechaInicio, fechaFin)
+                      } finally {
+                        setExportando(false)
+                      }
+                    }}
+                    className="h-7 text-xs gap-1 ml-auto">
+                    {exportando ? (
+                      <div className="animate-spin rounded-full h-3 w-3 border-2 border-gray-400 border-t-transparent" />
+                    ) : (
+                      <Save className="h-3 w-3" />
+                    )}
+                    {exportando ? 'Cargando...' : 'Excel'}
+                  </Button>
                 </div>
 
                 {/* ── Vista Cálculo Semanal ── */}
@@ -399,11 +416,7 @@ export const FacturacionSemanalView = () => {
                                   {formatNumber(c.utilidad_por_viaje)}
                                 </TableCell>
                                 <TableCell className="text-center py-1">
-                                  {yaGuardado(c.driver_id) ? (
-                                    <Badge className="text-[10px] bg-green-100 text-green-700 border-green-300 px-1.5 h-5">
-                                      Pagado
-                                    </Badge>
-                                  ) : c.completamente_liquidado ? (
+                                  {c.completamente_liquidado ? (
                                     <div className="flex items-center gap-1 justify-center">
                                       <Badge className="text-[10px] bg-yellow-100 text-yellow-700 border-yellow-300 px-1.5 h-5">
                                         Pendiente
@@ -413,7 +426,7 @@ export const FacturacionSemanalView = () => {
                                         size="sm"
                                         className="h-5 w-5 p-0"
                                         title="Registrar pago"
-                                        onClick={(e) => { e.stopPropagation(); setShowConfirmPago(c) }}
+                                        onClick={(e) => { e.stopPropagation(); setBonificacion(''); setGarantia(''); setDescuento(''); setGeneral(''); setShowConfirmPago(c) }}
                                         disabled={saveMutation.isPending}
                                       >
                                         <Save className="w-3 h-3 text-gray-400 hover:text-blue-600" />
@@ -624,74 +637,6 @@ export const FacturacionSemanalView = () => {
                       </TableBody>
                     </Table>
                   </div>
-                </TabsContent>
-
-                {/* ── Vista Historial ── */}
-                <TabsContent value="historial" className="mt-0">
-                  {loadingHistorial ? (
-                    <div className="text-center py-8"><div className="inline-block animate-spin rounded-full h-5 w-5 border-b-2 border-red-600" /></div>
-                  ) : !historial || historial.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500 text-sm">
-                      Sin registros guardados para esta semana
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto border border-gray-200 dark:border-gray-700 rounded-md">
-                      <Table className="text-[11px]">
-                        <TableHeader>
-                          <TableRow className="bg-gray-50 dark:bg-gray-800/50">
-                            <TableHead className="py-1.5">Conductor</TableHead>
-                            <TableHead className="text-right py-1.5">Viajes</TableHead>
-                            <TableHead className="text-right py-1.5">Horas</TableHead>
-                            <TableHead className="text-right py-1.5">Prod.</TableHead>
-                            <TableHead className="text-right py-1.5">Comis.</TableHead>
-                            <TableHead className="text-right py-1.5">Neto</TableHead>
-                            <TableHead className="text-right py-1.5">Comb.</TableHead>
-                            <TableHead className="text-right py-1.5">Bonif.</TableHead>
-                            <TableHead className="text-right py-1.5">Bono</TableHead>
-                            <TableHead className="text-right py-1.5">%</TableHead>
-                            <TableHead className="text-right py-1.5">Pago</TableHead>
-                            <TableHead className="text-right py-1.5 font-bold">Pago Total</TableHead>
-                            <TableHead className="text-right py-1.5">Util.</TableHead>
-                            <TableHead className="text-center py-1.5">Días</TableHead>
-                            <TableHead className="text-center py-1.5 w-20">Guardado</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {historial.map((h) => (
-                            <TableRow key={h.id ?? `${h.driverId}-${h.fechaInicio}`}>
-                              <TableCell className="py-1">
-                                <span className="truncate max-w-[150px] block" title={h.driverId}>{h.driverId}</span>
-                              </TableCell>
-                              <TableCell className="text-right py-1">{h.totalViajes}</TableCell>
-                              <TableCell className="text-right py-1">{formatNumber(h.horasTrabajo, 1)}</TableCell>
-                              <TableCell className="text-right py-1">{formatNumber(h.montoTotalProducido)}</TableCell>
-                              <TableCell className="text-right py-1 text-rose-600">{formatNumber(h.comisionApp)}</TableCell>
-                              <TableCell className="text-right py-1">{formatNumber(h.montoNeto)}</TableCell>
-                              <TableCell className="text-right py-1 text-amber-600">{h.gastoCombustible > 0 ? formatNumber(h.gastoCombustible) : '—'}</TableCell>
-                              <TableCell className="text-right py-1">{formatNumber(h.produccionBonificable)}</TableCell>
-                              <TableCell className="text-right py-1">{formatNumber(h.bono)}</TableCell>
-                              <TableCell className="text-right py-1">{(h.porcentajePago * 100).toFixed(0)}%</TableCell>
-                              <TableCell className="text-right py-1">{formatNumber(h.pago)}</TableCell>
-                              <TableCell className="text-right py-1 font-bold text-red-600">{formatBalance(h.pagoTotal)}</TableCell>
-                              <TableCell className={cn('text-right py-1', h.utilidad >= 0 ? 'text-green-600' : 'text-red-600')}>
-                                {formatNumber(h.utilidad)}
-                              </TableCell>
-                              <TableCell className="text-center py-1">
-                                <span className="text-green-600">{h.diasLiquidados}</span>
-                                <span className="text-gray-400">/</span>
-                                <span>{h.diasTrabajados}</span>
-                              </TableCell>
-                              <TableCell className="text-center py-1">
-                                <span className="text-[10px] text-gray-500">
-                                  {h.createdAt ? new Date(h.createdAt).toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
-                                </span>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  )}
                 </TabsContent>
 
                 {/* ── Vista Configuración ── */}
@@ -916,12 +861,58 @@ export const FacturacionSemanalView = () => {
                 </div>
               </div>
 
+              <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3 space-y-2.5 border border-gray-200 dark:border-gray-700">
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Ajustes manuales</p>
+                <div className="space-y-2">
+                  <div>
+                    <label className="block text-[11px] font-medium text-gray-700 dark:text-gray-300 mb-0.5">Bonificación (S/.)</label>
+                    <Input
+                      type="number" step="0.01" min="0"
+                      value={bonificacion}
+                      onChange={(e) => { const v = e.target.value; if (v === '' || parseFloat(v) >= 0) setBonificacion(v) }}
+                      placeholder="0.00"
+                      className="w-full h-8 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-medium text-gray-700 dark:text-gray-300 mb-0.5">Garantía (S/.)</label>
+                    <Input
+                      type="number" step="0.01" min="0"
+                      value={garantia}
+                      onChange={(e) => { const v = e.target.value; if (v === '' || parseFloat(v) >= 0) setGarantia(v) }}
+                      placeholder="0.00"
+                      className="w-full h-8 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-medium text-gray-700 dark:text-gray-300 mb-0.5">Descuento (S/.)</label>
+                    <Input
+                      type="number" step="0.01" min="0"
+                      value={descuento}
+                      onChange={(e) => { const v = e.target.value; if (v === '' || parseFloat(v) >= 0) setDescuento(v) }}
+                      placeholder="0.00"
+                      className="w-full h-8 text-xs"
+                    />
+                  </div>
+                </div>
+                <div className="pt-1">
+                  <label className="block text-[11px] font-medium text-gray-700 dark:text-gray-300 mb-0.5">Descripción</label>
+                  <textarea
+                    value={general}
+                    onChange={(e) => setGeneral(e.target.value)}
+                    placeholder="Observaciones..."
+                    rows={2}
+                    className="w-full text-xs px-2.5 py-1.5 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 resize-none focus:outline-none focus:ring-1 focus:ring-gray-400"
+                  />
+                </div>
+              </div>
+
               <div className="flex gap-2 pt-2">
                 <Button variant="outline" className="flex-1 h-9 text-sm" onClick={() => setShowConfirmPago(null)}
                   disabled={saveMutation.isPending}>
                   Cancelar
                 </Button>
-                <Button className="flex-1 h-9 text-sm bg-green-600 hover:bg-green-700 text-white"
+                <Button className="flex-1 h-9 text-sm bg-red-600 hover:bg-red-700 text-white"
                   onClick={() => {
                     handleGuardarFacturacion(showConfirmPago)
                     setShowConfirmPago(null)

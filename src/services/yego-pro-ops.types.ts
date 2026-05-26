@@ -284,7 +284,8 @@ export interface FacturacionSemanal {
   bono: number
   porcentajePago: number
   pago: number
-  descuentoYego?: number
+  descuento?: number
+  general?: string
   pagoTotal: number
   utilidad: number
   utilidadPorViaje: number
