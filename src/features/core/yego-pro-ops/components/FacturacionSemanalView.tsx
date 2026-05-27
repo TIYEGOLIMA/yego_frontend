@@ -49,6 +49,11 @@ export const FacturacionSemanalView = () => {
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const [semanaOffset, setSemanaOffset] = useState(-1)
+  const semanaEnCurso = (() => {
+    const lunes = obtenerLunesSemana(new Date())
+    lunes.setDate(lunes.getDate() + semanaOffset * 7)
+    return lunes >= obtenerLunesSemana(new Date())
+  })()
   const [showConfirmPago, setShowConfirmPago] = useState<ConductorSemanalInfo | null>(null)
   const [conductorExpandido, setConductorExpandido] = useState<string | null>(null)
   const [vista, setVista] = useState<'resumen' | 'calculos' | 'config'>('calculos')
@@ -186,7 +191,6 @@ export const FacturacionSemanalView = () => {
     if (sig <= new Date()) setSemanaOffset((s) => s + 1)
   }
   const semActual = () => setSemanaOffset(-1)
-  const semanaEnCurso = lunesSemana >= obtenerLunesSemana(new Date())
   const puedeAvanzar = (() => {
     const sig = new Date(lunesSemana)
     sig.setDate(sig.getDate() + 7)
