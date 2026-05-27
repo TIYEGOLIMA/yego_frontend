@@ -68,9 +68,9 @@ const buildParams = (params?: ReportFilters): Record<string, string | number> | 
 };
 
 export const reportsService = {
-  async getSACPerformanceReports(params?: ReportFilters): Promise<ReportData> {
+  async getSACPerformanceReports(params?: ReportFilters, signal?: AbortSignal): Promise<ReportData> {
     try {
-      const response = await api.get('/ticketera/sac-stats', { params: buildParams(params) });
+      const response = await api.get('/ticketera/sac-stats', { params: buildParams(params), signal });
       return response.data;
     } catch (error) {
       console.error('[reportsService] Error obteniendo reportes:', error);
@@ -78,9 +78,9 @@ export const reportsService = {
     }
   },
 
-  async obtenerTodoElHistorial(params?: Pick<ReportFilters, 'sedeId'>): Promise<ReportData> {
+  async obtenerTodoElHistorial(params?: Pick<ReportFilters, 'sedeId'>, signal?: AbortSignal): Promise<ReportData> {
     try {
-      const response = await api.get('/ticketera/sac-stats', { params: buildParams(params) });
+      const response = await api.get('/ticketera/sac-stats', { params: buildParams(params), signal });
       return response.data;
     } catch (error) {
       console.error('[reportsService] Error obteniendo todo el historial:', error);

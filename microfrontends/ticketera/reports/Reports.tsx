@@ -75,6 +75,8 @@ const Reports: React.FC = () => {
   const exportMenuRef = useRef<HTMLDivElement>(null)
   const sedeFilterRef = useRef<HTMLDivElement>(null)
   const hasLoadedRef = useRef(false)
+  const abortControllerRef = useRef<AbortController | null>(null)
+  const requestIdRef = useRef(0)
 
   const sedeGroups = useMemo<SedeGroup[]>(() => {
     const groups = new Map<string, SedeGroup>();
@@ -314,45 +316,68 @@ const Reports: React.FC = () => {
   }
 
   const loadReportData = async () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    const abortController = new AbortController()
+    abortControllerRef.current = abortController
+    const currentRequestId = ++requestIdRef.current
+
     try {
       setLoading(true)
-      setDatosCargados(false)
       const params = construirFiltros()
-      const data = await reportsService.getSACPerformanceReports(params)
+      const data = await reportsService.getSACPerformanceReports(params, abortController.signal)
+      if (currentRequestId !== requestIdRef.current) return
       setReportData(data)
       setDatosCargados(true)
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED') return
       console.error('[Reports] Error cargando datos de reportes:', error)
+      if (currentRequestId !== requestIdRef.current) return
       setReportData({
         totalSACs: 0, totalTickets: 0, averageRating: 0, totalRatings: 0,
         sacPerformance: [], topPerformers: [], recentRatings: [], hourlyDistribution: [], hourlyBySede: []
       })
       setDatosCargados(false)
     } finally {
-      setLoading(false)
+      if (currentRequestId === requestIdRef.current) {
+        setLoading(false)
+      }
     }
   }
 
   const cargarHistorialCompleto = async () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    const abortController = new AbortController()
+    abortControllerRef.current = abortController
+    const currentRequestId = ++requestIdRef.current
+
     try {
       setLoading(true)
       setDatosCargados(false)
       setShowDatePicker(false)
       setSelectedSede('todas')
-      const data = await reportsService.obtenerTodoElHistorial(undefined)
+      const data = await reportsService.obtenerTodoElHistorial(undefined, abortController.signal)
+      if (currentRequestId !== requestIdRef.current) return
       setReportData(data)
       setDatosCargados(true)
       setFechaInicio('')
       setFechaFin('')
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED') return
       console.error('[Reports] Error cargando historial completo:', error)
+      if (currentRequestId !== requestIdRef.current) return
       setReportData({
         totalSACs: 0, totalTickets: 0, averageRating: 0, totalRatings: 0,
         sacPerformance: [], topPerformers: [], recentRatings: [], hourlyDistribution: [], hourlyBySede: []
       })
       setDatosCargados(false)
     } finally {
-      setLoading(false)
+      if (currentRequestId === requestIdRef.current) {
+        setLoading(false)
+      }
     }
   }
 
@@ -416,7 +441,7 @@ const Reports: React.FC = () => {
   const exportarAExcel = () => exportarReporte('excel')
   const exportarAImagen = (formato: string) => exportarReporte('imagen', formato)
 
-  if (loading) {
+  if (loading && !datosCargados) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-white dark:from-slate-900 dark:to-slate-800 p-6">
         <div className="max-w-7xl mx-auto">
@@ -436,16 +461,19 @@ const Reports: React.FC = () => {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
-            <div>
-              <h1 className="text-4xl font-bold text-slate-900 dark:text-slate-100 mb-2">
-                Reporte de Desempeño SAC
-              </h1>
-              <p className="text-lg text-slate-600 dark:text-slate-400">
-                Análisis detallado del rendimiento de los agentes de atención al cliente{selectedSede !== 'todas' ? ` — ${sedes.find(s => s.id.toString() === selectedSede)?.name ?? ''}` : ''}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
+          <div className="mb-6">
+            <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100 mb-3">
+              Reporte de Desempeño SAC
+              {selectedSede !== 'todas' && (
+                <span className="text-lg font-normal text-slate-500 dark:text-slate-400 ml-2">
+                  — {sedes.find(s => s.id.toString() === selectedSede)?.name ?? ''}
+                </span>
+              )}
+            </h1>
+            <div className="flex items-center gap-2 flex-nowrap">
+              {loading && datosCargados && (
+                <RefreshCw className="w-4 h-4 animate-spin text-slate-400 dark:text-slate-500" />
+              )}
               {/* Sede filter */}
               {sedes.length > 0 && (
                 <div className="relative" ref={sedeFilterRef}>
@@ -500,10 +528,10 @@ const Reports: React.FC = () => {
                 {(fechaInicio || fechaFin) && (
                   <button
                     type="button"
-                    onClick={cargarHistorialCompleto}
-                    className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-100 transition-colors text-sm font-medium flex items-center gap-2"
+                    onClick={() => { setFechaInicio(''); setFechaFin(''); setShowDatePicker(false); loadReportData(); }}
+                    className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-red-600 dark:hover:text-red-400 transition-colors text-sm font-medium flex items-center gap-2"
                   >
-                    <X className="w-4 h-4" /> Histórico
+                    <X className="w-4 h-4" /> Limpiar fechas
                   </button>
                 )}
                 {showDatePicker && (
