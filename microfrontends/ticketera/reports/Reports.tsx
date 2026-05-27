@@ -136,21 +136,14 @@ const Reports: React.FC = () => {
   }, [sedeGroups, selectedSede]);
 
   const globalStats = useMemo(() => {
-    if (selectedSede === 'todas') {
-      return {
-        totalSACs: reportData?.totalSACs ?? 0,
-        totalTickets: reportData?.totalTickets ?? 0,
-        averageRating: reportData?.averageRating ?? 0,
-        totalRatings: reportData?.totalRatings ?? 0,
-      };
-    }
-    const group = filteredGroups[0];
-    return group ? {
-      totalSACs: group.sacs.length,
-      totalTickets: group.totalTickets,
-      averageRating: group.averageRating,
-      totalRatings: group.totalRatings,
-    } : { totalSACs: 0, totalTickets: 0, averageRating: 0, totalRatings: 0 };
+    return {
+      totalSACs: selectedSede === 'todas'
+        ? (reportData?.totalSACs ?? 0)
+        : (filteredGroups[0]?.sacs.length ?? 0),
+      totalTickets: reportData?.totalTickets ?? 0,
+      averageRating: reportData?.averageRating ?? 0,
+      totalRatings: reportData?.totalRatings ?? 0,
+    };
   }, [reportData, selectedSede, filteredGroups]);
 
   const globalTopPerformers = useMemo(() => {
@@ -372,12 +365,15 @@ const Reports: React.FC = () => {
   }, [])
 
   useEffect(() => {
-    if (fechaInicio && fechaFin) {
-      if (new Date(fechaInicio) > new Date(fechaFin)) return
-      const timer = setTimeout(() => { loadReportData() }, 300)
-      return () => clearTimeout(timer)
-    }
-  }, [fechaInicio, fechaFin, selectedSede])
+    loadReportData()
+  }, [selectedSede])
+
+  useEffect(() => {
+    if (!fechaInicio || !fechaFin) return
+    if (new Date(fechaInicio) > new Date(fechaFin)) return
+    const timer = setTimeout(() => { loadReportData() }, 300)
+    return () => clearTimeout(timer)
+  }, [fechaInicio, fechaFin])
 
   const descargarArchivo = (blob: Blob, nombreArchivo: string) => {
     const url = window.URL.createObjectURL(blob)
@@ -465,7 +461,7 @@ const Reports: React.FC = () => {
                   {showSedeFilter && (
                     <div className="absolute top-full right-0 mt-2 w-56 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-slate-200 dark:border-slate-700 py-1 z-50">
                       <button
-                        onClick={() => { setSelectedSede('todas'); setShowSedeFilter(false); if (fechaInicio && fechaFin) loadReportData(); }}
+                        onClick={() => { setSelectedSede('todas'); setShowSedeFilter(false); }}
                         className={`w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:bg-slate-100 dark:hover:bg-slate-700 ${selectedSede === 'todas' ? 'bg-slate-100 dark:bg-slate-700 font-semibold text-slate-900 dark:text-slate-100' : 'text-slate-700 dark:text-slate-300'}`}
                       >
                         <Filter className="w-4 h-4" />
@@ -474,7 +470,7 @@ const Reports: React.FC = () => {
                       {sedes.map((sede, i) => (
                         <button
                           key={sede.id}
-                          onClick={() => { setSelectedSede(sede.id.toString()); setShowSedeFilter(false); if (fechaInicio && fechaFin) loadReportData(); }}
+                          onClick={() => { setSelectedSede(sede.id.toString()); setShowSedeFilter(false); }}
                           className={`w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:bg-slate-100 dark:hover:bg-slate-700 ${selectedSede === sede.id.toString() ? 'bg-slate-100 dark:bg-slate-700 font-semibold text-slate-900 dark:text-slate-100' : 'text-slate-700 dark:text-slate-300'}`}
                         >
                           <div className={`w-2.5 h-2.5 rounded-full ${SEDE_COLORS[i % SEDE_COLORS.length].dot}`} />
@@ -871,7 +867,7 @@ const Reports: React.FC = () => {
                       <div className="flex flex-wrap gap-4">
                         <div className="text-center">
                           <p className="text-xs text-slate-500 dark:text-slate-400">Tickets</p>
-                          <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{group.totalTickets}</p>
+                          <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{reportData?.totalTickets ?? group.totalTickets}</p>
                         </div>
                         <div className="text-center">
                           <p className="text-xs text-slate-500 dark:text-slate-400">Completados</p>
@@ -879,7 +875,7 @@ const Reports: React.FC = () => {
                         </div>
                         <div className="text-center">
                           <p className="text-xs text-slate-500 dark:text-slate-400">Calificación</p>
-                          <p className="text-lg font-bold text-amber-600 dark:text-amber-400">{group.averageRating}/5</p>
+                          <p className="text-lg font-bold text-amber-600 dark:text-amber-400">{reportData?.averageRating ?? group.averageRating}/5</p>
                         </div>
                         <div className="text-center">
                           <p className="text-xs text-slate-500 dark:text-slate-400">Satisfacción</p>
