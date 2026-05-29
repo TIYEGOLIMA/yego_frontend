@@ -1,4 +1,4 @@
-export type TipoTurno = 'manana' | 'tarde'
+export type TipoTurno = 'diurno' | 'nocturno'
 
 export interface DriverItem {
   driver_id: string

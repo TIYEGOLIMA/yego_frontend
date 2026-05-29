@@ -2946,8 +2946,8 @@ value={editOtrosGastos}
                 const duracionHoras = Math.floor(turno.duracion_minutos / 60)
                 const duracionMinutos = turno.duracion_minutos % 60
 
-                const isTarde = turno.tipo_turno === 'tarde'
-                const tipoTurnoLabel = turno.tipo_turno === 'manana' ? 'Mañana' : 'Tarde'
+                const isNocturno = turno.tipo_turno === 'nocturno'
+                const tipoTurnoLabel = turno.tipo_turno === 'diurno' ? 'Diurno' : 'Nocturno'
 
                 const inicioTxt = fechaPart(turno.hora_inicio)
                   ? `${formatearFechaLegible(fechaPart(turno.hora_inicio) ?? turno.fecha)} ${formatHoraAmPm(turno.hora_inicio)}`
@@ -2967,14 +2967,14 @@ value={editOtrosGastos}
                       <div className="flex items-center justify-between gap-2">
                         <span
                           className={`text-[11px] font-semibold shrink-0 px-1.5 py-0.5 rounded ${
-                            isTarde
+                            isNocturno
                               ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/50'
                               : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/50'
                           }`}
                         >
                           {tipoTurnoLabel}
                         </span>
-                        <span className={`text-xs font-bold tabular-nums shrink-0 leading-none ${isTarde ? 'text-indigo-600 dark:text-indigo-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                        <span className={`text-xs font-bold tabular-nums shrink-0 leading-none ${isNocturno ? 'text-indigo-600 dark:text-indigo-400' : 'text-amber-600 dark:text-amber-400'}`}>
                           {formatBalance(turno.efectivo_total ?? turno.monto_total ?? 0)}
                         </span>
                       </div>
