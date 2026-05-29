@@ -94,14 +94,17 @@ const formatearFechaConDia = (fechaStr: string): string => {
 
 const formatHoraAmPm = (horaStr: string | null | undefined): string => {
   if (!horaStr) return '—'
-  const d = new Date(horaStr.includes('T') ? horaStr : `1970-01-01T${horaStr}`)
+  const spaceIdx = horaStr.indexOf(' ')
+  const timePart = spaceIdx !== -1 ? horaStr.substring(spaceIdx + 1) : horaStr
+  const d = new Date(timePart.includes('T') ? timePart : `1970-01-01T${timePart}`)
   if (Number.isNaN(d.getTime())) return horaStr
   return d.toLocaleTimeString('es-PE', { hour: 'numeric', minute: '2-digit', hour12: true })
 }
 
 const fechaPart = (isoOrDateStr: string | null | undefined): string | null => {
   if (!isoOrDateStr) return null
-  return isoOrDateStr.includes('T') ? isoOrDateStr.split('T')[0]! : isoOrDateStr
+  const spaceIdx = isoOrDateStr.indexOf(' ')
+  return spaceIdx !== -1 ? isoOrDateStr.substring(0, spaceIdx) : (isoOrDateStr.includes('T') ? isoOrDateStr.split('T')[0]! : isoOrDateStr)
 }
 
 const parseNumber = (value: string | undefined | null, defaultValue = 0): number => {
@@ -2972,7 +2975,7 @@ value={editOtrosGastos}
                           {tipoTurnoLabel}
                         </span>
                         <span className={`text-xs font-bold tabular-nums shrink-0 leading-none ${isTarde ? 'text-indigo-600 dark:text-indigo-400' : 'text-amber-600 dark:text-amber-400'}`}>
-                          {formatBalance(turno.monto_total)}
+                          {formatBalance(turno.efectivo_total ?? turno.monto_total ?? 0)}
                         </span>
                       </div>
 

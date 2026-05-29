@@ -97,6 +97,8 @@ export interface TurnoResumen {
   tipo_turno: TipoTurno
   duracion_minutos: number
   monto_total: number
+  produccion_total: number
+  efectivo_total: number
   pagado: boolean
 }
 
