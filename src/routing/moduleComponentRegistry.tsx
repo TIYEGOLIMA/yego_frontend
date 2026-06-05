@@ -16,6 +16,7 @@ import { MarketingMensajesModule } from '@/features/core/marketing-mensajes'
 import ControlTowerModule from '@/features/core/control-tower/control-tower.module'
 import ControlLoopModule from '@/features/core/control-loop/control-loop.module'
 import FinanciatorModule from '@/features/core/financiator/financiator.module'
+import { CargaMasivaModule } from '@/features/core/carga-masiva'
 
 /**
  * Registro por código estable (columna codigo en queue_modulos).
@@ -40,6 +41,7 @@ const REGISTRY: Record<string, ComponentType> = {
   CONTROL_TOWER: ControlTowerModule,
   CONTROL_LOOP: ControlLoopModule,
   FINANCIATOR: FinanciatorModule,
+  CARGA_MASIVA: CargaMasivaModule,
 }
 
 export function getComponentByModuleCode(code: string): ComponentType | null {

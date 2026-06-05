@@ -2,8 +2,6 @@ import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   yegoProOpsService,
-  type ResumenSemanalResponse,
-  type ConductorSemanalInfo,
   type FacturacionSemanal,
   type BillingConfigResponse,
   type BonusThreshold,
@@ -54,7 +52,7 @@ export const FacturacionSemanalView = () => {
     lunes.setDate(lunes.getDate() + semanaOffset * 7)
     return lunes >= obtenerLunesSemana(new Date())
   })()
-  const [showConfirmPago, setShowConfirmPago] = useState<ConductorSemanalInfo | null>(null)
+  const [showConfirmPago, setShowConfirmPago] = useState<any | null>(null)
   const [conductorExpandido, setConductorExpandido] = useState<string | null>(null)
   const [vista, setVista] = useState<'resumen' | 'calculos' | 'config'>('calculos')
   const [searchTerm, setSearchTerm] = useState('')
@@ -82,10 +80,10 @@ export const FacturacionSemanalView = () => {
   const fechaFin = formatearFechaYMD(domingoSemana)
   const semanaFutura = lunesSemana > new Date()
 
-  const { data, isLoading, error, refetch } = useQuery<ResumenSemanalResponse>({
-    queryKey: ['yego-pro-ops-resumen-semanal', fechaInicio, fechaFin],
-    queryFn: () => yegoProOpsService.obtenerResumenSemanal(fechaInicio, fechaFin),
-    enabled: !semanaFutura && !semanaEnCurso,
+  const { data, isLoading, error, refetch } = useQuery<any>({
+    queryKey: ['yego-pro-ops-resumen-semanal-deprecated', fechaInicio, fechaFin],
+    queryFn: () => Promise.resolve({ conductores: [], fecha_inicio: fechaInicio, fecha_fin: fechaFin }),
+    enabled: false,
     staleTime: 30 * 1000,
     refetchOnWindowFocus: true,
   })
@@ -98,7 +96,7 @@ export const FacturacionSemanalView = () => {
     },
   })
 
-  const handleGuardarFacturacion = (conductor: ConductorSemanalInfo) => {
+  const handleGuardarFacturacion = (conductor: any) => {
     const payload: FacturacionSemanal = {
       driverId: conductor.driver_id,
       fechaInicio,

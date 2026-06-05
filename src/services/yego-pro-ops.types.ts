@@ -174,8 +174,8 @@ export interface RegistroCierre {
   totalIngresos: number
   totalGastos: number
   resta: number
-  calculatedShiftIds?: string
-  tiposTurno?: TipoTurno[]
+  calculadoShiftIds?: string
+  shiftSessionId?: string
   placa?: string | null
   odometroInicial?: number | null
   odometroFinal?: number | null
@@ -324,4 +324,86 @@ export interface PaymentPercentage {
 export interface BillingConfigResponse {
   bonus_thresholds: BonusThreshold[]
   payment_percentages: PaymentPercentage[]
+}
+
+export interface ShiftSessionResponse {
+  id: string
+  driverId: string
+  startedAt: string
+  closedAt: string | null
+  settledAt: string | null
+  status: 'active' | 'closed' | 'settled'
+  totalTrips: number
+  totalAmount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ShiftSessionSummaryResponse extends ShiftSessionResponse {
+  tripCount: number
+  runningTotal: number
+  firstTrip: string | null
+  lastTrip: string | null
+}
+
+export interface TripResponse {
+  id: string
+  driverId: string
+  shiftSessionId: string
+  externalTripId: string | null
+  completedAt: string
+  amount: number
+  createdAt: string
+}
+
+export interface RegisterTripRequest {
+  driverId: string
+  externalTripId?: string
+  completedAt: string
+  amount: number
+}
+
+export interface RegisterTripResponse {
+  trip: TripResponse
+  sessionOpened: boolean
+  session: ShiftSessionResponse
+}
+
+export interface SesionDiaInfo {
+  sessionId: string
+  inicio: string | null
+  fin: string | null
+  viajes: number
+  ingresos: number
+  km: number
+  status: string
+}
+
+export interface DiaLiquidacionInfo {
+  fecha: string
+  diaSemana: string
+  viajes: number
+  ingresos: number
+  ingresosPendientes: number
+  ingresosLiquidados: number
+  km: number
+  sesiones: number
+  estado: string
+  sesionesDetalle: SesionDiaInfo[]
+}
+
+export interface LiquidacionSemanalResponse {
+  driverId: string
+  semanaInicio: string
+  semanaFin: string
+  totalSesiones: number
+  totalViajes: number
+  totalIngresos: number
+  totalKm: number
+  primerViaje: string | null
+  ultimoViaje: string | null
+  dias: DiaLiquidacionInfo[]
+  sesionesPendientes: string[]
+  tieneSesionesCerradas: boolean
+  tieneSesionActiva: boolean
 }

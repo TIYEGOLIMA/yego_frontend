@@ -1,70 +1,72 @@
 import { api } from './core/api'
 import type {
   BillingConfigResponse,
-  CalcularTurnosResponse,
   ConductorEnOrden,
   ConductoresEnOrdenResponse,
   FacturacionSemanal,
-  FechasTurnosResponse,
+  LiquidacionSemanalResponse,
   ListaConductoresResponse,
   RegistroCierre,
-  ResumenPagosResponse,
-  ResumenSemanalResponse,
-  TurnosPagadosResponse,
+  RegisterTripRequest,
+  RegisterTripResponse,
+  ShiftSessionResponse,
+  ShiftSessionSummaryResponse,
+  TripResponse,
   ViajeCompleto,
   ViajesCompletosResponse,
   ViajesPorFechaResponse,
 } from './yego-pro-ops.types'
 
 export type {
-  TipoTurno,
   DriverItem,
   ConductorEnOrden,
   SummaryDistance,
   ConductoresEnOrdenResponse,
   ViajePorFecha,
   ViajesPorFechaResponse,
-  TipoTurnoFecha,
-  FechaTurno,
-  FechasTurnosResponse,
   ViajeCompleto,
-  TurnoResumen,
-  ConductorResumenPagos,
-  ResumenPagosResponse,
-  ConductorTurnosPagados,
-  TurnosPagadosResponse,
   ConductorSimple,
   ListaConductoresResponse,
   RegistroCierre,
   ViajesCompletosResponse,
-  CalcularTurnosResponse,
-  ResumenSemanalResponse,
   FacturacionSemanal,
   BillingConfigResponse,
+  ShiftSessionResponse,
+  ShiftSessionSummaryResponse,
+  TripResponse,
+  RegisterTripRequest,
+  RegisterTripResponse,
+  LiquidacionSemanalResponse,
+  DiaLiquidacionInfo,
+  SesionDiaInfo,
 } from './yego-pro-ops.types'
 
 const ENDPOINTS = {
   driversInOrder: '/pro-ops/drivers/in-order',
   viajesSimplificadosPorFecha: '/pro-ops/driver/viajes-simplificados-por-fecha',
-  fechasTurnos: (driverId: string) => `/pro-ops/driver/fechas-turnos/${driverId}`,
   viajesCompletos: '/pro-ops/driver/viajes-completos',
   cierre: '/pro-ops/driver/cierre',
   registrarCierre: '/pro-ops/driver/registrar-cierre',
-  resumenPagos: '/pro-ops/drivers/resumen-pagos',
-  turnosPagados: '/pro-ops/drivers/turnos-pagados',
   listaConductores: '/pro-ops/drivers',
-  calcularTurnos: '/pro-ops/driver/calcular-turnos',
-  resumenSemanal: '/pro-ops/drivers/resumen-semanal',
   facturacionSemanal: '/pro-ops/drivers/facturacion-semanal',
   historialFacturacion: '/pro-ops/drivers/facturacion-semanal/historial',
   configBilling: '/pro-ops/config/billing',
+  registerTrip: '/pro-ops/shift-sessions/trips',
+  activeSession: (driverId: string) => `/pro-ops/shift-sessions/active/${driverId}`,
+  sessionSummary: (sessionId: string) => `/pro-ops/shift-sessions/${sessionId}`,
+  sessionHistory: (driverId: string) => `/pro-ops/shift-sessions/driver/${driverId}`,
+  sessionTrips: (sessionId: string) => `/pro-ops/shift-sessions/${sessionId}/trips`,
+  closeSession: (sessionId: string) => `/pro-ops/shift-sessions/${sessionId}/close`,
+  settleSession: (sessionId: string) => `/pro-ops/shift-sessions/${sessionId}/settle`,
+  liquidacionSemanal: (driverId: string) => `/pro-ops/liquidacion/${driverId}/semanal`,
+  liquidarSemana: (driverId: string) => `/pro-ops/liquidacion/${driverId}/liquidar`,
 } as const
 
 export interface CierrePayload {
   driverId: string
   userId: number
   fecha: string
-  turnoIds?: number[]
+  shiftSessionId?: string
   gnvM3: string | null
   gnvSoles: number
   gasolinaGalones: string | null
@@ -86,20 +88,9 @@ export interface ActualizarCierrePayload extends CierrePayload {
   id: number
 }
 
-function ymdToLocalIso(ymd: string, endOfDay: boolean): string {
-  const d = new Date(ymd)
-  const offMin = -d.getTimezoneOffset()
-  const sign = offMin >= 0 ? '+' : '-'
-  const h = Math.floor(Math.abs(offMin) / 60)
-  const m = Math.abs(offMin) % 60
-  const z = `${sign}${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
-  return endOfDay ? `${ymd}T23:59:59${z}` : `${ymd}T00:00:00${z}`
-}
-
 function buildCierreBody(data: CierrePayload | ActualizarCierrePayload) {
   return {
     ...data,
-    turnoIds: data.turnoIds ?? [],
     placa: data.placa ?? null,
     odometroInicial: data.odometroInicial ?? null,
     odometroFinal: data.odometroFinal ?? null,
@@ -133,11 +124,6 @@ export const yegoProOpsService = {
     return data
   },
 
-  obtenerFechasTurnos: async (driverId: string): Promise<FechasTurnosResponse> => {
-    const { data } = await api.get<FechasTurnosResponse>(ENDPOINTS.fechasTurnos(driverId))
-    return data
-  },
-
   obtenerViajesCompletos: async (
     driverId: string,
     dateFrom?: string,
@@ -145,8 +131,8 @@ export const yegoProOpsService = {
   ): Promise<ViajesCompletosResponse> => {
     try {
       const params: { driverId: string; dateFrom?: string; dateTo?: string } = { driverId }
-      if (dateFrom) params.dateFrom = ymdToLocalIso(dateFrom, false)
-      if (dateTo) params.dateTo = ymdToLocalIso(dateTo, true)
+      if (dateFrom) params.dateFrom = dateFrom
+      if (dateTo) params.dateTo = dateTo
 
       const { data } = await api.get<
         ViajeCompleto[] | { orders?: ViajeCompleto[]; cierre_registrado?: boolean }
@@ -199,36 +185,8 @@ export const yegoProOpsService = {
     }
   },
 
-  obtenerResumenPagos: async (fecha?: string | null): Promise<ResumenPagosResponse> => {
-    const { data } = await api.get<ResumenPagosResponse>(ENDPOINTS.resumenPagos, {
-      params: fecha ? { fecha } : {},
-    })
-    return data
-  },
-
-  obtenerTurnosPagados: async (fecha?: string): Promise<TurnosPagadosResponse> => {
-    const { data } = await api.get<TurnosPagadosResponse>(ENDPOINTS.turnosPagados, {
-      params: fecha ? { fecha } : {},
-    })
-    return data
-  },
-
   obtenerListaConductores: async (): Promise<ListaConductoresResponse> => {
     const { data } = await api.get<ListaConductoresResponse>(ENDPOINTS.listaConductores)
-    return data
-  },
-
-  calcularTurnos: async (driverId: string, fecha: string): Promise<CalcularTurnosResponse> => {
-    const { data } = await api.get<CalcularTurnosResponse>(ENDPOINTS.calcularTurnos, {
-      params: { driverId, fecha },
-    })
-    return data
-  },
-
-  obtenerResumenSemanal: async (fechaInicio: string, fechaFin: string): Promise<ResumenSemanalResponse> => {
-    const { data } = await api.get<ResumenSemanalResponse>(ENDPOINTS.resumenSemanal, {
-      params: { fechaInicio, fechaFin },
-    })
     return data
   },
 
@@ -256,16 +214,61 @@ export const yegoProOpsService = {
     return data
   },
 
-  exportarAsistenciaExcel: async (fechaInicio: string, fechaFin: string): Promise<void> => {
-    const response = await api.get(ENDPOINTS.facturacionSemanal + '/exportar-asistencia', {
-      params: { fechaInicio, fechaFin },
-      responseType: 'blob',
+  registerTrip: async (request: RegisterTripRequest): Promise<RegisterTripResponse> => {
+    const { data } = await api.post<RegisterTripResponse>(ENDPOINTS.registerTrip, {
+      driverId: request.driverId,
+      externalTripId: request.externalTripId ?? null,
+      completedAt: request.completedAt,
+      amount: request.amount,
     })
-    const url = window.URL.createObjectURL(new Blob([response.data]))
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `Asistencia_Yego_PRO_${fechaInicio}_${fechaFin}.xlsx`
-    link.click()
-    window.URL.revokeObjectURL(url)
+    return data
+  },
+
+  getActiveSession: async (driverId: string): Promise<ShiftSessionResponse | null> => {
+    try {
+      const { data } = await api.get<ShiftSessionResponse>(ENDPOINTS.activeSession(driverId))
+      return data
+    } catch (error: unknown) {
+      const status = (error as { response?: { status?: number } })?.response?.status
+      if (status === 404) return null
+      throw error
+    }
+  },
+
+  getSessionSummary: async (sessionId: string): Promise<ShiftSessionSummaryResponse> => {
+    const { data } = await api.get<ShiftSessionSummaryResponse>(ENDPOINTS.sessionSummary(sessionId))
+    return data
+  },
+
+  getSessionHistory: async (driverId: string): Promise<ShiftSessionResponse[]> => {
+    const { data } = await api.get<ShiftSessionResponse[]>(ENDPOINTS.sessionHistory(driverId))
+    return data
+  },
+
+  getSessionTrips: async (sessionId: string): Promise<TripResponse[]> => {
+    const { data } = await api.get<TripResponse[]>(ENDPOINTS.sessionTrips(sessionId))
+    return data
+  },
+
+  closeSession: async (sessionId: string, closedBy: number): Promise<ShiftSessionResponse> => {
+    const { data } = await api.post<ShiftSessionResponse>(ENDPOINTS.closeSession(sessionId), { closedBy })
+    return data
+  },
+
+  settleSession: async (sessionId: string, settledBy: number): Promise<ShiftSessionResponse> => {
+    const { data } = await api.post<ShiftSessionResponse>(ENDPOINTS.settleSession(sessionId), { settledBy })
+    return data
+  },
+
+  getLiquidacionSemanal: async (driverId: string, weekStart?: string): Promise<LiquidacionSemanalResponse> => {
+    const params: Record<string, string> = {}
+    if (weekStart) params.weekStart = weekStart
+    const { data } = await api.get<LiquidacionSemanalResponse>(ENDPOINTS.liquidacionSemanal(driverId), { params })
+    return data
+  },
+
+  liquidarSemana: async (driverId: string): Promise<{ liquidado: boolean; sesiones: number; total: number; mensaje?: string }> => {
+    const { data } = await api.post<{ liquidado: boolean; sesiones: number; total: number; mensaje?: string }>(ENDPOINTS.liquidarSemana(driverId))
+    return data
   },
 }

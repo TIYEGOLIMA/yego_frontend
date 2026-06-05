@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { yegoProOpsService, type DriverItem, type ViajesCompletosResponse, type RegistroCierre, type FechasTurnosResponse, type ResumenPagosResponse, type ConductorResumenPagos, type TurnosPagadosResponse, type ListaConductoresResponse, type ViajeCompleto } from '../../../../services/yego-pro-ops-service'
+import { yegoProOpsService, type DriverItem, type ViajesCompletosResponse, type RegistroCierre, type ListaConductoresResponse, type ViajeCompleto } from '../../../../services/yego-pro-ops-service'
 import { useAuth } from '../../../../shared/hooks/useAuth'
 import { useToastNotifications } from '../../../../hooks/useToastNotifications'
 import { NotificationContainer } from '../../../../components/NotificationToast'
@@ -572,30 +572,25 @@ export const DetalleView = () => {
     staleTime: 60 * 1000,
   })
 
-  const { data: resumenPagosData, isLoading: loadingResumenPagos, refetch: refetchResumenPagos } = useQuery<ResumenPagosResponse>({
-    queryKey: ['yego-pro-ops-resumen-pagos', fechaSeleccionada],
-    queryFn: () => yegoProOpsService.obtenerResumenPagos(fechaSeleccionada),
+  const { data: resumenPagosData, isLoading: loadingResumenPagos, refetch: refetchResumenPagos } = useQuery<{ conductores: any[] }>({
+    queryKey: ['yego-pro-ops-resumen-pagos-deprecated', fechaSeleccionada],
+    queryFn: () => Promise.resolve({ conductores: [] }),
     enabled: true,
     refetchOnWindowFocus: false,
     staleTime: 90 * 1000,
   })
 
-  const { refetch: refetchTurnosPagados } = useQuery<TurnosPagadosResponse>({
-    queryKey: ['yego-pro-ops-turnos-pagados', fechaSeleccionada],
-    queryFn: () => yegoProOpsService.obtenerTurnosPagados(fechaSeleccionada),
+  const { refetch: refetchTurnosPagados } = useQuery<{ conductores: any[] }>({
+    queryKey: ['yego-pro-ops-turnos-pagados-deprecated', fechaSeleccionada],
+    queryFn: () => Promise.resolve({ conductores: [] }),
     enabled: true,
     refetchOnWindowFocus: false,
     staleTime: 90 * 1000,
   })
 
-  const { data: fechasTurnosData } = useQuery<FechasTurnosResponse>({
-    queryKey: ['yego-pro-ops-fechas-turnos', selectedDriver?.driver_id],
-    queryFn: () => {
-      if (!selectedDriver) {
-        throw new Error('No hay conductor seleccionado')
-      }
-      return yegoProOpsService.obtenerFechasTurnos(selectedDriver.driver_id)
-    },
+  const { data: fechasTurnosData } = useQuery<{ fechas: { fecha: string }[] }>({
+    queryKey: ['yego-pro-ops-fechas-turnos-deprecated', selectedDriver?.driver_id],
+    queryFn: () => Promise.resolve({ fechas: [] }),
     enabled: showModal && !!selectedDriver,
     refetchOnWindowFocus: false,
     staleTime: 60 * 1000,
@@ -890,7 +885,7 @@ export const DetalleView = () => {
       setCerrandoTurnos(true)
       setConductorParaCerrarTurnos(conductor)
 
-      const respuesta = await yegoProOpsService.calcularTurnos(conductor.driver_id, fechaSeleccionada)
+      const respuesta: any = { message: 'Turnos deprecados - usar ShiftSessions', driverId: conductor.driver_id, fecha: fechaSeleccionada, cantidadTurnos: 0 }
 
       setRespuestaCerrarTurnos(respuesta)
       setShowModalCerrarTurnos(true)
@@ -968,7 +963,6 @@ export const DetalleView = () => {
         driverId: selectedDriver.driver_id,
         userId: user?.id ?? 0,
         fecha: fechaInicio,
-        turnoIds: obtenerTurnoIdsPorFecha(fechaInicio),
         gnvM3: editGnvM3 || null,
         gnvSoles: parseNumber(editGnvSoles),
         gasolinaGalones: editGasolinaGalones || null,
@@ -1054,7 +1048,6 @@ export const DetalleView = () => {
         driverId: selectedDriver.driver_id,
         userId: user?.id ?? 0,
         fecha: fechaInicio,
-        turnoIds: obtenerTurnoIdsPorFecha(fechaInicio),
         gnvM3: gnvM3 || null,
         gnvSoles: parseNumber(gnvSoles),
         gasolinaGalones: gasolinaGalones || null,
@@ -2447,13 +2440,11 @@ export const DetalleView = () => {
                     <span className="text-gray-600 dark:text-gray-400">Fecha:</span>
                     <span className="font-semibold text-gray-900 dark:text-gray-100">{formatearFechaConDia(cierreDetalle.fecha)}</span>
                   </div>
-                  {cierreDetalle.tiposTurno && cierreDetalle.tiposTurno.length > 0 && (
+                  {cierreDetalle.shiftSessionId && (
                     <div className="flex flex-wrap gap-1.5">
-                      {cierreDetalle.tiposTurno.map((tipo, index) => (
-                        <Badge key={index} variant="outline" className="capitalize text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800">
-                          {tipo}
-                        </Badge>
-                      ))}
+                      <Badge variant="outline" className="text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800">
+                        Sesión: {cierreDetalle.shiftSessionId.substring(0, 8)}
+                      </Badge>
                     </div>
                   )}
                 </>

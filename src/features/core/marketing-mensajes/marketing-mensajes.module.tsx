@@ -695,6 +695,25 @@ const Tabs = <T extends string>({
 };
 
 const MarketingMensajesModule: React.FC = () => {
+  const isDev = import.meta.env.DEV;
+
+  if (isDev) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center max-w-md">
+          <AlertTriangle className="w-16 h-16 text-amber-500 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+            Módulo desactivado en local
+          </h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Marketing Mensajes requiere conexión a servicios externos (WhatsApp, Yandex, grupos, flotas) 
+            que no están disponibles en entorno de desarrollo local.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const authState = useAuth();
   const [mensajes, setMensajes] = useState<MensajeMarketing[]>([]);
   const [mensajesCalendario, setMensajesCalendario] = useState<MensajeCalendario[]>([]);

@@ -1,9 +1,9 @@
 import React from 'react'
-import { DetalleView } from './components/DetalleView'
 import { MonitoreoEnVivoView } from './components/MonitoreoEnVivoView'
-import { FacturacionSemanalView } from './components/FacturacionSemanalView'
+import { ShiftSessionsView } from './components/ShiftSessionsView'
+import { LiquidacionView } from './components/LiquidacionView'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../components/ui/tabs'
-import { FileText, Radio, ReceiptText } from 'lucide-react'
+import { Radio, Clock, DollarSign } from 'lucide-react'
 
 const YegoProOpsModule: React.FC = () => {
   return (
@@ -14,37 +14,37 @@ const YegoProOpsModule: React.FC = () => {
             Gestión de Turnos
           </h1>
           <p className="yego-body">
-            Administra turnos de conductores por día (mañana y tarde) con asignación de vehículos
+            Administra sesiones de conductores, monitoreo en vivo y liquidaciones
           </p>
         </div>
       </div>
 
-      <Tabs defaultValue="monitoreo" className="space-y-4">
+      <Tabs defaultValue="sesiones" className="space-y-4">
         <TabsList className="grid w-full grid-cols-3 bg-transparent p-0 h-auto rounded-none border-b border-gray-200 dark:border-gray-700">
+          <TabsTrigger value="sesiones" className="flex items-center gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-red-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none py-2">
+            <Clock className="w-4 h-4" />
+            Sesiones
+          </TabsTrigger>
+          <TabsTrigger value="liquidacion" className="flex items-center gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-red-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none py-2">
+            <DollarSign className="w-4 h-4" />
+            Liquidación
+          </TabsTrigger>
           <TabsTrigger value="monitoreo" className="flex items-center gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-red-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none py-2">
             <Radio className="w-4 h-4" />
-            Monitoreo en Vivo
-          </TabsTrigger>
-          <TabsTrigger value="detalle" className="flex items-center gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-red-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none py-2">
-            <FileText className="w-4 h-4" />
-            Detalle
-          </TabsTrigger>
-          <TabsTrigger value="facturacion" className="flex items-center gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-red-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none py-2">
-            <ReceiptText className="w-4 h-4" />
-            Facturación Semanal
+            Monitoreo
           </TabsTrigger>
         </TabsList>
 
+        <TabsContent value="sesiones" className="space-y-4 data-[state=inactive]:hidden" forceMount>
+          <ShiftSessionsView />
+        </TabsContent>
+
+        <TabsContent value="liquidacion" className="space-y-4 data-[state=inactive]:hidden" forceMount>
+          <LiquidacionView />
+        </TabsContent>
+
         <TabsContent value="monitoreo" className="space-y-4 data-[state=inactive]:hidden" forceMount>
           <MonitoreoEnVivoView />
-        </TabsContent>
-
-        <TabsContent value="detalle" className="space-y-4 data-[state=inactive]:hidden" forceMount>
-          <DetalleView />
-        </TabsContent>
-
-        <TabsContent value="facturacion" className="space-y-4 data-[state=inactive]:hidden" forceMount>
-          <FacturacionSemanalView />
         </TabsContent>
       </Tabs>
 
