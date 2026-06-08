@@ -384,8 +384,8 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
                 <>
                   <div className="bg-[#F8F8F8] dark:bg-neutral-800/60 rounded-xl p-4"><span className="text-[11px] font-semibold text-gray-400 uppercase">VIAJES</span><p className="text-[28px] font-bold text-gray-900 dark:text-gray-100 leading-tight mb-1">{metricasYango.totalViajes}</p><p className="text-xs text-gray-400">{metricasYango.viajesPorHora.toFixed(1)} viajes/hora</p></div>
                   <div className="bg-[#F8F8F8] dark:bg-neutral-800/60 rounded-xl p-4"><span className="text-[11px] font-semibold text-gray-400 uppercase">PRODUCIDO</span><p className="text-[28px] font-bold text-gray-900 dark:text-gray-100 leading-tight mb-1">{formatCurrency(metricasYango.montoTotalProducido)}</p><p className="text-xs text-gray-400">Comisión: {formatCurrency(metricasYango.comisionApp)}</p></div>
-                  <div className="bg-emerald-50 dark:bg-emerald-950/20 rounded-xl p-4"><span className="text-[11px] font-semibold text-gray-400 uppercase">MONTO NETO</span><p className="text-[28px] font-bold text-gray-900 dark:text-gray-100 leading-tight mb-1">{formatCurrency(metricasYango.montoNeto)}</p><p className="text-xs text-gray-400">Producción bonificable</p></div>
-                  <div className="bg-emerald-50 dark:bg-emerald-950/20 rounded-xl p-4"><span className="text-[11px] font-semibold text-gray-400 uppercase">PAGO TOTAL</span><p className="text-[28px] font-bold text-emerald-600 leading-tight mb-1">{formatCurrency(metricasYango.pagoTotal)}</p><p className="text-xs text-gray-400">% Pago: {fmtPercent(metricasYango.porcentajePago)} · Utilidad: {formatCurrency(metricasYango.utilidad)}</p></div>
+                  <div className="bg-emerald-50 dark:bg-emerald-950/20 rounded-xl p-4"><span className="text-[11px] font-semibold text-gray-400 uppercase">EFECTIVO</span><p className="text-[28px] font-bold text-gray-900 dark:text-gray-100 leading-tight mb-1">{formatCurrency(metricasYango.efectivo)}</p><p className="text-xs text-gray-400">Efectivo recolectado</p></div>
+                  <div className="bg-emerald-50 dark:bg-emerald-950/20 rounded-xl p-4"><span className="text-[11px] font-semibold text-gray-400 uppercase">MONTO NETO</span><p className="text-[28px] font-bold text-emerald-600 leading-tight mb-1">{formatCurrency(metricasYango.montoNeto)}</p><p className="text-xs text-gray-400">% Pago: {fmtPercent(metricasYango.porcentajePago)} · Utilidad: {formatCurrency(metricasYango.utilidad)}</p></div>
                 </>
               ) : (
                 <>
@@ -478,16 +478,16 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
                     </div>
                     <div className="rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20 p-4">
                       <div className="mb-3">
-                        <span className="text-xs font-semibold text-emerald-600 uppercase">Neto</span>
+                        <span className="text-xs font-semibold text-emerald-600 uppercase">Efectivo</span>
                       </div>
-                      <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">{formatCurrency(metricasYango.montoNeto)}</p>
-                      <p className="text-[11px] text-emerald-500 mt-0.5">Prod. bonificable</p>
+                      <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">{formatCurrency(metricasYango.efectivo)}</p>
+                      <p className="text-[11px] text-emerald-500 mt-0.5">Efectivo recolectado</p>
                     </div>
                     <div className="rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20 p-4">
                       <div className="mb-3">
-                        <span className="text-xs font-semibold text-emerald-600 uppercase">A Pagar</span>
+                        <span className="text-xs font-semibold text-emerald-600 uppercase">Monto Neto</span>
                       </div>
-                      <p className="text-2xl font-bold text-emerald-600">{formatCurrency(metricasYango.pagoTotal)}</p>
+                      <p className="text-2xl font-bold text-emerald-600">{formatCurrency(metricasYango.montoNeto)}</p>
                       <p className="text-[11px] text-emerald-500 mt-0.5">{fmtPercent(metricasYango.porcentajePago)}</p>
                     </div>
                   </div>
@@ -536,7 +536,7 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
                   ) : (
                     <Button onClick={openCerrarTurno}
                       className="w-full h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-sm shadow-emerald-200 dark:shadow-emerald-900/30">
-                      Cerrar turno — {formatCurrency(metricasYango.pagoTotal)}
+                      Cerrar turno — {formatCurrency(metricasYango.efectivo)}
                     </Button>
                   )}
                 </div>

@@ -428,6 +428,7 @@ export interface LiquidacionPendienteResponse {
   porcentajePago: number
   pago: number
   pagoTotal: number
+  efectivo: number
   utilidad: number
   utilidadPorViaje: number
   pagoPorViaje: number
