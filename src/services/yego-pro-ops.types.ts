@@ -339,36 +339,6 @@ export interface ShiftSessionResponse {
   updatedAt: string
 }
 
-export interface ShiftSessionSummaryResponse extends ShiftSessionResponse {
-  tripCount: number
-  runningTotal: number
-  firstTrip: string | null
-  lastTrip: string | null
-}
-
-export interface TripResponse {
-  id: string
-  driverId: string
-  shiftSessionId: string
-  externalTripId: string | null
-  completedAt: string
-  amount: number
-  createdAt: string
-}
-
-export interface RegisterTripRequest {
-  driverId: string
-  externalTripId?: string
-  completedAt: string
-  amount: number
-}
-
-export interface RegisterTripResponse {
-  trip: TripResponse
-  sessionOpened: boolean
-  session: ShiftSessionResponse
-}
-
 export interface SesionDiaInfo {
   sessionId: string
   inicio: string | null
@@ -406,4 +376,77 @@ export interface LiquidacionSemanalResponse {
   sesionesPendientes: string[]
   tieneSesionesCerradas: boolean
   tieneSesionActiva: boolean
+  montoTotalProducido: number
+  bonoYango: number
+  comisionApp: number
+  montoNeto: number
+  produccionBonificable: number
+  bonoAdicViajes: number
+  bono: number
+  porcentajePago: number
+  pago: number
+  pagoTotal: number
+  utilidad: number
+  utilidadPorViaje: number
+  pagoPorViaje: number
+  kmRecorrido: number
+  gastoMantenimiento: number
+  viajesPorHora: number
+  sesionesDetalle: SesionDiaInfo[]
+  semanaCerrada: boolean
+}
+
+export interface DiaPendienteInfo {
+  fecha: string
+  diaSemana: string
+  sesiones: number
+  viajes: number
+  ingresos: number
+  km: number
+  estado: string
+  sesionesDetalle: SesionDiaInfo[]
+}
+
+export interface LiquidacionPendienteResponse {
+  driverId: string
+  periodoDesde: string
+  periodoHasta: string
+  esPrimeraLiquidacion: boolean
+  totalSesiones: number
+  totalViajes: number
+  viajesPorHora: number
+  kmRecorrido: number
+  montoTotalProducido: number
+  placa: string
+  carBrandModel: string
+  semanaCerrada: boolean
+  bonoYango: number
+  comisionApp: number
+  montoNeto: number
+  produccionBonificable: number
+  bono: number
+  porcentajePago: number
+  pago: number
+  pagoTotal: number
+  utilidad: number
+  utilidadPorViaje: number
+  pagoPorViaje: number
+  diasTrabajados: number
+  sesionesPendientes: string[]
+  dias: DiaPendienteInfo[]
+}
+
+export interface LiquidarPendienteResult {
+  liquidado: boolean
+  mensaje?: string
+  sesiones?: number
+  viajes?: number
+  total?: number
+  montoNeto?: number
+  comisionApp?: number
+  bono?: number
+  porcentajePago?: number
+  pagoTotal?: number
+  utilidad?: number
+  facturacionId?: number
 }

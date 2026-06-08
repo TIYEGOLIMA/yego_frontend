@@ -4,14 +4,12 @@ import type {
   ConductorEnOrden,
   ConductoresEnOrdenResponse,
   FacturacionSemanal,
+  LiquidacionPendienteResponse,
   LiquidacionSemanalResponse,
+  LiquidarPendienteResult,
   ListaConductoresResponse,
   RegistroCierre,
-  RegisterTripRequest,
-  RegisterTripResponse,
   ShiftSessionResponse,
-  ShiftSessionSummaryResponse,
-  TripResponse,
   ViajeCompleto,
   ViajesCompletosResponse,
   ViajesPorFechaResponse,
@@ -32,12 +30,11 @@ export type {
   FacturacionSemanal,
   BillingConfigResponse,
   ShiftSessionResponse,
-  ShiftSessionSummaryResponse,
-  TripResponse,
-  RegisterTripRequest,
-  RegisterTripResponse,
   LiquidacionSemanalResponse,
+  LiquidacionPendienteResponse,
+  LiquidarPendienteResult,
   DiaLiquidacionInfo,
+  DiaPendienteInfo,
   SesionDiaInfo,
 } from './yego-pro-ops.types'
 
@@ -46,20 +43,24 @@ const ENDPOINTS = {
   viajesSimplificadosPorFecha: '/pro-ops/driver/viajes-simplificados-por-fecha',
   viajesCompletos: '/pro-ops/driver/viajes-completos',
   cierre: '/pro-ops/driver/cierre',
+  cierrePorSession: (sessionId: string) => `/pro-ops/driver/cierre/session/${sessionId}`,
   registrarCierre: '/pro-ops/driver/registrar-cierre',
   listaConductores: '/pro-ops/drivers',
   facturacionSemanal: '/pro-ops/drivers/facturacion-semanal',
   historialFacturacion: '/pro-ops/drivers/facturacion-semanal/historial',
   configBilling: '/pro-ops/config/billing',
-  registerTrip: '/pro-ops/shift-sessions/trips',
   activeSession: (driverId: string) => `/pro-ops/shift-sessions/active/${driverId}`,
-  sessionSummary: (sessionId: string) => `/pro-ops/shift-sessions/${sessionId}`,
   sessionHistory: (driverId: string) => `/pro-ops/shift-sessions/driver/${driverId}`,
-  sessionTrips: (sessionId: string) => `/pro-ops/shift-sessions/${sessionId}/trips`,
   closeSession: (sessionId: string) => `/pro-ops/shift-sessions/${sessionId}/close`,
   settleSession: (sessionId: string) => `/pro-ops/shift-sessions/${sessionId}/settle`,
+  deleteSession: (sessionId: string) => `/pro-ops/shift-sessions/${sessionId}`,
   liquidacionSemanal: (driverId: string) => `/pro-ops/liquidacion/${driverId}/semanal`,
-  liquidarSemana: (driverId: string) => `/pro-ops/liquidacion/${driverId}/liquidar`,
+  liquidacionPendiente: (driverId: string) => `/pro-ops/liquidacion/${driverId}/pendiente`,
+  liquidarPendiente: (driverId: string, userId?: number) => {
+    const params = userId ? `?userId=${userId}` : ''
+    return `/pro-ops/liquidacion/${driverId}/liquidar${params}`
+  },
+  limpiarFacturacion: (driverId: string) => `/pro-ops/liquidacion/${driverId}/limpiar`,
 } as const
 
 export interface CierrePayload {
@@ -166,6 +167,17 @@ export const yegoProOpsService = {
     }
   },
 
+  obtenerCierrePorSession: async (sessionId: string): Promise<RegistroCierre | null> => {
+    try {
+      const { data } = await api.get<RegistroCierre>(ENDPOINTS.cierrePorSession(sessionId))
+      return data
+    } catch (error: unknown) {
+      const status = (error as { response?: { status?: number } })?.response?.status
+      if (status === 404) return null
+      throw error
+    }
+  },
+
   registrarCierre: async (data: CierrePayload): Promise<void> => {
     try {
       await api.post(ENDPOINTS.registrarCierre, buildCierreBody(data))
@@ -214,16 +226,6 @@ export const yegoProOpsService = {
     return data
   },
 
-  registerTrip: async (request: RegisterTripRequest): Promise<RegisterTripResponse> => {
-    const { data } = await api.post<RegisterTripResponse>(ENDPOINTS.registerTrip, {
-      driverId: request.driverId,
-      externalTripId: request.externalTripId ?? null,
-      completedAt: request.completedAt,
-      amount: request.amount,
-    })
-    return data
-  },
-
   getActiveSession: async (driverId: string): Promise<ShiftSessionResponse | null> => {
     try {
       const { data } = await api.get<ShiftSessionResponse>(ENDPOINTS.activeSession(driverId))
@@ -235,18 +237,8 @@ export const yegoProOpsService = {
     }
   },
 
-  getSessionSummary: async (sessionId: string): Promise<ShiftSessionSummaryResponse> => {
-    const { data } = await api.get<ShiftSessionSummaryResponse>(ENDPOINTS.sessionSummary(sessionId))
-    return data
-  },
-
   getSessionHistory: async (driverId: string): Promise<ShiftSessionResponse[]> => {
     const { data } = await api.get<ShiftSessionResponse[]>(ENDPOINTS.sessionHistory(driverId))
-    return data
-  },
-
-  getSessionTrips: async (sessionId: string): Promise<TripResponse[]> => {
-    const { data } = await api.get<TripResponse[]>(ENDPOINTS.sessionTrips(sessionId))
     return data
   },
 
@@ -260,6 +252,10 @@ export const yegoProOpsService = {
     return data
   },
 
+  deleteSession: async (sessionId: string, userId: number, reason: string): Promise<void> => {
+    await api.delete(ENDPOINTS.deleteSession(sessionId), { params: { userId, reason } })
+  },
+
   getLiquidacionSemanal: async (driverId: string, weekStart?: string): Promise<LiquidacionSemanalResponse> => {
     const params: Record<string, string> = {}
     if (weekStart) params.weekStart = weekStart
@@ -267,8 +263,20 @@ export const yegoProOpsService = {
     return data
   },
 
-  liquidarSemana: async (driverId: string): Promise<{ liquidado: boolean; sesiones: number; total: number; mensaje?: string }> => {
-    const { data } = await api.post<{ liquidado: boolean; sesiones: number; total: number; mensaje?: string }>(ENDPOINTS.liquidarSemana(driverId))
+  getLiquidacionPendiente: async (driverId: string, desde?: string, hasta?: string): Promise<LiquidacionPendienteResponse> => {
+    const params: Record<string, string> = {}
+    if (desde) params.desde = desde.split('T')[1]?.split(':').length === 2 ? desde + ':00' : desde
+    if (hasta) params.hasta = hasta.split('T')[1]?.split(':').length === 2 ? hasta + ':00' : hasta
+    const { data } = await api.get<LiquidacionPendienteResponse>(ENDPOINTS.liquidacionPendiente(driverId), { params })
     return data
+  },
+
+  liquidarPendiente: async (body: Record<string, unknown>): Promise<LiquidarPendienteResult> => {
+    const { data } = await api.post<LiquidarPendienteResult>(ENDPOINTS.liquidarPendiente(body.driverId as string, body.userId as number), body)
+    return data
+  },
+
+  limpiarFacturacion: async (driverId: string, desde: string, hasta: string): Promise<void> => {
+    await api.delete(ENDPOINTS.limpiarFacturacion(driverId), { params: { desde: desde.split('T')[0], hasta: hasta.split('T')[0] } })
   },
 }
