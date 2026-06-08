@@ -293,7 +293,7 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
   const activeCount = driversData?.conductores?.length ?? 0
   const odometroDif = (cierreForm.odometroInicial && cierreForm.odometroFinal) ? parseInt(cierreForm.odometroFinal) - parseInt(cierreForm.odometroInicial) : 0
   const totalGastos = (parseFloat(cierreForm.gnvSoles) || 0) + (parseFloat(cierreForm.gasolinaSoles) || 0) + (parseFloat(cierreForm.otrosGastos) || 0)
-  const ingresosModal = modalModo === 'turno' ? (metricasYango?.montoTotalProducido ?? 0) : (sessionALiquidar?.totalAmount ?? 0)
+  const ingresosModal = modalModo === 'turno' ? (metricasYango?.efectivo ?? 0) : (sessionALiquidar?.totalAmount ?? 0)
   const isReadonly = modalModo === 'sesion' && sessionALiquidar?.status === 'settled'
   const montoRestante = ingresosModal - totalGastos
   const totalLiquidacion = (parseFloat(cierreForm.liquidaEfectivo) || 0) + (parseFloat(cierreForm.liquidaYape) || 0)
