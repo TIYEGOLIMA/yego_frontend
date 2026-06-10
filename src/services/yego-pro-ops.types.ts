@@ -335,6 +335,7 @@ export interface ShiftSessionResponse {
   status: 'active' | 'closed' | 'settled'
   totalTrips: number
   totalAmount: number
+  totalCash: number
   createdAt: string
   updatedAt: string
 }

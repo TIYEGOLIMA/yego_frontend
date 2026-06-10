@@ -59,6 +59,9 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
   const [sessionALiquidar, setSessionALiquidar] = useState<ShiftSessionResponse | null>(null)
   const [liquidando, setLiquidando] = useState(false)
   const [cargandoDetalle, setCargandoDetalle] = useState(false)
+  const [editando, setEditando] = useState(false)
+  const [guardandoCambios, setGuardandoCambios] = useState(false)
+  const [errorEdicion, setErrorEdicion] = useState('')
   const [resultadoExpandido, setResultadoExpandido] = useState(false)
   const [cierrePrevio, setCierrePrevio] = useState<RegistroCierre | null>(null)
   const [cierreForm, setCierreForm] = useState({ placa: '', odometroInicial: '', odometroFinal: '', gnvM3: '', gnvSoles: '', gasolinaGalones: '', gasolinaSoles: '', liquidaEfectivo: '', liquidaYape: '', otrosGastos: '', otrosGastosDescripcion: '' })
@@ -210,6 +213,7 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
   const openLiquidarSesion = useCallback(async (session: ShiftSessionResponse) => {
     if (cargandoDetalle) return
     setModalModo('sesion'); setSessionALiquidar(session); setShowLiquidarModal(true)
+    setEditando(false); setErrorEdicion('')
     setCierreForm({ placa: '', odometroInicial: '', odometroFinal: '', gnvM3: '', gnvSoles: '', gasolinaGalones: '', gasolinaSoles: '', liquidaEfectivo: '', liquidaYape: '', otrosGastos: '', otrosGastosDescripcion: '' })
     setCargandoDetalle(true)
     try {
@@ -234,7 +238,7 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
     try {
       await yegoProOpsService.settleSession(sessionALiquidar.id, user?.id ?? 0)
       const fecha = new Date(sessionALiquidar.startedAt).toISOString().split('T')[0]
-      const ingresos = sessionALiquidar.totalAmount ?? 0
+      const ingresos = (sessionALiquidar.totalCash || sessionALiquidar.totalAmount) ?? 0
       const gastos = (parseFloat(cierreForm.gnvSoles) || 0) + (parseFloat(cierreForm.gasolinaSoles) || 0) + (parseFloat(cierreForm.otrosGastos) || 0)
       await yegoProOpsService.registrarCierre({
         driverId: selectedDriver.driverId, userId: user?.id ?? 0, fecha, shiftSessionId: sessionALiquidar.id,
@@ -251,6 +255,65 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
       setShowLiquidarModal(false); setSessionALiquidar(null)
     } catch (e) { console.error('Error liquidando sesión:', e) }
     setLiquidando(false)
+  }
+
+  const handleEditar = () => {
+    setEditando(true)
+    setErrorEdicion('')
+  }
+
+  const handleCancelarEdicion = () => {
+    setEditando(false)
+    setErrorEdicion('')
+    if (cierrePrevio) {
+      setCierreForm({
+        placa: cierrePrevio.placa ?? '', odometroInicial: cierrePrevio.odometroInicial?.toString() ?? '', odometroFinal: cierrePrevio.odometroFinal?.toString() ?? '',
+        gnvM3: cierrePrevio.gnvM3 ?? '', gnvSoles: cierrePrevio.gnvSoles?.toString() ?? '', gasolinaGalones: cierrePrevio.gasolinaGalones ?? '', gasolinaSoles: cierrePrevio.gasolinaSoles?.toString() ?? '',
+        liquidaEfectivo: cierrePrevio.liquidaEfectivo?.toString() ?? '', liquidaYape: cierrePrevio.liquidaYape?.toString() ?? '',
+        otrosGastos: cierrePrevio.otrosGastos?.toString() ?? '', otrosGastosDescripcion: cierrePrevio.otrosGastosDescripcion ?? ''
+      })
+    }
+  }
+
+  const handleGuardarEdicion = async () => {
+    if (!cierrePrevio || !selectedDriver || !user || !sessionALiquidar) return
+    const totalLiquidacion = (parseFloat(cierreForm.liquidaEfectivo) || 0) + (parseFloat(cierreForm.liquidaYape) || 0)
+    const ingresos = (sessionALiquidar.totalCash || sessionALiquidar.totalAmount) ?? 0
+    const totalG = (parseFloat(cierreForm.gnvSoles) || 0) + (parseFloat(cierreForm.gasolinaSoles) || 0) + (parseFloat(cierreForm.otrosGastos) || 0)
+    if (Math.abs(ingresos - totalG - totalLiquidacion) > 0.01) {
+      setErrorEdicion('Los montos no calzan. Ajustá los valores.')
+      return
+    }
+    setGuardandoCambios(true)
+    setErrorEdicion('')
+    try {
+      await yegoProOpsService.actualizarCierre({
+        id: cierrePrevio.id,
+        driverId: selectedDriver.driverId,
+        userId: user.id ?? 0,
+        fecha: cierrePrevio.fecha,
+        shiftSessionId: sessionALiquidar.id,
+        placa: cierreForm.placa || null,
+        odometroInicial: cierreForm.odometroInicial ? parseInt(cierreForm.odometroInicial) : null,
+        odometroFinal: cierreForm.odometroFinal ? parseInt(cierreForm.odometroFinal) : null,
+        diferenciaOdometro: (cierreForm.odometroInicial && cierreForm.odometroFinal) ? parseInt(cierreForm.odometroFinal) - parseInt(cierreForm.odometroInicial) : null,
+        gnvM3: cierreForm.gnvM3 || null, gnvSoles: parseFloat(cierreForm.gnvSoles) || 0,
+        gasolinaGalones: cierreForm.gasolinaGalones || null, gasolinaSoles: parseFloat(cierreForm.gasolinaSoles) || 0,
+        liquidaEfectivo: parseFloat(cierreForm.liquidaEfectivo) || 0, liquidaYape: parseFloat(cierreForm.liquidaYape) || 0,
+        otrosGastos: parseFloat(cierreForm.otrosGastos) || 0, otrosGastosDescripcion: cierreForm.otrosGastosDescripcion || null,
+        totalIngresos: ingresos, totalGastos: totalG, resta: ingresos - totalG,
+      })
+      if (sessionALiquidar) {
+        const previo = await yegoProOpsService.obtenerCierrePorSession(sessionALiquidar.id)
+        if (previo) setCierrePrevio(previo)
+      }
+      setEditando(false)
+      queryClient.invalidateQueries({ queryKey: ['pro-ops', 'shift-sessions'] })
+    } catch (e) {
+      setErrorEdicion('Error al guardar los cambios. Reintentá.')
+      console.error('Error guardando edición:', e)
+    }
+    setGuardandoCambios(false)
   }
 
   const handleCerrarTurno = async () => {
@@ -293,8 +356,8 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
   const activeCount = driversData?.conductores?.length ?? 0
   const odometroDif = (cierreForm.odometroInicial && cierreForm.odometroFinal) ? parseInt(cierreForm.odometroFinal) - parseInt(cierreForm.odometroInicial) : 0
   const totalGastos = (parseFloat(cierreForm.gnvSoles) || 0) + (parseFloat(cierreForm.gasolinaSoles) || 0) + (parseFloat(cierreForm.otrosGastos) || 0)
-  const ingresosModal = modalModo === 'turno' ? (metricasYango?.efectivo ?? 0) : (sessionALiquidar?.totalAmount ?? 0)
-  const isReadonly = modalModo === 'sesion' && sessionALiquidar?.status === 'settled'
+  const ingresosModal = modalModo === 'turno' ? (metricasYango?.efectivo ?? 0) : (sessionALiquidar?.totalCash ?? 0)
+  const isReadonly = modalModo === 'sesion' && sessionALiquidar?.status === 'settled' && !editando
   const montoRestante = ingresosModal - totalGastos
   const totalLiquidacion = (parseFloat(cierreForm.liquidaEfectivo) || 0) + (parseFloat(cierreForm.liquidaYape) || 0)
 
@@ -391,8 +454,8 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
                 <>
                   <div className="bg-[#F8F8F8] dark:bg-neutral-800/60 rounded-xl p-4"><span className="text-[11px] font-semibold text-gray-400 uppercase">SESIONES TOTALES</span><p className="text-[28px] font-bold text-gray-900 dark:text-gray-100 leading-tight mb-1">{filteredSessionsByWeek.length}</p><p className="text-xs text-gray-400">{filteredSessionsByWeek.filter(s => s.status === 'active').length} activa(s)</p></div>
                   <div className="bg-[#F8F8F8] dark:bg-neutral-800/60 rounded-xl p-4"><span className="text-[11px] font-semibold text-gray-400 uppercase">VIAJES TOTALES</span><p className="text-[28px] font-bold text-gray-900 dark:text-gray-100 leading-tight mb-1">{filteredSessionsByWeek.reduce((s, x) => s + (x.totalTrips ?? 0), 0)}</p><p className="text-xs text-gray-400">Total acumulado</p></div>
-                  <div className="bg-[#F8F8F8] dark:bg-neutral-800/60 rounded-xl p-4"><span className="text-[11px] font-semibold text-gray-400 uppercase">INGRESOS TOTALES</span><p className="text-[28px] font-bold text-gray-900 dark:text-gray-100 leading-tight mb-1">{formatCurrency(filteredSessionsByWeek.reduce((s, x) => s + (x.totalAmount ?? 0), 0))}</p><p className="text-xs text-gray-400">Bruto acumulado</p></div>
-                  <div className="bg-[#F8F8F8] dark:bg-neutral-800/60 rounded-xl p-4"><span className="text-[11px] font-semibold text-gray-400 uppercase">PROMEDIO</span><p className="text-[28px] font-bold text-gray-900 dark:text-gray-100 leading-tight mb-1">{filteredSessionsByWeek.length > 0 ? formatCurrency(filteredSessionsByWeek.reduce((s, x) => s + (x.totalAmount ?? 0), 0) / filteredSessionsByWeek.length) : '—'}</p><p className="text-xs text-gray-400">Ingresos / sesión</p></div>
+                  <div className="bg-[#F8F8F8] dark:bg-neutral-800/60 rounded-xl p-4"><span className="text-[11px] font-semibold text-gray-400 uppercase">INGRESOS TOTALES</span><p className="text-[28px] font-bold text-gray-900 dark:text-gray-100 leading-tight mb-1">{formatCurrency(filteredSessionsByWeek.reduce((s, x) => s + ((x.totalCash || x.totalAmount || 0)), 0))}</p><p className="text-xs text-gray-400">Efectivo acumulado</p></div>
+                  <div className="bg-[#F8F8F8] dark:bg-neutral-800/60 rounded-xl p-4"><span className="text-[11px] font-semibold text-gray-400 uppercase">PROMEDIO</span><p className="text-[28px] font-bold text-gray-900 dark:text-gray-100 leading-tight mb-1">{filteredSessionsByWeek.length > 0 ? formatCurrency(filteredSessionsByWeek.reduce((s, x) => s + ((x.totalCash || x.totalAmount || 0)), 0) / filteredSessionsByWeek.length) : '—'}</p><p className="text-xs text-gray-400">Efectivo / sesión</p></div>
                 </>
               )}
             </div>
@@ -427,7 +490,7 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
                     const endTime = session.closedAt ? formatTime(session.closedAt) : '···'
                     const mismoDia = session.closedAt ? new Date(session.startedAt).toDateString() === new Date(session.closedAt).toDateString() : true
                     const periodoText = mismoDia ? `${startDate} ${startTime} → ${endTime}` : `${startDate} ${startTime} → ${endDate} ${endTime}`
-                    const trips = session.totalTrips ?? 0; const amount = session.totalAmount ?? 0
+                    const trips = session.totalTrips ?? 0; const amount = (session.totalCash || session.totalAmount) ?? 0
 
                     return (
                       <tr key={session.id} onClick={() => {
@@ -553,11 +616,11 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
             <div className="px-5 py-4 border-b border-gray-100 dark:border-neutral-800 flex items-center justify-between">
               <div>
 
-                <h3 className="text-lg font-bold">{modalModo === 'turno' ? 'Cerrar turno' : isReadonly ? 'Detalle de sesión' : 'Liquidar sesión'}</h3>
+                <h3 className="text-lg font-bold">{modalModo === 'turno' ? 'Cerrar turno' : editando ? 'Editar sesión' : isReadonly ? 'Detalle de sesión' : 'Liquidar sesión'}</h3>
                 <p className="text-sm text-gray-400">
                   {modalModo === 'turno'
-                    ? <>{metricasYango?.totalViajes ?? 0} viajes · {formatCurrency(metricasYango?.montoTotalProducido ?? 0)}{metricasYango?.carBrandModel ? <> · <Car className="w-3 h-3 inline mx-0.5" />{metricasYango.carBrandModel}</> : null}</>
-                    : `${new Date(sessionALiquidar?.startedAt ?? '').toLocaleDateString('es-PE', { day: 'numeric', month: 'long' })} · ${sessionALiquidar?.totalTrips} viajes · ${formatCurrency(sessionALiquidar?.totalAmount ?? 0)}`
+                    ? <>{metricasYango?.totalViajes ?? 0} viajes · {formatCurrency(metricasYango?.efectivo ?? 0)}{metricasYango?.carBrandModel ? <> · <Car className="w-3 h-3 inline mx-0.5" />{metricasYango.carBrandModel}</> : null}</>
+                    : `${new Date(sessionALiquidar?.startedAt ?? '').toLocaleDateString('es-PE', { day: 'numeric', month: 'long' })} · ${sessionALiquidar?.totalTrips} viajes · ${formatCurrency((sessionALiquidar?.totalCash || sessionALiquidar?.totalAmount) ?? 0)}`
                   }
                 </p>
               </div>
@@ -603,12 +666,41 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
               </div>
             </div>
 
-            <div className="px-5 py-3 bg-gray-50 dark:bg-neutral-800/50 flex gap-3 justify-end">
-              <Button variant="outline" onClick={() => setShowLiquidarModal(false)} className="rounded-xl text-sm">Cancelar</Button>
-              <Button onClick={modalModo === 'turno' ? handleCerrarTurno : handleLiquidarSesion} disabled={liquidando || isReadonly || cargandoDetalle} className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm px-5">
-                {isReadonly ? 'Sesión liquidada' : cargandoDetalle ? 'Cargando...' : liquidando ? 'Liquidando...' : 'Confirmar liquidación'}
-              </Button>
-            </div>
+            {modalModo === 'sesion' && cierrePrevio && (
+              <div className="px-5 pb-2 text-[11px] text-gray-400 space-y-0.5">
+                <p>Registrado por {cierrePrevio.userName} — {new Date(cierrePrevio.createdAt).toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })} {new Date(cierrePrevio.createdAt).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}</p>
+                {cierrePrevio.userNameModificado && (
+                  <p>Modificado por {cierrePrevio.userNameModificado} — {new Date(cierrePrevio.updatedAt).toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })} {new Date(cierrePrevio.updatedAt).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}</p>
+                )}
+              </div>
+            )}
+
+            {errorEdicion && (
+              <div className="px-5 pb-2">
+                <p className="text-[11px] text-red-500">{errorEdicion}</p>
+              </div>
+            )}
+
+            {editando ? (
+              <div className="px-5 py-3 bg-gray-50 dark:bg-neutral-800/50 flex gap-3 justify-end">
+                <Button variant="outline" onClick={handleCancelarEdicion} disabled={guardandoCambios} className="rounded-xl text-sm">Cancelar</Button>
+                <Button onClick={handleGuardarEdicion} disabled={guardandoCambios} className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm px-5">
+                  {guardandoCambios ? 'Guardando...' : 'Guardar cambios'}
+                </Button>
+              </div>
+            ) : (
+              <div className="px-5 py-3 bg-gray-50 dark:bg-neutral-800/50 flex gap-3 justify-end">
+                <Button variant="outline" onClick={() => { setShowLiquidarModal(false); setEditando(false) }} className="rounded-xl text-sm">Cancelar</Button>
+                {modalModo === 'sesion' && isReadonly && (
+                  <Button onClick={handleEditar} className="rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm px-5">
+                    Editar
+                  </Button>
+                )}
+                <Button onClick={modalModo === 'turno' ? handleCerrarTurno : handleLiquidarSesion} disabled={liquidando || isReadonly || cargandoDetalle} className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm px-5">
+                  {isReadonly ? 'Sesión liquidada' : cargandoDetalle ? 'Cargando...' : liquidando ? 'Liquidando...' : 'Confirmar liquidación'}
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -620,7 +712,7 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
             <div className="px-6 py-5 border-b border-gray-100 dark:border-neutral-800">
               <h3 className="text-lg font-bold">Eliminar sesión</h3>
               <p className="text-sm text-gray-400 mt-1">
-                {new Date(sessionToDelete.startedAt).toLocaleDateString('es-PE', { day: 'numeric', month: 'long' })} · {sessionToDelete.totalTrips} viajes · {formatCurrency(sessionToDelete.totalAmount ?? 0)}
+                {new Date(sessionToDelete.startedAt).toLocaleDateString('es-PE', { day: 'numeric', month: 'long' })} · {sessionToDelete.totalTrips} viajes · {formatCurrency((sessionToDelete.totalCash || sessionToDelete.totalAmount) ?? 0)}
               </p>
             </div>
             <div className="p-6 space-y-4">
