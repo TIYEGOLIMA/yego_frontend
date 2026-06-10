@@ -452,3 +452,41 @@ export interface LiquidarPendienteResult {
   utilidad?: number
   facturacionId?: number
 }
+
+export interface RendimientoResponse {
+  periodo: string
+  desde: string
+  hasta: string
+  totales: TotalesRendimiento
+  conductores: ConductorRendimiento[]
+}
+
+export interface TotalesRendimiento {
+  conductores: number
+  viajes: number
+  efectivo: number
+  yape: number
+  montoTotalProducido: number
+  km: number
+  gnvSoles: number
+  gasolinaSoles: number
+  horas: number
+  viajesPorHora: number
+  minimoViajes: number
+}
+
+export interface ConductorRendimiento {
+  driverId: string
+  nombre: string
+  totalViajes: number
+  totalEfectivo: number
+  totalYape: number
+  totalProducido: number
+  totalKm: number
+  totalGnvSoles: number
+  totalGasolinaSoles: number
+  totalOtrosGastos: number
+  totalHoras: number
+  viajesPorHora: number
+  rentabilidad: number
+}

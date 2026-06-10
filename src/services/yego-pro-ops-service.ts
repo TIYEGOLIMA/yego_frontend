@@ -9,6 +9,7 @@ import type {
   LiquidarPendienteResult,
   ListaConductoresResponse,
   RegistroCierre,
+  RendimientoResponse,
   ShiftSessionResponse,
   ViajeCompleto,
   ViajesCompletosResponse,
@@ -54,6 +55,7 @@ const ENDPOINTS = {
   closeSession: (sessionId: string) => `/pro-ops/shift-sessions/${sessionId}/close`,
   settleSession: (sessionId: string) => `/pro-ops/shift-sessions/${sessionId}/settle`,
   deleteSession: (sessionId: string) => `/pro-ops/shift-sessions/${sessionId}`,
+  rendimiento: '/pro-ops/rendimiento',
   liquidacionSemanal: (driverId: string) => `/pro-ops/liquidacion/${driverId}/semanal`,
   liquidacionPendiente: (driverId: string) => `/pro-ops/liquidacion/${driverId}/pendiente`,
   liquidarPendiente: (driverId: string, userId?: number) => {
@@ -278,5 +280,14 @@ export const yegoProOpsService = {
 
   limpiarFacturacion: async (driverId: string, desde: string, hasta: string): Promise<void> => {
     await api.delete(ENDPOINTS.limpiarFacturacion(driverId), { params: { desde: desde.split('T')[0], hasta: hasta.split('T')[0] } })
+  },
+
+  getRendimiento: async (periodo: string, weekStart?: string, mes?: number, anio?: number): Promise<RendimientoResponse> => {
+    const params: Record<string, string> = { periodo }
+    if (weekStart) params.weekStart = weekStart
+    if (mes) params.mes = String(mes)
+    if (anio) params.anio = String(anio)
+    const { data } = await api.get<RendimientoResponse>(ENDPOINTS.rendimiento, { params })
+    return data
   },
 }

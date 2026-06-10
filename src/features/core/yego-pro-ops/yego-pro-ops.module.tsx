@@ -2,10 +2,11 @@ import React, { useState, useCallback } from 'react'
 import { MonitoreoEnVivoView } from './components/MonitoreoEnVivoView'
 import { ShiftSessionsView } from './components/ShiftSessionsView'
 import { LiquidacionView } from './components/LiquidacionView'
+import { RendimientoView } from './components/RendimientoView'
 import { ConfiguracionBillingView } from './components/ConfiguracionBillingView'
 import { type ConductorSimple } from '../../../services/yego-pro-ops-service'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../components/ui/tabs'
-import { Radio, Clock, DollarSign, Settings } from 'lucide-react'
+import { Radio, Clock, DollarSign, Settings, TrendingUp } from 'lucide-react'
 
 export interface SharedProOpsState {
   driver: ConductorSimple | null
@@ -52,7 +53,7 @@ const YegoProOpsModule: React.FC = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4 bg-transparent p-0 h-auto rounded-none border-b border-gray-200 dark:border-gray-700">
+        <TabsList className="grid w-full grid-cols-5 bg-transparent p-0 h-auto rounded-none border-b border-gray-200 dark:border-gray-700">
           <TabsTrigger value="sesiones" className="flex items-center gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-red-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none py-2">
             <Clock className="w-4 h-4" />
             Sesiones
@@ -60,6 +61,10 @@ const YegoProOpsModule: React.FC = () => {
           <TabsTrigger value="liquidacion" className="flex items-center gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-red-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none py-2">
             <DollarSign className="w-4 h-4" />
             Liquidación
+          </TabsTrigger>
+          <TabsTrigger value="rendimiento" className="flex items-center gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-red-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none py-2">
+            <TrendingUp className="w-4 h-4" />
+            Rendimiento
           </TabsTrigger>
           <TabsTrigger value="monitoreo" className="flex items-center gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-red-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none py-2">
             <Radio className="w-4 h-4" />
@@ -77,6 +82,10 @@ const YegoProOpsModule: React.FC = () => {
 
         <TabsContent value="liquidacion" className="space-y-4 data-[state=inactive]:hidden" forceMount>
           <LiquidacionView shared={shared} />
+        </TabsContent>
+
+        <TabsContent value="rendimiento" className="space-y-4 data-[state=inactive]:hidden" forceMount>
+          <RendimientoView />
         </TabsContent>
 
         <TabsContent value="monitoreo" className="space-y-4 data-[state=inactive]:hidden" forceMount>
