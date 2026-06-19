@@ -45,6 +45,7 @@ const ENDPOINTS = {
   viajesCompletos: '/pro-ops/driver/viajes-completos',
   cierre: '/pro-ops/driver/cierre',
   cierrePorSession: (sessionId: string) => `/pro-ops/driver/cierre/session/${sessionId}`,
+  cierresPorRango: '/pro-ops/driver/cierres/rango',
   registrarCierre: '/pro-ops/driver/registrar-cierre',
   listaConductores: '/pro-ops/drivers',
   facturacionSemanal: '/pro-ops/drivers/facturacion-semanal',
@@ -76,6 +77,7 @@ export interface CierrePayload {
   gasolinaSoles: number
   liquidaEfectivo: number
   liquidaYape: number
+  operacionYape: string | null
   otrosGastos: number
   otrosGastosDescripcion: string | null
   totalIngresos: number
@@ -176,6 +178,18 @@ export const yegoProOpsService = {
     } catch (error: unknown) {
       const status = (error as { response?: { status?: number } })?.response?.status
       if (status === 404) return null
+      throw error
+    }
+  },
+
+  obtenerCierresPorRango: async (driverId: string, desde: string, hasta: string): Promise<RegistroCierre[]> => {
+    try {
+      const { data } = await api.get<RegistroCierre[]>(ENDPOINTS.cierresPorRango, {
+        params: { driverId, desde, hasta },
+      })
+      return data
+    } catch (error) {
+      console.error('[yegoProOpsService] obtenerCierresPorRango:', error)
       throw error
     }
   },

@@ -76,23 +76,23 @@ const YegoProOpsModule: React.FC = () => {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="sesiones" className="space-y-4 data-[state=inactive]:hidden" forceMount>
+        <TabsContent value="sesiones" className="space-y-4">
           <ShiftSessionsView shared={shared} />
         </TabsContent>
 
-        <TabsContent value="liquidacion" className="space-y-4 data-[state=inactive]:hidden" forceMount>
+        <TabsContent value="liquidacion" className="space-y-4">
           <LiquidacionView shared={shared} />
         </TabsContent>
 
-        <TabsContent value="rendimiento" className="space-y-4 data-[state=inactive]:hidden" forceMount>
+        <TabsContent value="rendimiento" className="space-y-4">
           <RendimientoView />
         </TabsContent>
 
-        <TabsContent value="monitoreo" className="space-y-4 data-[state=inactive]:hidden" forceMount>
+        <TabsContent value="monitoreo" className="space-y-4">
           <MonitoreoEnVivoView />
         </TabsContent>
 
-        <TabsContent value="configuraciones" className="space-y-4 data-[state=inactive]:hidden" forceMount>
+        <TabsContent value="configuraciones" className="space-y-4">
           <ConfiguracionBillingView />
         </TabsContent>
       </Tabs>

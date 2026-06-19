@@ -169,6 +169,7 @@ export interface RegistroCierre {
   gasolinaSoles: number
   liquidaEfectivo: number
   liquidaYape: number
+  operacionYape: string | null
   otrosGastos: number
   otrosGastosDescripcion: string | null
   totalIngresos: number

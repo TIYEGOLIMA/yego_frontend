@@ -64,7 +64,7 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
   const [errorEdicion, setErrorEdicion] = useState('')
   const [resultadoExpandido, setResultadoExpandido] = useState(false)
   const [cierrePrevio, setCierrePrevio] = useState<RegistroCierre | null>(null)
-  const [cierreForm, setCierreForm] = useState({ placa: '', odometroInicial: '', odometroFinal: '', gnvM3: '', gnvSoles: '', gasolinaGalones: '', gasolinaSoles: '', liquidaEfectivo: '', liquidaYape: '', otrosGastos: '', otrosGastosDescripcion: '' })
+  const [cierreForm, setCierreForm] = useState({ placa: '', odometroInicial: '', odometroFinal: '', gnvM3: '', gnvSoles: '', gasolinaGalones: '', gasolinaSoles: '', liquidaEfectivo: '', liquidaYape: '', operacionYape: '', otrosGastos: '', otrosGastosDescripcion: '' })
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [sessionToDelete, setSessionToDelete] = useState<ShiftSessionResponse | null>(null)
   const [deleteReason, setDeleteReason] = useState('')
@@ -156,6 +156,15 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
     })
   }, [filteredSessions, currentWeekLabel])
 
+  const cierresDesde = currentWeekLabel.monday.toISOString().split('T')[0]
+  const cierresHasta = currentWeekLabel.sunday.toISOString().split('T')[0]
+  const { data: cierresSemana } = useQuery<RegistroCierre[]>({
+    queryKey: ['pro-ops', 'cierres-rango', selectedDriver?.driverId, cierresDesde, cierresHasta],
+    queryFn: () => yegoProOpsService.obtenerCierresPorRango(selectedDriver?.driverId ?? '', cierresDesde, cierresHasta),
+    enabled: !!selectedDriver?.driverId
+  })
+  const totalLiquidado = useMemo(() => (cierresSemana ?? []).reduce((s, c) => s + (c.liquidaEfectivo ?? 0) + (c.liquidaYape ?? 0), 0), [cierresSemana])
+
   const sessionsByWeek = useMemo(() => {
     const groups: { weekLabel: string; sessions: typeof filteredSessionsByWeek }[] = []
     const sorted = [...filteredSessionsByWeek].sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
@@ -214,7 +223,7 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
     if (cargandoDetalle) return
     setModalModo('sesion'); setSessionALiquidar(session); setShowLiquidarModal(true)
     setEditando(false); setErrorEdicion('')
-    setCierreForm({ placa: '', odometroInicial: '', odometroFinal: '', gnvM3: '', gnvSoles: '', gasolinaGalones: '', gasolinaSoles: '', liquidaEfectivo: '', liquidaYape: '', otrosGastos: '', otrosGastosDescripcion: '' })
+    setCierreForm({ placa: '', odometroInicial: '', odometroFinal: '', gnvM3: '', gnvSoles: '', gasolinaGalones: '', gasolinaSoles: '', liquidaEfectivo: '', liquidaYape: '', operacionYape: '', otrosGastos: '', otrosGastosDescripcion: '' })
     setCargandoDetalle(true)
     try {
       const previo = await yegoProOpsService.obtenerCierrePorSession(session.id)
@@ -229,7 +238,7 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
   const openCerrarTurno = useCallback(() => {
     if (!metricasYango || !selectedDriver) return
     setModalModo('turno'); setSessionALiquidar(null); setShowLiquidarModal(true)
-    setCierreForm({ placa: metricasYango.placa ?? '', odometroInicial: '', odometroFinal: '', gnvM3: '', gnvSoles: '', gasolinaGalones: '', gasolinaSoles: '', liquidaEfectivo: '', liquidaYape: '', otrosGastos: '', otrosGastosDescripcion: '' })
+    setCierreForm({ placa: metricasYango.placa ?? '', odometroInicial: '', odometroFinal: '', gnvM3: '', gnvSoles: '', gasolinaGalones: '', gasolinaSoles: '', liquidaEfectivo: '', liquidaYape: '', operacionYape: '', otrosGastos: '', otrosGastosDescripcion: '' })
   }, [metricasYango, selectedDriver])
 
   const handleLiquidarSesion = async () => {
@@ -238,14 +247,14 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
     try {
       await yegoProOpsService.settleSession(sessionALiquidar.id, user?.id ?? 0)
       const fecha = new Date(sessionALiquidar.startedAt).toISOString().split('T')[0]
-      const ingresos = (sessionALiquidar.totalCash || sessionALiquidar.totalAmount) ?? 0
+      const ingresos = sessionALiquidar?.totalCash ?? 0
       const gastos = (parseFloat(cierreForm.gnvSoles) || 0) + (parseFloat(cierreForm.gasolinaSoles) || 0) + (parseFloat(cierreForm.otrosGastos) || 0)
       await yegoProOpsService.registrarCierre({
         driverId: selectedDriver.driverId, userId: user?.id ?? 0, fecha, shiftSessionId: sessionALiquidar.id,
         placa: cierreForm.placa || null, odometroInicial: cierreForm.odometroInicial ? parseInt(cierreForm.odometroInicial) : null, odometroFinal: cierreForm.odometroFinal ? parseInt(cierreForm.odometroFinal) : null,
         diferenciaOdometro: (cierreForm.odometroInicial && cierreForm.odometroFinal) ? parseInt(cierreForm.odometroFinal) - parseInt(cierreForm.odometroInicial) : null,
         gnvM3: cierreForm.gnvM3 || null, gnvSoles: parseFloat(cierreForm.gnvSoles) || 0, gasolinaGalones: cierreForm.gasolinaGalones || null, gasolinaSoles: parseFloat(cierreForm.gasolinaSoles) || 0,
-        liquidaEfectivo: parseFloat(cierreForm.liquidaEfectivo) || 0, liquidaYape: parseFloat(cierreForm.liquidaYape) || 0,
+        liquidaEfectivo: parseFloat(cierreForm.liquidaEfectivo) || 0, liquidaYape: parseFloat(cierreForm.liquidaYape) || 0, operacionYape: cierreForm.operacionYape || null,
         otrosGastos: parseFloat(cierreForm.otrosGastos) || 0, otrosGastosDescripcion: cierreForm.otrosGastosDescripcion || null,
         totalIngresos: ingresos, totalGastos: gastos, resta: ingresos - gastos,
       })
@@ -269,7 +278,7 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
       setCierreForm({
         placa: cierrePrevio.placa ?? '', odometroInicial: cierrePrevio.odometroInicial?.toString() ?? '', odometroFinal: cierrePrevio.odometroFinal?.toString() ?? '',
         gnvM3: cierrePrevio.gnvM3 ?? '', gnvSoles: cierrePrevio.gnvSoles?.toString() ?? '', gasolinaGalones: cierrePrevio.gasolinaGalones ?? '', gasolinaSoles: cierrePrevio.gasolinaSoles?.toString() ?? '',
-        liquidaEfectivo: cierrePrevio.liquidaEfectivo?.toString() ?? '', liquidaYape: cierrePrevio.liquidaYape?.toString() ?? '',
+        liquidaEfectivo: cierrePrevio.liquidaEfectivo?.toString() ?? '', liquidaYape: cierrePrevio.liquidaYape?.toString() ?? '', operacionYape: cierrePrevio.operacionYape ?? '',
         otrosGastos: cierrePrevio.otrosGastos?.toString() ?? '', otrosGastosDescripcion: cierrePrevio.otrosGastosDescripcion ?? ''
       })
     }
@@ -278,7 +287,7 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
   const handleGuardarEdicion = async () => {
     if (!cierrePrevio || !selectedDriver || !user || !sessionALiquidar) return
     const totalLiquidacion = (parseFloat(cierreForm.liquidaEfectivo) || 0) + (parseFloat(cierreForm.liquidaYape) || 0)
-    const ingresos = (sessionALiquidar.totalCash || sessionALiquidar.totalAmount) ?? 0
+    const ingresos = sessionALiquidar?.totalCash ?? 0
     const totalG = (parseFloat(cierreForm.gnvSoles) || 0) + (parseFloat(cierreForm.gasolinaSoles) || 0) + (parseFloat(cierreForm.otrosGastos) || 0)
     if (Math.abs(ingresos - totalG - totalLiquidacion) > 0.01) {
       setErrorEdicion('Los montos no calzan. Ajustá los valores.')
@@ -299,7 +308,7 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
         diferenciaOdometro: (cierreForm.odometroInicial && cierreForm.odometroFinal) ? parseInt(cierreForm.odometroFinal) - parseInt(cierreForm.odometroInicial) : null,
         gnvM3: cierreForm.gnvM3 || null, gnvSoles: parseFloat(cierreForm.gnvSoles) || 0,
         gasolinaGalones: cierreForm.gasolinaGalones || null, gasolinaSoles: parseFloat(cierreForm.gasolinaSoles) || 0,
-        liquidaEfectivo: parseFloat(cierreForm.liquidaEfectivo) || 0, liquidaYape: parseFloat(cierreForm.liquidaYape) || 0,
+        liquidaEfectivo: parseFloat(cierreForm.liquidaEfectivo) || 0, liquidaYape: parseFloat(cierreForm.liquidaYape) || 0, operacionYape: cierreForm.operacionYape || null,
         otrosGastos: parseFloat(cierreForm.otrosGastos) || 0, otrosGastosDescripcion: cierreForm.otrosGastosDescripcion || null,
         totalIngresos: ingresos, totalGastos: totalG, resta: ingresos - totalG,
       })
@@ -335,6 +344,7 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
         gasolinaSoles: parseFloat(cierreForm.gasolinaSoles) || 0,
         liquidaEfectivo: parseFloat(cierreForm.liquidaEfectivo) || 0,
         liquidaYape: parseFloat(cierreForm.liquidaYape) || 0,
+        operacionYape: cierreForm.operacionYape || null,
         otrosGastos: parseFloat(cierreForm.otrosGastos) || 0,
         otrosGastosDescripcion: cierreForm.otrosGastosDescripcion || null,
       })
@@ -440,22 +450,24 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
             </div>
 
             {/* MÉTRICAS (siempre visibles) */}
-            <div className="grid grid-cols-4 gap-3 mb-6">
+            <div className="grid grid-cols-5 gap-3 mb-6">
               {loadingBuscar ? (
-                <div className="col-span-4 flex items-center justify-center py-6"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600" /><p className="text-sm text-gray-400 ml-3">Consultando Yango...</p></div>
+                <div className="col-span-5 flex items-center justify-center py-6"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600" /><p className="text-sm text-gray-400 ml-3">Consultando Yango...</p></div>
               ) : metricasYango ? (
                 <>
                   <div className="bg-[#F8F8F8] dark:bg-neutral-800/60 rounded-xl p-4"><span className="text-[11px] font-semibold text-gray-400 uppercase">VIAJES</span><p className="text-[28px] font-bold text-gray-900 dark:text-gray-100 leading-tight mb-1">{metricasYango.totalViajes}</p><p className="text-xs text-gray-400">{metricasYango.viajesPorHora.toFixed(1)} viajes/hora</p></div>
                   <div className="bg-[#F8F8F8] dark:bg-neutral-800/60 rounded-xl p-4"><span className="text-[11px] font-semibold text-gray-400 uppercase">PRODUCIDO</span><p className="text-[28px] font-bold text-gray-900 dark:text-gray-100 leading-tight mb-1">{formatCurrency(metricasYango.montoTotalProducido)}</p><p className="text-xs text-gray-400">Comisión: {formatCurrency(metricasYango.comisionApp)}</p></div>
                   <div className="bg-emerald-50 dark:bg-emerald-950/20 rounded-xl p-4"><span className="text-[11px] font-semibold text-gray-400 uppercase">EFECTIVO</span><p className="text-[28px] font-bold text-gray-900 dark:text-gray-100 leading-tight mb-1">{formatCurrency(metricasYango.efectivo)}</p><p className="text-xs text-gray-400">Efectivo recolectado</p></div>
+                  <div className="bg-blue-50 dark:bg-blue-950/20 rounded-xl p-4"><span className="text-[11px] font-semibold text-gray-400 uppercase">LIQUIDADO</span><p className="text-[28px] font-bold text-blue-600 leading-tight mb-1">{formatCurrency(totalLiquidado)}</p><p className="text-xs text-gray-400">Efectivo + Yape</p></div>
                   <div className="bg-emerald-50 dark:bg-emerald-950/20 rounded-xl p-4"><span className="text-[11px] font-semibold text-gray-400 uppercase">MONTO NETO</span><p className="text-[28px] font-bold text-emerald-600 leading-tight mb-1">{formatCurrency(metricasYango.montoNeto)}</p><p className="text-xs text-gray-400">% Pago: {fmtPercent(metricasYango.porcentajePago)} · Utilidad: {formatCurrency(metricasYango.utilidad)}</p></div>
                 </>
               ) : (
                 <>
                   <div className="bg-[#F8F8F8] dark:bg-neutral-800/60 rounded-xl p-4"><span className="text-[11px] font-semibold text-gray-400 uppercase">SESIONES TOTALES</span><p className="text-[28px] font-bold text-gray-900 dark:text-gray-100 leading-tight mb-1">{filteredSessionsByWeek.length}</p><p className="text-xs text-gray-400">{filteredSessionsByWeek.filter(s => s.status === 'active').length} activa(s)</p></div>
                   <div className="bg-[#F8F8F8] dark:bg-neutral-800/60 rounded-xl p-4"><span className="text-[11px] font-semibold text-gray-400 uppercase">VIAJES TOTALES</span><p className="text-[28px] font-bold text-gray-900 dark:text-gray-100 leading-tight mb-1">{filteredSessionsByWeek.reduce((s, x) => s + (x.totalTrips ?? 0), 0)}</p><p className="text-xs text-gray-400">Total acumulado</p></div>
-                  <div className="bg-[#F8F8F8] dark:bg-neutral-800/60 rounded-xl p-4"><span className="text-[11px] font-semibold text-gray-400 uppercase">INGRESOS TOTALES</span><p className="text-[28px] font-bold text-gray-900 dark:text-gray-100 leading-tight mb-1">{formatCurrency(filteredSessionsByWeek.reduce((s, x) => s + ((x.totalCash || x.totalAmount || 0)), 0))}</p><p className="text-xs text-gray-400">Efectivo acumulado</p></div>
-                  <div className="bg-[#F8F8F8] dark:bg-neutral-800/60 rounded-xl p-4"><span className="text-[11px] font-semibold text-gray-400 uppercase">PROMEDIO</span><p className="text-[28px] font-bold text-gray-900 dark:text-gray-100 leading-tight mb-1">{filteredSessionsByWeek.length > 0 ? formatCurrency(filteredSessionsByWeek.reduce((s, x) => s + ((x.totalCash || x.totalAmount || 0)), 0) / filteredSessionsByWeek.length) : '—'}</p><p className="text-xs text-gray-400">Efectivo / sesión</p></div>
+                  <div className="bg-[#F8F8F8] dark:bg-neutral-800/60 rounded-xl p-4"><span className="text-[11px] font-semibold text-gray-400 uppercase">INGRESOS TOTALES</span><p className="text-[28px] font-bold text-gray-900 dark:text-gray-100 leading-tight mb-1">{formatCurrency(filteredSessionsByWeek.reduce((s, x) => s + ((x.totalCash ?? 0)), 0))}</p><p className="text-xs text-gray-400">Efectivo acumulado</p></div>
+                  <div className="bg-[#F8F8F8] dark:bg-neutral-800/60 rounded-xl p-4"><span className="text-[11px] font-semibold text-gray-400 uppercase">PROMEDIO</span><p className="text-[28px] font-bold text-gray-900 dark:text-gray-100 leading-tight mb-1">{filteredSessionsByWeek.length > 0 ? formatCurrency(filteredSessionsByWeek.reduce((s, x) => s + ((x.totalCash ?? 0)), 0) / filteredSessionsByWeek.length) : '—'}</p><p className="text-xs text-gray-400">Efectivo / sesión</p></div>
+                  <div className="bg-[#F8F8F8] dark:bg-neutral-800/60 rounded-xl p-4"><span className="text-[11px] font-semibold text-gray-400 uppercase">LIQUIDADO</span><p className="text-[28px] font-bold text-gray-900 dark:text-gray-100 leading-tight mb-1">{formatCurrency(totalLiquidado)}</p><p className="text-xs text-gray-400">Efectivo + Yape</p></div>
                 </>
               )}
             </div>
@@ -490,7 +502,7 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
                     const endTime = session.closedAt ? formatTime(session.closedAt) : '···'
                     const mismoDia = session.closedAt ? new Date(session.startedAt).toDateString() === new Date(session.closedAt).toDateString() : true
                     const periodoText = mismoDia ? `${startDate} ${startTime} → ${endTime}` : `${startDate} ${startTime} → ${endDate} ${endTime}`
-                    const trips = session.totalTrips ?? 0; const amount = (session.totalCash || session.totalAmount) ?? 0
+                    const trips = session.totalTrips ?? 0; const amount = (session.totalCash ?? 0) ?? 0
 
                     return (
                       <tr key={session.id} onClick={() => {
@@ -620,7 +632,7 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
                 <p className="text-sm text-gray-400">
                   {modalModo === 'turno'
                     ? <>{metricasYango?.totalViajes ?? 0} viajes · {formatCurrency(metricasYango?.efectivo ?? 0)}{metricasYango?.carBrandModel ? <> · <Car className="w-3 h-3 inline mx-0.5" />{metricasYango.carBrandModel}</> : null}</>
-                    : `${new Date(sessionALiquidar?.startedAt ?? '').toLocaleDateString('es-PE', { day: 'numeric', month: 'long' })} · ${sessionALiquidar?.totalTrips} viajes · ${formatCurrency((sessionALiquidar?.totalCash || sessionALiquidar?.totalAmount) ?? 0)}`
+                    : `${new Date(sessionALiquidar?.startedAt ?? '').toLocaleDateString('es-PE', { day: 'numeric', month: 'long' })} · ${sessionALiquidar?.totalTrips} viajes · ${formatCurrency((sessionALiquidar?.totalCash ?? 0))}`
                   }
                 </p>
               </div>
@@ -649,9 +661,9 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
                 <div><label className="text-[10px] font-medium text-gray-500 uppercase">Gasolina soles</label><input type="number" value={cierreForm.gasolinaSoles} onChange={e => setCierreForm(f => ({ ...f, gasolinaSoles: e.target.value }))} disabled={isReadonly} className={cn('w-full text-sm border border-gray-300 dark:border-neutral-600 rounded px-2 py-1 mt-0.5', isReadonly ? 'bg-gray-100 dark:bg-neutral-700 cursor-not-allowed' : 'bg-white dark:bg-neutral-800')} /></div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-4 gap-3">
                 <div><label className="text-[10px] font-medium text-gray-500 uppercase">Efectivo</label><input type="number" value={cierreForm.liquidaEfectivo} onChange={e => setCierreForm(f => ({ ...f, liquidaEfectivo: e.target.value }))} disabled={isReadonly} className={cn('w-full text-sm border border-gray-300 dark:border-neutral-600 rounded px-2 py-1 mt-0.5', isReadonly ? 'bg-gray-100 dark:bg-neutral-700 cursor-not-allowed' : 'bg-white dark:bg-neutral-800')} /></div>
-                <div><label className="text-[10px] font-medium text-gray-500 uppercase">Yape</label><input type="number" value={cierreForm.liquidaYape} onChange={e => setCierreForm(f => ({ ...f, liquidaYape: e.target.value }))} disabled={isReadonly} className={cn('w-full text-sm border border-gray-300 dark:border-neutral-600 rounded px-2 py-1 mt-0.5', isReadonly ? 'bg-gray-100 dark:bg-neutral-700 cursor-not-allowed' : 'bg-white dark:bg-neutral-800')} /></div>
+                <div className="col-span-2"><div className="grid grid-cols-2 gap-2"><div><label className="text-[10px] font-medium text-gray-500 uppercase">Yape</label><input type="number" value={cierreForm.liquidaYape} onChange={e => setCierreForm(f => ({ ...f, liquidaYape: e.target.value, operacionYape: parseFloat(e.target.value) > 0 ? f.operacionYape : '' }))} disabled={isReadonly} className={cn('w-full text-sm border border-gray-300 dark:border-neutral-600 rounded px-2 py-1 mt-0.5', isReadonly ? 'bg-gray-100 dark:bg-neutral-700 cursor-not-allowed' : 'bg-white dark:bg-neutral-800')} /></div><div><label className="text-[10px] font-medium text-gray-500 uppercase">Nro. Operación</label><input type="text" value={cierreForm.operacionYape} onChange={e => setCierreForm(f => ({ ...f, operacionYape: e.target.value }))} disabled={isReadonly || !(parseFloat(cierreForm.liquidaYape) > 0)} placeholder="N° de operación" className={cn('w-full text-sm border border-gray-300 dark:border-neutral-600 rounded px-2 py-1 mt-0.5', (isReadonly || !(parseFloat(cierreForm.liquidaYape) > 0)) ? 'bg-gray-100 dark:bg-neutral-700 cursor-not-allowed' : 'bg-white dark:bg-neutral-800')} /></div></div></div>
                 <div><label className="text-[10px] font-medium text-gray-500 uppercase">Otros gastos</label><input type="number" value={cierreForm.otrosGastos} onChange={e => setCierreForm(f => ({ ...f, otrosGastos: e.target.value }))} disabled={isReadonly} className={cn('w-full text-sm border border-gray-300 dark:border-neutral-600 rounded px-2 py-1 mt-0.5', isReadonly ? 'bg-gray-100 dark:bg-neutral-700 cursor-not-allowed' : 'bg-white dark:bg-neutral-800')} /></div>
               </div>
               <div className="mt-3"><input type="text" value={cierreForm.otrosGastosDescripcion} onChange={e => setCierreForm(f => ({ ...f, otrosGastosDescripcion: e.target.value }))} disabled={isReadonly} placeholder="Descripción otros gastos" className={cn('w-full text-xs border border-gray-300 dark:border-neutral-600 rounded px-2 py-2.5', isReadonly ? 'bg-gray-100 dark:bg-neutral-700 cursor-not-allowed' : 'bg-white dark:bg-neutral-800')} /></div>
@@ -712,7 +724,7 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
             <div className="px-6 py-5 border-b border-gray-100 dark:border-neutral-800">
               <h3 className="text-lg font-bold">Eliminar sesión</h3>
               <p className="text-sm text-gray-400 mt-1">
-                {new Date(sessionToDelete.startedAt).toLocaleDateString('es-PE', { day: 'numeric', month: 'long' })} · {sessionToDelete.totalTrips} viajes · {formatCurrency((sessionToDelete.totalCash || sessionToDelete.totalAmount) ?? 0)}
+                {new Date(sessionToDelete.startedAt).toLocaleDateString('es-PE', { day: 'numeric', month: 'long' })} · {sessionToDelete.totalTrips} viajes · {formatCurrency((sessionToDelete.totalCash ?? 0))}
               </p>
             </div>
             <div className="p-6 space-y-4">
