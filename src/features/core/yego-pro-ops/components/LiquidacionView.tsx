@@ -116,6 +116,7 @@ export function LiquidacionView({ shared }: { shared: SharedProOpsState }) {
       diasTrabajados: diasUnicos,
       diasLiquidados: diasUnicos,
       turno: 'general',
+      estado: 'liquidado',
       userId: user?.id ?? 0,
     }
     setShowBonificacionModal(false)
