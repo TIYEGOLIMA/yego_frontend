@@ -290,6 +290,8 @@ export interface FacturacionSemanal {
   descuento?: number
   general?: string
   pagoTotal: number
+  bonificacionEmpresa?: number
+  pagoTotalFinal?: number
   utilidad: number
   utilidadPorViaje: number
   pagoPorViaje: number
@@ -388,6 +390,8 @@ export interface LiquidacionSemanalResponse {
   porcentajePago: number
   pago: number
   pagoTotal: number
+  bonificacionEmpresa?: number | null
+  pagoTotalFinal?: number | null
   utilidad: number
   utilidadPorViaje: number
   pagoPorViaje: number

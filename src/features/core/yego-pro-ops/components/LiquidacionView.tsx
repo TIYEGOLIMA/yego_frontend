@@ -23,6 +23,8 @@ export function LiquidacionView({ shared }: { shared: SharedProOpsState }) {
   const [searchTerm, setSearchTerm] = useState('')
   const [weekOffset, setWeekOffset] = useState(0)
   const [expandedSettled, setExpandedSettled] = useState<Set<string>>(new Set())
+  const [showBonificacionModal, setShowBonificacionModal] = useState(false)
+  const [bonificacionMonto, setBonificacionMonto] = useState('')
   const { driver: selectedDriver, setDriver } = shared
 
   const liquidarSemanaMutation = useMutation({
@@ -71,12 +73,21 @@ export function LiquidacionView({ shared }: { shared: SharedProOpsState }) {
 
   const handleLiquidarSemana = () => {
     if (!liquidacion || !selectedDriver) return
+    setBonificacionMonto('')
+    setShowBonificacionModal(true)
+  }
+
+  const handleConfirmarLiquidacion = () => {
+    if (!liquidacion || !selectedDriver) return
+    const bonifEmpresa = parseFloat(bonificacionMonto) || 0
+    if (bonifEmpresa < 0 || bonifEmpresa > liquidacion.pagoTotal) return
     const sesiones = liquidacion.sesionesDetalle ?? []
     const horas = sesiones.reduce((sum, s) => {
       if (!s.inicio || !s.fin) return sum
       return sum + (new Date(s.fin).getTime() - new Date(s.inicio).getTime()) / 3600000
     }, 0)
     const diasUnicos = new Set(sesiones.map(s => s.inicio?.substring(0, 10)).filter(Boolean)).size
+    const pagoTotalFinal = liquidacion.pagoTotal - bonifEmpresa
     const payload: FacturacionSemanal = {
       driverId: selectedDriver.driverId,
       fechaInicio: weekStart,
@@ -97,7 +108,9 @@ export function LiquidacionView({ shared }: { shared: SharedProOpsState }) {
       porcentajePago: liquidacion.porcentajePago,
       pago: liquidacion.pago,
       pagoTotal: liquidacion.pagoTotal,
-      utilidad: liquidacion.utilidad,
+      bonificacionEmpresa: bonifEmpresa || undefined,
+      pagoTotalFinal: bonifEmpresa > 0 ? pagoTotalFinal : undefined,
+      utilidad: pagoTotalFinal,
       utilidadPorViaje: liquidacion.utilidadPorViaje,
       pagoPorViaje: liquidacion.pagoPorViaje,
       diasTrabajados: diasUnicos,
@@ -105,6 +118,7 @@ export function LiquidacionView({ shared }: { shared: SharedProOpsState }) {
       turno: 'general',
       userId: user?.id ?? 0,
     }
+    setShowBonificacionModal(false)
     liquidarSemanaMutation.mutate(payload)
   }
 
@@ -168,7 +182,7 @@ export function LiquidacionView({ shared }: { shared: SharedProOpsState }) {
               </div>
 
               <div className="p-5 space-y-4">
-                <div className="grid grid-cols-4 gap-3">
+                <div className="grid grid-cols-5 gap-3">
                   <div className="rounded-xl border border-gray-100 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-3">
                     <span className="text-[10px] font-semibold text-gray-400 uppercase">Viajes</span>
                     <p className="text-xl font-bold text-gray-900 dark:text-gray-100">{liquidacion.totalViajes}</p>
@@ -184,6 +198,11 @@ export function LiquidacionView({ shared }: { shared: SharedProOpsState }) {
                   <div className="rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20 p-3">
                     <span className="text-[10px] font-semibold text-emerald-600 uppercase">A Pagar</span>
                     <p className="text-xl font-bold text-emerald-600">{fmtCur(liquidacion.pagoTotal)}</p>
+                  </div>
+                  <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20 p-3">
+                    <span className="text-[10px] font-semibold text-blue-600 uppercase">A Pagar Final</span>
+                    <p className="text-xl font-bold text-blue-700 dark:text-blue-400">{liquidacion.semanaCerrada && liquidacion.pagoTotalFinal != null ? fmtCur(liquidacion.pagoTotalFinal) : fmtCur(liquidacion.pagoTotal)}</p>
+                    {liquidacion.semanaCerrada && liquidacion.bonificacionEmpresa != null && liquidacion.bonificacionEmpresa > 0 && <p className="text-[10px] text-blue-500 mt-0.5">- {fmtCur(liquidacion.bonificacionEmpresa)} bonif.</p>}
                   </div>
                 </div>
 
@@ -220,8 +239,21 @@ export function LiquidacionView({ shared }: { shared: SharedProOpsState }) {
                     <Flecha />
                     <Caja label="+ BONO AD" value={fmtCur(liquidacion.bonoAdicViajes)} color="green" />
                     <Flecha />
-                    <Caja label="PAGO TOTAL" value={fmtCur(liquidacion.pagoTotal)} color="emerald" big />
+                    <Caja label="PAGO TOTAL" value={fmtCur(liquidacion.pagoTotal)} color="gray" />
                   </div>
+
+                  {liquidacion.semanaCerrada && liquidacion.bonificacionEmpresa != null && liquidacion.bonificacionEmpresa > 0 && (
+                    <>
+                      <div className="flex justify-center my-1.5">
+                        <svg className="w-4 h-4 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
+                      </div>
+                      <div className="flex items-center justify-center gap-1.5 overflow-x-auto">
+                        <Caja label="- BONIF EMPRESA" value={fmtCur(liquidacion.bonificacionEmpresa)} color="red" />
+                        <Flecha />
+                        <Caja label="PAGO FINAL" value={fmtCur(liquidacion.pagoTotalFinal)} color="emerald" big />
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {liquidacion.sesionesDetalle?.length > 0 && (
@@ -266,6 +298,35 @@ export function LiquidacionView({ shared }: { shared: SharedProOpsState }) {
           <div className="h-full flex items-center justify-center text-gray-400"><p className="text-sm">Sin datos disponibles</p></div>
         )}
       </div>
+
+      {showBonificacionModal && liquidacion && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowBonificacionModal(false)}>
+          <div className="bg-white dark:bg-neutral-900 rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-1">Bonificación de la empresa</h3>
+            <p className="text-sm text-gray-400 mb-4">Ingresa el monto que la empresa bonifica al conductor</p>
+            <div className="mb-3">
+              <p className="text-xs text-gray-500 mb-1">A Pagar original: <span className="font-bold text-gray-900 dark:text-gray-100">{fmtCur(liquidacion.pagoTotal)}</span></p>
+            </div>
+            <div className="mb-4">
+              <label className="text-[10px] font-medium text-gray-500 uppercase">Bonificación empresa (S/)</label>
+              <input type="number" min="0" step="0.01" value={bonificacionMonto} onChange={e => setBonificacionMonto(e.target.value)} placeholder="0.00"
+                className="w-full text-sm border border-gray-300 dark:border-neutral-600 rounded-lg px-3 py-2 mt-1 bg-white dark:bg-neutral-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:border-red-500" />
+              {parseFloat(bonificacionMonto) > liquidacion.pagoTotal && (
+                <p className="text-[11px] text-red-500 mt-1">No puede ser mayor a {fmtCur(liquidacion.pagoTotal)}</p>
+              )}
+            </div>
+            <div className="mb-4 p-3 rounded-lg bg-gray-50 dark:bg-neutral-800/50">
+              <p className="text-xs text-gray-500">A Pagar final: <span className="font-bold text-emerald-600">{fmtCur(liquidacion.pagoTotal - (parseFloat(bonificacionMonto) || 0))}</span></p>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <Button variant="outline" onClick={() => setShowBonificacionModal(false)} className="rounded-xl text-sm">Cancelar</Button>
+              <Button onClick={handleConfirmarLiquidacion} disabled={liquidarSemanaMutation.isPending || (parseFloat(bonificacionMonto) || 0) > liquidacion.pagoTotal || (parseFloat(bonificacionMonto) || 0) < 0} className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm px-5">
+                {liquidarSemanaMutation.isPending ? 'Liquidando...' : 'Liquidar semana'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
