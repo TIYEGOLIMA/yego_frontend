@@ -6,7 +6,8 @@ import { RendimientoView } from './components/RendimientoView'
 import { ConfiguracionBillingView } from './components/ConfiguracionBillingView'
 import { type ConductorSimple } from '../../../services/yego-pro-ops-service'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../components/ui/tabs'
-import { Radio, Clock, DollarSign, Settings, TrendingUp } from 'lucide-react'
+import { Radio, Clock, DollarSign, Settings, TrendingUp, Truck } from 'lucide-react'
+import FlotaModule from './components/flotas/flotas.module'
 
 export interface SharedProOpsState {
   driver: ConductorSimple | null
@@ -53,7 +54,7 @@ const YegoProOpsModule: React.FC = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-5 bg-transparent p-0 h-auto rounded-none border-b border-gray-200 dark:border-gray-700">
+        <TabsList className="grid w-full grid-cols-6 bg-transparent p-0 h-auto rounded-none border-b border-gray-200 dark:border-gray-700">
           <TabsTrigger value="sesiones" className="flex items-center gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-red-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none py-2">
             <Clock className="w-4 h-4" />
             Sesiones
@@ -73,6 +74,10 @@ const YegoProOpsModule: React.FC = () => {
           <TabsTrigger value="configuraciones" className="flex items-center gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-red-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none py-2">
             <Settings className="w-4 h-4" />
             Config
+          </TabsTrigger>
+          <TabsTrigger value="flotas" className="flex items-center gap-2 rounded-none border-b-2 border-transparent data-[state=active]:border-red-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none py-2">
+            <Truck className="w-4 h-4" />
+            Flotas
           </TabsTrigger>
         </TabsList>
 
@@ -94,6 +99,10 @@ const YegoProOpsModule: React.FC = () => {
 
         <TabsContent value="configuraciones" className="space-y-4">
           <ConfiguracionBillingView />
+        </TabsContent>
+
+        <TabsContent value="flotas">
+          <FlotaModule />
         </TabsContent>
       </Tabs>
 
