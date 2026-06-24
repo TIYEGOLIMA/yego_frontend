@@ -25,15 +25,19 @@ function toDatetimeLocal(iso: string): string {
 function StatusBadge({ status }: { status: string }) {
   switch (status) {
     case 'active': return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300"><span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />En curso</span>
-    case 'closed': return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300"><Pause className="w-3 h-3" />Pendiente</span>
+    case 'por_validar': return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300"><Clock className="w-3 h-3" />Por validar</span>
+    case 'completada': return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300"><CheckCircle2 className="w-3 h-3" />Completada</span>
+    case 'rechazada': return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300"><XCircle className="w-3 h-3" />Rechazada</span>
     case 'settled': return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300"><CheckCircle2 className="w-3 h-3" />Liquidada</span>
     default: return null
   }
 }
 function SessionStatusBadge({ status }: { status: string }) {
   switch (status) {
-    case 'settled': return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400"><CheckCircle2 className="w-3 h-3" />Completada</span>
-    case 'closed': return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400"><Clock className="w-3 h-3" />Pendiente</span>
+    case 'settled': return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400"><CheckCircle2 className="w-3 h-3" />Liquidada</span>
+    case 'completada': return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400"><CheckCircle2 className="w-3 h-3" />Completada</span>
+    case 'por_validar': return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400"><Clock className="w-3 h-3" />Por validar</span>
+    case 'rechazada': return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400"><XCircle className="w-3 h-3" />Rechazada</span>
     case 'active': return <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400"><span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />En curso</span>
     default: return null
   }
@@ -64,7 +68,7 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
   const [errorEdicion, setErrorEdicion] = useState('')
   const [resultadoExpandido, setResultadoExpandido] = useState(false)
   const [cierrePrevio, setCierrePrevio] = useState<RegistroCierre | null>(null)
-  const [cierreForm, setCierreForm] = useState({ placa: '', odometroInicial: '', odometroFinal: '', gnvM3: '', gnvSoles: '', gasolinaGalones: '', gasolinaSoles: '', liquidaEfectivo: '', liquidaYape: '', operacionYape: '', otrosGastos: '', otrosGastosDescripcion: '' })
+  const [cierreForm, setCierreForm] = useState({ placa: '', odometroInicial: '', odometroFinal: '', gnvM3: '', gnvSoles: '', gasolinaGalones: '', gasolinaSoles: '', liquidaEfectivo: '', liquidaYape: '', operacionYape: '', adelanto: '', otrosGastos: '', otrosGastosDescripcion: '' })
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [sessionToDelete, setSessionToDelete] = useState<ShiftSessionResponse | null>(null)
   const [deleteReason, setDeleteReason] = useState('')
@@ -156,14 +160,10 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
     })
   }, [filteredSessions, currentWeekLabel])
 
-  const cierresDesde = currentWeekLabel.monday.toISOString().split('T')[0]
-  const cierresHasta = currentWeekLabel.sunday.toISOString().split('T')[0]
-  const { data: cierresSemana } = useQuery<RegistroCierre[]>({
-    queryKey: ['pro-ops', 'cierres-rango', selectedDriver?.driverId, cierresDesde, cierresHasta],
-    queryFn: () => yegoProOpsService.obtenerCierresPorRango(selectedDriver?.driverId ?? '', cierresDesde, cierresHasta),
-    enabled: !!selectedDriver?.driverId
-  })
-  const totalLiquidado = useMemo(() => (cierresSemana ?? []).reduce((s, c) => s + (c.liquidaEfectivo ?? 0) + (c.liquidaYape ?? 0), 0), [cierresSemana])
+  const totalLiquidado = useMemo(
+    () => filteredSessionsByWeek.reduce((s, x) => s + (x.liquidaEfectivo ?? 0) + (x.liquidaYape ?? 0), 0),
+    [filteredSessionsByWeek]
+  )
 
   const sessionsByWeek = useMemo(() => {
     const groups: { weekLabel: string; sessions: typeof filteredSessionsByWeek }[] = []
@@ -217,13 +217,15 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
 
   const closeMutation = useMutation({ mutationFn: (sessionId: string) => yegoProOpsService.closeSession(sessionId, user?.id ?? 0), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['pro-ops', 'shift-sessions'] }) })
 
+  const updateStatusMutation = useMutation({ mutationFn: ({ sessionId, status }: { sessionId: string; status: string }) => yegoProOpsService.updateSessionStatus(sessionId, status), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['pro-ops', 'shift-sessions'] }) })
+
   const handleCerrarTodas = () => { filteredSessionsByWeek.filter(s => s.status === 'active').forEach(s => closeMutation.mutate(s.id)) }
 
   const openLiquidarSesion = useCallback(async (session: ShiftSessionResponse) => {
     if (cargandoDetalle) return
     setModalModo('sesion'); setSessionALiquidar(session); setShowLiquidarModal(true)
     setEditando(false); setErrorEdicion('')
-    setCierreForm({ placa: '', odometroInicial: '', odometroFinal: '', gnvM3: '', gnvSoles: '', gasolinaGalones: '', gasolinaSoles: '', liquidaEfectivo: '', liquidaYape: '', operacionYape: '', otrosGastos: '', otrosGastosDescripcion: '' })
+    setCierreForm({ placa: '', odometroInicial: '', odometroFinal: '', gnvM3: '', gnvSoles: '', gasolinaGalones: '', gasolinaSoles: '', liquidaEfectivo: '', liquidaYape: '', operacionYape: '', adelanto: '', otrosGastos: '', otrosGastosDescripcion: '' })
     setCargandoDetalle(true)
     try {
       const previo = await yegoProOpsService.obtenerCierrePorSession(session.id)
@@ -238,7 +240,7 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
   const openCerrarTurno = useCallback(() => {
     if (!metricasYango || !selectedDriver) return
     setModalModo('turno'); setSessionALiquidar(null); setShowLiquidarModal(true)
-    setCierreForm({ placa: metricasYango.placa ?? '', odometroInicial: '', odometroFinal: '', gnvM3: '', gnvSoles: '', gasolinaGalones: '', gasolinaSoles: '', liquidaEfectivo: '', liquidaYape: '', operacionYape: '', otrosGastos: '', otrosGastosDescripcion: '' })
+    setCierreForm({ placa: metricasYango.placa ?? '', odometroInicial: '', odometroFinal: '', gnvM3: '', gnvSoles: '', gasolinaGalones: '', gasolinaSoles: '', liquidaEfectivo: '', liquidaYape: '', operacionYape: '', adelanto: '', otrosGastos: '', otrosGastosDescripcion: '' })
   }, [metricasYango, selectedDriver])
 
   const handleLiquidarSesion = async () => {
@@ -254,9 +256,10 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
         placa: cierreForm.placa || null, odometroInicial: cierreForm.odometroInicial ? parseInt(cierreForm.odometroInicial) : null, odometroFinal: cierreForm.odometroFinal ? parseInt(cierreForm.odometroFinal) : null,
         diferenciaOdometro: (cierreForm.odometroInicial && cierreForm.odometroFinal) ? parseInt(cierreForm.odometroFinal) - parseInt(cierreForm.odometroInicial) : null,
         gnvM3: cierreForm.gnvM3 || null, gnvSoles: parseFloat(cierreForm.gnvSoles) || 0, gasolinaGalones: cierreForm.gasolinaGalones || null, gasolinaSoles: parseFloat(cierreForm.gasolinaSoles) || 0,
-        liquidaEfectivo: parseFloat(cierreForm.liquidaEfectivo) || 0, liquidaYape: parseFloat(cierreForm.liquidaYape) || 0, operacionYape: cierreForm.operacionYape || null,
+        liquidaEfectivo: parseFloat(cierreForm.liquidaEfectivo) || 0, liquidaYape: parseFloat(cierreForm.liquidaYape) || 0, operacionYape: cierreForm.operacionYape || null, adelanto: parseFloat(cierreForm.adelanto) || 0,
         otrosGastos: parseFloat(cierreForm.otrosGastos) || 0, otrosGastosDescripcion: cierreForm.otrosGastosDescripcion || null,
         totalIngresos: ingresos, totalGastos: gastos, resta: ingresos - gastos,
+        montoTotalProducido: sessionALiquidar?.totalAmount ?? 0,
       })
       queryClient.invalidateQueries({ queryKey: ['pro-ops', 'shift-sessions'] })
       queryClient.invalidateQueries({ queryKey: ['pro-ops', 'liquidacion-pendiente'] })
@@ -278,7 +281,7 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
       setCierreForm({
         placa: cierrePrevio.placa ?? '', odometroInicial: cierrePrevio.odometroInicial?.toString() ?? '', odometroFinal: cierrePrevio.odometroFinal?.toString() ?? '',
         gnvM3: cierrePrevio.gnvM3 ?? '', gnvSoles: cierrePrevio.gnvSoles?.toString() ?? '', gasolinaGalones: cierrePrevio.gasolinaGalones ?? '', gasolinaSoles: cierrePrevio.gasolinaSoles?.toString() ?? '',
-        liquidaEfectivo: cierrePrevio.liquidaEfectivo?.toString() ?? '', liquidaYape: cierrePrevio.liquidaYape?.toString() ?? '', operacionYape: cierrePrevio.operacionYape ?? '',
+        liquidaEfectivo: cierrePrevio.liquidaEfectivo?.toString() ?? '', liquidaYape: cierrePrevio.liquidaYape?.toString() ?? '', operacionYape: cierrePrevio.operacionYape ?? '', adelanto: cierrePrevio.adelanto?.toString() ?? '',
         otrosGastos: cierrePrevio.otrosGastos?.toString() ?? '', otrosGastosDescripcion: cierrePrevio.otrosGastosDescripcion ?? ''
       })
     }
@@ -308,9 +311,10 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
         diferenciaOdometro: (cierreForm.odometroInicial && cierreForm.odometroFinal) ? parseInt(cierreForm.odometroFinal) - parseInt(cierreForm.odometroInicial) : null,
         gnvM3: cierreForm.gnvM3 || null, gnvSoles: parseFloat(cierreForm.gnvSoles) || 0,
         gasolinaGalones: cierreForm.gasolinaGalones || null, gasolinaSoles: parseFloat(cierreForm.gasolinaSoles) || 0,
-        liquidaEfectivo: parseFloat(cierreForm.liquidaEfectivo) || 0, liquidaYape: parseFloat(cierreForm.liquidaYape) || 0, operacionYape: cierreForm.operacionYape || null,
+        liquidaEfectivo: parseFloat(cierreForm.liquidaEfectivo) || 0, liquidaYape: parseFloat(cierreForm.liquidaYape) || 0, operacionYape: cierreForm.operacionYape || null, adelanto: parseFloat(cierreForm.adelanto) || 0,
         otrosGastos: parseFloat(cierreForm.otrosGastos) || 0, otrosGastosDescripcion: cierreForm.otrosGastosDescripcion || null,
         totalIngresos: ingresos, totalGastos: totalG, resta: ingresos - totalG,
+        montoTotalProducido: sessionALiquidar?.totalAmount ?? 0,
       })
       if (sessionALiquidar) {
         const previo = await yegoProOpsService.obtenerCierrePorSession(sessionALiquidar.id)
@@ -344,9 +348,10 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
         gasolinaSoles: parseFloat(cierreForm.gasolinaSoles) || 0,
         liquidaEfectivo: parseFloat(cierreForm.liquidaEfectivo) || 0,
         liquidaYape: parseFloat(cierreForm.liquidaYape) || 0,
-        operacionYape: cierreForm.operacionYape || null,
+        operacionYape: cierreForm.operacionYape || null, adelanto: parseFloat(cierreForm.adelanto) || 0,
         otrosGastos: parseFloat(cierreForm.otrosGastos) || 0,
         otrosGastosDescripcion: cierreForm.otrosGastosDescripcion || null,
+        montoTotalProducido: metricasYango?.montoTotalProducido ?? 0,
       })
       queryClient.invalidateQueries({ queryKey: ['pro-ops', 'shift-sessions'] })
       queryClient.invalidateQueries({ queryKey: ['pro-ops', 'liquidacion-pendiente'] })
@@ -491,10 +496,10 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
 
             <div className="rounded-xl border border-gray-200 dark:border-neutral-800 overflow-hidden mb-6">
               <table className="w-full">
-                    <thead><tr className="border-b border-gray-200 dark:border-neutral-800 bg-gray-50 dark:bg-neutral-900/50"><th className="py-2.5 px-4 text-left text-[11px] font-semibold text-gray-400 uppercase">Período</th><th className="py-2.5 px-4 text-center text-[11px] font-semibold text-gray-400 uppercase">Viajes</th><th className="py-2.5 px-4 text-right text-[11px] font-semibold text-gray-400 uppercase">Ingresos</th><th className="py-2.5 px-4 text-left text-[11px] font-semibold text-gray-400 uppercase">Estado</th><th className="py-2.5 px-4 w-10" /></tr></thead>
+                    <thead><tr className="border-b border-gray-200 dark:border-neutral-800 bg-gray-50 dark:bg-neutral-900/50"><th className="py-2.5 px-4 text-left text-[11px] font-semibold text-gray-400 uppercase">Período</th><th className="py-2.5 px-4 text-center text-[11px] font-semibold text-gray-400 uppercase">Viajes</th><th className="py-2.5 px-4 text-right text-[11px] font-semibold text-gray-400 uppercase">Ingresos</th><th className="py-2.5 px-4 text-right text-[11px] font-semibold text-gray-400 uppercase">Efectivo</th><th className="py-2.5 px-4 text-left text-[11px] font-semibold text-gray-400 uppercase">Estado</th><th className="py-2.5 px-4 w-10" /></tr></thead>
                 <tbody>
                    {sessionsByWeek.length === 0 ? (
-                    <tr><td colSpan={5} className="py-8 text-center text-gray-400 dark:text-gray-600"><Clock className="w-8 h-8 mx-auto mb-2 opacity-40" /><p className="text-sm">Sin sesiones esta semana</p></td></tr>
+                    <tr><td colSpan={6} className="py-8 text-center text-gray-400 dark:text-gray-600"><Clock className="w-8 h-8 mx-auto mb-2 opacity-40" /><p className="text-sm">Sin sesiones esta semana</p></td></tr>
                   ) : sessionsByWeek[0].sessions.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()).map(session => {
                     const startDate = new Date(session.startedAt).toLocaleDateString('es-PE', { day: '2-digit', month: 'short' })
                     const startTime = formatTime(session.startedAt)
@@ -506,17 +511,28 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
 
                     return (
                       <tr key={session.id} onClick={() => {
-                        if (session.status === 'closed' || session.status === 'settled') {
+                        if (session.status === 'completada') {
                           openLiquidarSesion(session)
                         }
-                      }} className={cn('border-b border-gray-50 dark:border-neutral-800/50', (session.status === 'closed' || session.status === 'settled') && 'hover:bg-gray-50 dark:hover:bg-neutral-800/20 cursor-pointer transition-colors')}>
+                      }} className={cn('border-b border-gray-50 dark:border-neutral-800/50', (session.status === 'completada') && 'hover:bg-gray-50 dark:hover:bg-neutral-800/20 cursor-pointer transition-colors')}>
                         <td className="py-3 px-4"><p className="text-sm font-medium text-gray-900 dark:text-gray-100">{periodoText}</p></td>
                         <td className="py-3 px-4 text-center"><span className="text-sm font-semibold text-gray-700 dark:text-gray-300">{trips}v</span></td>
                         <td className="py-3 px-4 text-right"><span className="text-sm font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">{formatCurrency(amount)}</span></td>
-                        <td className="py-3 px-4"><SessionStatusBadge status={session.status} /></td>
+                        <td className="py-3 px-4 text-right"><span className="text-sm font-bold text-blue-600 dark:text-blue-400 tabular-nums">{formatCurrency((session.liquidaEfectivo ?? 0) + (session.liquidaYape ?? 0))}</span></td>
+                        <td className="py-3 px-4">
+                          {session.status === 'por_validar' ? (
+                            <select value={session.status} onChange={(e) => { e.stopPropagation(); updateStatusMutation.mutate({ sessionId: session.id, status: e.target.value }) }} className="text-xs border border-gray-300 dark:border-neutral-600 rounded px-2 py-1 bg-white dark:bg-neutral-800" onClick={e => e.stopPropagation()}>
+                              <option value="por_validar">Por validar</option>
+                              <option value="completada">Completada</option>
+                              <option value="rechazada">Rechazada</option>
+                            </select>
+                          ) : (
+                            <SessionStatusBadge status={session.status} />
+                          )}
+                        </td>
                         <td className="py-3 px-4">
                           {session.status === 'active' && <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); closeMutation.mutate(session.id) }} disabled={closeMutation.isPending} className="h-7 text-xs text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30 rounded-full">Cerrar</Button>}
-                          {session.status === 'closed' && <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); openLiquidarSesion(session) }} className="h-7 text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-full"><DollarSign className="w-3 h-3 mr-1" />Liquidar</Button>}
+                          {session.status === 'completada' && <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); openLiquidarSesion(session) }} className="h-7 text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-full"><DollarSign className="w-3 h-3 mr-1" />Liquidar</Button>}
                           {session.status !== 'active' && (
                             <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setSessionToDelete(session); setDeleteReason(''); setShowDeleteConfirm(true) }} className="h-7 text-xs text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-full ml-1"><Trash2 className="w-3 h-3" /></Button>
                           )}
@@ -667,6 +683,7 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
                 <div><label className="text-[10px] font-medium text-gray-500 uppercase">Otros gastos</label><input type="number" value={cierreForm.otrosGastos} onChange={e => setCierreForm(f => ({ ...f, otrosGastos: e.target.value }))} disabled={isReadonly} className={cn('w-full text-sm border border-gray-300 dark:border-neutral-600 rounded px-2 py-1 mt-0.5', isReadonly ? 'bg-gray-100 dark:bg-neutral-700 cursor-not-allowed' : 'bg-white dark:bg-neutral-800')} /></div>
               </div>
               <div className="mt-3"><input type="text" value={cierreForm.otrosGastosDescripcion} onChange={e => setCierreForm(f => ({ ...f, otrosGastosDescripcion: e.target.value }))} disabled={isReadonly} placeholder="Descripción otros gastos" className={cn('w-full text-xs border border-gray-300 dark:border-neutral-600 rounded px-2 py-2.5', isReadonly ? 'bg-gray-100 dark:bg-neutral-700 cursor-not-allowed' : 'bg-white dark:bg-neutral-800')} /></div>
+              <div><label className="text-[10px] font-medium text-gray-500 uppercase">Adelanto (S/)</label><input type="number" min="0" step="0.01" value={cierreForm.adelanto} onChange={e => setCierreForm(f => ({ ...f, adelanto: e.target.value }))} disabled={isReadonly} placeholder="0.00" className={cn('w-full text-sm border border-gray-300 dark:border-neutral-600 rounded px-2 py-1 mt-0.5', isReadonly ? 'bg-gray-100 dark:bg-neutral-700 cursor-not-allowed' : 'bg-white dark:bg-neutral-800')} /></div>
 
               <div className="border-t border-gray-100 dark:border-neutral-800 pt-3 space-y-1.5">
                 <div className="flex justify-between"><span className="text-xs text-gray-500">Producido total (Yego Pro)</span><span className="text-xs font-bold text-gray-900 dark:text-gray-100">{formatCurrency(producidoModal)}</span></div>

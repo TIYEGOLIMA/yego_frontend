@@ -269,6 +269,11 @@ export const yegoProOpsService = {
     return data
   },
 
+  updateSessionStatus: async (sessionId: string, status: string): Promise<ShiftSessionResponse> => {
+    const { data } = await api.post<ShiftSessionResponse>(`/shift-sessions/${sessionId}/status`, { status })
+    return data
+  },
+
   deleteSession: async (sessionId: string, userId: number, reason: string): Promise<void> => {
     await api.delete(ENDPOINTS.deleteSession(sessionId), { params: { userId, reason } })
   },

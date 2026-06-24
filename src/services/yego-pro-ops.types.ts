@@ -170,6 +170,7 @@ export interface RegistroCierre {
   liquidaEfectivo: number
   liquidaYape: number
   operacionYape: string | null
+  adelanto: number
   otrosGastos: number
   otrosGastosDescripcion: string | null
   totalIngresos: number
@@ -293,6 +294,8 @@ export interface FacturacionSemanal {
   pagoTotal: number
   bonificacionEmpresa?: number
   pagoTotalFinal?: number
+  totalAdelantos?: number
+  pagoTotalConAdelantos?: number
   utilidad: number
   utilidadPorViaje: number
   pagoPorViaje: number
@@ -336,10 +339,13 @@ export interface ShiftSessionResponse {
   startedAt: string
   closedAt: string | null
   settledAt: string | null
-  status: 'active' | 'closed' | 'settled'
+  status: 'active' | 'por_validar' | 'completada' | 'rechazada' | 'settled'
   totalTrips: number
   totalAmount: number
   totalCash: number
+  liquidaEfectivo: number
+  liquidaYape: number
+  adelanto: number
   createdAt: string
   updatedAt: string
 }
@@ -395,6 +401,8 @@ export interface LiquidacionSemanalResponse {
   pagoTotal: number
   bonificacionEmpresa?: number | null
   pagoTotalFinal?: number | null
+  totalAdelantos: number
+  pagoTotalConAdelantos: number | null
   utilidad: number
   utilidadPorViaje: number
   pagoPorViaje: number

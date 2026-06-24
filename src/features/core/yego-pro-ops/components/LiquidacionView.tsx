@@ -24,6 +24,7 @@ export function LiquidacionView({ shared }: { shared: SharedProOpsState }) {
   const [weekOffset, setWeekOffset] = useState(0)
   const [expandedSettled, setExpandedSettled] = useState<Set<string>>(new Set())
   const [showBonificacionModal, setShowBonificacionModal] = useState(false)
+  const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [bonificacionMonto, setBonificacionMonto] = useState('')
   const { driver: selectedDriver, setDriver } = shared
 
@@ -73,21 +74,17 @@ export function LiquidacionView({ shared }: { shared: SharedProOpsState }) {
 
   const handleLiquidarSemana = () => {
     if (!liquidacion || !selectedDriver) return
-    setBonificacionMonto('')
-    setShowBonificacionModal(true)
+    setShowConfirmModal(true)
   }
 
   const handleConfirmarLiquidacion = () => {
     if (!liquidacion || !selectedDriver) return
-    const bonifEmpresa = parseFloat(bonificacionMonto) || 0
-    if (bonifEmpresa < 0 || bonifEmpresa > liquidacion.pagoTotal) return
     const sesiones = liquidacion.sesionesDetalle ?? []
     const horas = sesiones.reduce((sum, s) => {
       if (!s.inicio || !s.fin) return sum
       return sum + (new Date(s.fin).getTime() - new Date(s.inicio).getTime()) / 3600000
     }, 0)
     const diasUnicos = new Set(sesiones.map(s => s.inicio?.substring(0, 10)).filter(Boolean)).size
-    const pagoTotalFinal = liquidacion.pagoTotal - bonifEmpresa
     const payload: FacturacionSemanal = {
       driverId: selectedDriver.driverId,
       fechaInicio: weekStart,
@@ -108,9 +105,7 @@ export function LiquidacionView({ shared }: { shared: SharedProOpsState }) {
       porcentajePago: liquidacion.porcentajePago,
       pago: liquidacion.pago,
       pagoTotal: liquidacion.pagoTotal,
-      bonificacionEmpresa: bonifEmpresa || undefined,
-      pagoTotalFinal: bonifEmpresa > 0 ? pagoTotalFinal : undefined,
-      utilidad: pagoTotalFinal,
+      utilidad: liquidacion.pagoTotal,
       utilidadPorViaje: liquidacion.utilidadPorViaje,
       pagoPorViaje: liquidacion.pagoPorViaje,
       diasTrabajados: diasUnicos,
@@ -119,7 +114,7 @@ export function LiquidacionView({ shared }: { shared: SharedProOpsState }) {
       estado: 'liquidado',
       userId: user?.id ?? 0,
     }
-    setShowBonificacionModal(false)
+    setShowConfirmModal(false)
     liquidarSemanaMutation.mutate(payload)
   }
 
@@ -257,6 +252,18 @@ export function LiquidacionView({ shared }: { shared: SharedProOpsState }) {
                       </div>
                     </>
                   )}
+                  {liquidacion.totalAdelantos != null && liquidacion.totalAdelantos > 0 && (
+                    <>
+                      <div className="flex justify-center my-1.5">
+                        <svg className="w-4 h-4 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
+                      </div>
+                      <div className="flex items-center justify-center gap-1.5 overflow-x-auto">
+                        <Caja label="- ADELANTOS" value={fmtCur(liquidacion.totalAdelantos)} color="red" />
+                        <Flecha />
+                        <Caja label="PAGO FINAL" value={fmtCur(liquidacion.pagoTotalConAdelantos ?? liquidacion.pagoTotal)} color="emerald" big />
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {liquidacion.sesionesDetalle?.length > 0 && (
@@ -326,6 +333,25 @@ export function LiquidacionView({ shared }: { shared: SharedProOpsState }) {
               <Button variant="outline" onClick={() => setShowBonificacionModal(false)} className="rounded-xl text-sm">Cancelar</Button>
               <Button onClick={handleConfirmarLiquidacion} disabled={liquidarSemanaMutation.isPending || (parseFloat(bonificacionMonto) || 0) > liquidacion.pagoTotal || (parseFloat(bonificacionMonto) || 0) < 0} className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm px-5">
                 {liquidarSemanaMutation.isPending ? 'Liquidando...' : 'Liquidar semana'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showConfirmModal && liquidacion && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowConfirmModal(false)}>
+          <div className="bg-white dark:bg-neutral-900 rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-1">Cerrar semana</h3>
+            <p className="text-sm text-gray-400 mb-4">¿Estás seguro de cerrar la semana del {fmtDateFull(weekStart)} al {fmtDateFull(weekEnd)}?</p>
+            <div className="mb-4 p-3 rounded-lg bg-gray-50 dark:bg-neutral-800/50 space-y-1">
+              <p className="text-xs text-gray-500">{liquidacion.totalSesiones} sesiones · {liquidacion.totalViajes} viajes</p>
+              <p className="text-xs font-bold text-gray-900 dark:text-gray-100">Pago total: {fmtCur(liquidacion.pagoTotal)}</p>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <Button variant="outline" onClick={() => setShowConfirmModal(false)} className="rounded-xl text-sm">Cancelar</Button>
+              <Button onClick={handleConfirmarLiquidacion} disabled={liquidarSemanaMutation.isPending} className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm px-5">
+                {liquidarSemanaMutation.isPending ? 'Liquidando...' : 'Cerrar semana'}
               </Button>
             </div>
           </div>
