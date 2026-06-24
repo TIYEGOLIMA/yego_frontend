@@ -23,9 +23,7 @@ export function LiquidacionView({ shared }: { shared: SharedProOpsState }) {
   const [searchTerm, setSearchTerm] = useState('')
   const [weekOffset, setWeekOffset] = useState(0)
   const [expandedSettled, setExpandedSettled] = useState<Set<string>>(new Set())
-  const [showBonificacionModal, setShowBonificacionModal] = useState(false)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
-  const [bonificacionMonto, setBonificacionMonto] = useState('')
   const { driver: selectedDriver, setDriver } = shared
 
   const liquidarSemanaMutation = useMutation({
@@ -98,6 +96,7 @@ export function LiquidacionView({ shared }: { shared: SharedProOpsState }) {
       kmRecorrido: liquidacion.kmRecorrido,
       gastoCombustible: liquidacion.gastoCombustible ?? 0,
       bonoYango: liquidacion.bonoYango,
+      bonoYangoLunes: liquidacion.bonoYangoLunes ?? 0,
       gastoMantenimiento: liquidacion.gastoMantenimiento,
       produccionBonificable: liquidacion.produccionBonificable,
       bonoAdicViajes: liquidacion.bonoAdicViajes,
@@ -198,7 +197,7 @@ export function LiquidacionView({ shared }: { shared: SharedProOpsState }) {
                   <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20 p-3">
                     <span className="text-[10px] font-semibold text-blue-600 uppercase">A Pagar Final</span>
                     <p className="text-xl font-bold text-blue-700 dark:text-blue-400">{liquidacion.semanaCerrada && liquidacion.pagoTotalFinal != null ? fmtCur(liquidacion.pagoTotalFinal) : fmtCur(liquidacion.pagoTotal)}</p>
-                    {liquidacion.semanaCerrada && liquidacion.bonificacionEmpresa != null && liquidacion.bonificacionEmpresa > 0 && <p className="text-[10px] text-blue-500 mt-0.5">- {fmtCur(liquidacion.bonificacionEmpresa)} bonif.</p>}
+                  </div>
                   </div>
                 </div>
 
@@ -215,6 +214,12 @@ export function LiquidacionView({ shared }: { shared: SharedProOpsState }) {
                     <Flecha />
                     <Caja label="+ B YANGO" value={fmtCur(liquidacion.bonoYango)} color="green" />
                     <Flecha />
+                    {liquidacion.bonoYangoLunes > 0 && (
+                      <>
+                        <Caja label="+ B LUNES" value={fmtCur(liquidacion.bonoYangoLunes)} color="green" />
+                        <Flecha />
+                      </>
+                    )}
                     <Caja label="- COMBUSTIBLE" value={fmtCur(liquidacion.gastoCombustible)} color="red" />
                     <Flecha />
                     <Caja label="- GTO MANT" value={fmtCur(liquidacion.gastoMantenimiento)} color="red" />
@@ -240,18 +245,6 @@ export function LiquidacionView({ shared }: { shared: SharedProOpsState }) {
                     <Caja label="PAGO TOTAL" value={fmtCur(liquidacion.pagoTotal)} color="gray" />
                   </div>
 
-                  {liquidacion.semanaCerrada && liquidacion.bonificacionEmpresa != null && liquidacion.bonificacionEmpresa > 0 && (
-                    <>
-                      <div className="flex justify-center my-1.5">
-                        <svg className="w-4 h-4 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
-                      </div>
-                      <div className="flex items-center justify-center gap-1.5 overflow-x-auto">
-                        <Caja label="- BONIF EMPRESA" value={fmtCur(liquidacion.bonificacionEmpresa)} color="red" />
-                        <Flecha />
-                        <Caja label="PAGO FINAL" value={fmtCur(liquidacion.pagoTotalFinal)} color="emerald" big />
-                      </div>
-                    </>
-                  )}
                   {liquidacion.totalAdelantos != null && liquidacion.totalAdelantos > 0 && (
                     <>
                       <div className="flex justify-center my-1.5">
@@ -277,7 +270,9 @@ export function LiquidacionView({ shared }: { shared: SharedProOpsState }) {
                             <span className="text-gray-500">{ses.viajes}v</span>
                             <span className="text-gray-500">Efec: <span className="font-semibold text-emerald-600">{fmtCur(ses.efectivo ?? ses.ingresos)}</span></span>
                             <span className="text-gray-500">Prod: <span className="font-semibold text-gray-900 dark:text-gray-100">{fmtCur(ses.montoTotalProducido ?? 0)}</span></span>
-                            <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full', ses.status === 'settled' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600')}>{ses.status === 'settled' ? '✓' : '⏳'}</span>
+                            {ses.adelanto != null && ses.adelanto > 0 && (
+                              <span className="text-red-500">-Adel: <span className="font-semibold">{fmtCur(ses.adelanto)}</span></span>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -288,7 +283,7 @@ export function LiquidacionView({ shared }: { shared: SharedProOpsState }) {
 
               {liquidacion.tieneSesionesCerradas && !liquidacion.semanaCerrada ? (
                 <div className="px-5 py-4 border-t border-gray-100 dark:border-neutral-800">
-                  <Button onClick={handleLiquidarSemana} disabled={liquidarSemanaMutation.isPending} className="w-full h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-sm shadow-emerald-200">
+                  <Button onClick={handleLiquidarSemana} disabled={liquidarSemanaMutation.isPending || !liquidacion.bonoYangoLunes || liquidacion.bonoYangoLunes <= 0} className="w-full h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-sm shadow-emerald-200">
                     {liquidarSemanaMutation.isPending ? 'Liquidando...' : `Liquidar semana — ${fmtCur(liquidacion.pagoTotal)}`}
                   </Button>
                 </div>
@@ -299,45 +294,15 @@ export function LiquidacionView({ shared }: { shared: SharedProOpsState }) {
                   </div>
                 </div>
               )}
-            </div>
 
-            {/* SETTLED WEEKS NAVIGATION */}
-            <p className="text-xs font-semibold text-gray-400 uppercase mb-2">Semanas anteriores</p>
-            <div className="text-sm text-gray-400 py-4 text-center">Navega con ← → para ver semanas anteriores</div>
-          </div>
+              {/* SETTLED WEEKS NAVIGATION */}
+              <p className="text-xs font-semibold text-gray-400 uppercase mb-2">Semanas anteriores</p>
+              <div className="text-sm text-gray-400 py-4 text-center">Navega con ← → para ver semanas anteriores</div>
+            </div>
         ) : (
           <div className="h-full flex items-center justify-center text-gray-400"><p className="text-sm">Sin datos disponibles</p></div>
         )}
       </div>
-
-      {showBonificacionModal && liquidacion && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowBonificacionModal(false)}>
-          <div className="bg-white dark:bg-neutral-900 rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-1">Bonificación de la empresa</h3>
-            <p className="text-sm text-gray-400 mb-4">Ingresa el monto que la empresa bonifica al conductor</p>
-            <div className="mb-3">
-              <p className="text-xs text-gray-500 mb-1">A Pagar original: <span className="font-bold text-gray-900 dark:text-gray-100">{fmtCur(liquidacion.pagoTotal)}</span></p>
-            </div>
-            <div className="mb-4">
-              <label className="text-[10px] font-medium text-gray-500 uppercase">Bonificación empresa (S/)</label>
-              <input type="number" min="0" step="0.01" value={bonificacionMonto} onChange={e => setBonificacionMonto(e.target.value)} placeholder="0.00"
-                className="w-full text-sm border border-gray-300 dark:border-neutral-600 rounded-lg px-3 py-2 mt-1 bg-white dark:bg-neutral-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:border-red-500" />
-              {parseFloat(bonificacionMonto) > liquidacion.pagoTotal && (
-                <p className="text-[11px] text-red-500 mt-1">No puede ser mayor a {fmtCur(liquidacion.pagoTotal)}</p>
-              )}
-            </div>
-            <div className="mb-4 p-3 rounded-lg bg-gray-50 dark:bg-neutral-800/50">
-              <p className="text-xs text-gray-500">A Pagar final: <span className="font-bold text-emerald-600">{fmtCur(liquidacion.pagoTotal - (parseFloat(bonificacionMonto) || 0))}</span></p>
-            </div>
-            <div className="flex gap-3 justify-end">
-              <Button variant="outline" onClick={() => setShowBonificacionModal(false)} className="rounded-xl text-sm">Cancelar</Button>
-              <Button onClick={handleConfirmarLiquidacion} disabled={liquidarSemanaMutation.isPending || (parseFloat(bonificacionMonto) || 0) > liquidacion.pagoTotal || (parseFloat(bonificacionMonto) || 0) < 0} className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm px-5">
-                {liquidarSemanaMutation.isPending ? 'Liquidando...' : 'Liquidar semana'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {showConfirmModal && liquidacion && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowConfirmModal(false)}>

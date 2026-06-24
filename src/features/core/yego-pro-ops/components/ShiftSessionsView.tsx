@@ -4,7 +4,7 @@ import { yegoProOpsService, type ShiftSessionResponse, type ListaConductoresResp
 import type { SharedProOpsState } from '../yego-pro-ops.module'
 import { useAuth } from '../../../../shared/hooks/useAuth'
 import { Button } from '../../../../components/ui/button'
-import { Phone, Hash, Clock, CheckCircle2, ChevronRight, ChevronDown, ChevronUp, Pause, Calendar, Search, DollarSign, Car, TrendingUp, Percent, Award, Trash2 } from 'lucide-react'
+import { Phone, Hash, Clock, CheckCircle2, ChevronRight, ChevronDown, ChevronUp, Pause, Calendar, Search, DollarSign, Car, TrendingUp, Percent, Award, Trash2, XCircle, Eye } from 'lucide-react'
 import { cn } from '../../../../utils/cn'
 
 function getInitials(name: string): string { return name.split(' ').slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('') }
@@ -140,6 +140,15 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
     return history ?? []
   }, [history])
 
+  useEffect(() => {
+    if (!desde && history && history.length > 0) {
+      const ultimaSesion = history[0]
+      const d = toDatetimeLocal(ultimaSesion.startedAt)
+      setLocalDesde(d)
+      setDesde(d)
+    }
+  }, [history])
+
   const currentWeekLabel = useMemo(() => {
     const now = new Date()
     const day = now.getDay()
@@ -213,7 +222,20 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
   const hastaEsFuturo = !!(localHasta && new Date(localHasta) > new Date())
   const desdeMayorQueHasta = !!(localDesde && localHasta && new Date(localDesde) >= new Date(localHasta))
   const desdeEsFuturo = !!(localDesde && new Date(localDesde) > new Date())
-  const buscarBloqueado = !localDesde || !localHasta || desdeMayorQueHasta || desdeEsFuturo || todasSettled || haySolapamiento || hastaEsFuturo
+  const sesionesFueraRango = (() => {
+    if (!localDesde || !localHasta) return []
+    const desde = new Date(localDesde)
+    const hasta = new Date(localHasta)
+    return filteredSessionsByWeek.filter(s => {
+      const inicio = new Date(s.startedAt)
+      const fin = s.closedAt ? new Date(s.closedAt) : new Date()
+      const seSuperpone = inicio < hasta && fin > desde
+      const estaCompleta = inicio >= desde && fin <= hasta
+      return seSuperpone && !estaCompleta
+    })
+  })()
+  const hayFueraDeRango = sesionesFueraRango.length > 0
+  const buscarBloqueado = !localDesde || !localHasta || desdeMayorQueHasta || desdeEsFuturo || todasSettled || haySolapamiento || hastaEsFuturo || hayFueraDeRango
 
   const closeMutation = useMutation({ mutationFn: (sessionId: string) => yegoProOpsService.closeSession(sessionId, user?.id ?? 0), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['pro-ops', 'shift-sessions'] }) })
 
@@ -231,7 +253,7 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
       const previo = await yegoProOpsService.obtenerCierrePorSession(session.id)
       if (previo) {
         setCierrePrevio(previo)
-        setCierreForm({ placa: previo.placa ?? '', odometroInicial: previo.odometroInicial?.toString() ?? '', odometroFinal: previo.odometroFinal?.toString() ?? '', gnvM3: previo.gnvM3 ?? '', gnvSoles: previo.gnvSoles?.toString() ?? '', gasolinaGalones: previo.gasolinaGalones ?? '', gasolinaSoles: previo.gasolinaSoles?.toString() ?? '', liquidaEfectivo: previo.liquidaEfectivo?.toString() ?? '', liquidaYape: previo.liquidaYape?.toString() ?? '', otrosGastos: previo.otrosGastos?.toString() ?? '', otrosGastosDescripcion: previo.otrosGastosDescripcion ?? '' })
+        setCierreForm({ placa: previo.placa ?? '', odometroInicial: previo.odometroInicial?.toString() ?? '', odometroFinal: previo.odometroFinal?.toString() ?? '', gnvM3: previo.gnvM3 ?? '', gnvSoles: previo.gnvSoles?.toString() ?? '', gasolinaGalones: previo.gasolinaGalones ?? '', gasolinaSoles: previo.gasolinaSoles?.toString() ?? '', liquidaEfectivo: previo.liquidaEfectivo?.toString() ?? '', liquidaYape: previo.liquidaYape?.toString() ?? '', operacionYape: previo.operacionYape ?? '', adelanto: previo.adelanto?.toString() ?? '', otrosGastos: previo.otrosGastos?.toString() ?? '', otrosGastosDescripcion: previo.otrosGastosDescripcion ?? '' })
       } else { setCierrePrevio(null) }
     } catch { setCierrePrevio(null) }
     setCargandoDetalle(false)
@@ -376,12 +398,13 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
   const isReadonly = modalModo === 'sesion' && sessionALiquidar?.status === 'settled' && !editando
   const montoRestante = ingresosModal - totalGastos
   const totalLiquidacion = (parseFloat(cierreForm.liquidaEfectivo) || 0) + (parseFloat(cierreForm.liquidaYape) || 0)
+  const montosNoCalzan = Math.abs(montoRestante - totalLiquidacion) > 0.01
 
   const fechaInputClase = cn('text-xs border rounded px-2 py-1 bg-white dark:bg-neutral-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:border-red-500',
-    todasSettled ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/20' : haySolapamiento || desdeMayorQueHasta || desdeEsFuturo ? 'border-red-500 bg-red-50 dark:bg-red-950/20' : hayPendientes ? 'border-amber-500' : hayActivas ? 'border-red-400' : 'border-gray-300 dark:border-neutral-600')
+    todasSettled ? 'border-gray-300 dark:border-neutral-600' : haySolapamiento || desdeMayorQueHasta || desdeEsFuturo ? 'border-red-500 bg-red-50 dark:bg-red-950/20' : hayPendientes ? 'border-amber-500' : hayActivas ? 'border-red-400' : 'border-gray-300 dark:border-neutral-600')
 
   const hastaInputClase = cn('text-xs border rounded px-2 py-1 bg-white dark:bg-neutral-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:border-red-500',
-    todasSettled ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/20' : haySolapamiento || hastaEsFuturo || desdeMayorQueHasta ? 'border-red-500 bg-red-50 dark:bg-red-950/20' : hayPendientes ? 'border-amber-500' : 'border-gray-300 dark:border-neutral-600')
+    todasSettled ? 'border-gray-300 dark:border-neutral-600' : haySolapamiento || hastaEsFuturo || desdeMayorQueHasta ? 'border-red-500 bg-red-50 dark:bg-red-950/20' : hayPendientes ? 'border-amber-500' : 'border-gray-300 dark:border-neutral-600')
 
   return (
     <div className="flex h-[calc(100vh-180px)] bg-white dark:bg-neutral-950 rounded-xl overflow-hidden border border-gray-200 dark:border-neutral-800 shadow-sm">
@@ -421,9 +444,9 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
               <div className="flex items-center gap-3">
                 <Calendar className={cn('w-4 h-4 flex-shrink-0', todasSettled ? 'text-emerald-500' : haySolapamiento ? 'text-red-500' : hayPendientes ? 'text-amber-500' : 'text-gray-400')} />
                 <div className="flex items-center gap-2 flex-1">
-                  <div className="flex flex-col gap-0.5"><label className="text-[10px] font-semibold text-gray-400 uppercase">Desde</label><input type="datetime-local" value={localDesde} onChange={e => setLocalDesde(e.target.value)} disabled={todasSettled} className={fechaInputClase} /></div>
+                  <div className="flex flex-col gap-0.5"><label className="text-[10px] font-semibold text-gray-400 uppercase">Desde</label><input type="datetime-local" value={localDesde} onChange={e => setLocalDesde(e.target.value)} className={fechaInputClase} /></div>
                   <span className="text-gray-400 text-sm mt-4">→</span>
-                  <div className="flex flex-col gap-0.5"><label className="text-[10px] font-semibold text-gray-400 uppercase">Hasta</label><input type="datetime-local" value={localHasta} onChange={e => setLocalHasta(e.target.value)} disabled={todasSettled} className={hastaInputClase} /></div>
+                  <div className="flex flex-col gap-0.5"><label className="text-[10px] font-semibold text-gray-400 uppercase">Hasta</label><input type="datetime-local" value={localHasta} onChange={e => setLocalHasta(e.target.value)} className={hastaInputClase} /></div>
                   <Button size="sm" onClick={handleAplicarFiltro} disabled={loadingBuscar || buscarBloqueado}
                     className={cn('ml-2 mt-4 h-7 text-xs rounded-lg text-white px-3 transition-colors', filtroAplicado ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700')}>
                     {loadingBuscar ? <div className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-white" /> : filtroAplicado ? <><CheckCircle2 className="w-3.5 h-3.5 mr-1" />Aplicado</> : <><Search className="w-3.5 h-3.5 mr-1" />Buscar</>}
@@ -452,6 +475,16 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
               )}
               {hastaEsFuturo && !haySolapamiento && !desdeMayorQueHasta && !desdeEsFuturo && (
                 <p className="text-[11px] text-red-500 mt-1 pl-7">La fecha seleccionada es posterior a la fecha actual</p>
+              )}
+              {hayFueraDeRango && !desdeMayorQueHasta && !desdeEsFuturo && !haySolapamiento && !hastaEsFuturo && (
+                <div className="mt-2 pl-7">
+                  <p className="text-[11px] font-semibold text-red-600 mb-1">El período seleccionado no cubre sesiones existentes:</p>
+                  {sesionesFueraRango.map(s => (
+                    <p key={s.id} className="text-[10px] text-red-500 ml-2">
+                      • {formatDateShort(s.startedAt).date} {formatTime(s.startedAt)} → {s.closedAt ? formatTime(s.closedAt) : '···'} (inicia fuera del período)
+                    </p>
+                  ))}
+                </div>
               )}
             </div>
 
@@ -511,10 +544,10 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
 
                     return (
                       <tr key={session.id} onClick={() => {
-                        if (session.status === 'completada') {
+                        if (session.status === 'por_validar' || session.status === 'completada' || session.status === 'settled') {
                           openLiquidarSesion(session)
                         }
-                      }} className={cn('border-b border-gray-50 dark:border-neutral-800/50', (session.status === 'completada') && 'hover:bg-gray-50 dark:hover:bg-neutral-800/20 cursor-pointer transition-colors')}>
+                      }} className={cn('border-b border-gray-50 dark:border-neutral-800/50', (session.status === 'por_validar' || session.status === 'completada' || session.status === 'settled') && 'hover:bg-gray-50 dark:hover:bg-neutral-800/20 cursor-pointer transition-colors')}>
                         <td className="py-3 px-4"><p className="text-sm font-medium text-gray-900 dark:text-gray-100">{periodoText}</p></td>
                         <td className="py-3 px-4 text-center"><span className="text-sm font-semibold text-gray-700 dark:text-gray-300">{trips}v</span></td>
                         <td className="py-3 px-4 text-right"><span className="text-sm font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">{formatCurrency(amount)}</span></td>
@@ -532,7 +565,6 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
                         </td>
                         <td className="py-3 px-4">
                           {session.status === 'active' && <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); closeMutation.mutate(session.id) }} disabled={closeMutation.isPending} className="h-7 text-xs text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30 rounded-full">Cerrar</Button>}
-                          {session.status === 'completada' && <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); openLiquidarSesion(session) }} className="h-7 text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-full"><DollarSign className="w-3 h-3 mr-1" />Liquidar</Button>}
                           {session.status !== 'active' && (
                             <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setSessionToDelete(session); setDeleteReason(''); setShowDeleteConfirm(true) }} className="h-7 text-xs text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-full ml-1"><Trash2 className="w-3 h-3" /></Button>
                           )}
@@ -726,7 +758,7 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
                     Editar
                   </Button>
                 )}
-                <Button onClick={modalModo === 'turno' ? handleCerrarTurno : handleLiquidarSesion} disabled={liquidando || isReadonly || cargandoDetalle} className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm px-5">
+                <Button onClick={modalModo === 'turno' ? handleCerrarTurno : handleLiquidarSesion} disabled={liquidando || isReadonly || cargandoDetalle || montosNoCalzan} className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm px-5">
                   {isReadonly ? 'Sesión liquidada' : cargandoDetalle ? 'Cargando...' : liquidando ? 'Liquidando...' : 'Confirmar liquidación'}
                 </Button>
               </div>

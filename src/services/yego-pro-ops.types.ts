@@ -283,6 +283,7 @@ export interface FacturacionSemanal {
   kmRecorrido: number
   gastoCombustible: number
   bonoYango?: number
+  bonoYangoLunes?: number
   gastoMantenimiento: number
   produccionBonificable: number
   bonoAdicViajes: number
@@ -360,6 +361,7 @@ export interface SesionDiaInfo {
   montoTotalProducido?: number
   km: number
   status: string
+  adelanto?: number
 }
 
 export interface DiaLiquidacionInfo {
@@ -391,6 +393,7 @@ export interface LiquidacionSemanalResponse {
   tieneSesionActiva: boolean
   montoTotalProducido: number
   bonoYango: number
+  bonoYangoLunes: number
   comisionApp: number
   montoNeto: number
   produccionBonificable: number
