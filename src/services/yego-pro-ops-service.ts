@@ -83,6 +83,7 @@ export interface CierrePayload {
   totalIngresos: number
   totalGastos: number
   resta: number
+  montoTotalProducido?: number
   placa?: string | null
   odometroInicial?: number | null
   odometroFinal?: number | null

@@ -99,7 +99,7 @@ export function LiquidacionView({ shared }: { shared: SharedProOpsState }) {
       comisionApp: liquidacion.comisionApp,
       montoNeto: liquidacion.montoNeto,
       kmRecorrido: liquidacion.kmRecorrido,
-      gastoCombustible: 0,
+      gastoCombustible: liquidacion.gastoCombustible ?? 0,
       bonoYango: liquidacion.bonoYango,
       gastoMantenimiento: liquidacion.gastoMantenimiento,
       produccionBonificable: liquidacion.produccionBonificable,
@@ -220,6 +220,8 @@ export function LiquidacionView({ shared }: { shared: SharedProOpsState }) {
                     <Flecha />
                     <Caja label="+ B YANGO" value={fmtCur(liquidacion.bonoYango)} color="green" />
                     <Flecha />
+                    <Caja label="- COMBUSTIBLE" value={fmtCur(liquidacion.gastoCombustible)} color="red" />
+                    <Flecha />
                     <Caja label="- GTO MANT" value={fmtCur(liquidacion.gastoMantenimiento)} color="red" />
                     <Flecha />
                     <Caja label="PROD BONIF" value={fmtCur(liquidacion.produccionBonificable)} color="emerald" />
@@ -264,9 +266,10 @@ export function LiquidacionView({ shared }: { shared: SharedProOpsState }) {
                       {liquidacion.sesionesDetalle.map(ses => (
                         <div key={ses.sessionId} className="flex items-center justify-between py-1.5 px-2 rounded-lg bg-gray-50 dark:bg-neutral-800/30 text-xs">
                           <span className="text-gray-600 dark:text-gray-300">{ses.inicio?.substring(0, 16) ?? '···'} → {ses.fin?.substring(0, 16) ?? '···'}</span>
-                          <div className="flex items-center gap-4">
+                          <div className="flex items-center gap-3">
                             <span className="text-gray-500">{ses.viajes}v</span>
-                            <span className="font-semibold text-emerald-600">{fmtCur(ses.ingresos)}</span>
+                            <span className="text-gray-500">Efec: <span className="font-semibold text-emerald-600">{fmtCur(ses.efectivo ?? ses.ingresos)}</span></span>
+                            <span className="text-gray-500">Prod: <span className="font-semibold text-gray-900 dark:text-gray-100">{fmtCur(ses.montoTotalProducido ?? 0)}</span></span>
                             <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full', ses.status === 'settled' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600')}>{ses.status === 'settled' ? '✓' : '⏳'}</span>
                           </div>
                         </div>

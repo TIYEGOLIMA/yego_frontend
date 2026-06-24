@@ -175,6 +175,7 @@ export interface RegistroCierre {
   totalIngresos: number
   totalGastos: number
   resta: number
+  montoTotalProducido?: number
   calculadoShiftIds?: string
   shiftSessionId?: string
   placa?: string | null
@@ -349,6 +350,8 @@ export interface SesionDiaInfo {
   fin: string | null
   viajes: number
   ingresos: number
+  efectivo?: number
+  montoTotalProducido?: number
   km: number
   status: string
 }
@@ -397,6 +400,7 @@ export interface LiquidacionSemanalResponse {
   pagoPorViaje: number
   kmRecorrido: number
   gastoMantenimiento: number
+  gastoCombustible: number
   viajesPorHora: number
   sesionesDetalle: SesionDiaInfo[]
   semanaCerrada: boolean

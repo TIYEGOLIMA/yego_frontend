@@ -367,6 +367,7 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
   const odometroDif = (cierreForm.odometroInicial && cierreForm.odometroFinal) ? parseInt(cierreForm.odometroFinal) - parseInt(cierreForm.odometroInicial) : 0
   const totalGastos = (parseFloat(cierreForm.gnvSoles) || 0) + (parseFloat(cierreForm.gasolinaSoles) || 0) + (parseFloat(cierreForm.otrosGastos) || 0)
   const ingresosModal = modalModo === 'turno' ? (metricasYango?.efectivo ?? 0) : (sessionALiquidar?.totalCash ?? 0)
+  const producidoModal = modalModo === 'turno' ? (metricasYango?.montoTotalProducido ?? 0) : (cierrePrevio?.montoTotalProducido ?? sessionALiquidar?.totalAmount ?? 0)
   const isReadonly = modalModo === 'sesion' && sessionALiquidar?.status === 'settled' && !editando
   const montoRestante = ingresosModal - totalGastos
   const totalLiquidacion = (parseFloat(cierreForm.liquidaEfectivo) || 0) + (parseFloat(cierreForm.liquidaYape) || 0)
@@ -450,9 +451,9 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
             </div>
 
             {/* MÉTRICAS (siempre visibles) */}
-            <div className="grid grid-cols-5 gap-3 mb-6">
+            <div className={cn('grid gap-3 mb-6', metricasYango ? 'grid-cols-5' : 'grid-cols-4')}>
               {loadingBuscar ? (
-                <div className="col-span-5 flex items-center justify-center py-6"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600" /><p className="text-sm text-gray-400 ml-3">Consultando Yango...</p></div>
+                <div className="col-span-full flex items-center justify-center py-6"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600" /><p className="text-sm text-gray-400 ml-3">Consultando Yango...</p></div>
               ) : metricasYango ? (
                 <>
                   <div className="bg-[#F8F8F8] dark:bg-neutral-800/60 rounded-xl p-4"><span className="text-[11px] font-semibold text-gray-400 uppercase">VIAJES</span><p className="text-[28px] font-bold text-gray-900 dark:text-gray-100 leading-tight mb-1">{metricasYango.totalViajes}</p><p className="text-xs text-gray-400">{metricasYango.viajesPorHora.toFixed(1)} viajes/hora</p></div>
@@ -466,7 +467,6 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
                   <div className="bg-[#F8F8F8] dark:bg-neutral-800/60 rounded-xl p-4"><span className="text-[11px] font-semibold text-gray-400 uppercase">SESIONES TOTALES</span><p className="text-[28px] font-bold text-gray-900 dark:text-gray-100 leading-tight mb-1">{filteredSessionsByWeek.length}</p><p className="text-xs text-gray-400">{filteredSessionsByWeek.filter(s => s.status === 'active').length} activa(s)</p></div>
                   <div className="bg-[#F8F8F8] dark:bg-neutral-800/60 rounded-xl p-4"><span className="text-[11px] font-semibold text-gray-400 uppercase">VIAJES TOTALES</span><p className="text-[28px] font-bold text-gray-900 dark:text-gray-100 leading-tight mb-1">{filteredSessionsByWeek.reduce((s, x) => s + (x.totalTrips ?? 0), 0)}</p><p className="text-xs text-gray-400">Total acumulado</p></div>
                   <div className="bg-[#F8F8F8] dark:bg-neutral-800/60 rounded-xl p-4"><span className="text-[11px] font-semibold text-gray-400 uppercase">INGRESOS TOTALES</span><p className="text-[28px] font-bold text-gray-900 dark:text-gray-100 leading-tight mb-1">{formatCurrency(filteredSessionsByWeek.reduce((s, x) => s + ((x.totalCash ?? 0)), 0))}</p><p className="text-xs text-gray-400">Efectivo acumulado</p></div>
-                  <div className="bg-[#F8F8F8] dark:bg-neutral-800/60 rounded-xl p-4"><span className="text-[11px] font-semibold text-gray-400 uppercase">PROMEDIO</span><p className="text-[28px] font-bold text-gray-900 dark:text-gray-100 leading-tight mb-1">{filteredSessionsByWeek.length > 0 ? formatCurrency(filteredSessionsByWeek.reduce((s, x) => s + ((x.totalCash ?? 0)), 0) / filteredSessionsByWeek.length) : '—'}</p><p className="text-xs text-gray-400">Efectivo / sesión</p></div>
                   <div className="bg-[#F8F8F8] dark:bg-neutral-800/60 rounded-xl p-4"><span className="text-[11px] font-semibold text-gray-400 uppercase">LIQUIDADO</span><p className="text-[28px] font-bold text-gray-900 dark:text-gray-100 leading-tight mb-1">{formatCurrency(totalLiquidado)}</p><p className="text-xs text-gray-400">Efectivo + Yape</p></div>
                 </>
               )}
@@ -669,7 +669,8 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
               <div className="mt-3"><input type="text" value={cierreForm.otrosGastosDescripcion} onChange={e => setCierreForm(f => ({ ...f, otrosGastosDescripcion: e.target.value }))} disabled={isReadonly} placeholder="Descripción otros gastos" className={cn('w-full text-xs border border-gray-300 dark:border-neutral-600 rounded px-2 py-2.5', isReadonly ? 'bg-gray-100 dark:bg-neutral-700 cursor-not-allowed' : 'bg-white dark:bg-neutral-800')} /></div>
 
               <div className="border-t border-gray-100 dark:border-neutral-800 pt-3 space-y-1.5">
-                <div className="flex justify-between"><span className="text-xs text-gray-500">Ingresos</span><span className="text-xs font-semibold text-emerald-600">{formatCurrency(ingresosModal)}</span></div>
+                <div className="flex justify-between"><span className="text-xs text-gray-500">Producido total (Yego Pro)</span><span className="text-xs font-bold text-gray-900 dark:text-gray-100">{formatCurrency(producidoModal)}</span></div>
+                <div className="flex justify-between"><span className="text-xs text-gray-500">Ingresos (efectivo)</span><span className="text-xs font-semibold text-emerald-600">{formatCurrency(ingresosModal)}</span></div>
                 <div className="flex justify-between"><span className="text-xs text-gray-500">Gastos</span><span className="text-xs font-semibold text-red-500">{formatCurrency(totalGastos)}</span></div>
                 <div className="flex justify-between"><span className="text-xs text-gray-500">Monto restante</span><span className={cn('text-xs font-bold', montoRestante >= 0 ? 'text-emerald-600' : 'text-red-600')}>{formatCurrency(montoRestante)}</span></div>
                 <div className="flex justify-between"><span className="text-xs text-gray-500">Total liquidado (efectivo + yape)</span><span className="text-xs font-semibold">{formatCurrency(totalLiquidacion)}</span></div>
