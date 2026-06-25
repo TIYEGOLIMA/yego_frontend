@@ -395,7 +395,7 @@ export function ShiftSessionsView({ shared }: { shared: SharedProOpsState }) {
   const totalGastos = (parseFloat(cierreForm.gnvSoles) || 0) + (parseFloat(cierreForm.gasolinaSoles) || 0) + (parseFloat(cierreForm.otrosGastos) || 0)
   const ingresosModal = modalModo === 'turno' ? (metricasYango?.efectivo ?? 0) : (sessionALiquidar?.totalCash ?? 0)
   const producidoModal = modalModo === 'turno' ? (metricasYango?.montoTotalProducido ?? 0) : (cierrePrevio?.montoTotalProducido ?? sessionALiquidar?.totalAmount ?? 0)
-  const isReadonly = modalModo === 'sesion' && sessionALiquidar?.status === 'settled' && !editando
+  const isReadonly = modalModo === 'sesion' && (sessionALiquidar?.status === 'settled' || sessionALiquidar?.status === 'completada' || sessionALiquidar?.status === 'por_validar') && !editando
   const montoRestante = ingresosModal - totalGastos
   const totalLiquidacion = (parseFloat(cierreForm.liquidaEfectivo) || 0) + (parseFloat(cierreForm.liquidaYape) || 0)
   const montosNoCalzan = Math.abs(montoRestante - totalLiquidacion) > 0.01

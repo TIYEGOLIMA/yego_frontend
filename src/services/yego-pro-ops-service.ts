@@ -270,7 +270,7 @@ export const yegoProOpsService = {
   },
 
   updateSessionStatus: async (sessionId: string, status: string): Promise<ShiftSessionResponse> => {
-    const { data } = await api.post<ShiftSessionResponse>(`/shift-sessions/${sessionId}/status`, { status })
+    const { data } = await api.post<ShiftSessionResponse>(`/pro-ops/shift-sessions/${sessionId}/status`, { status })
     return data
   },
 
