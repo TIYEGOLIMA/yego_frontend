@@ -268,11 +268,15 @@ export function LiquidacionView({ shared }: { shared: SharedProOpsState }) {
                           <span className="text-gray-600 dark:text-gray-300">{ses.inicio?.substring(0, 16) ?? '···'} → {ses.fin?.substring(0, 16) ?? '···'}</span>
                           <div className="flex items-center gap-3">
                             <span className="text-gray-500">{ses.viajes}v</span>
-                            <span className="text-gray-500">Efec: <span className="font-semibold text-emerald-600">{fmtCur(ses.efectivo ?? ses.ingresos)}</span></span>
-                            <span className="text-gray-500">Prod: <span className="font-semibold text-gray-900 dark:text-gray-100">{fmtCur(ses.montoTotalProducido ?? 0)}</span></span>
-                            {ses.adelanto != null && ses.adelanto > 0 && (
-                              <span className="text-red-500">-Adel: <span className="font-semibold">{fmtCur(ses.adelanto)}</span></span>
+                            {ses.adelanto != null && ses.adelanto > 0 ? (
+                              <>
+                                <span className="text-gray-500">Ingresos: <span className="font-semibold text-emerald-600">{fmtCur(ses.ingresos ?? 0)}</span></span>
+                                <span className="text-gray-400 text-[10px]">Adel: {fmtCur(ses.adelanto)}</span>
+                              </>
+                            ) : (
+                              <span className="text-gray-500">Ingresos: <span className="font-semibold text-emerald-600">{fmtCur(ses.ingresos ?? 0)}</span></span>
                             )}
+                            <span className="text-gray-500">Prod: <span className="font-semibold text-gray-900 dark:text-gray-100">{fmtCur(ses.montoTotalProducido ?? 0)}</span></span>
                           </div>
                         </div>
                       ))}
