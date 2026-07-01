@@ -8,8 +8,8 @@ export default function AlertasTab({ vehicle }: Props) {
   const hoy = new Date()
 
   const alertasDocs = (vehicle.documents ?? []).map(doc => {
-    if (!doc.fechaFin) return null
-    const fin = new Date(doc.fechaFin)
+    if (!doc.fechaVigente) return null
+    const fin = new Date(doc.fechaVigente)
     const dias = Math.ceil((fin.getTime() - hoy.getTime()) / 86400000)
     if (dias < 0) return { tipo: 'documento', nombre: doc.tipo, mensaje: `${doc.tipo} vencido`, severidad: 'critica' as const, icono: <XCircle className="w-4 h-4 text-red-500" />, dias }
     if (dias <= 7) return { tipo: 'documento', nombre: doc.tipo, mensaje: `${doc.tipo} vence en ${dias} días`, severidad: 'alta' as const, icono: <AlertTriangle className="w-4 h-4 text-orange-500" />, dias }

@@ -19,12 +19,12 @@ export default function SiniestrosTab({ vehicleId, incidents }: Props) {
 
   const crearMutation = useMutation({
     mutationFn: () => flotaService.agregarSiniestro(vehicleId, form),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['vehicle', vehicleId] }); setShowForm(false); setForm({ fecha: new Date().toISOString().split('T')[0], tipo: 'Accidente', descripcion: '', conductor: '', montoDano: 0, estado: 'reportado' }) },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['vehicle-detail', vehicleId] }); setShowForm(false); setForm({ fecha: new Date().toISOString().split('T')[0], tipo: 'Accidente', descripcion: '', conductor: '', montoDano: 0, estado: 'reportado' }) },
   })
 
   const eliminarMutation = useMutation({
-    mutationFn: (incId: number) => flotaService.eliminarSiniestro(vehicleId, incId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['vehicle', vehicleId] }),
+    mutationFn: (incId: number) => flotaService.eliminarSiniestro(incId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['vehicle-detail', vehicleId] }),
   })
 
   const totalDano = incidents.reduce((s, i) => s + (i.montoDano || 0), 0)

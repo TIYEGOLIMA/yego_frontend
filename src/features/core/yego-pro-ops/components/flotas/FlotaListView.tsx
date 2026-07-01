@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { flotaService } from './service'
 import type { YangoVehicle } from './types'
-import { Search, Truck, ChevronRight } from 'lucide-react'
+import { Search, Truck, ChevronRight, RefreshCw, Plus, X } from 'lucide-react'
 import { cn } from '@/utils/cn'
 
 function StatusBadge({ status }: { status?: { id: string; name: string } }) {
@@ -18,35 +18,97 @@ function CategoryBadge({ cat }: { cat: string }) {
   return <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-neutral-800 text-gray-500 font-medium">{cat}</span>
 }
 
-interface Props { onSelectVehicle: (id: string) => void }
+interface Props { onSelectVehicle: (id: string, parkId?: string) => void }
 
 export default function FlotaListView({ onSelectVehicle }: Props) {
+  const queryClient = useQueryClient()
   const [busqueda, setBusqueda] = useState('')
+  const [segmentoActivo, setSegmentoActivo] = useState<string | null>(null)
+  const [showAgregar, setShowAgregar] = useState(false)
+  const [nuevoParkId, setNuevoParkId] = useState('')
+
+  const { data: flotas } = useQuery({
+    queryKey: ['fleet-segments'],
+    queryFn: () => flotaService.listarFlotas(),
+  })
+
+  const { data: partners } = useQuery({
+    queryKey: ['fleet-partners'],
+    queryFn: () => flotaService.listarPartners(),
+    enabled: showAgregar,
+  })
+
+  const partnersDisponibles = useMemo(() => {
+    const yaAgregados = new Set((flotas ?? []).map(f => f.parkId))
+    return (partners ?? []).filter(p => !yaAgregados.has(p.id))
+  }, [partners, flotas])
 
   const { data, isLoading } = useQuery({
-    queryKey: ['yango-vehicles'],
+    queryKey: ['fleet-vehicles'],
     queryFn: () => flotaService.listarVehiculos(),
   })
 
-  const vehicles = useMemo(() => {
-    const cars: YangoVehicle[] = data?.cars ?? []
-    if (!busqueda) return cars
-    const q = busqueda.toLowerCase()
-    return cars.filter(v =>
-      v.number?.toLowerCase().includes(q) ||
-      v.callsign?.toLowerCase().includes(q) ||
-      v.brand?.toLowerCase().includes(q) ||
-      v.model?.toLowerCase().includes(q) ||
-      v.vin?.toLowerCase().includes(q)
-    )
-  }, [data, busqueda])
+  const sincronizar = useMutation({
+    mutationFn: () => flotaService.sincronizar(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['fleet-vehicles'] })
+      queryClient.invalidateQueries({ queryKey: ['fleet-segments'] })
+    },
+  })
 
-  const total = data?.total ?? 0
+  const agregarFlota = useMutation({
+    mutationFn: (parkId: string) => flotaService.agregarFlota(parkId),
+    onSuccess: () => {
+      setShowAgregar(false)
+      setNuevoParkId('')
+      queryClient.invalidateQueries({ queryKey: ['fleet-segments'] })
+    },
+  })
+
+  const vehicles = useMemo(() => {
+    let cars: YangoVehicle[] = data?.cars ?? []
+    if (segmentoActivo != null) cars = cars.filter(v => v.segment_id === segmentoActivo)
+    if (busqueda) {
+      const q = busqueda.toLowerCase()
+      cars = cars.filter(v =>
+        v.number?.toLowerCase().includes(q) ||
+        v.callsign?.toLowerCase().includes(q) ||
+        v.brand?.toLowerCase().includes(q) ||
+        v.model?.toLowerCase().includes(q) ||
+        v.vin?.toLowerCase().includes(q)
+      )
+    }
+    return cars
+  }, [data, busqueda, segmentoActivo])
+
+  const total = data?.cars?.length ?? 0
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
       <div className="flex items-center justify-between mb-6">
-        <div><h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2"><Truck className="w-7 h-7" /> Flotas</h1><p className="text-sm text-gray-400 mt-1">{total} vehículos en la flota</p></div>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2"><Truck className="w-7 h-7" /> Flotas</h1>
+          <p className="text-sm text-gray-400 mt-1">{total} vehículos en {flotas?.length ?? 0} flotas</p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={() => sincronizar.mutate()} disabled={sincronizar.isPending} className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-xl border border-gray-300 dark:border-neutral-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-neutral-800 disabled:opacity-50">
+            <RefreshCw className={cn('w-4 h-4', sincronizar.isPending && 'animate-spin')} /> {sincronizar.isPending ? 'Sincronizando...' : 'Sincronizar'}
+          </button>
+          <button onClick={() => setShowAgregar(true)} className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-xl bg-red-600 text-white hover:bg-red-700">
+            <Plus className="w-4 h-4" /> Agregar flota
+          </button>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2 mb-4">
+        <button onClick={() => setSegmentoActivo(null)} className={cn('text-xs font-semibold px-3 py-1.5 rounded-full transition-colors', segmentoActivo == null ? 'bg-red-600 text-white' : 'bg-gray-100 dark:bg-neutral-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200')}>
+          Todos {total}
+        </button>
+        {flotas?.map(f => (
+          <button key={f.id} onClick={() => setSegmentoActivo(f.id)} className={cn('text-xs font-semibold px-3 py-1.5 rounded-full transition-colors', segmentoActivo === f.id ? 'bg-red-600 text-white' : 'bg-gray-100 dark:bg-neutral-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200')}>
+            {f.nombre} {f.totalVehiculos}
+          </button>
+        ))}
       </div>
 
       <div className="flex gap-3 mb-6">
@@ -56,14 +118,16 @@ export default function FlotaListView({ onSelectVehicle }: Props) {
       {isLoading ? (
         <div className="flex justify-center py-16"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600" /></div>
       ) : vehicles.length === 0 ? (
-        <div className="text-center py-16 text-gray-400"><Truck className="w-12 h-12 mx-auto mb-3 opacity-30" /><p className="text-sm">{busqueda ? 'Sin resultados para la búsqueda' : 'No hay vehículos en la flota'}</p></div>
+        <div className="text-center py-16 text-gray-400"><Truck className="w-12 h-12 mx-auto mb-3 opacity-30" /><p className="text-sm">{busqueda || segmentoActivo != null ? 'Sin resultados' : 'No hay vehículos. Agrega una flota y sincroniza.'}</p></div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {vehicles.map(v => (
-            <div key={v.id} onClick={() => onSelectVehicle(v.id)} className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 p-4 hover:shadow-lg hover:border-red-200 dark:hover:border-red-900 transition-all cursor-pointer group">
+            <div key={v.id} onClick={() => onSelectVehicle(v.id, v.park_id)} className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 p-4 hover:shadow-lg hover:border-red-200 dark:hover:border-red-900 transition-all cursor-pointer group">
               <div className="flex items-start gap-3 mb-3">
                 <div className="w-16 h-12 rounded-xl bg-gray-100 dark:bg-neutral-800 flex items-center justify-center overflow-hidden flex-shrink-0">
-                  <Truck className="w-6 h-6 text-gray-300" />
+                  {v.foto_url
+                    ? <img src={v.foto_url} alt={v.number} className="w-full h-full object-cover" onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
+                    : <Truck className="w-6 h-6 text-gray-300" />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between">
@@ -75,7 +139,8 @@ export default function FlotaListView({ onSelectVehicle }: Props) {
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
+                {v.park_nombre && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400 font-bold">{v.park_nombre}</span>}
                 <span className="text-xs text-gray-400">{v.color_name || v.color}</span>
                 {v.rental && <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 font-bold">Renta</span>}
               </div>
@@ -91,6 +156,30 @@ export default function FlotaListView({ onSelectVehicle }: Props) {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {showAgregar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowAgregar(false)}>
+          <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Agregar flota</h2>
+              <button onClick={() => setShowAgregar(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Selecciona una flota de Yango</label>
+            <select value={nuevoParkId} onChange={e => setNuevoParkId(e.target.value)} className="w-full px-3 py-2.5 text-sm border border-gray-300 dark:border-neutral-600 rounded-xl bg-white dark:bg-neutral-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:border-red-500 mb-1">
+              <option value="">— Selecciona una flota —</option>
+              {partnersDisponibles.map(p => (
+                <option key={p.id} value={p.id}>{p.name}{p.city ? ` · ${p.city}` : ''}</option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-400 mb-4">Se consultará esa flota en Yango para traer sus vehículos propios.</p>
+            {agregarFlota.isError && <p className="text-xs text-red-500 mb-3">No se pudo agregar la flota.</p>}
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowAgregar(false)} className="px-3 py-2 text-sm font-medium rounded-xl border border-gray-300 dark:border-neutral-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-neutral-800">Cancelar</button>
+              <button onClick={() => nuevoParkId.trim() && agregarFlota.mutate(nuevoParkId.trim())} disabled={!nuevoParkId.trim() || agregarFlota.isPending} className="px-3 py-2 text-sm font-medium rounded-xl bg-red-600 text-white hover:bg-red-700 disabled:opacity-50">{agregarFlota.isPending ? 'Agregando...' : 'Agregar'}</button>
+            </div>
+          </div>
         </div>
       )}
     </div>

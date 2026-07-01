@@ -12,27 +12,28 @@ import KilometrajeTab from './tabs/KilometrajeTab'
 import SiniestrosTab from './tabs/SiniestrosTab'
 import GastosTab from './tabs/GastosTab'
 import AlertasTab from './tabs/AlertasTab'
+import TrazabilidadTab from './tabs/TrazabilidadTab'
 
 function StatusBadge({ status }: { status?: { id: string; name: string } }) {
   const styles: Record<string, string> = { working: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400', inactive: 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400', maintenance: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400' }
   return <span className={cn('text-xs font-bold px-2.5 py-1 rounded-full', styles[status?.id ?? ''] ?? 'bg-gray-100 text-gray-600')}>{status?.name ?? '—'}</span>
 }
 
-interface Props { vehicleId: string; onBack: () => void }
+interface Props { vehicleId: string; parkId?: string; onBack: () => void }
 
-export default function VehicleProfile({ vehicleId, onBack }: Props) {
+export default function VehicleProfile({ vehicleId, parkId, onBack }: Props) {
   const [activeTab, setActiveTab] = useState('info')
 
   const { data: vehicle, isLoading } = useQuery<VehicleDetail>({
-    queryKey: ['vehicle-detail', vehicleId],
-    queryFn: () => flotaService.obtenerDetalle(vehicleId),
+    queryKey: ['vehicle-detail', vehicleId, parkId],
+    queryFn: () => flotaService.obtenerDetalle(vehicleId, parkId),
   })
 
   if (isLoading) return <div className="flex justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600" /></div>
   if (!vehicle) return <div className="text-center py-20 text-gray-400">Vehículo no encontrado</div>
 
-  const docsVencidos = vehicle.documents?.filter(d => d.estado === 'vencido').length ?? 0
-  const docsPorVencer = vehicle.documents?.filter(d => { if (!d.fechaFin) return false; const dias = Math.ceil((new Date(d.fechaFin).getTime() - Date.now()) / 86400000); return dias > 0 && dias <= 30 }).length ?? 0
+  const docsVencidos = vehicle.documents?.filter(d => { if (!d.fechaVigente) return false; return new Date(d.fechaVigente).getTime() < Date.now() }).length ?? 0
+  const docsPorVencer = vehicle.documents?.filter(d => { if (!d.fechaVigente) return false; const dias = Math.ceil((new Date(d.fechaVigente).getTime() - Date.now()) / 86400000); return dias > 0 && dias <= 30 }).length ?? 0
   const mantPendientes = vehicle.maintenance?.filter(m => m.estado === 'pendiente').length ?? 0
   const gastoTotal = (vehicle.maintenance ?? []).reduce((s, m) => s + (m.costo || 0), 0)
 
@@ -44,6 +45,7 @@ export default function VehicleProfile({ vehicleId, onBack }: Props) {
     { key: 'sin', label: 'Siniestros' },
     { key: 'gastos', label: 'Gastos' },
     { key: 'alertas', label: `Alertas ${docsVencidos + docsPorVencer > 0 ? `(${docsVencidos + docsPorVencer})` : ''}` },
+    { key: 'traza', label: 'Trazabilidad' },
   ]
 
   return (
@@ -97,6 +99,7 @@ export default function VehicleProfile({ vehicleId, onBack }: Props) {
         {activeTab === 'sin' && <SiniestrosTab vehicleId={vehicleId} incidents={vehicle.incidents ?? []} />}
         {activeTab === 'gastos' && <GastosTab maintenance={vehicle.maintenance ?? []} incidents={vehicle.incidents ?? []} />}
         {activeTab === 'alertas' && <AlertasTab vehicle={vehicle} />}
+        {activeTab === 'traza' && <TrazabilidadTab vehicleId={vehicleId} />}
       </div>
     </div>
   )

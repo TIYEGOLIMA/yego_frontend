@@ -1,6 +1,33 @@
+export interface Flota {
+  id: string
+  parkId: string
+  nombre: string
+  ciudad?: string | null
+  activo: boolean
+  totalVehiculos: number
+}
+
+export interface FlotaPartner {
+  id: string
+  name: string
+  city?: string | null
+}
+
+export interface VehicleTraceEvent {
+  tipo: 'INGRESO' | 'CAMBIO_FLOTA' | 'DOC_CARGADO' | 'DOC_ELIMINADO'
+  descripcion: string
+  usuario?: string | null
+  fecha: string
+  flotaAnterior?: string | null
+  flotaNuevo?: string | null
+}
+
 export interface YangoVehicle {
   id: string
   park_id: string
+  segment_id?: string
+  park_nombre?: string
+  foto_url?: string
   brand: string
   model: string
   year: number
@@ -27,8 +54,7 @@ export interface VehicleDocument {
   id?: number
   tipo: string
   nombre?: string | null
-  fechaInicio?: string | null
-  fechaFin?: string | null
+  fechaVigente?: string | null
   archivoUrl?: string | null
   estado: string
 }
@@ -84,6 +110,8 @@ export interface QcMedia {
 }
 
 export interface VehicleDetail extends YangoVehicle {
+  fotoUrl?: string
+  segmentId?: string
   documents: VehicleDocument[]
   maintenance: VehicleMaintenance[]
   mileageHistory: VehicleMileage[]

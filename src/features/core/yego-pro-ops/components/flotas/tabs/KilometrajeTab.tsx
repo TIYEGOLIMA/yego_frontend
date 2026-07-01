@@ -14,7 +14,7 @@ export default function KilometrajeTab({ vehicleId, mileage, kmActual }: Props) 
 
   const crearMutation = useMutation({
     mutationFn: () => flotaService.agregarKilometraje(vehicleId, form),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['vehicle', vehicleId] }); setShowForm(false); setForm({ fecha: new Date().toISOString().split('T')[0], kilometraje: kmActual }) },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['vehicle-detail', vehicleId] }); setShowForm(false); setForm({ fecha: new Date().toISOString().split('T')[0], kilometraje: kmActual }) },
   })
 
   const totalKm = mileage.length > 0 ? mileage[mileage.length - 1].kilometraje - mileage[0].kilometraje : 0
