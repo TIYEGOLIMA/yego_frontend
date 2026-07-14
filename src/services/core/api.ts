@@ -28,6 +28,56 @@ export const api = axios.create({
   timeout: 60000,
 })
 
+let refreshEnCurso: Promise<string> | null = null
+let invalidandoSesionHumana = false
+
+export function invalidarSesionHumana(): void {
+  if (invalidandoSesionHumana) return
+  invalidandoSesionHumana = true
+  authService.clearLocalStorage()
+  delete api.defaults.headers.common.Authorization
+  if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+    window.location.replace('/login')
+  } else {
+    invalidandoSesionHumana = false
+  }
+}
+
+function renovarTokenUnaVez(currentToken: string): Promise<string> {
+  if (refreshEnCurso) return refreshEnCurso
+
+  refreshEnCurso = (async () => {
+    const refreshUrl = window.location.pathname.includes('/ticketera')
+      ? '/ticketera/auth/refresh'
+      : '/auth/refresh'
+    const refreshResponse = await api.post(
+      refreshUrl,
+      {},
+      { headers: { Authorization: `Bearer ${currentToken}` } },
+    )
+    const newToken =
+      getAccessTokenFromResponse(refreshResponse) ??
+      (refreshResponse.data as { accessToken?: string })?.accessToken
+
+    if (!newToken) {
+      throw new Error('La renovación no devolvió un token')
+    }
+
+    try {
+      const { useAuthStore } = await import('../../store/auth-store')
+      useAuthStore.setState({ token: newToken })
+    } catch {
+      // El interceptor también funciona antes de inicializar el store.
+    }
+    api.defaults.headers.common.Authorization = `Bearer ${newToken}`
+    return newToken
+  })().finally(() => {
+    refreshEnCurso = null
+  })
+
+  return refreshEnCurso
+}
+
 api.interceptors.request.use(
   (config) => {
     if (config.data instanceof FormData) {
@@ -68,6 +118,7 @@ api.interceptors.response.use(
     const isTicketeraRefreshRequest = url.includes('/ticketera/auth/refresh')
 
     if (error.response?.status === 401 && !isLoginRequest && !isRefreshRequest && !isTicketeraRefreshRequest) {
+      const requestConfig = error.config as typeof error.config & { _retry?: boolean }
       const errCode = parseAxiosErrorCode(error)
       const sesionDispositivo = getDispositivoSession()
       const currentToken = getHumanJwtFromStorage()
@@ -82,35 +133,21 @@ api.interceptors.response.use(
         return Promise.reject(error)
       }
 
+      if (requestConfig?._retry) {
+        invalidarSesionHumana()
+        return Promise.reject(error)
+      }
+
       try {
         if (currentToken) {
-          const refreshUrl = window.location.pathname.includes('/ticketera')
-            ? '/ticketera/auth/refresh'
-            : '/auth/refresh'
-
-          const refreshResponse = await api.post(
-            refreshUrl,
-            {},
-            { headers: { Authorization: `Bearer ${currentToken}` } },
-          )
-
-          const newToken =
-            getAccessTokenFromResponse(refreshResponse) ??
-            (refreshResponse.data as { accessToken?: string })?.accessToken
-
-          try {
-            const { useAuthStore } = await import('../../store/auth-store')
-            useAuthStore.setState({ token: newToken })
-          } catch {
-            // store opcional
-          }
-
-          api.defaults.headers.common['Authorization'] = `Bearer ${newToken}`
-          error.config.headers['Authorization'] = `Bearer ${newToken}`
-          return api.request(error.config)
+          requestConfig._retry = true
+          const newToken = await renovarTokenUnaVez(currentToken)
+          requestConfig.headers.Authorization = `Bearer ${newToken}`
+          return api.request(requestConfig)
         }
       } catch {
-        // sigue a logout humano
+        invalidarSesionHumana()
+        return Promise.reject(error)
       }
 
       if (esSoloSesionDispositivo()) {
@@ -118,17 +155,7 @@ api.interceptors.response.use(
         return Promise.reject(error)
       }
 
-      try {
-        await authService.logout()
-      } catch {
-        localStorage.removeItem('token')
-        localStorage.removeItem('user')
-        localStorage.removeItem('auth-storage')
-      }
-
-      if (!window.location.pathname.includes('/login')) {
-        window.location.href = '/login'
-      }
+      invalidarSesionHumana()
     }
 
     if (error.response?.status === 403 && error.response?.data?.error === 'PASSWORD_EXPIRED') {

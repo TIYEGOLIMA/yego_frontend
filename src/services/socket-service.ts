@@ -205,7 +205,7 @@ class SocketService {
       const token = getAuthToken();
       if (!token) return;
       
-      const { default: api } = await import('./core/api');
+      const { default: api, invalidarSesionHumana } = await import('./core/api');
       const refreshUrl = window.location.pathname.includes('/ticketera') 
         ? '/ticketera/auth/refresh' 
         : '/auth/refresh';
@@ -233,9 +233,15 @@ class SocketService {
         this.reconnectAttempts = 0;
         this.maxReconnectAttemptsReached = false;
         this.connect('refresh-reconnect');
-      } catch {
+      } catch (error: unknown) {
         if (esSoloSesionDispositivo()) {
           handleDispositivoSesionRevocada()
+          return
+        }
+        const status = (error as { response?: { status?: number } })?.response?.status
+        if (status === 401) {
+          this.stopReconnect()
+          invalidarSesionHumana()
           return
         }
         console.warn('[SocketService] No se pudo refrescar el token tras agotar reintentos.')
