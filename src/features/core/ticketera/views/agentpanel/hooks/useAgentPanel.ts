@@ -9,7 +9,7 @@ import { useSocket } from '../contexts/SocketContext'
 import { getSedeActivaId } from '@/features/core/ticketera/shared/utils/sedeContext'
 import { useAuthStore } from '@/store/auth-store'
 import type { ModuloAtencion, ModuloUsuarioResponse } from '../services/moduloAtencionService'
-import { getTicketeraErrorMessage, getTicketeraErrorStatus } from '../../../domain'
+import { getTicketeraErrorMessage, getTicketeraErrorStatus, sortTicketsFifo } from '../../../domain'
 
 type TicketSocketMessage = Ticket & { ticketId?: number; type?: string; startedAt?: string }
 
@@ -631,11 +631,7 @@ export const useAgentPanel = (sedePickerKey?: number): UseAgentPanelReturn => {
   const ticketsEnEspera = useMemo(() => {
     const ticketsWaiting = tickets.filter(t => t.status === 'WAITING')
     const ticketsInProgress = tickets.filter(t => t.status === 'IN_PROGRESS')
-    const ticketsOrdenados = [...ticketsWaiting].sort((a, b) => {
-      const fechaA = a.createdAt ? new Date(a.createdAt).getTime() : a.id
-      const fechaB = b.createdAt ? new Date(b.createdAt).getTime() : b.id
-      return fechaA - fechaB
-    })
+    const ticketsOrdenados = sortTicketsFifo(ticketsWaiting)
     if (ticketsInProgress.length > 0) {
       return ticketsOrdenados.slice(0, 1)
     }

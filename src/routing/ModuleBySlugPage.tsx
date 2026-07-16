@@ -1,7 +1,7 @@
 import { Navigate, useParams } from 'react-router-dom'
 import { useAuthStore } from '@/store/auth-store'
 import { findFirstModuleForSlug } from '@/shared/utils/moduleUrlMatch'
-import { getComponentByModuleCode } from '@/routing/moduleComponentRegistry'
+import { getComponentForModule } from '@/routing/moduleComponentRegistry'
 import { PermissionRoute } from '@/routing/PermissionRoute'
 
 /**
@@ -22,8 +22,7 @@ function ResolvedModule({ slug }: { slug: string }) {
   const { modules } = useAuthStore()
 
   const mod = findFirstModuleForSlug(modules, slug)
-  const code = mod?.codigo?.trim().toUpperCase() ?? ''
-  const Cmp = code ? getComponentByModuleCode(code) : null
+  const Cmp = getComponentForModule(mod, slug)
 
   if (!Cmp) {
     return (

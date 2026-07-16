@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Ticket } from '../../types'
 import { CompleteTicketModal } from './CompleteTicketModal'
-import { TICKET_STATUS } from '../../utils/constants'
+import { TICKET_STATUS } from '@/features/core/ticketera/shared'
 
 interface TicketCardProps {
   ticket: Ticket

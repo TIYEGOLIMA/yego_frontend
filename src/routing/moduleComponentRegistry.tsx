@@ -46,7 +46,49 @@ const REGISTRY: Record<string, ComponentType> = {
   CARGA_MASIVA: CargaMasivaModule,
 }
 
+const CODE_ALIASES: Record<string, string> = {
+  TICKETERA: 'TICKETS',
+  TICKET: 'TICKETS',
+  REPORTES: 'REPORTS',
+}
+
+function normalizeModuleCode(value: string): string {
+  return value
+    .trim()
+    .replace(/^\/+|\/+$/g, '')
+    .replace(/[?#].*$/, '')
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toUpperCase()
+}
+
 export function getComponentByModuleCode(code: string): ComponentType | null {
-  const key = code.trim().toUpperCase()
+  const normalizedCode = normalizeModuleCode(code)
+  const key = CODE_ALIASES[normalizedCode] ?? normalizedCode
   return REGISTRY[key] ?? null
+}
+
+interface ModuleScreenDescriptor {
+  codigo?: string | null
+  url?: string | null
+  nombre?: string | null
+}
+
+/**
+ * Mantiene compatibilidad con módulos creados antes de existir `codigo`.
+ * El código estable tiene prioridad; URL, slug y nombre son solo respaldo de migración.
+ */
+export function getComponentForModule(
+  module: ModuleScreenDescriptor | null | undefined,
+  routeSlug: string,
+): ComponentType | null {
+  const candidates = [module?.codigo, routeSlug, module?.url, module?.nombre]
+
+  for (const candidate of candidates) {
+    if (!candidate?.trim()) continue
+    const component = getComponentByModuleCode(candidate)
+    if (component) return component
+  }
+
+  return null
 }
