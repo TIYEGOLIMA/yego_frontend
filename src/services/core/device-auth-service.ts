@@ -96,6 +96,24 @@ export function clearDispositivoSession(): void {
   }
 }
 
+/**
+ * Una pantalla física no debe conservar credenciales ni alcance de una sesión
+ * humana anterior. Si permanecen, Axios o el WebSocket pueden elegir el JWT
+ * humano en lugar del JWT del dispositivo.
+ */
+export function clearHumanSessionForDevice(): void {
+  try {
+    localStorage.removeItem('auth-storage')
+    localStorage.removeItem('token')
+    localStorage.removeItem('ticketera_token')
+    localStorage.removeItem('ticketera_user')
+    localStorage.removeItem('ticketera_validated')
+    localStorage.removeItem('sedeActiva')
+  } catch {
+    // ignore
+  }
+}
+
 let revocandoSesion = false
 
 export function handleDispositivoSesionRevocada(): void {
@@ -144,8 +162,26 @@ export async function autenticarDispositivo(
   )
 
   const session = toDispositivoSession(data as Record<string, unknown>)
-
+  clearHumanSessionForDevice()
   localStorage.setItem(STORAGE_KEY, JSON.stringify(session))
+
+  try {
+    const [{ default: api }, { useAuthStore }] = await Promise.all([
+      import('./api'),
+      import('../../store/auth-store'),
+    ])
+    useAuthStore.setState({
+      user: null,
+      token: null,
+      modules: [],
+      loading: false,
+      error: null,
+    })
+    api.defaults.headers.common.Authorization = `Bearer ${session.accessToken}`
+  } catch {
+    // La sesión persistida del dispositivo sigue siendo autoritativa.
+  }
+
   return session
 }
 
