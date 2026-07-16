@@ -28,7 +28,6 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": resolve(__dirname, "src"),
-      "microfrontends": resolve(__dirname, "microfrontends"),
     },
   },
   define: {

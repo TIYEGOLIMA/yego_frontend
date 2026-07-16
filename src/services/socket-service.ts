@@ -1,4 +1,5 @@
-import { Client, IMessage } from '@stomp/stompjs'
+import { Client, IMessage, type IFrame, type StompSubscription } from '@stomp/stompjs'
+import { api } from './core/api'
 import {
   esSoloSesionDispositivo,
   getDispositivoToken,
@@ -18,14 +19,26 @@ const HEARTBEAT_INTERVAL = 10000
 
 const getAuthToken = (): string | null => getHumanJwtFromStorage() || getDispositivoToken()
 
-const getWebSocketUrl = (token: string): string => {
-  if (isProduction) {
-    const prodUrl = WS_URL || 'wss://api-int.yego.pro/ws';
-    return `${prodUrl}?token=${encodeURIComponent(token)}`;
-  }
-  const devUrl = WS_URL || 'ws://localhost:8080/ws';
-  return `${devUrl}?token=${encodeURIComponent(token)}`;
-};
+interface WebSocketTicketResponse {
+  ticket: string
+  expiresAt: string
+}
+
+interface WebSocketCredentials {
+  url: string
+  connectHeaders: Record<string, string>
+}
+
+const getWebSocketBaseUrl = (): string => {
+  if (isProduction) return WS_URL || 'wss://api-int.yego.pro/ws'
+  return WS_URL || 'ws://localhost:8080/ws'
+}
+
+async function getWebSocketCredentials(): Promise<WebSocketCredentials> {
+  const { data } = await api.post<WebSocketTicketResponse>('/ws/ticket')
+  const url = `${getWebSocketBaseUrl()}?ticket=${encodeURIComponent(data.ticket)}`
+  return { url, connectHeaders: { 'X-WS-Ticket': data.ticket } }
+}
 
 const getUserIdFromToken = (token: string): number | null => {
   try {
@@ -37,11 +50,24 @@ const getUserIdFromToken = (token: string): number | null => {
 };
 
 type ConnectionStatus = 'connected' | 'disconnected' | 'connecting' | 'error'
+type EventCallback = (data: unknown) => void
+type SocketPayload = Record<string, unknown> & {
+  type?: string
+  event?: string
+  data?: Record<string, unknown>
+  timestamp?: string | number
+}
+
+interface DynamicSubscription {
+  callbacks: Set<EventCallback>
+  brokerSubscription: StompSubscription | null
+}
 
 class SocketService {
   private static instance: SocketService;
   public stompClient: Client | null = null;
-  private listeners: { [event: string]: Function[] } = {};
+  private listeners: Record<string, EventCallback[]> = {};
+  private dynamicSubscriptions = new Map<string, DynamicSubscription>();
   private connectionStatus: ConnectionStatus = 'disconnected';
   private statusListeners: ((status: string) => void)[] = [];
   private reconnectInterval: NodeJS.Timeout | null = null;
@@ -55,7 +81,11 @@ class SocketService {
   private connectionLimitReached = false;
   private readonly connectionLimitDelay = 30000;
 
-  private constructor() {}
+  private constructor() {
+    window.addEventListener('online', () => {
+      if (getAuthToken() && this.connectionStatus !== 'connected') this.forceReconnect()
+    })
+  }
 
   private updateStatus(status: ConnectionStatus) {
     this.connectionStatus = status;
@@ -74,7 +104,8 @@ class SocketService {
     const exponentialDelay = this.baseReconnectDelay * Math.pow(2, this.reconnectAttempts);
     const maxDelay = 60000;
     const delay = Math.min(exponentialDelay, maxDelay);
-    return this.connectionLimitReached ? delay + this.connectionLimitDelay : delay;
+    const jitter = Math.round(delay * (Math.random() * 0.4 - 0.2));
+    return (this.connectionLimitReached ? delay + this.connectionLimitDelay : delay) + jitter;
   }
 
   private detectConnectionLimit(errorMessage: string): boolean {
@@ -184,7 +215,9 @@ class SocketService {
         this.updateStatus('error');
         this.reconnectExceededListeners.forEach(listener => listener());
         if (esSoloSesionDispositivo()) {
-          handleDispositivoSesionRevocada()
+          this.reconnectAttempts = 0
+          this.maxReconnectAttemptsReached = false
+          this.reconnectInterval = setTimeout(() => this.forceReconnect(), 60000)
           return
         }
         setTimeout(() => this.attemptTokenRefreshAndReconnect(), 10000);
@@ -254,12 +287,12 @@ class SocketService {
   private stopReconnect() {
     if (this.reconnectInterval) {
       clearTimeout(this.reconnectInterval);
-      clearInterval(this.reconnectInterval as any);
       this.reconnectInterval = null;
     }
   }
 
-  public async connect(_sessionId: string) {
+  public async connect(sessionId: string) {
+    void sessionId
     if (this.isConnecting || (this.stompClient && this.stompClient.connected)) {
       return;
     }
@@ -286,11 +319,18 @@ class SocketService {
 
     this.isConnecting = true;
     
-    const clientConfig: any = {};
-    const wsUrl = getWebSocketUrl(token);
+    const clientConfig: ConstructorParameters<typeof Client>[0] = {};
+    let credentials: WebSocketCredentials
+    try {
+      credentials = await getWebSocketCredentials()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo obtener credencial WebSocket'
+      this.handleConnectionError(message)
+      return
+    }
     
-    clientConfig.brokerURL = wsUrl;
-    clientConfig.connectHeaders = { 'Authorization': `Bearer ${token}` };
+    clientConfig.brokerURL = credentials.url;
+    clientConfig.connectHeaders = credentials.connectHeaders;
     
     Object.assign(clientConfig, {
       reconnectDelay: 0,
@@ -302,13 +342,14 @@ class SocketService {
         this.isConnecting = false;
         this.updateStatus('connected');
         this.subscribeToAllTopics();
+        this.resubscribeDynamicTopics();
       },
-      onStompError: (frame: any) => {
+      onStompError: (frame: IFrame) => {
         this.isConnecting = false;
         const errorMessage = frame?.headers?.['message'] || frame?.body || '';
         this.handleConnectionError(errorMessage);
       },
-      onWebSocketError: (event: any) => {
+      onWebSocketError: (event: Event & { message?: string }) => {
         this.isConnecting = false;
         const errorMessage = event?.message || event?.type || '';
         this.handleConnectionError(errorMessage);
@@ -335,7 +376,9 @@ class SocketService {
   }
 
   private subscribeToAllTopics() {
-    this.subscribeToTicketeraEvents();
+    // Los dispositivos solo consumen sus topics canónicos con alcance; no deben
+    // quedar suscritos a los canales globales legacy de otros módulos o sedes.
+    if (esSoloSesionDispositivo()) return
     this.subscribeToSistemasExternosEvents();
     this.subscribeToSystemTopic();
     this.subscribeToGarantizadoEvents();
@@ -344,12 +387,12 @@ class SocketService {
     this.subscribeToPremiumTopics();
   }
 
-  private subscribe(topic: string, handler: (data: any) => void) {
+  private subscribe(topic: string, handler: (data: SocketPayload) => void) {
     if (!this.stompClient || !this.stompClient.connected) return;
     
     this.stompClient.subscribe(topic, (message: IMessage) => {
       try {
-        const data = JSON.parse(message.body);
+        const data = JSON.parse(message.body) as SocketPayload;
         handler(data);
       } catch {
         /* noop */
@@ -357,29 +400,45 @@ class SocketService {
     });
   }
 
-  private subscribeToTicketeraEvents() {
-    if (!this.stompClient || !this.stompClient.connected) return;
+  private resubscribeDynamicTopics() {
+    if (!this.stompClient?.connected) return
 
-    const topics = [
-      { path: '/topic/tickets', type: 'ticket_updated' },
-      { path: '/topic/new-ticket', type: 'ticket_created' },
-      { path: '/topic/ticket-called', type: 'ticket_called' },
-      { path: '/topic/ticket-started', type: 'ticket_started' },
-      { path: '/topic/ticket-completed', type: 'ticket_completed' },
-      { path: '/topic/ticket-cancelled', type: 'ticket_cancelled' }
-    ];
+    this.dynamicSubscriptions.forEach((entry, topic) => {
+      entry.brokerSubscription?.unsubscribe()
+      entry.brokerSubscription = this.stompClient!.subscribe(topic, (message: IMessage) => {
+        let payload: unknown
+        try {
+          payload = JSON.parse(message.body) as unknown
+        } catch {
+          return
+        }
+        entry.callbacks.forEach((callback) => callback(payload))
+      })
+    })
+  }
 
-    topics.forEach(({ path, type }) => {
-      this.subscribe(path, (ticket) => {
-        this.emit('ticketera', { type, data: ticket, timestamp: Date.now() });
-      });
-    });
+  public subscribeTopic(topic: string, callback: EventCallback): () => void {
+    const existing = this.dynamicSubscriptions.get(topic)
+    const entry: DynamicSubscription = existing ?? {
+      callbacks: new Set<EventCallback>(),
+      brokerSubscription: null,
+    }
+    entry.callbacks.add(callback)
+    this.dynamicSubscriptions.set(topic, entry)
 
-    this.subscribe('/topic/pong', () => {});
+    if (!existing && this.stompClient?.connected) {
+      this.resubscribeDynamicTopics()
+    }
 
-    this.subscribe('/topic/modulos-atencion', (modulosData) => {
-      this.emitModulosActualizados(modulosData);
-    });
+    return () => {
+      const current = this.dynamicSubscriptions.get(topic)
+      if (!current) return
+      current.callbacks.delete(callback)
+      if (current.callbacks.size === 0) {
+        current.brokerSubscription?.unsubscribe()
+        this.dynamicSubscriptions.delete(topic)
+      }
+    }
   }
 
   private subscribeToSistemasExternosEvents() {
@@ -406,7 +465,7 @@ class SocketService {
     this.subscribe(`/topic/user/${userId}`, (event) => {
       this.emit('user-event', event);
       
-      if (['ACCOUNT_BLOCKED', 'FORCED_LOGOUT', 'ROLE_DEACTIVATED'].includes(event.type)) {
+      if (event.type && ['ACCOUNT_BLOCKED', 'FORCED_LOGOUT', 'ROLE_DEACTIVATED'].includes(event.type)) {
         this.emit('system', event);
       }
     });
@@ -451,32 +510,12 @@ class SocketService {
   }
 
   private subscribeToPremiumTopics() {
-    const handlePremiumEvent = (event: any) => {
+    const handlePremiumEvent = (event: SocketPayload) => {
       this.emit('system', event);
     };
 
     this.subscribe('/topic/yego-premium', handlePremiumEvent);
     this.subscribe('/topic/premium-driver', handlePremiumEvent);
-  }
-
-  private emitModulosActualizados(modulosData: any) {
-    const event = {
-      type: modulosData.type || 'MODULOS_ACTUALIZADOS',
-      data: {
-        type: modulosData.type || 'MODULOS_ACTUALIZADOS',
-        modulosDisponibles: modulosData.modulosDisponibles || [],
-        modulosOcupados: modulosData.modulosOcupados || [],
-        timestamp: modulosData.timestamp || Date.now()
-      },
-      timestamp: modulosData.timestamp || Date.now()
-    };
-    
-    this.emit('ticketera', event);
-    this.emit('modulos-actualizados', {
-      modulosDisponibles: modulosData.modulosDisponibles || [],
-      modulosOcupados: modulosData.modulosOcupados || [],
-      timestamp: modulosData.timestamp || Date.now()
-    });
   }
 
   public static getInstance(): SocketService {
@@ -512,11 +551,17 @@ class SocketService {
     this.currentReconnectDelay = this.baseReconnectDelay;
     this.connectionLimitReached = false;
     this.stopReconnect();
-    
     const token = getAuthToken();
-    if (token) {
-      this.connect('force-reconnect');
+    if (!token) return
+
+    const previous = this.stompClient
+    this.stompClient = null
+    this.isConnecting = false
+    if (previous) {
+      void previous.deactivate().finally(() => this.connect('force-reconnect'))
+      return
     }
+    void this.connect('force-reconnect')
   }
 
   public disconnect() {
@@ -526,6 +571,9 @@ class SocketService {
       this.stompClient.deactivate();
       this.stompClient = null;
     }
+    this.dynamicSubscriptions.forEach((entry) => {
+      entry.brokerSubscription = null
+    })
     this.updateStatus('disconnected');
   }
 
@@ -533,29 +581,21 @@ class SocketService {
     this.stopReconnect();
   }
 
-  public sendTicketeraEvent(event: any) {
-    if (!this.stompClient || !this.stompClient.connected) return;
-
-    this.stompClient.publish({
-      destination: '/app/ticketera',
-      body: JSON.stringify(event)
-    });
-  }
-
-  public on(event: string, callback: Function) {
+  public on<T = unknown>(event: string, callback: (data: T) => void) {
     if (!this.listeners[event]) {
       this.listeners[event] = [];
     }
-    this.listeners[event].push(callback);
+    this.listeners[event].push(callback as EventCallback);
   }
 
-  public off(event: string, callback: Function) {
+  public off<T = unknown>(event: string, callback: (data: T) => void) {
     if (this.listeners[event]) {
-      this.listeners[event] = this.listeners[event].filter(cb => cb !== callback);
+      const listener = callback as EventCallback
+      this.listeners[event] = this.listeners[event].filter(cb => cb !== listener);
     }
   }
 
-  private emit(event: string, data: any) {
+  private emit(event: string, data: unknown) {
     if (this.listeners[event]) {
       this.listeners[event].forEach((callback) => {
         try {

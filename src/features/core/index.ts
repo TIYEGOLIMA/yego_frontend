@@ -13,7 +13,7 @@ export { default as YegoProOpsModule } from './yego-pro-ops/yego-pro-ops.module'
 export { WelcomeModule } from './welcome';
 export { MarketingMensajesModule } from './marketing-mensajes';
 export { YegoGanttModule } from './yego-gantt';
-export { default as TicketsModule } from './ticketera/tickets/tickets.module';
+export { TicketeraModule as TicketsModule } from './ticketera';
 export { default as ControlTowerModule } from './control-tower/control-tower.module';
 export { default as ControlLoopModule } from './control-loop/control-loop.module';
 export { default as FinanciatorModule } from './financiator/financiator.module';

@@ -4,7 +4,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from './store/auth-store'
 import { useTheme } from './hooks/useTheme'
 import { useSystemNotifications } from './hooks/useSystemNotifications'
-import { getRedirectPathForRole } from './utils/role-based-routing'
 import Login from './pages/Login'
 import { MainLayout } from './shared/components/MainLayout'
 import SocketService from './services/socket-service'
@@ -18,9 +17,7 @@ import {
 
 import { WelcomeModule } from './features/core/welcome'
 
-import TicketsModule from './features/core/ticketera/tickets/tickets.module'
-
-import { TVDisplay, RatingTablet, TabletInterface } from '../microfrontends'
+import { TVDisplayPage, RatingTabletPage, MainTabletPage } from './features/core/ticketera'
 import { ModuleBySlugRoute } from './routing/ModuleBySlugPage'
 
 import { ForcedLogoutModal } from './components/ForcedLogoutModal'
@@ -54,21 +51,6 @@ const DeviceProtectedRoute = ({
   if (session.tipo !== expectedType) {
     return <Navigate to={getRutaPorTipo(session.tipo)} replace />
   }
-  return <>{children}</>
-}
-
-const RoleRestrictedRoute = ({ children, allowedRoles }: { children: React.ReactNode, allowedRoles?: string[] }) => {
-  const { user } = useAuthStore()
-  
-  if (!user) return <Navigate to="/login" />
-  if (!allowedRoles || allowedRoles.length === 0) return <>{children}</>
-  
-  const isAllowed = allowedRoles.includes(user.role.toUpperCase())
-  if (!isAllowed) {
-    const { modules } = useAuthStore.getState();
-    return <Navigate to={getRedirectPathForRole(user.role, modules)} replace />
-  }
-  
   return <>{children}</>
 }
 
@@ -186,14 +168,8 @@ function App() {
     };
 
     const handleVisibilityChange = () => {
-      // Si la pestaña se oculta por más de 5 minutos, desconectar para liberar recursos
-      if (document.hidden) {
-        setTimeout(() => {
-          if (document.hidden) {
-            SocketService.disconnect();
-          }
-        }, 5 * 60 * 1000); // 5 minutos
-      } else {
+      // Mantener la conexión en vistas operativas; al volver, recuperar solo si cayó.
+      if (!document.hidden) {
         const currentStatus = SocketService.getConnectionStatus();
         if (currentStatus === 'connected') return;
 
@@ -227,28 +203,19 @@ function App() {
         <UpdateBanner />
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route path="/tickets" element={
-            <ProtectedRoute>
-              <RoleRestrictedRoute allowedRoles={['SUPERADMIN', 'OPERADOR', 'SAC']}>
-                <MainLayout>
-                  <TicketsModule />
-                </MainLayout>
-              </RoleRestrictedRoute>
-            </ProtectedRoute>
-          } />
           <Route path="/tv-display" element={
             <DeviceProtectedRoute expectedType="TV">
-              <TVDisplay />
+              <TVDisplayPage />
             </DeviceProtectedRoute>
           } />
           <Route path="/rating-tablet" element={
             <DeviceProtectedRoute expectedType="TABLET">
-              <RatingTablet />
+              <RatingTabletPage />
             </DeviceProtectedRoute>
           } />
           <Route path="/tablet-interface" element={
             <DeviceProtectedRoute expectedType="TABLET_PRINCIPAL">
-              <TabletInterface />
+              <MainTabletPage />
             </DeviceProtectedRoute>
           } />
           <Route path="/" element={

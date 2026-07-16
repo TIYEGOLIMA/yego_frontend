@@ -1,4 +1,4 @@
-import axios, { type AxiosInstance } from 'axios'
+import axios from 'axios'
 
 export type TipoDispositivo = 'TABLET_PRINCIPAL' | 'TABLET' | 'TV'
 
@@ -10,6 +10,7 @@ export interface DispositivoSession {
   sedeId: number
   sedeNombre: string | null
   moduleId: number | null
+  expiresAt: string
 }
 
 const STORAGE_KEY = 'dispositivo-session'
@@ -22,7 +23,12 @@ export function getDispositivoSession(): DispositivoSession | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return null
-    return JSON.parse(raw) as DispositivoSession
+    const session = JSON.parse(raw) as DispositivoSession
+    if (!session.accessToken || !session.expiresAt || new Date(session.expiresAt).getTime() <= Date.now()) {
+      localStorage.removeItem(STORAGE_KEY)
+      return null
+    }
+    return session
   } catch {
     return null
   }
@@ -30,6 +36,31 @@ export function getDispositivoSession(): DispositivoSession | null {
 
 export function getDispositivoToken(): string | null {
   return getDispositivoSession()?.accessToken ?? null
+}
+
+function getJwtExpiresAt(token: string): string {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1])) as { exp?: number }
+    if (payload.exp) return new Date(payload.exp * 1000).toISOString()
+  } catch {
+    // El backend también devuelve expiresAt; este fallback cubre despliegues escalonados.
+  }
+  return new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+}
+
+function toDispositivoSession(data: Record<string, unknown>): DispositivoSession {
+  const accessToken = String(data.accessToken ?? '')
+  return {
+    accessToken,
+    dispositivoId: Number(data.dispositivoId),
+    nombre: String(data.nombre ?? ''),
+    tipo: data.tipo as TipoDispositivo,
+    sedeId: Number(data.sedeId),
+    sedeNombre: typeof data.sedeNombre === 'string' ? data.sedeNombre : null,
+    moduleId: data.moduleId != null ? Number(data.moduleId) : null,
+    expiresAt:
+      typeof data.expiresAt === 'string' ? data.expiresAt : getJwtExpiresAt(accessToken),
+  }
 }
 
 export function getHumanJwtFromStorage(): string | null {
@@ -85,58 +116,6 @@ export function handleDispositivoSesionRevocada(): void {
   }
 }
 
-export function attachDeviceAuthInterceptor(instance: AxiosInstance): void {
-  instance.interceptors.response.use(
-    (response) => response,
-    (error) => {
-      const status = error?.response?.status
-      const errorCode = parseAxiosErrorCode(error)
-      const esDispositivo = !!getDispositivoSession()
-      if (
-        esDispositivo &&
-        (status === 401 ||
-          errorCode === 'DEVICE_TOKEN_REVOKED' ||
-          errorCode === 'DEVICE_REVOKED' ||
-          errorCode === 'TOKEN_EXPIRED')
-      ) {
-        handleDispositivoSesionRevocada()
-      }
-      return Promise.reject(error)
-    },
-  )
-}
-
-function getRequestToken(): string | null {
-  return getHumanJwtFromStorage() || getDispositivoToken()
-}
-
-const DEFAULT_API_BASE_URL =
-  import.meta.env.VITE_AGENT_API_URL || 'https://api-int.yego.pro/api/ticketera'
-
-export function createDeviceApiClient(baseURL: string = DEFAULT_API_BASE_URL): AxiosInstance {
-  const instance = axios.create({
-    baseURL,
-    timeout: 30000,
-    headers: { 'Content-Type': 'application/json' },
-  })
-
-  instance.interceptors.request.use((config) => {
-    const path = (config.url ?? '').toLowerCase()
-    if (path.includes('dispositivos/auth')) {
-      delete config.headers.Authorization
-      return config
-    }
-    const token = getRequestToken()
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
-    }
-    return config
-  })
-
-  attachDeviceAuthInterceptor(instance)
-  return instance
-}
-
 export function getRutaPorTipo(tipo: TipoDispositivo): string {
   switch (tipo) {
     case 'TV':
@@ -164,16 +143,25 @@ export async function autenticarDispositivo(
     { headers: { 'Content-Type': 'application/json' } },
   )
 
-  const session: DispositivoSession = {
-    accessToken: data.accessToken,
-    dispositivoId: data.dispositivoId,
-    nombre: data.nombre,
-    tipo: data.tipo,
-    sedeId: data.sedeId,
-    sedeNombre: data.sedeNombre ?? null,
-    moduleId: data.moduleId ?? null,
-  }
+  const session = toDispositivoSession(data as Record<string, unknown>)
 
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(session))
+  return session
+}
+
+export async function refreshDispositivoSession(): Promise<DispositivoSession> {
+  const current = getDispositivoSession()
+  if (!current?.accessToken) throw new Error('No hay sesión de dispositivo para renovar')
+
+  const { data } = await axios.post(
+    `${API_BASE_URL}/ticketera/dispositivos/refresh`,
+    {},
+    {
+      headers: { Authorization: `Bearer ${current.accessToken}` },
+      timeout: 30000,
+    },
+  )
+  const session = toDispositivoSession(data as Record<string, unknown>)
   localStorage.setItem(STORAGE_KEY, JSON.stringify(session))
   return session
 }

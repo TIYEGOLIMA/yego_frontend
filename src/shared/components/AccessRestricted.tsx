@@ -1,7 +1,7 @@
 import React from 'react';
 import { Shield } from 'lucide-react';
 
-const AccessRestricted: React.FC = () => {
+export const AccessRestricted: React.FC = () => {
   return (
     <div className="flex items-center justify-center h-64">
       <div className="text-center">

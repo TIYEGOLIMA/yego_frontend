@@ -13,8 +13,6 @@ export const PermissionRoute = ({
   const { user, modules } = useAuthStore()
   const [isChecking, setIsChecking] = useState(true)
 
-  if (!user) return <Navigate to="/login" />
-
   useEffect(() => {
     if (modules && modules.length > 0) {
       setIsChecking(false)
@@ -23,6 +21,8 @@ export const PermissionRoute = ({
       return () => clearTimeout(timer)
     }
   }, [modules])
+
+  if (!user) return <Navigate to="/login" />
 
   if (isChecking && (!modules || modules.length === 0)) {
     return (

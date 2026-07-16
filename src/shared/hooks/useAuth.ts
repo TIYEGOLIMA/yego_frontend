@@ -27,7 +27,6 @@ export const useAuth = () => {
 
 export function useAuthEvents() {
   const fetchProfile = useAuthStore((state) => state.fetchProfile);
-  const fetchModules = useAuthStore((state) => state.fetchModules);
   const triggerRefresh = useAuthStore((state) => state.triggerRefresh);
 
   useEffect(() => {
@@ -39,25 +38,10 @@ export function useAuthEvents() {
       });
     };
 
-    const handleModulosActualizados = (event: any) => {
-      if (event?.type === 'MODULOS_ACTUALIZADOS') {
-        fetchProfile()
-          .then(() => {
-            triggerRefresh();
-          })
-          .catch((error) => {
-            console.error('❌ [useAuthEvents] Error al actualizar perfil:', error);
-          });
-      }
-      // Ignorar otros eventos silenciosamente
-    };
-
     socket.on('permissions-updated', handlePermissionsUpdated);
-    socket.on('ticketera', handleModulosActualizados);
     
     return () => {
       socket.off('permissions-updated', handlePermissionsUpdated);
-      socket.off('ticketera', handleModulosActualizados);
     };
-  }, [fetchProfile, fetchModules, triggerRefresh]);
-} 
+  }, [fetchProfile, triggerRefresh]);
+}

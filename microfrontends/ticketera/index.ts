@@ -1,5 +1,0 @@
-export { default as AgentPanel } from './agentpanel/AgentPanel'
-export { default as TVDisplay } from './tvdisplay/TVDisplay'
-export { default as RatingTablet } from './ratingtablet/RatingTablet'
-export { default as TabletInterface } from './tabletinterface/TabletInterface'
-export { default as Reports } from './reports/Reports'

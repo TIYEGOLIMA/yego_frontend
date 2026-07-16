@@ -8,7 +8,8 @@ import { AreasModule } from '@/features/core/areas'
 import AuditModule from '@/features/core/audit/audit.module'
 import ApiLogsModule from '@/features/core/api-logs/api-logs.module'
 import SessionsModule from '@/features/core/sessions/sessions.module'
-import { Reports, GarantizadoModule } from '../../microfrontends'
+import { GarantizadoModule } from '@/features/core/garantizado'
+import { TicketeraModule, TicketeraReportsModule } from '@/features/core/ticketera'
 import YegoPremiumModule from '@/features/core/yego-premium/yego-premium.module'
 import YegoProOpsModule from '@/features/core/yego-pro-ops/yego-pro-ops.module'
 import { YegoGanttModule } from '@/features/core/yego-gantt'
@@ -32,7 +33,8 @@ const REGISTRY: Record<string, ComponentType> = {
   AUDIT: AuditModule,
   API_LOGS: ApiLogsModule,
   SESSIONS: SessionsModule,
-  REPORTS: Reports,
+  TICKETS: TicketeraModule,
+  REPORTS: TicketeraReportsModule,
   GARANTIZADO: GarantizadoModule,
   YEGO_PREMIUM: YegoPremiumModule,
   YEGO_PRO_OPS: YegoProOpsModule,

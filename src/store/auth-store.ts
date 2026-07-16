@@ -24,6 +24,7 @@ export interface User {
   requirePasswordChange?: boolean;
   sedeId?: number | null;
   sedeNombre?: string | null;
+  moduleId?: number | null;
 }
 
 const SEDE_ACTIVA_KEY = 'sedeActiva'
