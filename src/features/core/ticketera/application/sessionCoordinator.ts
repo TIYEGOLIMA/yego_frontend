@@ -13,6 +13,30 @@ import { useAuthStore } from '@/store/auth-store'
 const RENEWAL_LEAD_MS = 24 * 60 * 60 * 1000
 const RETRY_MS = 60 * 60 * 1000
 const MIN_TIMER_MS = 60 * 1000
+const MAX_TIMER_MS = 24 * 60 * 60 * 1000
+
+export interface RenewalSchedule {
+  delayMs: number
+  renewAtEnd: boolean
+}
+
+/**
+ * Los navegadores convierten timeouts mayores a 2^31-1 ms en demoras mínimas.
+ * Los tokens largos se revisan por tramos diarios sin renovarlos antes de tiempo.
+ */
+export function calculateRenewalSchedule(
+  expiresAt: number,
+  now = Date.now(),
+): RenewalSchedule {
+  const renewalDelay = expiresAt - now - RENEWAL_LEAD_MS
+  if (renewalDelay > MAX_TIMER_MS) {
+    return { delayMs: MAX_TIMER_MS, renewAtEnd: false }
+  }
+  return {
+    delayMs: Math.max(MIN_TIMER_MS, renewalDelay),
+    renewAtEnd: true,
+  }
+}
 
 function getTokenExpirationMs(token: string): number | null {
   try {
@@ -69,10 +93,14 @@ class DefaultTicketeraSessionCoordinator implements TicketeraSessionCoordinator 
       (device?.expiresAt ? new Date(device.expiresAt).getTime() : null)
     if (!expiresAt) return
 
-    const delay = Math.max(MIN_TIMER_MS, expiresAt - Date.now() - RENEWAL_LEAD_MS)
+    const schedule = calculateRenewalSchedule(expiresAt)
     this.timer = window.setTimeout(() => {
-      void this.renewNow()
-    }, delay)
+      if (schedule.renewAtEnd) {
+        void this.renewNow()
+      } else {
+        this.schedule()
+      }
+    }, schedule.delayMs)
   }
 
   private async renewCurrentSession() {

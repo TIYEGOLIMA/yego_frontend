@@ -237,7 +237,7 @@ export const useTVDisplay = () => {
       
       const interval = setInterval(async () => {
         try {
-          const ticketsData = await ticketService.getAllTickets(dispositivoSedeId)
+          const ticketsData = await ticketService.getAllTickets(dispositivoSedeId, controller.signal)
           
           setTickets(prev => {
             if (prev.length !== ticketsData.length || 

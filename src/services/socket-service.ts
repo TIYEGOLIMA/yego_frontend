@@ -217,13 +217,11 @@ class SocketService {
         this.stopReconnect();
         this.updateStatus('error');
         this.reconnectExceededListeners.forEach(listener => listener());
-        if (esContextoDispositivo()) {
-          this.reconnectAttempts = 0
-          this.maxReconnectAttemptsReached = false
-          this.reconnectInterval = setTimeout(() => this.forceReconnect(), 60000)
-          return
-        }
-        setTimeout(() => this.attemptTokenRefreshAndReconnect(), 10000);
+        // La renovación pertenece al coordinador de sesión. Un error de
+        // transporte solo debe reintentar la conexión, nunca cambiar el JWT.
+        this.reconnectAttempts = 0
+        this.maxReconnectAttemptsReached = false
+        this.reconnectInterval = setTimeout(() => this.forceReconnect(), 60000)
         return;
       }
 
@@ -236,67 +234,6 @@ class SocketService {
     this.reconnectInterval = setTimeout(attemptReconnect, this.currentReconnectDelay);
   }
   
-  private async attemptTokenRefreshAndReconnect() {
-    try {
-      // Las pantallas físicas renuevan semanalmente mediante el coordinador de
-      // Ticketera. Un fallo de transporte no debe invocar el refresh humano.
-      if (esContextoDispositivo()) {
-        this.reconnectAttempts = 0
-        this.maxReconnectAttemptsReached = false
-        this.stopReconnect()
-        this.reconnectInterval = setTimeout(() => this.forceReconnect(), 60000)
-        return
-      }
-
-      const token = getAuthToken();
-      if (!token) return;
-      
-      const { default: api, invalidarSesionHumana } = await import('./core/api');
-      const refreshUrl = window.location.pathname.includes('/ticketera') 
-        ? '/ticketera/auth/refresh' 
-        : '/auth/refresh';
-      
-      try {
-        const refreshResponse = await api.post(refreshUrl, {}, {
-          headers: { 'Authorization': `Bearer ${token}` },
-          timeout: 5000
-        });
-        
-        const newToken = refreshResponse.data.accessToken;
-        
-        try {
-          const { useAuthStore } = await import('../store/auth-store');
-          useAuthStore.setState({ token: newToken });
-        } catch {
-          const authStorage = localStorage.getItem('auth-storage');
-          if (authStorage) {
-            const parsed = JSON.parse(authStorage);
-            parsed.state.token = newToken;
-            localStorage.setItem('auth-storage', JSON.stringify(parsed));
-          }
-        }
-        
-        this.reconnectAttempts = 0;
-        this.maxReconnectAttemptsReached = false;
-        this.connect('refresh-reconnect');
-      } catch (error: unknown) {
-        if (esContextoDispositivo()) {
-          handleDispositivoSesionRevocada()
-          return
-        }
-        const status = (error as { response?: { status?: number } })?.response?.status
-        if (status === 401) {
-          this.stopReconnect()
-          invalidarSesionHumana()
-          return
-        }
-        console.warn('[SocketService] No se pudo refrescar el token tras agotar reintentos.')
-      }
-    } catch (error) {
-      console.error('❌ [SocketService] Error en attemptTokenRefreshAndReconnect:', error);
-    }
-  }
-
   private stopReconnect() {
     if (this.reconnectInterval) {
       clearTimeout(this.reconnectInterval);
@@ -588,10 +525,6 @@ class SocketService {
       entry.brokerSubscription = null
     })
     this.updateStatus('disconnected');
-  }
-
-  public stopAutoReconnect() {
-    this.stopReconnect();
   }
 
   public on<T = unknown>(event: string, callback: (data: T) => void) {
