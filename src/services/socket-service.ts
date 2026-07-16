@@ -2,8 +2,9 @@ import { Client, IMessage, type IFrame, type StompSubscription } from '@stomp/st
 import { api } from './core/api'
 import {
   esSoloSesionDispositivo,
+  esRutaDispositivo,
   getDispositivoToken,
-  getHumanJwtFromStorage,
+  getJwtActivoParaRuta,
   handleDispositivoSesionRevocada,
 } from './core/device-auth-service'
 
@@ -17,7 +18,9 @@ const isProduction =
 const WS_URL = import.meta.env.VITE_WS_URL
 const HEARTBEAT_INTERVAL = 10000
 
-const getAuthToken = (): string | null => getHumanJwtFromStorage() || getDispositivoToken()
+const getAuthToken = (): string | null => getJwtActivoParaRuta()
+const esContextoDispositivo = (): boolean =>
+  !!getDispositivoToken() && (esRutaDispositivo() || esSoloSesionDispositivo())
 
 interface WebSocketTicketResponse {
   ticket: string
@@ -142,7 +145,7 @@ class SocketService {
   private handleConnectionError(errorMessage: string = '') {
     this.isConnecting = false;
 
-    if (esSoloSesionDispositivo() && this.detectDispositivoTokenRevocado(errorMessage)) {
+    if (esContextoDispositivo() && this.detectDispositivoTokenRevocado(errorMessage)) {
       this.stopReconnect()
       this.maxReconnectAttemptsReached = true
       this.updateStatus('disconnected')
@@ -214,7 +217,7 @@ class SocketService {
         this.stopReconnect();
         this.updateStatus('error');
         this.reconnectExceededListeners.forEach(listener => listener());
-        if (esSoloSesionDispositivo()) {
+        if (esContextoDispositivo()) {
           this.reconnectAttempts = 0
           this.maxReconnectAttemptsReached = false
           this.reconnectInterval = setTimeout(() => this.forceReconnect(), 60000)
@@ -235,6 +238,16 @@ class SocketService {
   
   private async attemptTokenRefreshAndReconnect() {
     try {
+      // Las pantallas físicas renuevan semanalmente mediante el coordinador de
+      // Ticketera. Un fallo de transporte no debe invocar el refresh humano.
+      if (esContextoDispositivo()) {
+        this.reconnectAttempts = 0
+        this.maxReconnectAttemptsReached = false
+        this.stopReconnect()
+        this.reconnectInterval = setTimeout(() => this.forceReconnect(), 60000)
+        return
+      }
+
       const token = getAuthToken();
       if (!token) return;
       
@@ -267,7 +280,7 @@ class SocketService {
         this.maxReconnectAttemptsReached = false;
         this.connect('refresh-reconnect');
       } catch (error: unknown) {
-        if (esSoloSesionDispositivo()) {
+        if (esContextoDispositivo()) {
           handleDispositivoSesionRevocada()
           return
         }
@@ -378,7 +391,7 @@ class SocketService {
   private subscribeToAllTopics() {
     // Los dispositivos solo consumen sus topics canónicos con alcance; no deben
     // quedar suscritos a los canales globales legacy de otros módulos o sedes.
-    if (esSoloSesionDispositivo()) return
+    if (esContextoDispositivo()) return
     this.subscribeToSistemasExternosEvents();
     this.subscribeToSystemTopic();
     this.subscribeToGarantizadoEvents();

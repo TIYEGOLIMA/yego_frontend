@@ -3,8 +3,9 @@ import { authService } from './auth-service'
 import { getAccessTokenFromResponse } from './auth-token-header'
 import {
   esSoloSesionDispositivo,
+  esRutaDispositivo,
   getDispositivoSession,
-  getDispositivoToken,
+  getJwtActivoParaRuta,
   getHumanJwtFromStorage,
   handleDispositivoSesionRevocada,
   parseAxiosErrorCode,
@@ -90,6 +91,16 @@ api.interceptors.request.use(
       return config
     }
 
+    const routeToken = getJwtActivoParaRuta()
+    if (esRutaDispositivo()) {
+      if (routeToken) {
+        config.headers.Authorization = `Bearer ${routeToken}`
+      } else {
+        delete config.headers.Authorization
+      }
+      return config
+    }
+
     const existingAuth =
       config.headers?.Authorization ??
       (config.headers as Record<string, string | undefined>)?.authorization
@@ -98,9 +109,8 @@ api.interceptors.request.use(
       return config
     }
 
-    const token = getHumanJwtFromStorage() || getDispositivoToken()
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
+    if (routeToken) {
+      config.headers.Authorization = `Bearer ${routeToken}`
     } else {
       delete config.headers.Authorization
     }
@@ -121,12 +131,12 @@ api.interceptors.response.use(
       const requestConfig = error.config as typeof error.config & { _retry?: boolean }
       const errCode = parseAxiosErrorCode(error)
       const sesionDispositivo = getDispositivoSession()
-      const currentToken = getHumanJwtFromStorage()
+      const currentToken = esRutaDispositivo() ? null : getHumanJwtFromStorage()
 
       const cerrarDispositivo =
         errCode === 'DEVICE_TOKEN_REVOKED' ||
         errCode === 'DEVICE_REVOKED' ||
-        (!!sesionDispositivo && !currentToken)
+        (!!sesionDispositivo && (esRutaDispositivo() || !currentToken))
 
       if (cerrarDispositivo) {
         handleDispositivoSesionRevocada()

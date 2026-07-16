@@ -14,6 +14,11 @@ export interface DispositivoSession {
 }
 
 const STORAGE_KEY = 'dispositivo-session'
+const RUTAS_DISPOSITIVO = new Set([
+  '/tv-display',
+  '/tablet-interface',
+  '/rating-tablet',
+])
 
 const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
@@ -76,6 +81,19 @@ export function getHumanJwtFromStorage(): string | null {
   return localStorage.getItem('token')
 }
 
+export function esRutaDispositivo(
+  pathname = typeof window !== 'undefined' ? window.location.pathname : '',
+): boolean {
+  return RUTAS_DISPOSITIVO.has(pathname.replace(/\/$/, ''))
+}
+
+/** El dispositivo siempre domina en sus pantallas físicas, incluso si quedó un JWT humano legacy. */
+export function getJwtActivoParaRuta(): string | null {
+  const deviceToken = getDispositivoToken()
+  if (deviceToken && esRutaDispositivo()) return deviceToken
+  return getHumanJwtFromStorage() || deviceToken
+}
+
 export function esSoloSesionDispositivo(): boolean {
   return !!getDispositivoSession() && !getHumanJwtFromStorage()
 }
@@ -111,6 +129,30 @@ export function clearHumanSessionForDevice(): void {
     localStorage.removeItem('sedeActiva')
   } catch {
     // ignore
+  }
+}
+
+export async function aplicarSesionDispositivo(
+  session: DispositivoSession,
+): Promise<void> {
+  clearHumanSessionForDevice()
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(session))
+
+  try {
+    const [{ default: api }, { useAuthStore }] = await Promise.all([
+      import('./api'),
+      import('../../store/auth-store'),
+    ])
+    useAuthStore.setState({
+      user: null,
+      token: null,
+      modules: [],
+      loading: false,
+      error: null,
+    })
+    api.defaults.headers.common.Authorization = `Bearer ${session.accessToken}`
+  } catch {
+    // La sesión persistida del dispositivo sigue siendo autoritativa.
   }
 }
 
@@ -162,26 +204,7 @@ export async function autenticarDispositivo(
   )
 
   const session = toDispositivoSession(data as Record<string, unknown>)
-  clearHumanSessionForDevice()
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(session))
-
-  try {
-    const [{ default: api }, { useAuthStore }] = await Promise.all([
-      import('./api'),
-      import('../../store/auth-store'),
-    ])
-    useAuthStore.setState({
-      user: null,
-      token: null,
-      modules: [],
-      loading: false,
-      error: null,
-    })
-    api.defaults.headers.common.Authorization = `Bearer ${session.accessToken}`
-  } catch {
-    // La sesión persistida del dispositivo sigue siendo autoritativa.
-  }
-
+  await aplicarSesionDispositivo(session)
   return session
 }
 

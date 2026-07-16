@@ -10,6 +10,8 @@ import SocketService from './services/socket-service'
 import { useAuthEvents } from './shared/hooks/useAuth'
 import { authService } from './services'
 import {
+  aplicarSesionDispositivo,
+  esRutaDispositivo,
   getDispositivoSession,
   getRutaPorTipo,
   TipoDispositivo,
@@ -97,6 +99,10 @@ const SystemNotificationsHandler = () => {
 
 function App() {
   const { token, user } = useAuthStore();
+  const dispositivoSession = esRutaDispositivo() ? getDispositivoSession() : null
+  const dispositivoToken = dispositivoSession?.accessToken ?? null
+  const dispositivoId = dispositivoSession?.dispositivoId ?? null
+  const dispositivoTipo = dispositivoSession?.tipo ?? null
   
   useTheme();
   useAuthEvents();
@@ -105,12 +111,29 @@ function App() {
     authService.cleanupCorruptedToken();
   }, []);
 
+  // Las rutas físicas siempre pertenecen al dispositivo. Esto sanea sesiones
+  // antiguas automáticamente, incluso si la pantalla no volvió a ingresar su código.
+  useEffect(() => {
+    if (!dispositivoToken) return
+    const session = getDispositivoSession()
+    if (session) void aplicarSesionDispositivo(session)
+  }, [dispositivoToken])
+
   // ✅ OPTIMIZADO: Conectar WebSocket solo cuando cambia el token o el ID del usuario
   // Usar useRef para evitar reconexiones innecesarias
   const lastUserIdRef = useRef<number | null>(null);
   const lastTokenRef = useRef<string | null>(null);
 
   useEffect(() => {
+    if (dispositivoToken) {
+      if (lastUserIdRef.current !== null || lastTokenRef.current !== null) {
+        SocketService.disconnect()
+        lastUserIdRef.current = null
+        lastTokenRef.current = null
+      }
+      return
+    }
+
     const currentUserId = user?.id || null;
     const currentToken = token || null;
     const requirePasswordChange = user?.requirePasswordChange === true;
@@ -146,20 +169,17 @@ function App() {
         lastTokenRef.current = null;
       }
     }
-  }, [token, user?.id, user?.username, user?.requirePasswordChange]);
+  }, [token, user?.id, user?.username, user?.requirePasswordChange, dispositivoToken]);
 
   // Conectar WebSocket cuando solo hay sesión de dispositivo (sin usuario humano)
   useEffect(() => {
-    if (token && user?.id) return;
-
-    const session = getDispositivoSession();
-    if (!session?.accessToken) return;
+    if (!dispositivoToken || !dispositivoId || !dispositivoTipo) return;
 
     const status = SocketService.getConnectionStatus();
     if (status === 'connected' || status === 'connecting') return;
 
-    SocketService.connect(`device-${session.tipo}-${session.dispositivoId}`);
-  }, [token, user?.id]);
+    SocketService.connect(`device-${dispositivoTipo}-${dispositivoId}`);
+  }, [dispositivoToken, dispositivoId, dispositivoTipo]);
 
   // Limpiar conexiones WebSocket al cerrar la pestaña o cuando la página pierde visibilidad
   useEffect(() => {
@@ -173,16 +193,17 @@ function App() {
         const currentStatus = SocketService.getConnectionStatus();
         if (currentStatus === 'connected') return;
 
+        const session = esRutaDispositivo() ? getDispositivoSession() : null;
+        if (session?.accessToken) {
+          console.log('🔄 [App] Reconectando WebSocket de dispositivo al volver a ser visible');
+          SocketService.connect(`device-${session.tipo}-${session.dispositivoId}`);
+          return;
+        }
+
         if (token && user?.id && user?.username && !user?.requirePasswordChange) {
           console.log('🔄 [App] Reconectando WebSocket al volver a ser visible');
           SocketService.connect(`${user.id}-${user.username}`);
           return;
-        }
-
-        const session = getDispositivoSession();
-        if (session?.accessToken) {
-          console.log('🔄 [App] Reconectando WebSocket de dispositivo al volver a ser visible');
-          SocketService.connect(`device-${session.tipo}-${session.dispositivoId}`);
         }
       }
     };

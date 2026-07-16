@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { api } from '@/services/core/api'
 import { authService } from '@/services/core/auth-service'
 import {
+  esRutaDispositivo,
   getDispositivoSession,
   handleDispositivoSesionRevocada,
   refreshDispositivoSession,
@@ -59,8 +60,8 @@ class DefaultTicketeraSessionCoordinator implements TicketeraSessionCoordinator 
     this.clearTimer()
     if (this.consumers === 0) return
 
-    const humanToken = useAuthStore.getState().token
     const device = getDispositivoSession()
+    const humanToken = esRutaDispositivo() ? null : useAuthStore.getState().token
     const token = humanToken ?? device?.accessToken
     if (!token) return
 
@@ -75,6 +76,12 @@ class DefaultTicketeraSessionCoordinator implements TicketeraSessionCoordinator 
   }
 
   private async renewCurrentSession() {
+    const device = getDispositivoSession()
+    if (device && esRutaDispositivo()) {
+      await this.renewDeviceSession(device)
+      return
+    }
+
     const human = useAuthStore.getState()
     if (human.token) {
       try {
@@ -95,8 +102,11 @@ class DefaultTicketeraSessionCoordinator implements TicketeraSessionCoordinator 
       }
     }
 
-    const device = getDispositivoSession()
     if (!device) return
+    await this.renewDeviceSession(device)
+  }
+
+  private async renewDeviceSession(device: NonNullable<ReturnType<typeof getDispositivoSession>>) {
     try {
       await refreshDispositivoSession()
       SocketService.forceReconnect()
