@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { flotaService } from './service'
 import type { VehicleDetail } from './types'
-import { ArrowLeft, Truck } from 'lucide-react'
+import { ArrowLeft, RefreshCw, Truck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/utils/cn'
 import InfoGeneralTab from './tabs/InfoGeneralTab'
@@ -19,14 +19,29 @@ function StatusBadge({ status }: { status?: { id: string; name: string } }) {
   return <span className={cn('text-xs font-bold px-2.5 py-1 rounded-full', styles[status?.id ?? ''] ?? 'bg-gray-100 text-gray-600')}>{status?.name ?? '—'}</span>
 }
 
-interface Props { vehicleId: string; parkId?: string; onBack: () => void }
+interface Props { vehicleId: string; parkId?: string; segmentId?: string; onBack: () => void }
 
-export default function VehicleProfile({ vehicleId, parkId, onBack }: Props) {
+export default function VehicleProfile({ vehicleId, parkId, segmentId, onBack }: Props) {
+  const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState('info')
 
-  const { data: vehicle, isLoading } = useQuery<VehicleDetail>({
+  const { data: vehicle, isLoading, refetch } = useQuery<VehicleDetail>({
     queryKey: ['vehicle-detail', vehicleId, parkId],
     queryFn: () => flotaService.obtenerDetalle(vehicleId, parkId),
+  })
+
+  const actualizarDatos = useMutation({
+    mutationFn: () => {
+      if (!segmentId) throw new Error('No se pudo identificar la flota del vehículo')
+      return flotaService.actualizarDatos(segmentId)
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        refetch(),
+        queryClient.invalidateQueries({ queryKey: ['fleet-vehicles'] }),
+        queryClient.invalidateQueries({ queryKey: ['fleet-segments'] }),
+      ])
+    },
   })
 
   if (isLoading) return <div className="flex justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600" /></div>
@@ -52,9 +67,26 @@ export default function VehicleProfile({ vehicleId, parkId, onBack }: Props) {
     <div className="min-h-screen bg-gray-50 dark:bg-neutral-950">
       <div className="bg-white dark:bg-neutral-900 border-b border-gray-200 dark:border-neutral-800">
         <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex items-center gap-3 mb-4">
+          <div className="mb-4 flex items-center justify-between gap-3">
             <Button variant="ghost" size="sm" onClick={onBack} className="rounded-xl"><ArrowLeft className="w-4 h-4 mr-1" /> Volver</Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => actualizarDatos.mutate()}
+              disabled={!segmentId || actualizarDatos.isPending}
+              className="rounded-xl"
+              title={!segmentId ? 'No se pudo identificar la flota del vehículo' : 'Actualizar los datos de esta flota desde Yango'}
+            >
+              <RefreshCw className={cn('mr-1.5 h-4 w-4', actualizarDatos.isPending && 'animate-spin')} />
+              {actualizarDatos.isPending ? 'Actualizando...' : 'Actualizar datos'}
+            </Button>
           </div>
+          {actualizarDatos.isSuccess && (
+            <p className="mb-3 text-right text-xs font-medium text-emerald-600">Datos actualizados correctamente.</p>
+          )}
+          {actualizarDatos.isError && (
+            <p className="mb-3 text-right text-xs font-medium text-red-600">No se pudieron actualizar los datos.</p>
+          )}
           <div className="flex items-start gap-6">
             <div className="w-24 h-24 rounded-2xl bg-gray-100 dark:bg-neutral-800 flex items-center justify-center overflow-hidden flex-shrink-0">
               {vehicle.fotoUrl

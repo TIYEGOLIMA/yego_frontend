@@ -18,7 +18,7 @@ function CategoryBadge({ cat }: { cat: string }) {
   return <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-neutral-800 text-gray-500 font-medium">{cat}</span>
 }
 
-interface Props { onSelectVehicle: (id: string, parkId?: string) => void }
+interface Props { onSelectVehicle: (id: string, parkId?: string, segmentId?: string) => void }
 
 export default function FlotaListView({ onSelectVehicle }: Props) {
   const queryClient = useQueryClient()
@@ -55,9 +55,11 @@ export default function FlotaListView({ onSelectVehicle }: Props) {
 
   const actualizarDatos = useMutation({
     mutationFn: (segmentId?: string) => flotaService.actualizarDatos(segmentId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['fleet-vehicles'] })
-      queryClient.invalidateQueries({ queryKey: ['fleet-segments'] })
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ['fleet-vehicles'], type: 'active' }),
+        queryClient.refetchQueries({ queryKey: ['fleet-segments'], type: 'active' }),
+      ])
     },
   })
 
@@ -158,7 +160,7 @@ export default function FlotaListView({ onSelectVehicle }: Props) {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {vehicles.map(v => (
-            <div key={v.id} onClick={() => onSelectVehicle(v.id, v.park_id)} className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 p-4 hover:shadow-lg hover:border-red-200 dark:hover:border-red-900 transition-all cursor-pointer group">
+            <div key={v.id} onClick={() => onSelectVehicle(v.id, v.park_id, v.segment_id)} className="bg-white dark:bg-neutral-900 rounded-2xl border border-gray-200 dark:border-neutral-800 p-4 hover:shadow-lg hover:border-red-200 dark:hover:border-red-900 transition-all cursor-pointer group">
               <div className="flex items-start gap-3 mb-3">
                 <div className="w-16 h-12 rounded-xl bg-gray-100 dark:bg-neutral-800 flex items-center justify-center overflow-hidden flex-shrink-0">
                   {v.foto_url
