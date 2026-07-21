@@ -43,13 +43,18 @@ export default function FlotaListView({ onSelectVehicle }: Props) {
     return (partners ?? []).filter(p => !yaAgregados.has(p.id))
   }, [partners, flotas])
 
+  const flotaActiva = useMemo(
+    () => (flotas ?? []).find(f => f.id === segmentoActivo) ?? null,
+    [flotas, segmentoActivo]
+  )
+
   const { data, isLoading } = useQuery({
-    queryKey: ['fleet-vehicles'],
-    queryFn: () => flotaService.listarVehiculos(),
+    queryKey: ['fleet-vehicles', segmentoActivo ?? 'all'],
+    queryFn: () => flotaService.listarVehiculos(segmentoActivo ?? undefined),
   })
 
-  const sincronizar = useMutation({
-    mutationFn: () => flotaService.sincronizar(),
+  const actualizarDatos = useMutation({
+    mutationFn: (segmentId?: string) => flotaService.actualizarDatos(segmentId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['fleet-vehicles'] })
       queryClient.invalidateQueries({ queryKey: ['fleet-segments'] })
@@ -66,49 +71,80 @@ export default function FlotaListView({ onSelectVehicle }: Props) {
   })
 
   const vehicles = useMemo(() => {
-    let cars: YangoVehicle[] = data?.cars ?? []
-    if (segmentoActivo != null) cars = cars.filter(v => v.segment_id === segmentoActivo)
-    if (busqueda) {
-      const q = busqueda.toLowerCase()
-      cars = cars.filter(v =>
-        v.number?.toLowerCase().includes(q) ||
-        v.callsign?.toLowerCase().includes(q) ||
-        v.brand?.toLowerCase().includes(q) ||
-        v.model?.toLowerCase().includes(q) ||
-        v.vin?.toLowerCase().includes(q)
-      )
-    }
-    return cars
-  }, [data, busqueda, segmentoActivo])
+    const searchTerm = busqueda.trim().toLowerCase()
+    const cars: YangoVehicle[] = data?.cars ?? []
+
+    if (!searchTerm) return cars
+
+    return cars.filter(vehicle =>
+      vehicle.number?.toLowerCase().includes(searchTerm) ||
+      vehicle.callsign?.toLowerCase().includes(searchTerm) ||
+      vehicle.brand?.toLowerCase().includes(searchTerm) ||
+      vehicle.model?.toLowerCase().includes(searchTerm) ||
+      vehicle.vin?.toLowerCase().includes(searchTerm)
+    )
+  }, [data, busqueda])
 
   const total = data?.cars?.length ?? 0
+  const totalGeneral = (flotas ?? []).reduce((sum, flota) => sum + flota.totalVehiculos, 0)
+  const alcanceActualizacion = flotaActiva?.id
+
+  const seleccionarFlota = (segmentId: string | null) => {
+    actualizarDatos.reset()
+    setSegmentoActivo(segmentId)
+  }
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2"><Truck className="w-7 h-7" /> Flotas</h1>
-          <p className="text-sm text-gray-400 mt-1">{total} vehículos en {flotas?.length ?? 0} flotas</p>
+          <p className="text-sm text-gray-400 mt-1">
+            {flotaActiva ? `${total} vehículos en ${flotaActiva.nombre}` : `${total} vehículos en ${flotas?.length ?? 0} flotas`}
+          </p>
         </div>
-        <div className="flex gap-2">
-          <button onClick={() => sincronizar.mutate()} disabled={sincronizar.isPending} className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-xl border border-gray-300 dark:border-neutral-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-neutral-800 disabled:opacity-50">
-            <RefreshCw className={cn('w-4 h-4', sincronizar.isPending && 'animate-spin')} /> {sincronizar.isPending ? 'Sincronizando...' : 'Sincronizar'}
-          </button>
-          <button onClick={() => setShowAgregar(true)} className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-xl bg-red-600 text-white hover:bg-red-700">
-            <Plus className="w-4 h-4" /> Agregar flota
-          </button>
-        </div>
+        <button onClick={() => setShowAgregar(true)} className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-xl bg-red-600 text-white hover:bg-red-700">
+          <Plus className="w-4 h-4" /> Agregar flota
+        </button>
       </div>
 
       <div className="flex flex-wrap gap-2 mb-4">
-        <button onClick={() => setSegmentoActivo(null)} className={cn('text-xs font-semibold px-3 py-1.5 rounded-full transition-colors', segmentoActivo == null ? 'bg-red-600 text-white' : 'bg-gray-100 dark:bg-neutral-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200')}>
-          Todos {total}
+        <button onClick={() => seleccionarFlota(null)} className={cn('text-xs font-semibold px-3 py-1.5 rounded-full transition-colors', segmentoActivo == null ? 'bg-red-600 text-white' : 'bg-gray-100 dark:bg-neutral-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200')}>
+          Todos {segmentoActivo == null ? total : totalGeneral}
         </button>
         {flotas?.map(f => (
-          <button key={f.id} onClick={() => setSegmentoActivo(f.id)} className={cn('text-xs font-semibold px-3 py-1.5 rounded-full transition-colors', segmentoActivo === f.id ? 'bg-red-600 text-white' : 'bg-gray-100 dark:bg-neutral-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200')}>
+          <button key={f.id} onClick={() => seleccionarFlota(f.id)} className={cn('text-xs font-semibold px-3 py-1.5 rounded-full transition-colors', segmentoActivo === f.id ? 'bg-red-600 text-white' : 'bg-gray-100 dark:bg-neutral-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200')}>
             {f.nombre} {f.totalVehiculos}
           </button>
         ))}
+      </div>
+
+      <div className="mb-5 flex flex-col gap-3 border-y border-gray-200 bg-gray-50 px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900/60 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-bold text-gray-900 dark:text-gray-100">{flotaActiva?.nombre ?? 'Todas las flotas'}</p>
+          <p className="mt-0.5 text-xs text-gray-500">
+            {flotaActiva
+              ? 'Actualiza estados, asignaciones y datos de esta flota directamente desde Yango.'
+              : 'Actualiza estados, asignaciones y datos de todas las flotas directamente desde Yango.'}
+          </p>
+          {actualizarDatos.isSuccess && actualizarDatos.variables === alcanceActualizacion && (
+            <p className="mt-1 text-xs font-medium text-emerald-600">
+              Datos de {actualizarDatos.data.procesados} vehículos actualizados.
+            </p>
+          )}
+          {actualizarDatos.isError && actualizarDatos.variables === alcanceActualizacion && (
+            <p className="mt-1 text-xs font-medium text-red-600">No se pudieron actualizar los datos.</p>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => actualizarDatos.mutate(alcanceActualizacion)}
+          disabled={actualizarDatos.isPending}
+          className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-3 text-sm font-semibold text-gray-700 hover:bg-gray-100 disabled:opacity-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-gray-200 dark:hover:bg-neutral-800"
+        >
+          <RefreshCw className={cn('h-4 w-4', actualizarDatos.isPending && 'animate-spin')} />
+          {actualizarDatos.isPending ? 'Actualizando...' : 'Actualizar datos'}
+        </button>
       </div>
 
       <div className="flex gap-3 mb-6">

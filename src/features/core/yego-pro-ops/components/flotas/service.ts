@@ -48,8 +48,10 @@ export const flotaService = {
     await api.delete(ENDPOINTS.segment(id))
   },
 
-  sincronizar: async (segmentId?: string): Promise<{ procesados: number }> => {
-    const { data } = await api.post(ENDPOINTS.fleetSync, null, { params: segmentId != null ? { segmentId } : {} })
+  actualizarDatos: async (segmentId?: string): Promise<{ procesados: number }> => {
+    const { data } = await api.post(ENDPOINTS.fleetSync, null, {
+      params: segmentId ? { segmentId } : undefined,
+    })
     return data
   },
 
