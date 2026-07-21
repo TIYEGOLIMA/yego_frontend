@@ -1,18 +1,15 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react'
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { isCancelledRequest } from '../../domain'
 import {
   BarChart as BarChartIcon,
-  Users,
+  Activity,
+  CheckCircle2,
   Download,
   RefreshCw,
   Star,
-  Award,
   Target,
-  UserCheck,
-  ThumbsUp,
-  MessageSquare,
   ChevronDown,
   FileSpreadsheet,
   Image,
@@ -38,6 +35,7 @@ import {
 } from 'recharts'
 import { reportsService, ReportData, ReportFilters, SACPerformance } from './services/reportsService'
 import { sedesService, SedeInfo } from './services/sedesService'
+import { TicketTraceabilityPanel } from './components/TicketTraceabilityPanel'
 
 interface SedeGroup {
   sedeId: number | null;
@@ -121,6 +119,25 @@ const Reports: React.FC = () => {
       }
     }
 
+    // La distribución horaria incluye también tickets aún sin agente. Por eso
+    // es la fuente autoritativa para medir la demanda generada por cada sede.
+    for (const sede of reportData?.hourlyBySede ?? []) {
+      const key = sede.sedeId.toString();
+      if (!groups.has(key)) {
+        groups.set(key, {
+          sedeId: sede.sedeId,
+          sedeName: sede.sedeName,
+          sacs: [],
+          totalTickets: 0,
+          completedTickets: 0,
+          averageRating: 0,
+          totalRatings: 0,
+          satisfactionPercentage: 0,
+        });
+      }
+      groups.get(key)!.totalTickets = sede.hourlyDistribution.reduce((sum, hour) => sum + hour.count, 0);
+    }
+
     for (const group of groups.values()) {
       group.averageRating = group.totalRatings > 0
         ? Math.round((group.sacs.reduce((sum, s) => sum + s.averageRating * s.totalRatings, 0) / group.totalRatings) * 10) / 10
@@ -139,25 +156,19 @@ const Reports: React.FC = () => {
   }, [sedeGroups, selectedSede]);
 
   const globalStats = useMemo(() => {
+    const tickets = reportData?.ticketTraceability ?? []
     return {
-      totalSACs: selectedSede === 'todas'
-        ? (reportData?.totalSACs ?? 0)
-        : (filteredGroups[0]?.sacs.length ?? 0),
       totalTickets: reportData?.totalTickets ?? 0,
+      openTickets: reportData?.openTickets
+        ?? tickets.filter(ticket => ['WAITING', 'CALLED', 'IN_PROGRESS'].includes(ticket.status)).length,
+      completedTickets: reportData?.completedTickets
+        ?? tickets.filter(ticket => ticket.status === 'COMPLETED').length,
+      cancelledTickets: reportData?.cancelledTickets
+        ?? tickets.filter(ticket => ticket.status === 'CANCELLED').length,
       averageRating: reportData?.averageRating ?? 0,
       totalRatings: reportData?.totalRatings ?? 0,
     };
-  }, [reportData, selectedSede, filteredGroups]);
-
-  const globalTopPerformers = useMemo(() => {
-    if (selectedSede === 'todas') return reportData?.topPerformers ?? [];
-    const group = filteredGroups[0];
-    if (!group) return [];
-    return group.sacs
-      .filter(s => s.totalTickets > 0)
-      .sort((a, b) => b.satisfactionPercentage - a.satisfactionPercentage)
-      .slice(0, 3);
-  }, [reportData, selectedSede, filteredGroups]);
+  }, [reportData]);
 
   const hourlyBySedeData = useMemo(() => {
     if (!reportData?.hourlyBySede || reportData.hourlyBySede.length === 0) return null;
@@ -300,23 +311,23 @@ const Reports: React.FC = () => {
     })
   }
 
-  const obtenerFechasParaPeticion = () => {
+  const obtenerFechasParaPeticion = useCallback(() => {
     if (fechaInicio && fechaFin) {
       return { fechaInicio, fechaFin }
     }
     return {}
-  }
+  }, [fechaInicio, fechaFin])
 
-  const construirFiltros = (extra?: Partial<ReportFilters>): ReportFilters => {
+  const construirFiltros = useCallback((extra?: Partial<ReportFilters>): ReportFilters => {
     const effectiveSedeId = selectedSede !== 'todas' ? Number(selectedSede) : undefined
     return {
       ...obtenerFechasParaPeticion(),
       ...(effectiveSedeId ? { sedeId: effectiveSedeId } : {}),
       ...(extra ?? {}),
     }
-  }
+  }, [obtenerFechasParaPeticion, selectedSede])
 
-  const loadReportData = async () => {
+  const loadReportData = useCallback(async () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
     }
@@ -337,7 +348,9 @@ const Reports: React.FC = () => {
       if (currentRequestId !== requestIdRef.current) return
       setReportData({
         totalSACs: 0, totalTickets: 0, averageRating: 0, totalRatings: 0,
-        sacPerformance: [], topPerformers: [], recentRatings: [], hourlyDistribution: [], hourlyBySede: []
+        openTickets: 0, completedTickets: 0, cancelledTickets: 0, traceabilityTotal: 0,
+        sacPerformance: [], topPerformers: [], recentRatings: [], hourlyDistribution: [], hourlyBySede: [],
+        ticketTraceability: [],
       })
       setDatosCargados(false)
     } finally {
@@ -345,7 +358,7 @@ const Reports: React.FC = () => {
         setLoading(false)
       }
     }
-  }
+  }, [construirFiltros])
 
   useEffect(() => {
     sedesService.listarSedesActivas().then(setSedes).catch(() => {})
@@ -356,15 +369,11 @@ const Reports: React.FC = () => {
   }, [])
 
   useEffect(() => {
-    loadReportData()
-  }, [selectedSede])
-
-  useEffect(() => {
-    if (!fechaInicio || !fechaFin) return
-    if (new Date(fechaInicio) > new Date(fechaFin)) return
-    const timer = setTimeout(() => { loadReportData() }, 300)
+    if ((fechaInicio && !fechaFin) || (!fechaInicio && fechaFin)) return
+    if (fechaInicio && fechaFin && new Date(fechaInicio) > new Date(fechaFin)) return
+    const timer = setTimeout(() => { loadReportData() }, fechaInicio && fechaFin ? 300 : 0)
     return () => clearTimeout(timer)
-  }, [fechaInicio, fechaFin])
+  }, [fechaInicio, fechaFin, loadReportData])
 
   const descargarArchivo = (blob: Blob, nombreArchivo: string) => {
     const url = window.URL.createObjectURL(blob)
@@ -430,13 +439,16 @@ const Reports: React.FC = () => {
         <div className="mb-8">
           <div className="mb-6">
             <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100 mb-3">
-              Reporte de Desempeño SAC
+              Monitoreo y trazabilidad de Ticketera
               {selectedSede !== 'todas' && (
                 <span className="text-lg font-normal text-slate-500 dark:text-slate-400 ml-2">
                   — {sedes.find(s => s.id.toString() === selectedSede)?.name ?? ''}
                 </span>
               )}
             </h1>
+            <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">
+              Seguimiento operativo por sede, opción seleccionada y estado del ticket.
+            </p>
             <div className="flex items-center gap-2 flex-nowrap">
               {loading && datosCargados && (
                 <RefreshCw className="w-4 h-4 animate-spin text-slate-400 dark:text-slate-500" />
@@ -595,12 +607,12 @@ const Reports: React.FC = () => {
         {datosCargados && reportData ? (
           <>
             {/* Global Stats */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
               {[
-                { label: 'Total SAC', value: globalStats.totalSACs, icon: Users, color: 'from-blue-500 to-blue-600', bg: 'bg-blue-50 dark:bg-blue-950/30' },
-                { label: 'Total Tickets', value: globalStats.totalTickets, icon: BarChartIcon, color: 'from-emerald-500 to-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-950/30' },
-                { label: 'Calificación Promedio', value: `${globalStats.averageRating}/5`, icon: Star, color: 'from-amber-500 to-amber-600', bg: 'bg-amber-50 dark:bg-amber-950/30' },
-                { label: 'Total Valoraciones', value: globalStats.totalRatings, icon: ThumbsUp, color: 'from-violet-500 to-violet-600', bg: 'bg-violet-50 dark:bg-violet-950/30' },
+                { label: 'Tickets generados', value: globalStats.totalTickets, helper: 'Dentro del alcance seleccionado', icon: BarChartIcon, iconClass: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-950/30' },
+                { label: 'Abiertos ahora', value: globalStats.openTickets, helper: 'En espera, llamados o en atención', icon: Activity, iconClass: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-950/30' },
+                { label: 'Completados', value: globalStats.completedTickets, helper: `${globalStats.cancelledTickets} cancelados`, icon: CheckCircle2, iconClass: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/30' },
+                { label: 'Calificación', value: `${globalStats.averageRating}/5`, helper: `${globalStats.totalRatings} respuestas recibidas`, icon: Star, iconClass: 'text-violet-600 dark:text-violet-400', bg: 'bg-violet-50 dark:bg-violet-950/30' },
               ].map((metric, i) => {
                 const IconComponent = metric.icon
                 return (
@@ -610,9 +622,10 @@ const Reports: React.FC = () => {
                         <div>
                           <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">{metric.label}</p>
                           <p className="text-3xl font-bold text-slate-900 dark:text-slate-100 mt-1">{metric.value}</p>
+                          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{metric.helper}</p>
                         </div>
                         <div className={`w-12 h-12 ${metric.bg} rounded-xl flex items-center justify-center`}>
-                          <IconComponent className={`w-6 h-6 bg-gradient-to-br ${metric.color} bg-clip-text text-transparent`} />
+                          <IconComponent className={`w-6 h-6 ${metric.iconClass}`} />
                         </div>
                       </div>
                     </CardContent>
@@ -621,53 +634,10 @@ const Reports: React.FC = () => {
               })}
             </div>
 
-            {/* Top Performers */}
-            {globalTopPerformers.length > 0 && selectedSede !== 'todas' && (
-              <Card className="mb-8 border-slate-200 dark:border-slate-700">
-                <CardHeader>
-                  <CardTitle className="flex items-center space-x-2 text-slate-900 dark:text-slate-100">
-                    <Award className="w-6 h-6 text-yellow-500" />
-                    <span>Top 3 Mejores SAC {selectedSede !== 'todas' ? `— ${sedes.find(s => s.id.toString() === selectedSede)?.name ?? ''}` : ''}</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {globalTopPerformers.map((sac, idx) => (
-                      <div key={sac.id} className={`bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-700 rounded-xl p-6 border border-slate-200 dark:border-slate-600 ${idx === 0 ? 'ring-2 ring-yellow-400 dark:ring-yellow-500' : ''}`}>
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center space-x-3">
-                            <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg ${idx === 0 ? 'bg-gradient-to-br from-yellow-400 to-yellow-600' : idx === 1 ? 'bg-gradient-to-br from-slate-400 to-slate-500' : 'bg-gradient-to-br from-amber-600 to-amber-700'}`}>
-                              #{idx + 1}
-                            </div>
-                            <div>
-                              <h3 className="font-semibold text-slate-900 dark:text-slate-100">{sac.name}</h3>
-                              <p className="text-sm text-slate-500 dark:text-slate-400">@{sac.username}</p>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm text-slate-600 dark:text-slate-400">Completados</span>
-                            <span className="font-semibold text-slate-900 dark:text-slate-100">{sac.completedTickets}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm text-slate-600 dark:text-slate-400">Calificación</span>
-                            <div className="flex items-center space-x-1">
-                              <Star className="w-4 h-4 text-yellow-500 fill-current" />
-                              <span className="font-semibold text-slate-900 dark:text-slate-100">{sac.averageRating}</span>
-                            </div>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm text-slate-600 dark:text-slate-400">Rendimiento</span>
-                            <span className="font-semibold text-green-600 dark:text-green-400">{sac.satisfactionPercentage}%</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+            <TicketTraceabilityPanel
+              tickets={reportData.ticketTraceability ?? []}
+              total={reportData.traceabilityTotal ?? reportData.ticketTraceability?.length ?? 0}
+            />
 
             {/* Resumen General - solo en modo "Todas las sedes" */}
             {selectedSede === 'todas' && sedeGroups.length > 0 && (
@@ -800,7 +770,7 @@ const Reports: React.FC = () => {
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2 text-slate-900 dark:text-slate-100">
                   <BarChartIcon className="w-6 h-6 text-violet-500" />
-                  <span>Tickets Atendidos por Hora {selectedSede !== 'todas' ? `— ${sedes.find(s => s.id.toString() === selectedSede)?.name ?? ''}` : ''}</span>
+                  <span>Tickets generados por hora {selectedSede !== 'todas' ? `— ${sedes.find(s => s.id.toString() === selectedSede)?.name ?? ''}` : ''}</span>
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -813,7 +783,7 @@ const Reports: React.FC = () => {
                         <YAxis className="text-xs text-slate-500" allowDecimals={false} />
                         <Tooltip
                           contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', backgroundColor: '#fff', color: '#1e293b' }}
-                          formatter={(value) => [`${Number(value ?? 0)} tickets`, 'Atendidos']}
+                          formatter={(value) => [`${Number(value ?? 0)} tickets`, 'Generados']}
                         />
                         <Bar dataKey="count" radius={[6, 6, 0, 0]} barSize={20}>
                           {reportData.hourlyDistribution.map((entry) => {
@@ -847,10 +817,6 @@ const Reports: React.FC = () => {
             {/* Sede Sections - solo cuando se selecciona una sede específica */}
             {selectedSede !== 'todas' && filteredGroups.map((group, groupIndex) => {
               const colorScheme = SEDE_COLORS[groupIndex % SEDE_COLORS.length];
-              const sedeRatings = group.sacs
-                .flatMap(s => s.ratings.map(r => ({ ...r, sacName: s.name })))
-                .sort((a, b) => b.date.localeCompare(a.date))
-                .slice(0, 6);
               return (
                 <div key={group.sedeId ?? 'sin-sede'} className="mb-8">
                   {/* Sede Header */}
@@ -879,7 +845,7 @@ const Reports: React.FC = () => {
                           <p className="text-lg font-bold text-amber-600 dark:text-amber-400">{reportData?.averageRating ?? group.averageRating}/5</p>
                         </div>
                         <div className="text-center">
-                          <p className="text-xs text-slate-500 dark:text-slate-400">Satisfacción</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">Resolución</p>
                           <p className="text-lg font-bold text-violet-600 dark:text-violet-400">{group.satisfactionPercentage}%</p>
                         </div>
                       </div>
@@ -906,7 +872,7 @@ const Reports: React.FC = () => {
                               <th className="text-center py-3 px-4 font-semibold text-slate-700 dark:text-slate-300 text-sm">Total</th>
                               <th className="text-center py-3 px-4 font-semibold text-slate-700 dark:text-slate-300 text-sm">Completados</th>
                               <th className="text-center py-3 px-4 font-semibold text-slate-700 dark:text-slate-300 text-sm">Calificación</th>
-                              <th className="text-center py-3 px-4 font-semibold text-slate-700 dark:text-slate-300 text-sm">Satisfacción</th>
+                              <th className="text-center py-3 px-4 font-semibold text-slate-700 dark:text-slate-300 text-sm">Resolución</th>
                               <th className="text-center py-3 px-4 font-semibold text-slate-700 dark:text-slate-300 text-sm">T. Respuesta</th>
                             </tr>
                           </thead>
@@ -951,50 +917,6 @@ const Reports: React.FC = () => {
                     </CardContent>
                   </Card>
 
-                  {/* Recent Ratings per Sede */}
-                  {sedeRatings.length > 0 && (
-                    <Card className="border-slate-200 dark:border-slate-700 mt-4">
-                      <CardHeader>
-                        <CardTitle className="flex items-center space-x-2 text-slate-900 dark:text-slate-100 text-lg">
-                          <MessageSquare className="w-5 h-5 text-green-500" />
-                          <span>Valoraciones Recientes</span>
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {sedeRatings.map((rating) => (
-                            <div key={rating.id} className="p-4 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-700 rounded-xl border border-slate-200 dark:border-slate-600 hover:shadow-md transition-shadow">
-                              <div className="flex items-start justify-between mb-3">
-                                <div className="flex items-center space-x-3">
-                                  <div className="w-10 h-10 bg-gradient-to-br from-red-100 to-red-200 dark:from-red-900/30 dark:to-red-800/30 rounded-full flex items-center justify-center">
-                                    <UserCheck className="w-5 h-5 text-red-600 dark:text-red-400" />
-                                  </div>
-                                  <div>
-                                    <p className="font-semibold text-slate-900 dark:text-slate-100 text-sm">{rating.sacName}</p>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400">Ticket {rating.ticketNumber}</p>
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="flex items-center justify-between mb-3">
-                                <div className="flex items-center space-x-1">
-                                  {[...Array(5)].map((_, i) => (
-                                    <Star key={i} className={`w-4 h-4 ${i < rating.score ? 'text-yellow-500 fill-current' : 'text-slate-300 dark:text-slate-600'}`} />
-                                  ))}
-                                  <span className="ml-2 text-sm font-semibold text-slate-700 dark:text-slate-300">{rating.score}/5</span>
-                                </div>
-                                <span className="text-xs text-slate-400">{rating.date}</span>
-                              </div>
-                              {rating.comment && (
-                                <div className="bg-white/60 dark:bg-slate-800/60 rounded-lg p-3 border border-slate-200 dark:border-slate-600">
-                                  <p className="text-sm text-slate-700 dark:text-slate-300 italic">"{rating.comment}"</p>
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
                 </div>
               );
             })}

@@ -21,11 +21,43 @@ export interface SACPerformance {
   }>;
 }
 
+export interface TicketTraceEvent {
+  status: string;
+  label: string;
+  occurredAt: string;
+  notes: string | null;
+}
+
+export interface TicketTraceability {
+  id: number;
+  ticketNumber: string;
+  status: 'WAITING' | 'CALLED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+  sedeId: number | null;
+  sedeName: string;
+  optionId: number | null;
+  categoryName: string | null;
+  optionName: string;
+  licenseNumber: string | null;
+  moduleId: number | null;
+  moduleName: string | null;
+  operatorId: number | null;
+  operatorName: string | null;
+  createdAt: string;
+  calledAt: string | null;
+  completedAt: string | null;
+  rating: number | null;
+  events: TicketTraceEvent[];
+}
+
 export interface ReportData {
   totalSACs: number;
   totalTickets: number;
   averageRating: number;
   totalRatings: number;
+  openTickets?: number;
+  completedTickets?: number;
+  cancelledTickets?: number;
+  traceabilityTotal?: number;
   sacPerformance: SACPerformance[];
   topPerformers: SACPerformance[];
   recentRatings: Array<{
@@ -50,6 +82,7 @@ export interface ReportData {
       count: number;
     }>;
   }>;
+  ticketTraceability?: TicketTraceability[];
 }
 
 export interface ReportFilters {
