@@ -10,15 +10,8 @@ export interface SACPerformance {
   completedTickets: number;
   averageRating: number;
   totalRatings: number;
-  satisfactionPercentage: number;
-  averageResponseTime: string;
-  ratings: Array<{
-    id: number;
-    score: number;
-    comment: string;
-    ticketNumber: string;
-    date: string;
-  }>;
+  resolutionPercentage: number;
+  averageServiceTime: string;
 }
 
 export interface TicketTraceEvent {
@@ -49,25 +42,39 @@ export interface TicketTraceability {
   events: TicketTraceEvent[];
 }
 
+export interface TicketTraceabilityPage {
+  content: TicketTraceability[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+  first: boolean;
+  last: boolean;
+}
+
+export interface OptionSelection {
+  optionId: number;
+  categoryName: string | null;
+  optionName: string;
+  count: number;
+  percentage: number;
+}
+
+export interface OptionSelectionsBySede {
+  sedeId: number;
+  sedeName: string;
+  totalTickets: number;
+  options: OptionSelection[];
+}
+
 export interface ReportData {
-  totalSACs: number;
   totalTickets: number;
   averageRating: number;
   totalRatings: number;
-  openTickets?: number;
-  completedTickets?: number;
-  cancelledTickets?: number;
-  traceabilityTotal?: number;
+  openTickets: number;
+  completedTickets: number;
+  cancelledTickets: number;
   sacPerformance: SACPerformance[];
-  topPerformers: SACPerformance[];
-  recentRatings: Array<{
-    id: number;
-    sacName: string;
-    score: number;
-    comment: string;
-    ticketNumber: string;
-    date: string;
-  }>;
   hourlyDistribution: Array<{
     hour: number;
     label: string;
@@ -82,13 +89,18 @@ export interface ReportData {
       count: number;
     }>;
   }>;
-  ticketTraceability?: TicketTraceability[];
+  optionSelectionsBySede: OptionSelectionsBySede[];
 }
 
 export interface ReportFilters {
   fechaInicio?: string;
   fechaFin?: string;
   sedeId?: number;
+}
+
+export interface TicketTraceabilityFilters extends ReportFilters {
+  page: number;
+  size: number;
 }
 
 const buildParams = (params?: ReportFilters): Record<string, string | number> | undefined => {
@@ -109,6 +121,17 @@ export const reportsService = {
       console.error('[reportsService] Error obteniendo reportes:', error);
       throw error;
     }
+  },
+
+  async getTicketTraceability(
+    params: TicketTraceabilityFilters,
+    signal?: AbortSignal,
+  ): Promise<TicketTraceabilityPage> {
+    const response = await api.get('/ticketera/sac-stats/traceability', {
+      params: { ...buildParams(params), page: params.page, size: params.size },
+      signal,
+    });
+    return response.data;
   },
 
   async exportarAExcel(params?: ReportFilters): Promise<Blob> {

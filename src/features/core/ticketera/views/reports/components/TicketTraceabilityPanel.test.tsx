@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { TicketTraceability } from '../services/reportsService'
 import { TicketTraceabilityPanel } from './TicketTraceabilityPanel'
 
@@ -52,11 +52,21 @@ const tickets: TicketTraceability[] = [
   },
 ]
 
+const paginationProps = {
+  page: 0,
+  size: 20,
+  totalPages: 1,
+  loading: false,
+  error: null,
+  onPageChange: vi.fn(),
+  onPageSizeChange: vi.fn(),
+}
+
 describe('TicketTraceabilityPanel', () => {
   afterEach(cleanup)
 
   it('muestra la sede y las opciones marcadas y permite consultar el recorrido', () => {
-    render(<TicketTraceabilityPanel tickets={tickets} total={2} />)
+    render(<TicketTraceabilityPanel tickets={tickets} {...paginationProps} />)
 
     expect(screen.getByText('Cuenta del conductor → Actualización de datos')).toBeTruthy()
     expect(screen.getByText('Sede Lima')).toBeTruthy()
@@ -70,7 +80,7 @@ describe('TicketTraceabilityPanel', () => {
   })
 
   it('filtra por sede, opción o estado sin mezclar tickets', () => {
-    render(<TicketTraceabilityPanel tickets={tickets} total={2} />)
+    render(<TicketTraceabilityPanel tickets={tickets} {...paginationProps} />)
 
     fireEvent.change(screen.getByPlaceholderText('Ticket, opción, conductor u operador'), {
       target: { value: 'Callao' },
@@ -79,7 +89,33 @@ describe('TicketTraceabilityPanel', () => {
     expect(screen.getByText('#C-202')).toBeTruthy()
     expect(screen.queryByText('#M-101')).toBeNull()
 
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'COMPLETED' } })
+    fireEvent.change(screen.getByLabelText('Estado del ticket'), { target: { value: 'COMPLETED' } })
     expect(screen.getByText('No hay tickets que coincidan con los filtros.')).toBeTruthy()
+  })
+
+  it('navega entre páginas y permite cambiar la cantidad de filas', () => {
+    const onPageChange = vi.fn()
+    const onPageSizeChange = vi.fn()
+    render(
+      <TicketTraceabilityPanel
+        tickets={tickets}
+        {...paginationProps}
+        page={1}
+        totalPages={3}
+        onPageChange={onPageChange}
+        onPageSizeChange={onPageSizeChange}
+      />,
+    )
+
+    expect(screen.queryByText(/Origen, opción marcada/)).toBeNull()
+    expect(screen.getByText('Página 2 de 3')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Página anterior' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Página siguiente' }))
+    fireEvent.change(screen.getByLabelText('Filas por página'), { target: { value: '50' } })
+
+    expect(onPageChange).toHaveBeenNthCalledWith(1, 0)
+    expect(onPageChange).toHaveBeenNthCalledWith(2, 2)
+    expect(onPageSizeChange).toHaveBeenCalledWith(50)
   })
 })

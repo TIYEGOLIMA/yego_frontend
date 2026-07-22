@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   ChevronDown,
   ChevronUp,
   Clock3,
   MapPin,
   Monitor,
+  Loader2,
   Route,
   Search,
   Star,
@@ -12,10 +13,17 @@ import {
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { TicketTraceability } from '../services/reportsService'
+import { ReportPagination } from './ReportPagination'
 
 interface Props {
   tickets: TicketTraceability[]
-  total: number
+  page: number
+  size: number
+  totalPages: number
+  loading: boolean
+  error: string | null
+  onPageChange: (page: number) => void
+  onPageSizeChange: (size: number) => void
 }
 
 const STATUS_META: Record<TicketTraceability['status'], { label: string; className: string }> = {
@@ -49,10 +57,23 @@ function formatDuration(ticket: TicketTraceability): string {
   return `${hours} h ${minutes % 60} min`
 }
 
-export function TicketTraceabilityPanel({ tickets, total }: Props) {
+export function TicketTraceabilityPanel({
+  tickets,
+  page,
+  size,
+  totalPages,
+  loading,
+  error,
+  onPageChange,
+  onPageSizeChange,
+}: Props) {
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<'ALL' | TicketTraceability['status']>('ALL')
   const [expandedId, setExpandedId] = useState<number | null>(null)
+
+  useEffect(() => {
+    setExpandedId(null)
+  }, [page, size])
 
   const visibleTickets = useMemo(() => {
     const query = search.trim().toLocaleLowerCase('es')
@@ -80,9 +101,6 @@ export function TicketTraceabilityPanel({ tickets, total }: Props) {
               <Route className="h-6 w-6 text-blue-600 dark:text-blue-400" />
               Trazabilidad de tickets
             </CardTitle>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              Origen, opción marcada y recorrido operativo. Mostrando {tickets.length} de {total} tickets recientes.
-            </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
             <label className="relative min-w-64">
@@ -97,6 +115,7 @@ export function TicketTraceabilityPanel({ tickets, total }: Props) {
             <select
               value={status}
               onChange={(event) => setStatus(event.target.value as typeof status)}
+              aria-label="Estado del ticket"
               className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 outline-none focus:border-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
             >
               <option value="ALL">Todos los estados</option>
@@ -104,11 +123,21 @@ export function TicketTraceabilityPanel({ tickets, total }: Props) {
                 <option key={value} value={value}>{meta.label}</option>
               ))}
             </select>
+            {loading && <Loader2 className="h-5 w-5 animate-spin self-center text-slate-400" aria-label="Cargando" />}
           </div>
         </div>
+        <p className="text-xs text-slate-400">La búsqueda y el estado filtran los resultados de la página actual.</p>
       </CardHeader>
-      <CardContent className="p-0">
-        {visibleTickets.length === 0 ? (
+      <CardContent className="p-0" aria-busy={loading}>
+        {error ? (
+          <div role="alert" className="px-6 py-14 text-center text-sm text-red-600 dark:text-red-400">
+            {error}
+          </div>
+        ) : loading && tickets.length === 0 ? (
+          <div className="flex items-center justify-center gap-2 px-6 py-14 text-sm text-slate-500">
+            <Loader2 className="h-5 w-5 animate-spin" /> Cargando trazabilidad…
+          </div>
+        ) : visibleTickets.length === 0 ? (
           <div className="px-6 py-14 text-center text-sm text-slate-500 dark:text-slate-400">
             No hay tickets que coincidan con los filtros.
           </div>
@@ -180,6 +209,14 @@ export function TicketTraceabilityPanel({ tickets, total }: Props) {
             })}
           </div>
         )}
+        <ReportPagination
+          page={page}
+          size={size}
+          totalPages={totalPages}
+          disabled={loading}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+        />
       </CardContent>
     </Card>
   )

@@ -45,4 +45,27 @@ describe('reportsService', () => {
       responseType: 'blob',
     });
   });
+
+  it('envía página, tamaño y filtros al consultar trazabilidad', async () => {
+    mockedGet.mockResolvedValueOnce({ data: { content: [], totalElements: 0 } });
+
+    await reportsService.getTicketTraceability({
+      fechaInicio: '2026-07-01',
+      fechaFin: '2026-07-16',
+      sedeId: 10,
+      page: 2,
+      size: 50,
+    });
+
+    expect(mockedGet).toHaveBeenCalledWith('/ticketera/sac-stats/traceability', {
+      params: {
+        fechaInicio: '2026-07-01',
+        fechaFin: '2026-07-16',
+        sedeId: 10,
+        page: 2,
+        size: 50,
+      },
+      signal: undefined,
+    });
+  });
 });

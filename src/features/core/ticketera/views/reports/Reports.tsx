@@ -4,8 +4,6 @@ import { Button } from '@/components/ui/button'
 import { isCancelledRequest } from '../../domain'
 import {
   BarChart as BarChartIcon,
-  Activity,
-  CheckCircle2,
   Download,
   RefreshCw,
   Star,
@@ -20,7 +18,7 @@ import {
   X,
   Building2,
   Filter,
-  MapPin
+  MapPin,
 } from 'lucide-react'
 import {
   BarChart,
@@ -35,7 +33,10 @@ import {
 } from 'recharts'
 import { reportsService, ReportData, ReportFilters, SACPerformance } from './services/reportsService'
 import { sedesService, SedeInfo } from './services/sedesService'
-import { TicketTraceabilityPanel } from './components/TicketTraceabilityPanel'
+import { PaginatedTicketTraceability } from './components/PaginatedTicketTraceability'
+import { OptionInsightsPanel } from './components/OptionInsightsPanel'
+import { ReportKpiGrid } from './components/ReportKpiGrid'
+import { ReportTabs, type ReportTab } from './components/ReportTabs'
 
 interface SedeGroup {
   sedeId: number | null;
@@ -45,17 +46,8 @@ interface SedeGroup {
   completedTickets: number;
   averageRating: number;
   totalRatings: number;
-  satisfactionPercentage: number;
+  resolutionPercentage: number;
 }
-
-const SEDE_COLORS = [
-  { bg: 'from-blue-500/10 to-blue-600/5', border: 'border-blue-200 dark:border-blue-800', accent: 'text-blue-600 dark:text-blue-400', dot: 'bg-blue-500' },
-  { bg: 'from-emerald-500/10 to-emerald-600/5', border: 'border-emerald-200 dark:border-emerald-800', accent: 'text-emerald-600 dark:text-emerald-400', dot: 'bg-emerald-500' },
-  { bg: 'from-violet-500/10 to-violet-600/5', border: 'border-violet-200 dark:border-violet-800', accent: 'text-violet-600 dark:text-violet-400', dot: 'bg-violet-500' },
-  { bg: 'from-amber-500/10 to-amber-600/5', border: 'border-amber-200 dark:border-amber-800', accent: 'text-amber-600 dark:text-amber-400', dot: 'bg-amber-500' },
-  { bg: 'from-rose-500/10 to-rose-600/5', border: 'border-rose-200 dark:border-rose-800', accent: 'text-rose-600 dark:text-rose-400', dot: 'bg-rose-500' },
-  { bg: 'from-cyan-500/10 to-cyan-600/5', border: 'border-cyan-200 dark:border-cyan-800', accent: 'text-cyan-600 dark:text-cyan-400', dot: 'bg-cyan-500' },
-];
 
 const Reports: React.FC = () => {
   const [reportData, setReportData] = useState<ReportData | null>(null)
@@ -70,6 +62,7 @@ const Reports: React.FC = () => {
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [selectedSede, setSelectedSede] = useState<string>('todas')
   const [showSedeFilter, setShowSedeFilter] = useState(false)
+  const [activeTab, setActiveTab] = useState<ReportTab>('summary')
   const [sedes, setSedes] = useState<SedeInfo[]>([])
   const datePickerRef = useRef<HTMLDivElement>(null)
   const exportMenuRef = useRef<HTMLDivElement>(null)
@@ -89,7 +82,7 @@ const Reports: React.FC = () => {
         completedTickets: 0,
         averageRating: 0,
         totalRatings: 0,
-        satisfactionPercentage: 0,
+        resolutionPercentage: 0,
       });
     }
 
@@ -108,7 +101,7 @@ const Reports: React.FC = () => {
             completedTickets: 0,
             averageRating: 0,
             totalRatings: 0,
-            satisfactionPercentage: 0,
+            resolutionPercentage: 0,
           });
         }
         const group = groups.get(key)!;
@@ -132,7 +125,7 @@ const Reports: React.FC = () => {
           completedTickets: 0,
           averageRating: 0,
           totalRatings: 0,
-          satisfactionPercentage: 0,
+          resolutionPercentage: 0,
         });
       }
       groups.get(key)!.totalTickets = sede.hourlyDistribution.reduce((sum, hour) => sum + hour.count, 0);
@@ -142,7 +135,7 @@ const Reports: React.FC = () => {
       group.averageRating = group.totalRatings > 0
         ? Math.round((group.sacs.reduce((sum, s) => sum + s.averageRating * s.totalRatings, 0) / group.totalRatings) * 10) / 10
         : 0;
-      group.satisfactionPercentage = group.totalTickets > 0
+      group.resolutionPercentage = group.totalTickets > 0
         ? Math.round((group.completedTickets / group.totalTickets) * 100)
         : 0;
     }
@@ -155,20 +148,14 @@ const Reports: React.FC = () => {
     return sedeGroups.filter(g => g.sedeId?.toString() === selectedSede);
   }, [sedeGroups, selectedSede]);
 
-  const globalStats = useMemo(() => {
-    const tickets = reportData?.ticketTraceability ?? []
-    return {
-      totalTickets: reportData?.totalTickets ?? 0,
-      openTickets: reportData?.openTickets
-        ?? tickets.filter(ticket => ['WAITING', 'CALLED', 'IN_PROGRESS'].includes(ticket.status)).length,
-      completedTickets: reportData?.completedTickets
-        ?? tickets.filter(ticket => ticket.status === 'COMPLETED').length,
-      cancelledTickets: reportData?.cancelledTickets
-        ?? tickets.filter(ticket => ticket.status === 'CANCELLED').length,
-      averageRating: reportData?.averageRating ?? 0,
-      totalRatings: reportData?.totalRatings ?? 0,
-    };
-  }, [reportData]);
+  const globalStats = {
+    totalTickets: reportData?.totalTickets ?? 0,
+    openTickets: reportData?.openTickets ?? 0,
+    completedTickets: reportData?.completedTickets ?? 0,
+    cancelledTickets: reportData?.cancelledTickets ?? 0,
+    averageRating: reportData?.averageRating ?? 0,
+    totalRatings: reportData?.totalRatings ?? 0,
+  }
 
   const hourlyBySedeData = useMemo(() => {
     if (!reportData?.hourlyBySede || reportData.hourlyBySede.length === 0) return null;
@@ -347,10 +334,10 @@ const Reports: React.FC = () => {
       console.error('[Reports] Error cargando datos de reportes:', error)
       if (currentRequestId !== requestIdRef.current) return
       setReportData({
-        totalSACs: 0, totalTickets: 0, averageRating: 0, totalRatings: 0,
-        openTickets: 0, completedTickets: 0, cancelledTickets: 0, traceabilityTotal: 0,
-        sacPerformance: [], topPerformers: [], recentRatings: [], hourlyDistribution: [], hourlyBySede: [],
-        ticketTraceability: [],
+        totalTickets: 0, averageRating: 0, totalRatings: 0,
+        openTickets: 0, completedTickets: 0, cancelledTickets: 0,
+        sacPerformance: [], hourlyDistribution: [], hourlyBySede: [],
+        optionSelectionsBySede: [],
       })
       setDatosCargados(false)
     } finally {
@@ -419,7 +406,7 @@ const Reports: React.FC = () => {
 
   if (loading && !datosCargados) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-white dark:from-slate-900 dark:to-slate-800 p-6">
+      <div className="min-h-screen bg-slate-50 p-6 dark:bg-slate-950">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-center h-96">
             <div className="text-center">
@@ -433,7 +420,7 @@ const Reports: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-white dark:from-slate-900 dark:to-slate-800 p-6">
+    <div className="min-h-screen bg-slate-50 p-6 dark:bg-slate-950">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -450,9 +437,6 @@ const Reports: React.FC = () => {
               Seguimiento operativo por sede, opción seleccionada y estado del ticket.
             </p>
             <div className="flex items-center gap-2 flex-nowrap">
-              {loading && datosCargados && (
-                <RefreshCw className="w-4 h-4 animate-spin text-slate-400 dark:text-slate-500" />
-              )}
               {/* Sede filter */}
               {sedes.length > 0 && (
                 <div className="relative" ref={sedeFilterRef}>
@@ -474,13 +458,13 @@ const Reports: React.FC = () => {
                         <Filter className="w-4 h-4" />
                         Todas las sedes
                       </button>
-                      {sedes.map((sede, i) => (
+                      {sedes.map((sede) => (
                         <button
                           key={sede.id}
                           onClick={() => { setSelectedSede(sede.id.toString()); setShowSedeFilter(false); }}
                           className={`w-full px-4 py-2 text-left text-sm flex items-center gap-2 hover:bg-slate-100 dark:hover:bg-slate-700 ${selectedSede === sede.id.toString() ? 'bg-slate-100 dark:bg-slate-700 font-semibold text-slate-900 dark:text-slate-100' : 'text-slate-700 dark:text-slate-300'}`}
                         >
-                          <div className={`w-2.5 h-2.5 rounded-full ${SEDE_COLORS[i % SEDE_COLORS.length].dot}`} />
+                          <MapPin className="h-4 w-4 text-slate-400" />
                           {sede.name}
                         </button>
                       ))}
@@ -606,38 +590,19 @@ const Reports: React.FC = () => {
 
         {datosCargados && reportData ? (
           <>
-            {/* Global Stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
-              {[
-                { label: 'Tickets generados', value: globalStats.totalTickets, helper: 'Dentro del alcance seleccionado', icon: BarChartIcon, iconClass: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-950/30' },
-                { label: 'Abiertos ahora', value: globalStats.openTickets, helper: 'En espera, llamados o en atención', icon: Activity, iconClass: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-950/30' },
-                { label: 'Completados', value: globalStats.completedTickets, helper: `${globalStats.cancelledTickets} cancelados`, icon: CheckCircle2, iconClass: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/30' },
-                { label: 'Calificación', value: `${globalStats.averageRating}/5`, helper: `${globalStats.totalRatings} respuestas recibidas`, icon: Star, iconClass: 'text-violet-600 dark:text-violet-400', bg: 'bg-violet-50 dark:bg-violet-950/30' },
-              ].map((metric, i) => {
-                const IconComponent = metric.icon
-                return (
-                  <Card key={i} className="border-slate-200 dark:border-slate-700 overflow-hidden">
-                    <CardContent className="p-5">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">{metric.label}</p>
-                          <p className="text-3xl font-bold text-slate-900 dark:text-slate-100 mt-1">{metric.value}</p>
-                          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{metric.helper}</p>
-                        </div>
-                        <div className={`w-12 h-12 ${metric.bg} rounded-xl flex items-center justify-center`}>
-                          <IconComponent className={`w-6 h-6 ${metric.iconClass}`} />
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )
-              })}
-            </div>
+            <ReportKpiGrid {...globalStats} />
+            <ReportTabs activeTab={activeTab} onChange={setActiveTab} />
 
-            <TicketTraceabilityPanel
-              tickets={reportData.ticketTraceability ?? []}
-              total={reportData.traceabilityTotal ?? reportData.ticketTraceability?.length ?? 0}
-            />
+            {activeTab === 'traceability' && (
+              <PaginatedTicketTraceability filters={construirFiltros()} />
+            )}
+
+            {activeTab === 'options' && (
+              <OptionInsightsPanel data={reportData.optionSelectionsBySede} />
+            )}
+
+            {activeTab === 'summary' && (
+              <>
 
             {/* Resumen General - solo en modo "Todas las sedes" */}
             {selectedSede === 'todas' && sedeGroups.length > 0 && (
@@ -815,19 +780,18 @@ const Reports: React.FC = () => {
             </Card>
 
             {/* Sede Sections - solo cuando se selecciona una sede específica */}
-            {selectedSede !== 'todas' && filteredGroups.map((group, groupIndex) => {
-              const colorScheme = SEDE_COLORS[groupIndex % SEDE_COLORS.length];
+            {selectedSede !== 'todas' && filteredGroups.map((group) => {
               return (
                 <div key={group.sedeId ?? 'sin-sede'} className="mb-8">
                   {/* Sede Header */}
-                  <div className={`bg-gradient-to-r ${colorScheme.bg} rounded-xl border ${colorScheme.border} p-5 mb-4`}>
+                  <div className="mb-4 rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900/40">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                       <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-xl ${colorScheme.bg} border ${colorScheme.border} flex items-center justify-center`}>
-                          <MapPin className={`w-5 h-5 ${colorScheme.accent}`} />
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800">
+                          <MapPin className="h-5 w-5 text-slate-600 dark:text-slate-300" />
                         </div>
                         <div>
-                          <h2 className={`text-xl font-bold ${colorScheme.accent}`}>{group.sedeName}</h2>
+                          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{group.sedeName}</h2>
                           <p className="text-sm text-slate-500 dark:text-slate-400">{group.sacs.length} agentes SAC</p>
                         </div>
                       </div>
@@ -846,7 +810,7 @@ const Reports: React.FC = () => {
                         </div>
                         <div className="text-center">
                           <p className="text-xs text-slate-500 dark:text-slate-400">Resolución</p>
-                          <p className="text-lg font-bold text-violet-600 dark:text-violet-400">{group.satisfactionPercentage}%</p>
+                          <p className="text-lg font-bold text-violet-600 dark:text-violet-400">{group.resolutionPercentage}%</p>
                         </div>
                       </div>
                     </div>
@@ -873,7 +837,7 @@ const Reports: React.FC = () => {
                               <th className="text-center py-3 px-4 font-semibold text-slate-700 dark:text-slate-300 text-sm">Completados</th>
                               <th className="text-center py-3 px-4 font-semibold text-slate-700 dark:text-slate-300 text-sm">Calificación</th>
                               <th className="text-center py-3 px-4 font-semibold text-slate-700 dark:text-slate-300 text-sm">Resolución</th>
-                              <th className="text-center py-3 px-4 font-semibold text-slate-700 dark:text-slate-300 text-sm">T. Respuesta</th>
+                              <th className="text-center py-3 px-4 font-semibold text-slate-700 dark:text-slate-300 text-sm">T. atención</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -902,12 +866,12 @@ const Reports: React.FC = () => {
                                 <td className="text-center py-4 px-4">
                                   <div className="flex items-center justify-center gap-2">
                                     <div className="w-16 h-2 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
-                                      <div className={`h-full rounded-full ${sac.satisfactionPercentage >= 80 ? 'bg-green-500' : sac.satisfactionPercentage >= 50 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${sac.satisfactionPercentage}%` }} />
+                                      <div className={`h-full rounded-full ${sac.resolutionPercentage >= 80 ? 'bg-green-500' : sac.resolutionPercentage >= 50 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${sac.resolutionPercentage}%` }} />
                                     </div>
-                                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">{sac.satisfactionPercentage}%</span>
+                                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">{sac.resolutionPercentage}%</span>
                                   </div>
                                 </td>
-                                <td className="text-center py-4 px-4"><span className="text-sm text-slate-500 dark:text-slate-400">{sac.averageResponseTime}</span></td>
+                                <td className="text-center py-4 px-4"><span className="text-sm text-slate-500 dark:text-slate-400">{sac.averageServiceTime}</span></td>
                               </tr>
                             ))}
                           </tbody>
@@ -920,6 +884,8 @@ const Reports: React.FC = () => {
                 </div>
               );
             })}
+              </>
+            )}
           </>
         ) : (
           <Card className="mb-8 border-slate-200 dark:border-slate-700">
